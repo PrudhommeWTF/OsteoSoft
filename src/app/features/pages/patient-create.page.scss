@@ -339,12 +339,12 @@
   position: fixed;
   inset: 0;
   background: rgba(15, 23, 42, 0.45);
-  z-index: 1050;
+  z-index: 2000;
 }
 
 .antecedent-modal {
   position: fixed;
-  z-index: 1060;
+  z-index: 2010;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
@@ -355,6 +355,14 @@
   border-radius: 12px;
   border: 1px solid #dfe3e7;
   box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
+}
+
+.antecedent-modal--wide {
+  width: min(720px, calc(100vw - 1.5rem));
+}
+
+.antecedent-modal--narrow {
+  width: min(640px, calc(100vw - 1.5rem));
 }
 
 .antecedent-modal-header,
