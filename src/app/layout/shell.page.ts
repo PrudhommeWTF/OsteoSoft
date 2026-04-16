@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { ApiService } from '../core/api.service';
+import { Patient } from '../core/api.types';
 import { AuthService } from '../core/auth.service';
 import { ConfigService } from '../core/config.service';
 import { TopbarService } from '../core/topbar.service';
@@ -41,8 +42,13 @@ export class ShellPage implements OnInit, OnDestroy {
   readonly username = this.authService.username;
   readonly role = this.authService.role;
   readonly now = signal(new Date());
+  readonly sidebarSearch = signal('');
+  readonly sidebarSearchResults = signal<Patient[]>([]);
+  readonly isSearchingSidebarPatients = signal(false);
 
   private clockTimer: ReturnType<typeof setInterval> | null = null;
+  private sidebarSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
+  private sidebarSearchRequestId = 0;
 
   readonly currentDateTime = computed(() =>
     new Intl.DateTimeFormat('fr-FR', {
@@ -107,6 +113,11 @@ export class ShellPage implements OnInit, OnDestroy {
       clearInterval(this.clockTimer);
       this.clockTimer = null;
     }
+
+    if (this.sidebarSearchDebounceId !== null) {
+      clearTimeout(this.sidebarSearchDebounceId);
+      this.sidebarSearchDebounceId = null;
+    }
   }
 
   readonly utilityItems = signal<UtilityItem[]>([
@@ -119,6 +130,106 @@ export class ShellPage implements OnInit, OnDestroy {
 
   closeMenu(): void {
     this.isMenuOpen.set(false);
+  }
+
+  onSidebarSearchChange(value: string): void {
+    this.sidebarSearch.set(value);
+    const term = value.trim();
+
+    if (this.sidebarSearchDebounceId !== null) {
+      clearTimeout(this.sidebarSearchDebounceId);
+      this.sidebarSearchDebounceId = null;
+    }
+
+    if (term.length < 2) {
+      this.sidebarSearchResults.set([]);
+      this.isSearchingSidebarPatients.set(false);
+      return;
+    }
+
+    this.isSearchingSidebarPatients.set(true);
+    this.sidebarSearchDebounceId = setTimeout(() => {
+      void this.searchSidebarPatients(term);
+    }, 220);
+  }
+
+  clearSidebarSearchResults(): void {
+    this.sidebarSearchResults.set([]);
+  }
+
+  async openPatientFromSidebar(patientId: number): Promise<void> {
+    this.sidebarSearch.set('');
+    this.sidebarSearchResults.set([]);
+    this.isSearchingSidebarPatients.set(false);
+    await this.router.navigate(['/patients', patientId]);
+    this.closeMenu();
+  }
+
+  getSidebarPatientSexIcon(sex: Patient['sex']): string {
+    if (sex === 'Homme') {
+      return 'fa-solid fa-mars';
+    }
+
+    if (sex === 'Femme') {
+      return 'fa-solid fa-venus';
+    }
+
+    return 'fa-solid fa-user';
+  }
+
+  getSidebarPatientSexClass(sex: Patient['sex']): string {
+    if (sex === 'Homme') {
+      return 'sex-male';
+    }
+
+    if (sex === 'Femme') {
+      return 'sex-female';
+    }
+
+    return 'sex-unknown';
+  }
+
+  formatSidebarPatientName(fullName: string): string {
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length <= 1) {
+      return fullName;
+    }
+
+    const [lastName, ...firstNameParts] = parts;
+    return `${lastName.toUpperCase()} ${firstNameParts.join(' ')}`;
+  }
+
+  formatSidebarPatientConsultationCount(value: number): string {
+    return value <= 1 ? `${value} consultation` : `${value} consultations`;
+  }
+
+  formatSidebarPatientAge(age: number | null): string {
+    if (age === null || age < 0) {
+      return 'Age non renseigne';
+    }
+
+    return `${age} ans`;
+  }
+
+  private async searchSidebarPatients(term: string): Promise<void> {
+    const requestId = ++this.sidebarSearchRequestId;
+
+    try {
+      const patients = await this.api.getPatients(term);
+      if (requestId !== this.sidebarSearchRequestId) {
+        return;
+      }
+
+      this.sidebarSearchResults.set(patients.slice(0, 8));
+    } catch {
+      if (requestId === this.sidebarSearchRequestId) {
+        this.sidebarSearchResults.set([]);
+      }
+    } finally {
+      if (requestId === this.sidebarSearchRequestId) {
+        this.isSearchingSidebarPatients.set(false);
+      }
+    }
   }
 
   async logout(): Promise<void> {

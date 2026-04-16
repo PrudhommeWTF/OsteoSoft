@@ -100,6 +100,125 @@
   color: #333;
 }
 
+.sidebar-search-area {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.sidebar-search-area .input-group-text {
+  border: 1px solid #cfd9e1;
+  border-right: 0;
+  background: linear-gradient(180deg, #f6fafc 0%, #ecf3f8 100%);
+  color: #557083;
+}
+
+.sidebar-search-area .sidebar-search {
+  border: 1px solid #cfd9e1;
+  border-left: 0;
+  border-radius: 0 0.45rem 0.45rem 0;
+  padding: 0.52rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+.sidebar-search-area .sidebar-search:focus {
+  box-shadow: none;
+  border-color: #7da2bd;
+}
+
+.sidebar-search-area .input-group:focus-within .input-group-text {
+  border-color: #7da2bd;
+}
+
+.sidebar-search-status {
+  margin: 0;
+  color: #597080;
+  font-size: 0.79rem;
+}
+
+.sidebar-search-results {
+  display: grid;
+  gap: 0.35rem;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 0.1rem;
+}
+
+.patient-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 0.62rem;
+  width: 100%;
+  border: 1px solid #d8e2ea;
+  border-radius: 0.75rem;
+  background: linear-gradient(120deg, #ffffff 0%, #f5f8fb 100%);
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.patient-suggestion:hover,
+.patient-suggestion:focus-visible {
+  transform: translateY(-1px);
+  border-color: #85acc8;
+  box-shadow: 0 8px 16px rgb(54 85 108 / 12%);
+  outline: none;
+}
+
+.patient-suggestion-icon {
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 1.9rem;
+  font-size: 0.8rem;
+}
+
+.patient-suggestion-icon.sex-male {
+  background: #d8ebff;
+  color: #16558f;
+}
+
+.patient-suggestion-icon.sex-female {
+  background: #ffe2ec;
+  color: #9b2a62;
+}
+
+.patient-suggestion-icon.sex-unknown {
+  background: #eceff2;
+  color: #4c5f70;
+}
+
+.patient-suggestion-content {
+  min-width: 0;
+  display: grid;
+  gap: 0.13rem;
+}
+
+.patient-suggestion-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #1e2c37;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.patient-suggestion-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #567182;
+  font-size: 0.74rem;
+}
+
+.patient-suggestion-meta span + span {
+  padding-left: 0.45rem;
+  border-left: 1px solid #d5e0e8;
+}
+
 .main-nav,
 .utility-nav {
   display: grid;

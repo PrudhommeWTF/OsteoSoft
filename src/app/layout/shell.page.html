@@ -13,9 +13,47 @@
     </div>
 
     <label class="sidebar-search-label" for="sidebar-search">Rechercher un patient</label>
-    <div class="input-group input-group-sm">
+    <div class="sidebar-search-area">
+      <div class="input-group input-group-sm">
       <span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
-      <input id="sidebar-search" class="form-control sidebar-search" type="search" placeholder="Rechercher un patient" />
+        <input
+          id="sidebar-search"
+          class="form-control sidebar-search"
+          type="search"
+          placeholder="Rechercher un patient"
+          [value]="sidebarSearch()"
+          (input)="onSidebarSearchChange($any($event.target).value)"
+          (blur)="clearSidebarSearchResults()" />
+      </div>
+
+      @if (isSearchingSidebarPatients()) {
+        <p class="sidebar-search-status" aria-live="polite">Recherche en cours...</p>
+      } @else if (sidebarSearch().trim().length >= 2 && sidebarSearchResults().length === 0) {
+        <p class="sidebar-search-status" aria-live="polite">Aucun patient correspondant.</p>
+      }
+
+      @if (sidebarSearchResults().length > 0) {
+        <div class="sidebar-search-results" role="listbox" aria-label="Suggestions de patients">
+          @for (patient of sidebarSearchResults(); track patient.id) {
+            <button
+              type="button"
+              class="patient-suggestion"
+              (mousedown)="$event.preventDefault()"
+              (click)="openPatientFromSidebar(patient.id)">
+              <span class="patient-suggestion-icon" [class]="getSidebarPatientSexClass(patient.sex)">
+                <i [class]="getSidebarPatientSexIcon(patient.sex)"></i>
+              </span>
+              <span class="patient-suggestion-content">
+                <span class="patient-suggestion-name">{{ formatSidebarPatientName(patient.fullName) }}</span>
+                <span class="patient-suggestion-meta">
+                  <span>{{ formatSidebarPatientConsultationCount(patient.consultationCount) }}</span>
+                  <span>{{ formatSidebarPatientAge(patient.age) }}</span>
+                </span>
+              </span>
+            </button>
+          }
+        </div>
+      }
     </div>
 
     <nav class="main-nav">
