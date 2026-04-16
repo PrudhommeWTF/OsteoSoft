@@ -126,12 +126,11 @@
                   <input
                     #birthDateInput
                     id="edit-birthdate"
-                    class="form-control"
+                    class="form-control cursor-pointer"
                     type="text"
                     autocomplete="off"
                     placeholder="jj/mm/aaaa"
                     readonly
-                    style="cursor: pointer;"
                     formControlName="birthDate"
                   />
                 </div>
@@ -316,8 +315,7 @@
                         {{ person.fullName }}
                         <button
                           type="button"
-                          class="btn-close ms-1"
-                          style="font-size:0.55rem;"
+                          class="btn-close btn-close-xs ms-1"
                           aria-label="Retirer"
                           (click)="removeRelatedPatient(person.id)"
                         ></button>

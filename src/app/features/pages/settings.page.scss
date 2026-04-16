@@ -166,6 +166,20 @@
   background-color: #f4f9fc;
 }
 
+.settings-color-dot {
+  width: 1rem;
+  height: 1rem;
+  display: inline-block;
+}
+
+.settings-signature-preview {
+  max-height: 110px;
+}
+
+.settings-modal-overlay {
+  background-color: rgb(0 0 0 / 50%);
+}
+
 .settings-access-intro {
   display: flex;
   justify-content: space-between;

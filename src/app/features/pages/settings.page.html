@@ -116,8 +116,7 @@
                       {{ selectedRgpdPatient()!.fullName }}
                       <button
                         type="button"
-                        class="btn-close ms-1"
-                        style="font-size:0.55rem;"
+                        class="btn-close btn-close-xs ms-1"
                         aria-label="Retirer"
                         [disabled]="isExportingRgpdPatient()"
                         (click)="clearRgpdPatientSelection()"
@@ -508,7 +507,7 @@
                         </td>
                         <td>{{ formatUserName(user) }}</td>
                         <td>
-                          <span class="d-inline-block rounded-circle border" [style.background]="user.colorHex || '#4d92d1'" style="width: 1rem; height: 1rem;"></span>
+                          <span class="d-inline-block rounded-circle border settings-color-dot" [style.background]="user.colorHex || '#4d92d1'"></span>
                         </td>
                         <td>{{ user.profileLabel || '-' }}</td>
                         <td>{{ user.cabinetName || '-' }}</td>
@@ -714,8 +713,7 @@
                               <img
                                 [src]="userSignatureValue()"
                                 alt="Signature actuelle"
-                                class="img-fluid rounded border"
-                                style="max-height: 110px;"
+                                class="img-fluid rounded border settings-signature-preview"
                               />
                             } @else {
                               <div class="small text-break">{{ getUserSignaturePreviewText() }}</div>
@@ -1000,7 +998,7 @@
 
           <!-- Office Modal -->
           @if (isOfficeModalOpen()) {
-            <div class="modal d-block" role="dialog" style="background-color: rgba(0, 0, 0, 0.5)">
+            <div class="modal d-block settings-modal-overlay" role="dialog">
               <div class="modal-dialog modal-xl">
                 <div class="modal-content">
                   <div class="modal-header">
@@ -1466,7 +1464,7 @@
                                         <td class="fw-semibold">{{ calendar.name }}</td>
                                         <td>{{ calendar.description || '—' }}</td>
                                         <td>
-                                          <span class="rounded-circle border" style="width: 1rem; height: 1rem; display: inline-block;" [style.background-color]="calendar.colorHex" aria-label="Pastille couleur"></span>
+                                          <span class="rounded-circle border settings-color-dot" [style.background-color]="calendar.colorHex" aria-label="Pastille couleur"></span>
                                         </td>
                                         <td>{{ getLocalCalendarVisibilityText(calendar) }}</td>
                                         <td class="text-end">
@@ -1553,7 +1551,7 @@
           }
 
           @if (isLocalCalendarModalOpen()) {
-            <div class="modal d-block" role="dialog" style="background-color: rgba(0, 0, 0, 0.5)">
+            <div class="modal d-block settings-modal-overlay" role="dialog">
               <div class="modal-dialog modal-lg">
                 <div class="modal-content">
                   <div class="modal-header">

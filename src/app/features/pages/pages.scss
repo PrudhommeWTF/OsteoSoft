@@ -57,6 +57,11 @@
   height: var(--agenda-slot-height, 14px);
 }
 
+.agenda-calendar-dot {
+  width: 10px;
+  height: 10px;
+}
+
 .table > :not(caption) > * > * {
   white-space: nowrap;
 }
