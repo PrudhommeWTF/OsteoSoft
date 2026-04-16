@@ -92,7 +92,7 @@
 }
 
 .sidebar-search {
-  width: 100%;
+  min-width: 0;
   border: 1px solid #d0d0d0;
   border-radius: 4px;
   padding: 0.9rem 0.8rem;
@@ -103,6 +103,10 @@
 .sidebar-search-area {
   position: relative;
   display: grid;
+}
+
+.sidebar-search-area .input-group {
+  flex-wrap: nowrap;
 }
 
 .sidebar-search-area .input-group-text {

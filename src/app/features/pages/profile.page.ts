@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { ApiService } from '../../core/api.service';
+import { AuthService } from '../../core/auth.service';
+import { UpdateMyUserProfilePayload } from '../../core/api.types';
 
 @Component({
   selector: 'app-profile-page',
@@ -12,12 +14,18 @@ import { ApiService } from '../../core/api.service';
 })
 export class ProfilePage {
   private readonly api = inject(ApiService);
+  private readonly authService = inject(AuthService);
   private readonly fb = inject(FormBuilder);
 
   readonly isLoading = signal(false);
   readonly isSaving = signal(false);
   readonly error = signal('');
   readonly success = signal('');
+  readonly lockedRole = signal('');
+  readonly lockedIsActive = signal(true);
+  readonly lockedCabinets = signal<string[]>([]);
+
+  readonly countryOptions = ['France', 'Belgique', 'Suisse', 'Luxembourg', 'Canada'] as const;
 
   readonly patientRemarksDisplayOptions = [
     { value: 'hidden' as const, label: 'Ne pas afficher' },
@@ -39,7 +47,37 @@ export class ProfilePage {
 
   readonly patientAutoSaveOptions = ['Jamais', 'Toutes les 2 minutes', 'Toutes les 5 minutes', 'Toutes les 10 minutes'] as const;
 
-  readonly form = this.fb.nonNullable.group({
+  readonly accountForm = this.fb.nonNullable.group({
+    username: ['', [Validators.required, Validators.maxLength(100)]],
+    password: ['', [Validators.maxLength(256)]],
+    passwordConfirmation: ['', [Validators.maxLength(256)]],
+    lastName: ['', [Validators.maxLength(100)]],
+    firstName: ['', [Validators.maxLength(100)]],
+    email: ['', [Validators.maxLength(150), Validators.email]],
+    mobilePhone: ['', [Validators.maxLength(50)]],
+    country: ['France', [Validators.maxLength(80)]],
+    siret: ['', [Validators.maxLength(30)]],
+    adeliCode: ['', [Validators.maxLength(40)]],
+    rppsCode: ['', [Validators.maxLength(40)]],
+    apeNafCode: ['', [Validators.maxLength(40)]],
+    nameSuffixText: ['', [Validators.maxLength(200)]],
+    letterHeader: ['', [Validators.maxLength(500)]],
+    letterFooter: ['', [Validators.maxLength(500)]],
+    signatureText: ['', [Validators.maxLength(2_000_000)]],
+    colorHex: ['#4d92d1', [Validators.maxLength(20)]],
+    bankName: ['', [Validators.maxLength(150)]],
+    iban: ['', [Validators.maxLength(60)]],
+    retrocessionPercent: [0, [Validators.min(0), Validators.max(100)]],
+    retrocessionRecipient: ['', [Validators.maxLength(120)]],
+    defaultAgendaView: ['Semaine', [Validators.maxLength(80)]],
+    visibleCalendars: ['Tous les calendriers', [Validators.maxLength(120)]],
+    defaultService: ['Aucune prestation', [Validators.maxLength(120)]],
+    invoiceMentions: ['', [Validators.maxLength(2000)]],
+    includeFreeConsultations: [true],
+    showConsultationHour: [true]
+  });
+
+  readonly preferencesForm = this.fb.nonNullable.group({
     slotDurationMinutes: [15, [Validators.required, Validators.min(5), Validators.max(50)]],
     displayHeight: [14, [Validators.required, Validators.min(14), Validators.max(35)]],
     pdfDisplayMode: ['browser' as 'browser' | 'download', [Validators.required]],
@@ -63,9 +101,15 @@ export class ProfilePage {
   }
 
   async save(): Promise<void> {
-    if (this.form.invalid) {
-      this.form.markAllAsTouched();
+    if (this.accountForm.invalid || this.preferencesForm.invalid) {
+      this.accountForm.markAllAsTouched();
+      this.preferencesForm.markAllAsTouched();
       this.error.set('Veuillez corriger les champs invalides.');
+      return;
+    }
+
+    if (this.hasPasswordMismatch()) {
+      this.error.set('Les mots de passe saisis ne correspondent pas.');
       return;
     }
 
@@ -78,11 +122,20 @@ export class ProfilePage {
     this.success.set('');
 
     try {
-      const saved = await this.api.updateMyAgendaPreferences(this.form.getRawValue());
-      this.form.reset(saved);
-      this.success.set('Préférences enregistrées.');
+      const profilePayload = this.buildProfilePayload();
+      await this.api.updateMyUserProfile(profilePayload);
+      const savedPreferences = await this.api.updateMyAgendaPreferences(this.preferencesForm.getRawValue());
+
+      this.preferencesForm.reset(savedPreferences);
+      this.accountForm.patchValue({
+        password: '',
+        passwordConfirmation: ''
+      });
+
+      await this.authService.refreshSession();
+      this.success.set('Profil enregistré avec succès.');
     } catch {
-      this.error.set('Impossible d’enregistrer vos préférences.');
+      this.error.set('Impossible d’enregistrer votre profil.');
     } finally {
       this.isSaving.set(false);
     }
@@ -93,12 +146,99 @@ export class ProfilePage {
     this.error.set('');
 
     try {
-      const preferences = await this.api.getMyAgendaPreferences();
-      this.form.reset(preferences);
+      const [profile, preferences] = await Promise.all([
+        this.api.getMyUserProfile(),
+        this.api.getMyAgendaPreferences()
+      ]);
+
+      this.lockedRole.set(profile.role || 'Inconnu');
+      this.lockedIsActive.set(Boolean(profile.isActive));
+      this.lockedCabinets.set(
+        String(profile.cabinetName ?? '')
+          .split(',')
+          .map((name) => name.trim())
+          .filter((name) => name.length > 0)
+      );
+
+      this.accountForm.reset({
+        username: profile.username || '',
+        password: '',
+        passwordConfirmation: '',
+        lastName: profile.lastName || '',
+        firstName: profile.firstName || '',
+        email: profile.email || '',
+        mobilePhone: profile.mobilePhone || '',
+        country: profile.country || 'France',
+        siret: profile.siret || '',
+        adeliCode: profile.adeliCode || '',
+        rppsCode: profile.rppsCode || '',
+        apeNafCode: profile.apeNafCode || '',
+        nameSuffixText: profile.nameSuffixText || '',
+        letterHeader: profile.letterHeader || '',
+        letterFooter: profile.letterFooter || '',
+        signatureText: profile.signatureText || '',
+        colorHex: profile.colorHex || '#4d92d1',
+        bankName: profile.bankName || '',
+        iban: profile.iban || '',
+        retrocessionPercent: profile.retrocessionPercent ?? 0,
+        retrocessionRecipient: profile.retrocessionRecipient || '',
+        defaultAgendaView: profile.defaultAgendaView || 'Semaine',
+        visibleCalendars: profile.visibleCalendars || 'Tous les calendriers',
+        defaultService: profile.defaultService || 'Aucune prestation',
+        invoiceMentions: profile.invoiceMentions || '',
+        includeFreeConsultations: profile.includeFreeConsultations ?? true,
+        showConsultationHour: profile.showConsultationHour ?? true
+      });
+
+      this.preferencesForm.reset(preferences);
     } catch {
-      this.error.set('Impossible de charger vos préférences.');
+      this.error.set('Impossible de charger votre profil.');
     } finally {
       this.isLoading.set(false);
     }
+  }
+
+  hasPasswordMismatch(): boolean {
+    const password = this.accountForm.controls.password.value.trim();
+    const confirmation = this.accountForm.controls.passwordConfirmation.value.trim();
+
+    if (!password && !confirmation) {
+      return false;
+    }
+
+    return password !== confirmation;
+  }
+
+  private buildProfilePayload(): UpdateMyUserProfilePayload {
+    const raw = this.accountForm.getRawValue();
+
+    return {
+      username: raw.username.trim(),
+      password: raw.password.trim(),
+      lastName: raw.lastName.trim(),
+      firstName: raw.firstName.trim(),
+      email: raw.email.trim(),
+      mobilePhone: raw.mobilePhone.trim(),
+      country: raw.country.trim() || 'France',
+      siret: raw.siret.trim(),
+      adeliCode: raw.adeliCode.trim(),
+      rppsCode: raw.rppsCode.trim(),
+      apeNafCode: raw.apeNafCode.trim(),
+      nameSuffixText: raw.nameSuffixText.trim(),
+      letterHeader: raw.letterHeader.trim(),
+      letterFooter: raw.letterFooter.trim(),
+      signatureText: raw.signatureText.trim(),
+      colorHex: raw.colorHex.trim() || '#4d92d1',
+      bankName: raw.bankName.trim(),
+      iban: raw.iban.trim(),
+      retrocessionPercent: Number(raw.retrocessionPercent) || 0,
+      retrocessionRecipient: raw.retrocessionRecipient.trim(),
+      defaultAgendaView: raw.defaultAgendaView.trim() || 'Semaine',
+      visibleCalendars: raw.visibleCalendars.trim() || 'Tous les calendriers',
+      defaultService: raw.defaultService.trim() || 'Aucune prestation',
+      invoiceMentions: raw.invoiceMentions.trim(),
+      includeFreeConsultations: raw.includeFreeConsultations,
+      showConsultationHour: raw.showConsultationHour
+    };
   }
 }

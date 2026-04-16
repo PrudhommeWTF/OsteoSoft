@@ -89,6 +89,13 @@ export type UserAccountPayload = {
   showConsultationHour: boolean;
 };
 
+export type MyUserProfile = AccessManagedUser;
+
+export type UpdateMyUserProfilePayload = Omit<
+  UserAccountPayload,
+  'isActive' | 'profileId' | 'role' | 'officeId' | 'officeIds'
+>;
+
 export type Practitioner = {
   id: number;
   username: string;

@@ -27,6 +27,7 @@ import {
   GeneralSettingsPayload,
   InvoiceSummaryTile,
   LocationPair,
+  MyUserProfile,
   NewPatientDraft,
   NewPatientDraftPayload,
   Office,
@@ -43,6 +44,7 @@ import {
   UpdateAccessProfileRightsPayload,
   UpdateOfficePayload,
   UserAgendaPreferences,
+  UpdateMyUserProfilePayload,
   UpdatePatientPayload
 } from './api.types';
 
@@ -435,6 +437,18 @@ export class ApiService {
     );
 
     return response.preferences;
+  }
+
+  async getMyUserProfile(): Promise<MyUserProfile> {
+    const response = await firstValueFrom(
+      this.http.get<{ profile: MyUserProfile }>(`${this.baseUrl}/profile/me`)
+    );
+
+    return response.profile;
+  }
+
+  async updateMyUserProfile(payload: UpdateMyUserProfilePayload): Promise<void> {
+    await firstValueFrom(this.http.put<void>(`${this.baseUrl}/profile/me`, payload));
   }
 
   async getOffices(): Promise<Office[]> {

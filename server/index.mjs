@@ -3453,6 +3453,14 @@ const createUserAccountSchema = userAccountFieldsSchema.extend({
 
 const updateUserAccountSchema = userAccountFieldsSchema;
 
+const updateMyProfileSchema = userAccountFieldsSchema.omit({
+  isActive: true,
+  profileId: true,
+  role: true,
+  officeId: true,
+  officeIds: true
+});
+
 const dataRestoreSchema = z.object({
   meta: z.record(z.string(), z.unknown()).optional(),
   data: z.object({
@@ -3679,6 +3687,148 @@ app.put('/api/settings/agenda', authMiddleware, adminOnlyMiddleware, (req, res) 
 
 app.get('/api/profile/agenda-preferences', authMiddleware, (req, res) => {
   return res.json({ preferences: readUserAgendaPreferences(req.user.sub) });
+});
+
+app.get('/api/profile/me', authMiddleware, (req, res) => {
+  const row = db
+    .prepare(
+      `SELECT u.id, u.username, u.created_at, u.role, u.is_active, u.profile_id, p.label AS profile_label,
+              u.office_id, o.name AS office_name, u.last_name, u.first_name, u.email, u.mobile_phone, u.country,
+              u.siret, u.adeli_code, u.rpps_code, u.ape_naf_code, u.name_suffix_text,
+              u.letter_header, u.letter_footer, u.signature_text, u.color_hex,
+              u.bank_name, u.iban, u.retrocession_percent, u.retrocession_recipient,
+              u.default_agenda_view, u.visible_calendars, u.default_service, u.invoice_mentions,
+              u.include_free_consultations, u.show_consultation_hour,
+              (
+                SELECT json_group_array(uo.office_id)
+                FROM user_offices uo
+                WHERE uo.user_id = u.id
+              ) AS office_ids_json,
+              (
+                SELECT group_concat(o2.name, ', ')
+                FROM user_offices uo2
+                INNER JOIN offices o2 ON o2.id = uo2.office_id
+                WHERE uo2.user_id = u.id
+              ) AS office_names
+       FROM users u
+       LEFT JOIN access_profiles p ON p.id = u.profile_id
+       LEFT JOIN offices o ON o.id = u.office_id
+       WHERE u.id = ?`
+    )
+    .get(req.user.sub);
+
+  if (!row) {
+    return res.status(404).json({ message: 'Utilisateur introuvable' });
+  }
+
+  return res.json({ profile: mapUserAccountRow(row) });
+});
+
+app.put('/api/profile/me', authMiddleware, async (req, res) => {
+  const parsed = updateMyProfileSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Payload invalide' });
+  }
+
+  const payload = parsed.data;
+  const currentUser = db.prepare('SELECT id, username FROM users WHERE id = ?').get(req.user.sub);
+
+  if (!currentUser) {
+    return res.status(404).json({ message: 'Utilisateur introuvable' });
+  }
+
+  const username = payload.username.trim();
+  if (!username) {
+    return res.status(400).json({ message: 'Le login est obligatoire' });
+  }
+
+  const usernameConflict = db
+    .prepare('SELECT id FROM users WHERE lower(username) = lower(?) AND id <> ?')
+    .get(username, req.user.sub);
+
+  if (usernameConflict) {
+    return res.status(409).json({ message: 'Un utilisateur avec ce login existe deja' });
+  }
+
+  if (currentUser.username === 'admin' && username !== 'admin') {
+    return res.status(403).json({ message: 'Le login du compte admin ne peut pas être modifié' });
+  }
+
+  db.prepare(
+    `UPDATE users
+     SET username = ?,
+         last_name = ?,
+         first_name = ?,
+         email = ?,
+         mobile_phone = ?,
+         country = ?,
+         siret = ?,
+         adeli_code = ?,
+         rpps_code = ?,
+         ape_naf_code = ?,
+         name_suffix_text = ?,
+         letter_header = ?,
+         letter_footer = ?,
+         signature_text = ?,
+         color_hex = ?,
+         bank_name = ?,
+         iban = ?,
+         retrocession_percent = ?,
+         retrocession_recipient = ?,
+         default_agenda_view = ?,
+         visible_calendars = ?,
+         default_service = ?,
+         invoice_mentions = ?,
+         include_free_consultations = ?,
+         show_consultation_hour = ?
+     WHERE id = ?`
+  ).run(
+    username,
+    payload.lastName.trim(),
+    payload.firstName.trim(),
+    payload.email.trim(),
+    payload.mobilePhone.trim(),
+    payload.country.trim() || 'France',
+    payload.siret.trim(),
+    payload.adeliCode.trim(),
+    payload.rppsCode.trim(),
+    payload.apeNafCode.trim(),
+    payload.nameSuffixText.trim(),
+    payload.letterHeader.trim(),
+    payload.letterFooter.trim(),
+    payload.signatureText.trim(),
+    payload.colorHex.trim() || '#4d92d1',
+    payload.bankName.trim(),
+    payload.iban.trim(),
+    Number(payload.retrocessionPercent) || 0,
+    payload.retrocessionRecipient.trim(),
+    payload.defaultAgendaView.trim() || 'Semaine',
+    payload.visibleCalendars.trim() || 'Tous les calendriers',
+    payload.defaultService.trim() || 'Aucune prestation',
+    payload.invoiceMentions.trim(),
+    payload.includeFreeConsultations ? 1 : 0,
+    payload.showConsultationHour ? 1 : 0,
+    req.user.sub
+  );
+
+  const nextPassword = payload.password.trim();
+  if (nextPassword) {
+    const passwordHash = await argon2.hash(nextPassword, {
+      type: argon2.argon2id,
+      memoryCost: 2 ** 16,
+      timeCost: 3,
+      parallelism: 1
+    });
+
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, req.user.sub);
+  }
+
+  writeAuditLog(req.user.sub, 'UPDATE', 'users', String(req.user.sub), {
+    username,
+    updatedPassword: Boolean(nextPassword)
+  });
+
+  return res.status(204).send();
 });
 
 app.put('/api/profile/agenda-preferences', authMiddleware, (req, res) => {

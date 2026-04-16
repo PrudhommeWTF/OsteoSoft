@@ -77,6 +77,15 @@ export class AuthService {
     }
   }
 
+  async refreshSession(): Promise<void> {
+    try {
+      const user = await this.api.me();
+      this.setSessionFromUser(user);
+    } catch {
+      this.clearSession();
+    }
+  }
+
   private setSessionFromUser(user: AuthUser): void {
     const permissions = new Set<string>();
     const rights = user.rights ?? {};
