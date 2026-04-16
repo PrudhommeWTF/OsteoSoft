@@ -1,5 +1,6 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 
@@ -188,6 +189,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   readonly consultationSchemaHtml = signal('');
   readonly consultationTreatmentsHtml = signal('');
   readonly consultationRemarksHtml = signal('');
+  readonly isConsultationLinkStrategyModalOpen = signal(false);
 
   readonly consultationProfileOptions: PatientProfile[] = ['Adulte', 'Femme enceinte', 'Nourrisson', 'Enfant'];
 
@@ -229,6 +231,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   private isViewReady = false;
   private pendingBirthDateIso = '';
   private isSynchronizingLocationFields = false;
+  private pendingConsultationLinkStrategy: 'attach-existing' | 'create-new' | null = null;
 
   /** ISO date (yyyy-mm-dd) kept in sync by the datepicker */
   private readonly birthDateIso = signal('');
@@ -827,18 +830,48 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
+    if (this.hasConsultationContent() && !this.pendingConsultationLinkStrategy) {
+      this.isConsultationLinkStrategyModalOpen.set(true);
+      return;
+    }
+
     this.isSaving.set(true);
     this.errorMessage.set('');
 
     try {
-      const payload = { ...this.form.getRawValue(), isDeceased: false };
+      const payload = {
+        ...this.form.getRawValue(),
+        isDeceased: false,
+        ...(this.hasConsultationContent() && this.pendingConsultationLinkStrategy
+          ? { consultationLinkStrategy: this.pendingConsultationLinkStrategy }
+          : {})
+      };
       await this.api.createPatient(payload);
+      this.pendingConsultationLinkStrategy = null;
+      this.isConsultationLinkStrategyModalOpen.set(false);
       this.clearLocalDraft();
       await this.router.navigateByUrl('/patients');
-    } catch {
-      this.errorMessage.set("Impossible d'enregistrer le patient. Verifie les champs et reessaie.");
+    } catch (error) {
+      if (error instanceof HttpErrorResponse && error.status === 403) {
+        this.errorMessage.set('Droit insuffisant pour creer un patient.');
+      } else {
+        this.errorMessage.set("Impossible d'enregistrer le patient. Verifie les champs et reessaie.");
+      }
       this.isSaving.set(false);
     }
+  }
+
+  closeConsultationLinkStrategyModal(): void {
+    if (this.isSaving()) {
+      return;
+    }
+    this.isConsultationLinkStrategyModalOpen.set(false);
+  }
+
+  chooseConsultationLinkStrategy(attachExisting: boolean): void {
+    this.pendingConsultationLinkStrategy = attachExisting ? 'attach-existing' : 'create-new';
+    this.isConsultationLinkStrategyModalOpen.set(false);
+    void this.submit();
   }
 
   async cancelCreation(): Promise<void> {
@@ -1418,6 +1451,17 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
 
   private syncConsultationNoteFromState(): void {
     this.form.controls.consultationNote.setValue(JSON.stringify(this.buildConsultationDraft()));
+  }
+
+  private hasConsultationContent(): boolean {
+    return Boolean(
+      this.consultationTitle().trim() ||
+      this.consultationMotifMainHtml().trim() ||
+      this.consultationTestsHtml().trim() ||
+      this.consultationSchemaHtml().trim() ||
+      this.consultationTreatmentsHtml().trim() ||
+      this.consultationRemarksHtml().trim()
+    );
   }
 
   private restoreConsultationFromNote(raw: string): void {

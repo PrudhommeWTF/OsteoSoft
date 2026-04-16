@@ -849,4 +849,35 @@
     </div>
 
   </form>
+
+  @if (isConsultationLinkStrategyModalOpen()) {
+    <div
+      class="antecedent-modal-backdrop"
+      style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); z-index: 2000;"
+      (click)="closeConsultationLinkStrategyModal()"></div>
+    <div
+      class="antecedent-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="consultationLinkStrategyModalTitle"
+      style="position: fixed; z-index: 2010; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(640px, calc(100vw - 1.5rem)); max-height: calc(100vh - 2rem); overflow: auto; background: #fff; border-radius: 12px; border: 1px solid #dfe3e7; box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);"
+      (click)="$event.stopPropagation()">
+      <div class="antecedent-modal-header">
+        <h3 id="consultationLinkStrategyModalTitle" class="mb-0">Strategie de liaison consultation/rendez-vous</h3>
+        <button type="button" class="btn-close" aria-label="Fermer" (click)="closeConsultationLinkStrategyModal()"></button>
+      </div>
+      <div class="antecedent-modal-body">
+        <p class="mb-2">Si une consultation existe deja autour du meme creneau, que faut-il faire ?</p>
+        <div class="alert alert-secondary py-2 mb-0">
+          <div><strong>Oui</strong>: rattacher la consultation existante au lieu d'en creer une nouvelle.</div>
+          <div><strong>Non</strong>: creer une nouvelle consultation meme en cas de consultation existante.</div>
+        </div>
+      </div>
+      <div class="antecedent-modal-footer">
+        <button type="button" class="btn btn-outline-secondary" (click)="closeConsultationLinkStrategyModal()">Annuler</button>
+        <button type="button" class="btn btn-outline-primary" (click)="chooseConsultationLinkStrategy(false)">Non, creer une nouvelle consultation</button>
+        <button type="button" class="btn btn-success" (click)="chooseConsultationLinkStrategy(true)">Oui, rattacher l'existante</button>
+      </div>
+    </div>
+  }
 </div>

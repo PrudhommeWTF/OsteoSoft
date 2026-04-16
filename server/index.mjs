@@ -3357,7 +3357,8 @@ const createPatientSchema = z.object({
   relatedPeople: z.string().max(500).optional().default(''),
   isDeceased: z.boolean().optional().default(false),
   medicalHistory: z.string().max(5000).optional().default(''),
-  consultationNote: z.string().max(30000).optional().default('')
+  consultationNote: z.string().max(30000).optional().default(''),
+  consultationLinkStrategy: z.enum(['attach-existing', 'create-new']).optional()
 });
 
 const patientDraftSchema = z.object({
@@ -5258,7 +5259,7 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
   storeAntecedentTypes(antecedentCategories);
   insertConsultationFromNote(Number(inserted.lastInsertRowid), payload.consultationNote, {
     userId: req.user.sub,
-    linkStrategy: 'attach-existing'
+    linkStrategy: payload.consultationLinkStrategy === 'create-new' ? 'create-new' : 'attach-existing'
   });
   synchronizeBidirectionalRelatedPeople({
     targetPatientId: Number(inserted.lastInsertRowid),

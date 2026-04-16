@@ -215,6 +215,7 @@ export type CreatePatientPayload = {
   isDeceased: boolean;
   medicalHistory: string;
   consultationNote: string;
+  consultationLinkStrategy?: 'attach-existing' | 'create-new';
 };
 
 export type PeoplePickerContact = {
