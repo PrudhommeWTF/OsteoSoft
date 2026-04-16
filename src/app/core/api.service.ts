@@ -148,6 +148,14 @@ export class ApiService {
     return firstValueFrom(this.http.get<DirectoryContactsPayload>(`${this.baseUrl}/directory/contacts`, { params }));
   }
 
+  async getDirectoryContactCount(): Promise<number> {
+    const response = await firstValueFrom(
+      this.http.get<{ count: number }>(`${this.baseUrl}/directory/contacts/count`)
+    );
+
+    return Number(response.count ?? 0);
+  }
+
   async createDirectoryContact(payload: DirectoryContactPayload): Promise<DirectoryContact> {
     const response = await firstValueFrom(
       this.http.post<{ contact: DirectoryContact }>(`${this.baseUrl}/directory/contacts`, payload)

@@ -4810,6 +4810,34 @@ app.get('/api/directory/contacts', authMiddleware, requirePermission('read-direc
   return res.json({ contacts: rows, offices, selectedOfficeId: officeIdFilter });
 });
 
+app.get('/api/directory/contacts/count', authMiddleware, requirePermission('read-directory'), (req, res) => {
+  const isAdmin = req.user.role === 'admin';
+  const offices = getScopedOfficeOptions(req.userAccess, isAdmin);
+  const allowedOfficeIds = offices
+    .map((office) => Number(office.id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+
+  if (!isAdmin && allowedOfficeIds.length === 0) {
+    return res.json({ count: 0 });
+  }
+
+  if (isAdmin) {
+    const totalCount = Number(
+      db.prepare('SELECT COUNT(*) AS count FROM directory_contacts').get()?.count ?? 0
+    );
+    return res.json({ count: totalCount });
+  }
+
+  const placeholders = allowedOfficeIds.map(() => '?').join(', ');
+  const scopedCount = Number(
+    db
+      .prepare(`SELECT COUNT(*) AS count FROM directory_contacts WHERE office_id IN (${placeholders})`)
+      .get(...allowedOfficeIds)?.count ?? 0
+  );
+
+  return res.json({ count: scopedCount });
+});
+
 app.post('/api/directory/contacts', authMiddleware, requirePermission('create-directory-contact'), (req, res) => {
   const parsed = z
     .object({
