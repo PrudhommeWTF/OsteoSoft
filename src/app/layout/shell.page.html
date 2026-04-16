@@ -14,20 +14,20 @@
 
     <label class="sidebar-search-label" for="sidebar-search">Rechercher un patient</label>
     <div class="sidebar-search-area">
-      <div class="input-group input-group-sm">
-      <span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
-        <input
+      <input
           id="sidebar-search"
-          class="form-control sidebar-search"
+          class="form-control"
           type="search"
           placeholder="Rechercher un patient"
           [value]="sidebarSearch()"
           (input)="onSidebarSearchChange($any($event.target).value)"
           (blur)="clearSidebarSearchResults()" />
-      </div>
 
       @if (isSearchingSidebarPatients()) {
-        <p class="sidebar-search-status" aria-live="polite">Recherche en cours...</p>
+        <div class="sidebar-search-status" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+          Recherche en cours...
+        </div>
       } @else if (sidebarSearch().trim().length >= 2 && sidebarSearchResults().length === 0) {
         <p class="sidebar-search-status" aria-live="polite">Aucun patient correspondant.</p>
       }

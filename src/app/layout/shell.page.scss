@@ -101,8 +101,8 @@
 }
 
 .sidebar-search-area {
+  position: relative;
   display: grid;
-  gap: 0.5rem;
 }
 
 .sidebar-search-area .input-group-text {
@@ -130,16 +130,37 @@
 }
 
 .sidebar-search-status {
-  margin: 0;
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  right: 0;
+  z-index: 8;  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;  margin: 0;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #d8e2ea;
+  border-radius: 0.7rem;
+  background: #fff;
+  box-shadow: 0 10px 24px rgb(54 85 108 / 12%);
   color: #597080;
   font-size: 0.79rem;
 }
 
 .sidebar-search-results {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  right: 0;
+  z-index: 8;
   display: grid;
   gap: 0.35rem;
   max-height: 240px;
   overflow-y: auto;
+  border: 1px solid #d8e2ea;
+  border-radius: 0.8rem;
+  background: #fff;
+  box-shadow: 0 10px 24px rgb(54 85 108 / 12%);
+  padding: 0.4rem;
   padding-right: 0.1rem;
 }
 
