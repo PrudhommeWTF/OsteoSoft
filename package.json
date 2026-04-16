@@ -7,6 +7,7 @@
     "start:api": "node server/index.mjs",
     "start:full": "concurrently -n web,api -c cyan,green \"npm:start\" \"npm:start:api\"",
     "seed:fakename": "node server/scripts/import-fakename-patients.mjs 1500",
+    "seed:directory": "node server/scripts/seed-directory-contacts.mjs",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
