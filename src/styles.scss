@@ -44,3 +44,9 @@ textarea {
 .datepicker {
   z-index: 2000 !important;
 }
+
+.ui-datepicker,
+#ui-datepicker-div,
+.datepicker-dropdown {
+  z-index: 2200 !important;
+}
