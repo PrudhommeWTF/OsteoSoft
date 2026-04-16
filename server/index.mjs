@@ -3319,6 +3319,11 @@ function requirePermission(permissionId) {
       return res.status(401).json({ message: 'Session invalide' });
     }
 
+    if (access.role === 'admin') {
+      req.userAccess = access;
+      return next();
+    }
+
     if (!hasPermission(access.rights, permissionId)) {
       return res.status(403).json({ message: 'Droit insuffisant' });
     }

@@ -124,8 +124,20 @@ export class DirectoryPage {
       if (this.selectedOfficeId() === null && payload.selectedOfficeId != null) {
         this.selectedOfficeId.set(Number(payload.selectedOfficeId));
       }
-    } catch {
-      this.errorMessage.set('Impossible de charger le repertoire.');
+    } catch (error) {
+      if (error instanceof HttpErrorResponse) {
+        if (error.status === 403) {
+          this.errorMessage.set('Acces refuse au repertoire (droits insuffisants).');
+        } else if (error.status === 401) {
+          this.errorMessage.set('Session expiree. Reconnectez-vous puis reessayez.');
+        } else if (error.status === 0) {
+          this.errorMessage.set('Serveur API inaccessible. Verifiez que le backend est demarre.');
+        } else {
+          this.errorMessage.set('Impossible de charger le repertoire.');
+        }
+      } else {
+        this.errorMessage.set('Impossible de charger le repertoire.');
+      }
     } finally {
       this.isLoading.set(false);
     }
