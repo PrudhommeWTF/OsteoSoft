@@ -1,0 +1,29 @@
+:host {
+  display: block;
+}
+
+.page-head h1 {
+  color: #17384d;
+}
+
+.panel {
+  border-radius: 1rem;
+}
+
+.calendar-host {
+  width: 100%;
+}
+.chart-wrap {
+  position: relative;
+  min-height: 320px;
+}
+
+.chart-wrap-sm {
+  min-height: 260px;
+}
+
+@media (max-width: 1199px) {
+  .chart-wrap {
+    min-height: 280px;
+  }
+}

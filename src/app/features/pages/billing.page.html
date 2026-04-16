@@ -1,0 +1,31 @@
+<section class="page-head d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+  <div>
+    <h1 class="h3 mb-1"><i class="fa-solid fa-file-invoice-dollar text-primary me-2"></i>Facturation</h1>
+    <p class="text-secondary mb-0">Suivi de la performance financière du cabinet.</p>
+  </div>
+</section>
+
+<section class="row g-3" aria-label="KPI facturation">
+  @for (tile of tiles(); track tile.label) {
+    <article class="col-12 col-md-4">
+      <div class="panel stat-panel card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <p class="muted text-uppercase small mb-1">{{ tile.label }}</p>
+          <p class="kpi mb-1">{{ tile.value }}</p>
+          <p class="trend mb-0">{{ tile.trend }}</p>
+        </div>
+      </div>
+    </article>
+  }
+</section>
+
+<section class="panel card border-0 shadow-sm mt-3">
+  <div class="card-body">
+    <h2 class="h5 mb-3"><i class="fa-solid fa-bolt me-2 text-primary"></i>Actions rapides</h2>
+    <div class="actions d-flex gap-2 flex-wrap">
+      <button type="button" class="btn btn-primary"><i class="fa-solid fa-plus me-2"></i>Créer une facture</button>
+      <button type="button" class="btn btn-outline-primary"><i class="fa-solid fa-file-export me-2"></i>Exporter vers comptable</button>
+      <button type="button" class="btn btn-outline-secondary"><i class="fa-solid fa-envelope-circle-check me-2"></i>Relancer les impayés</button>
+    </div>
+  </div>
+</section>

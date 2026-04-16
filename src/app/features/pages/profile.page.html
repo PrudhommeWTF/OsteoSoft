@@ -1,0 +1,108 @@
+<section class="page-head d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+  <div>
+    <h1 class="h3 mb-1"><i class="fa-solid fa-user-pen text-primary me-2"></i>Mon profil</h1>
+    <p class="text-secondary mb-0">Préférences personnelles d’affichage de l’agenda.</p>
+  </div>
+</section>
+
+<section class="card border-0 shadow-sm">
+  <div class="card-body p-4">
+    @if (isLoading()) {
+      <p class="text-secondary mb-0">Chargement de vos préférences...</p>
+    } @else {
+      <form [formGroup]="form" (ngSubmit)="save()" novalidate>
+        <div class="row g-3">
+          <div class="col-12 col-lg-6">
+            <label class="form-label" for="profile-slot-duration">
+              Durée des créneaux de l'agenda: {{ form.controls.slotDurationMinutes.value }} min
+            </label>
+            <input id="profile-slot-duration" type="range" class="form-range mb-3" formControlName="slotDurationMinutes" min="5" max="50" step="5" />
+
+            <label class="form-label" for="profile-display-height">
+              Hauteur d'affichage: {{ form.controls.displayHeight.value }}
+            </label>
+            <input id="profile-display-height" type="range" class="form-range mb-3" formControlName="displayHeight" min="14" max="35" step="1" />
+
+            <div class="form-check mb-2">
+              <input id="profile-show-weekend" type="checkbox" class="form-check-input" formControlName="showWeekend" />
+              <label class="form-check-label" for="profile-show-weekend">Afficher le weekend</label>
+            </div>
+            <div class="form-check mb-2">
+              <input id="profile-show-sex" type="checkbox" class="form-check-input" formControlName="showPatientSex" />
+              <label class="form-check-label" for="profile-show-sex">Afficher le sexe du patient</label>
+            </div>
+            <div class="form-check mb-2">
+              <input id="profile-show-mobile" type="checkbox" class="form-check-input" formControlName="showPatientMobilePhone" />
+              <label class="form-check-label" for="profile-show-mobile">Afficher le numéro de téléphone portable du patient</label>
+            </div>
+            <div class="form-check mb-2">
+              <input id="profile-show-landline" type="checkbox" class="form-check-input" formControlName="showPatientLandlinePhone" />
+              <label class="form-check-label" for="profile-show-landline">Afficher le numéro de téléphone fixe du patient</label>
+            </div>
+            <div class="form-check mb-2">
+              <input id="profile-show-comment" type="checkbox" class="form-check-input" formControlName="showAppointmentComment" />
+              <label class="form-check-label" for="profile-show-comment">Afficher le commentaire du RDV</label>
+            </div>
+          </div>
+
+          <div class="col-12 col-lg-6">
+            <label class="form-label" for="profile-pdf-display-mode">Affichage PDF</label>
+            <select id="profile-pdf-display-mode" class="form-select mb-3" formControlName="pdfDisplayMode">
+              @for (option of pdfDisplayModeOptions; track option.value) {
+                <option [value]="option.value">{{ option.label }}</option>
+              }
+            </select>
+
+            <label class="form-label" for="profile-consultation-order">Ordre consultations</label>
+            <select id="profile-consultation-order" class="form-select mb-3" formControlName="consultationOrder">
+              @for (option of consultationOrderOptions; track option) {
+                <option [value]="option">{{ option }}</option>
+              }
+            </select>
+
+            <label class="form-label" for="profile-group-by-year">Regrouper par année à partir de</label>
+            <input id="profile-group-by-year" type="number" class="form-control mb-3" formControlName="groupConsultationsByYearFrom" min="0" max="200" />
+
+            <label class="form-label" for="profile-patient-auto-save">Enregistrement auto des fiches patient</label>
+            <select id="profile-patient-auto-save" class="form-select mb-3" formControlName="patientAutoSaveFrequency">
+              @for (option of patientAutoSaveOptions; track option) {
+                <option [value]="option">{{ option }}</option>
+              }
+            </select>
+
+            <label class="form-label" for="profile-patient-remarks-display">Afficher le champ de remarques patient</label>
+            <select id="profile-patient-remarks-display" class="form-select mb-3" formControlName="patientRemarksDisplay">
+              @for (option of patientRemarksDisplayOptions; track option.value) {
+                <option [value]="option.value">{{ option.label }}</option>
+              }
+            </select>
+
+            <label class="form-label" for="profile-appointment-color-mode">Couleur des RDV</label>
+            <select id="profile-appointment-color-mode" class="form-select" formControlName="appointmentColorMode">
+              @for (option of appointmentColorModeOptions; track option.value) {
+                <option [value]="option.value">{{ option.label }}</option>
+              }
+            </select>
+          </div>
+        </div>
+
+        @if (error()) {
+          <div class="alert alert-danger py-2 mt-3 mb-0" role="alert">{{ error() }}</div>
+        }
+
+        @if (success()) {
+          <div class="alert alert-success py-2 mt-3 mb-0" role="status">{{ success() }}</div>
+        }
+
+        <div class="d-flex justify-content-end mt-3">
+          <button type="submit" class="btn btn-primary" [disabled]="isSaving()">
+            @if (isSaving()) {
+              <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            }
+            Enregistrer mon profil
+          </button>
+        </div>
+      </form>
+    }
+  </div>
+</section>

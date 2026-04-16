@@ -1,0 +1,685 @@
+<div class="wizard-container">
+
+  <!-- Progress stepper -->
+  <div class="wizard-progress mb-4">
+    <div class="progress-step" [class.active]="currentStep() >= 1" [class.done]="currentStep() > 1">
+      <div class="step-circle">
+        @if (currentStep() > 1) { <i class="fa-solid fa-check"></i> } @else { 1 }
+      </div>
+      <span class="step-label">Identite</span>
+    </div>
+    <div class="progress-connector" [class.done]="currentStep() > 1"></div>
+    <div class="progress-step" [class.active]="currentStep() >= 2" [class.done]="currentStep() > 2">
+      <div class="step-circle">
+        @if (currentStep() > 2) { <i class="fa-solid fa-check"></i> } @else { 2 }
+      </div>
+      <span class="step-label">Coordonnees</span>
+    </div>
+    <div class="progress-connector" [class.done]="currentStep() > 2"></div>
+    <div class="progress-step" [class.active]="currentStep() >= 3" [class.done]="currentStep() > 3">
+      <div class="step-circle">3</div>
+      <span class="step-label">Antecedents</span>
+    </div>
+    <div class="progress-connector" [class.done]="currentStep() > 3"></div>
+    <div class="progress-step" [class.active]="currentStep() >= 4">
+      <div class="step-circle">4</div>
+      <span class="step-label">Consultation</span>
+    </div>
+  </div>
+
+  <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+
+    <!-- ── ETAPE 1 : Identite ────────────────────────────── -->
+    <div [hidden]="currentStep() !== 1" class="wizard-card">
+      <div class="wizard-card-header">
+        <h2>Identite du patient</h2>
+        <p class="step-subtitle mb-0">Le nom, le prenom et la date de naissance sont obligatoires.</p>
+      </div>
+      <div class="wizard-card-body">
+
+        <!-- Sexe -->
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Sexe</label>
+          <div class="sex-cards">
+            <button type="button" class="sex-card" [class.active-indeterminate]="sexValue() === 'Non renseigne'" (click)="setSex('Non renseigne')">
+              <i class="fa-solid fa-circle-question"></i>
+              <span>Indetermine</span>
+            </button>
+            <button type="button" class="sex-card" [class.active-femme]="sexValue() === 'Femme'" (click)="setSex('Femme')">
+              <i class="fa-solid fa-venus"></i>
+              <span>Femme</span>
+            </button>
+            <button type="button" class="sex-card" [class.active-homme]="sexValue() === 'Homme'" (click)="setSex('Homme')">
+              <i class="fa-solid fa-mars"></i>
+              <span>Homme</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Nom / Prenom -->
+        <div class="row g-3 mb-3">
+          <div class="col-6">
+            <label class="form-label fw-semibold" for="lastName">Nom <span class="text-danger">*</span></label>
+            <input id="lastName" class="form-control" type="text" formControlName="lastName"
+                   [class.is-invalid]="form.controls.lastName.touched && form.controls.lastName.invalid" />
+            @if (form.controls.lastName.touched && form.controls.lastName.errors?.['required']) {
+              <div class="invalid-feedback">Le nom est obligatoire.</div>
+            }
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold" for="firstName">Prenom <span class="text-danger">*</span></label>
+            <input id="firstName" class="form-control" type="text" formControlName="firstName"
+                   [class.is-invalid]="form.controls.firstName.touched && form.controls.firstName.invalid" />
+            @if (form.controls.firstName.touched && form.controls.firstName.errors?.['required']) {
+              <div class="invalid-feedback">Le prenom est obligatoire.</div>
+            }
+          </div>
+        </div>
+
+        <!-- Date de naissance / Age -->
+        <div class="row g-3 mb-3">
+          <div class="col-6">
+            <label class="form-label fw-semibold" for="birthDate">Date de naissance <span class="text-danger">*</span></label>
+            <input #birthDateInput id="birthDate" class="form-control" type="text"
+                   autocomplete="off" placeholder="jj/mm/aaaa" readonly style="cursor: pointer;"
+                   [class.is-invalid]="form.controls.birthDate.touched && form.controls.birthDate.invalid" />
+            @if (form.controls.birthDate.touched && form.controls.birthDate.errors?.['required']) {
+              <div class="invalid-feedback d-block">La date de naissance est obligatoire.</div>
+            }
+          </div>
+          @if (ageText()) {
+            <div class="col-6 d-flex align-items-end pb-1">
+              <span class="age-badge">
+                <i class="fa-solid fa-cake-candles me-1"></i>{{ ageText() }}
+              </span>
+            </div>
+          }
+        </div>
+
+        <div class="mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <label class="form-label fw-semibold mb-0">Liens de parente avec d'autres patients</label>
+            <button type="button" class="btn btn-outline-primary btn-sm" (click)="toggleRelatedPicker()">
+              <i class="fa-solid fa-user-plus me-1"></i>
+              {{ showRelatedPicker() ? 'Fermer' : 'Ajouter' }}
+            </button>
+          </div>
+
+          @if (selectedRelatedPatients().length > 0) {
+            <div class="d-flex flex-wrap gap-2 mb-2">
+              @for (person of selectedRelatedPatients(); track person.id) {
+                <span class="badge text-bg-light border related-pill">
+                  {{ person.fullName }}
+                  <button
+                    type="button"
+                    class="btn-close ms-2"
+                    aria-label="Retirer"
+                    (click)="removeRelatedPatient(person.id)"></button>
+                </span>
+              }
+            </div>
+          }
+
+          @if (showRelatedPicker()) {
+            <div class="border rounded p-2 bg-light-subtle">
+              <label class="form-label small mb-1" for="relatedPatientSearch">Rechercher un patient existant</label>
+              <input
+                id="relatedPatientSearch"
+                type="text"
+                class="form-control"
+                placeholder="Tapez au moins 2 caracteres..."
+                [value]="relatedSearch()"
+                (input)="onRelatedSearchChange($any($event.target).value)" />
+
+              @if (isSearchingRelated()) {
+                <div class="small text-muted mt-2">Recherche en cours...</div>
+              } @else if (relatedSearch().trim().length >= 2 && relatedSearchResults().length === 0) {
+                <div class="small text-muted mt-2">Aucun patient trouve.</div>
+              }
+
+              @if (relatedSearchResults().length > 0) {
+                <div class="list-group mt-2">
+                  @for (result of relatedSearchResults(); track result.id) {
+                    <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" (click)="addRelatedPatient(result)">
+                      <span class="d-flex align-items-start gap-2">
+                        <i class="mt-1" [class]="getRelatedPatientIcon(result.sex)"></i>
+                        <span class="d-flex flex-column text-start">
+                          <span>{{ result.fullName }}</span>
+                          <span class="text-muted small fst-italic">{{ getRelatedPatientMeta(result) }}</span>
+                        </span>
+                      </span>
+                      <span class="badge text-bg-primary">Ajouter</span>
+                    </button>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- Remarques generales -->
+        <div class="mb-1">
+          <label class="form-label fw-semibold" for="generalRemarks">
+            Remarques generales <span class="text-muted fw-normal">(optionnel)</span>
+          </label>
+          <textarea id="generalRemarks" rows="4" class="form-control" formControlName="generalRemarks"
+                    placeholder="Informations complementaires a noter..."></textarea>
+        </div>
+      </div>
+
+      <div class="wizard-actions">
+        <button class="btn btn-link text-secondary ps-0" type="button" (click)="cancelCreation()">Annuler</button>
+        <button class="btn btn-primary px-4" type="button" (click)="goNext()">
+          Suivant <i class="fa-solid fa-arrow-right ms-1"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── ETAPE 2 : Coordonnees ──────────────────────────── -->
+    <div [hidden]="currentStep() !== 2" class="wizard-card">
+      <div class="wizard-card-header">
+        <h2>Coordonnees <span class="badge bg-secondary fw-normal fs-6 ms-2">Optionnel</span></h2>
+        <p class="step-subtitle mb-0">Ces informations peuvent etre ajoutees ou modifiees plus tard.</p>
+      </div>
+      <div class="wizard-card-body">
+
+        <div class="row g-3 mb-3">
+          <div class="col-6">
+            <label class="form-label" for="mobilePhone">Telephone portable</label>
+            <input id="mobilePhone" class="form-control" type="text" formControlName="mobilePhone" placeholder="06 xx xx xx xx" />
+          </div>
+          <div class="col-6">
+            <label class="form-label" for="landlinePhone">Telephone fixe</label>
+            <input id="landlinePhone" class="form-control" type="text" formControlName="landlinePhone" placeholder="01 xx xx xx xx" />
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" for="email">Adresse email</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="fa-solid fa-envelope"></i></span>
+            <input id="email" class="form-control" type="email" formControlName="email" placeholder="email@exemple.fr"
+                   [class.is-invalid]="form.controls.email.touched && form.controls.email.invalid"
+                   [class.is-valid]="form.controls.email.touched && form.controls.email.valid && form.controls.email.value !== ''" />
+          </div>
+          @if (form.controls.email.touched && form.controls.email.errors?.['email']) {
+            <div class="text-danger small mt-1">
+              <i class="fa-solid fa-triangle-exclamation me-1"></i>Adresse email invalide.
+            </div>
+          }
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" for="address1">Adresse</label>
+          <input id="address1" class="form-control mb-2" type="text" formControlName="address1" placeholder="Numero et rue" />
+          <input id="address2" class="form-control" type="text" formControlName="address2" placeholder="Complement (batiment, etage...)" />
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-3 position-relative">
+            <label class="form-label" for="postalCode">Code postal</label>
+            <input
+              id="postalCode"
+              class="form-control"
+              type="text"
+              formControlName="postalCode"
+              (input)="onPostalCodeInput($any($event.target).value)"
+              (focus)="onPostalCodeFocus()"
+              (blur)="onPostalCodeBlur()"
+            />
+            @if (showPostalCodeSuggestions()) {
+              <ul class="autocomplete-list list-group shadow-sm">
+                @for (postalCode of postalCodeSuggestions(); track postalCode) {
+                  <li class="list-group-item list-group-item-action" (mousedown)="applyPostalCodeSuggestion(postalCode)">
+                    {{ postalCode }}
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+          <div class="col-5 position-relative">
+            <label class="form-label" for="city">Ville</label>
+            <input
+              id="city"
+              class="form-control"
+              type="text"
+              formControlName="city"
+              (input)="onCityInput($any($event.target).value)"
+              (focus)="onCityFocus()"
+              (blur)="onCityBlur()"
+            />
+            @if (showCitySuggestions()) {
+              <ul class="autocomplete-list list-group shadow-sm">
+                @for (city of citySuggestions(); track city) {
+                  <li class="list-group-item list-group-item-action" (mousedown)="applyCitySuggestion(city)">
+                    {{ city }}
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+          <div class="col-4">
+            <label class="form-label" for="country">Pays</label>
+            <input id="country" class="form-control" type="text" formControlName="country" />
+          </div>
+        </div>
+
+      </div>
+      <div class="draft-indicator px-4 py-2 border-top" [class.saving]="draftSaveState() === 'saving'" [class.error]="draftSaveState() === 'error'">
+        <i class="fa-solid fa-floppy-disk me-1"></i>{{ draftStatusText() }}
+      </div>
+      <div class="wizard-actions">
+        <button class="btn btn-outline-secondary" type="button" (click)="goPrev()">
+          <i class="fa-solid fa-arrow-left me-1"></i> Retour
+        </button>
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-primary" type="button" (click)="goNext()">Passer cette etape</button>
+          <button class="btn btn-primary px-4" type="button" (click)="goNext()">
+            Suivant <i class="fa-solid fa-arrow-right ms-1"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ETAPE 3 : Antecedents ─────────────────────────── -->
+    <div [hidden]="currentStep() !== 3" class="wizard-card">
+      <div class="wizard-card-header">
+        <h2>Antecedents <span class="badge bg-secondary fw-normal fs-6 ms-2">Optionnel</span></h2>
+        <p class="step-subtitle mb-0">Renseignez l'historique clinique du patient.</p>
+      </div>
+      <div class="wizard-card-body">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <label class="form-label fw-semibold mb-0">Elements de timeline</label>
+          <button type="button" class="btn btn-primary btn-sm" (click)="openAntecedentModal()">
+            <i class="fa-solid fa-plus me-1"></i> Ajouter
+          </button>
+        </div>
+
+        @if (antecedentItems().length === 0) {
+          <div class="alert alert-light border mb-0">Aucun antecedent ajoute pour le moment.</div>
+        } @else {
+          <div class="antecedent-timeline">
+            @for (item of antecedentItems(); track item.id) {
+              <div class="timeline-item" [class.important]="item.important">
+                <div class="timeline-marker"></div>
+                <div class="timeline-content">
+                  <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div>
+                      <div class="fw-semibold d-flex align-items-center gap-2">
+                        <span>{{ item.category }}</span>
+                        @if (item.important) {
+                          <span class="badge text-bg-danger">Important</span>
+                        }
+                      </div>
+                      <div class="small text-muted fst-italic">{{ getAntecedentDateLabel(item) }}</div>
+                    </div>
+                    <button type="button" class="btn btn-link text-danger p-0" (click)="removeAntecedent(item.id)">
+                      <i class="fa-solid fa-trash"></i>
+                    </button>
+                  </div>
+
+                  @if (item.description) {
+                    <div class="mt-2">{{ item.description }}</div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        }
+
+      </div>
+      <div class="draft-indicator px-4 py-2 border-top" [class.saving]="draftSaveState() === 'saving'" [class.error]="draftSaveState() === 'error'">
+        <i class="fa-solid fa-floppy-disk me-1"></i>{{ draftStatusText() }}
+      </div>
+      <div class="wizard-actions">
+        <button class="btn btn-outline-secondary" type="button" (click)="goPrev()">
+          <i class="fa-solid fa-arrow-left me-1"></i> Retour
+        </button>
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-primary" type="button" (click)="goNext()">Passer cette etape</button>
+          <button class="btn btn-primary px-4" type="button" (click)="goNext()">
+            Suivant <i class="fa-solid fa-arrow-right ms-1"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    @if (isAntecedentModalOpen()) {
+      <div
+        class="antecedent-modal-backdrop"
+        style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); z-index: 2000;"
+        (click)="closeAntecedentModal()"></div>
+      <div
+        class="antecedent-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="antecedentModalTitle"
+        style="position: fixed; z-index: 2010; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(680px, calc(100vw - 1.5rem)); max-height: calc(100vh - 2rem); overflow: auto; background: #fff; border-radius: 12px; border: 1px solid #dfe3e7; box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);"
+        (click)="$event.stopPropagation()">
+        <div class="antecedent-modal-header">
+          <h3 id="antecedentModalTitle" class="mb-0">Ajouter un antecedent</h3>
+          <button type="button" class="btn-close" aria-label="Fermer" (click)="closeAntecedentModal()"></button>
+        </div>
+        <div class="antecedent-modal-body">
+          <div class="mb-3">
+            <label class="form-label">Precision de date</label>
+            <div class="btn-group w-100" role="group">
+              <button type="button" class="btn" [class.btn-primary]="antecedentDatePrecision() === 'date'" [class.btn-outline-primary]="antecedentDatePrecision() !== 'date'" (click)="setAntecedentPrecision('date')">Date precise</button>
+              <button type="button" class="btn" [class.btn-primary]="antecedentDatePrecision() === 'month'" [class.btn-outline-primary]="antecedentDatePrecision() !== 'month'" (click)="setAntecedentPrecision('month')">Mois / annee</button>
+              <button type="button" class="btn" [class.btn-primary]="antecedentDatePrecision() === 'year'" [class.btn-outline-primary]="antecedentDatePrecision() !== 'year'" (click)="setAntecedentPrecision('year')">Annee</button>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="antecedentDateInput">Date</label>
+            <input
+              #antecedentDateInput
+              id="antecedentDateInput"
+              type="text"
+              class="form-control"
+              [placeholder]="antecedentDatePrecision() === 'date' ? 'jj/mm/aaaa' : antecedentDatePrecision() === 'month' ? 'mm/aaaa' : 'aaaa'"
+              readonly
+              [value]="antecedentDateDisplay()"
+              style="cursor: pointer;" />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="antecedentCategory">Type d'antecedent</label>
+            <input
+              id="antecedentCategory"
+              type="text"
+              class="form-control"
+              list="antecedentCategoryOptions"
+              placeholder="Ex: Psychologie"
+              [value]="antecedentCategory()"
+              (input)="setAntecedentCategory($any($event.target).value)" />
+            <datalist id="antecedentCategoryOptions">
+              @for (option of antecedentCategoryOptions(); track option) {
+                <option [value]="option"></option>
+              }
+            </datalist>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="antecedentDescription">Description</label>
+            <textarea
+              id="antecedentDescription"
+              class="form-control"
+              rows="4"
+              placeholder="Details de l'antecedent..."
+              [value]="antecedentDescription()"
+              (input)="setAntecedentDescription($any($event.target).value)"></textarea>
+          </div>
+
+          <div class="form-check">
+            <input
+              id="antecedentImportant"
+              class="form-check-input"
+              type="checkbox"
+              [checked]="antecedentImportant()"
+              (change)="setAntecedentImportant($any($event.target).checked)" />
+            <label class="form-check-label" for="antecedentImportant">Marquer comme important</label>
+          </div>
+
+          @if (antecedentError()) {
+            <div class="alert alert-danger mt-3 mb-0">{{ antecedentError() }}</div>
+          }
+        </div>
+        <div class="antecedent-modal-footer">
+          <button type="button" class="btn btn-outline-secondary" (click)="closeAntecedentModal()">Annuler</button>
+          <button type="button" class="btn btn-primary" (click)="addAntecedent()">Ajouter l'element</button>
+        </div>
+      </div>
+    }
+
+    @if (isParentPrefillModalOpen()) {
+      <div
+        class="antecedent-modal-backdrop"
+        style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); z-index: 2000;"
+        (click)="closeParentPrefillModal()"></div>
+      <div
+        class="antecedent-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="parentPrefillModalTitle"
+        style="position: fixed; z-index: 2010; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(720px, calc(100vw - 1.5rem)); max-height: calc(100vh - 2rem); overflow: auto; background: #fff; border-radius: 12px; border: 1px solid #dfe3e7; box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);"
+        (click)="$event.stopPropagation()">
+        <div class="antecedent-modal-header">
+          <h3 id="parentPrefillModalTitle" class="mb-0">Choisir les coordonnees a pre-remplir</h3>
+          <button type="button" class="btn-close" aria-label="Fermer" (click)="closeParentPrefillModal()"></button>
+        </div>
+        <div class="antecedent-modal-body">
+          <p class="text-muted mb-3">
+            Plusieurs patients lies sont selectionnes. Choisissez la valeur a appliquer pour chaque champ de coordonnees.
+          </p>
+
+          @for (field of parentPrefillFields; track field) {
+            <div class="mb-3">
+              <label class="form-label" [for]="'parent-prefill-' + field">{{ getParentPrefillFieldLabel(field) }}</label>
+              <select
+                class="form-select"
+                [id]="'parent-prefill-' + field"
+                [value]="getParentPrefillSelection(field)"
+                (change)="setParentPrefillSelection(field, $any($event.target).value)">
+                <option value="">Ne pas pre-remplir</option>
+                @for (option of getParentPrefillOptions(field); track option.value) {
+                  <option [value]="option.value">{{ option.label }}</option>
+                }
+              </select>
+            </div>
+          }
+        </div>
+        <div class="antecedent-modal-footer">
+          <button type="button" class="btn btn-outline-secondary" (click)="closeParentPrefillModal()">Annuler</button>
+          <button type="button" class="btn btn-primary" (click)="applyParentPrefillSelections()">Appliquer</button>
+        </div>
+      </div>
+    }
+
+    <!-- ── ETAPE 4 : Consultation ─────────────────────────── -->
+    <div [hidden]="currentStep() !== 4" class="wizard-card">
+      <div class="wizard-card-header">
+        <h2>Premiere consultation <span class="badge bg-secondary fw-normal fs-6 ms-2">Optionnel</span></h2>
+        <p class="step-subtitle mb-0">Consultation du {{ consultationStartedAtLabel() }}.</p>
+      </div>
+      <div class="wizard-card-body">
+
+        <div class="consultation-tabs mb-3" role="tablist" aria-label="Sections de la consultation">
+          <button type="button" class="btn" [class.btn-primary]="consultationActiveTab() === 'consultation'" [class.btn-outline-primary]="consultationActiveTab() !== 'consultation'" (click)="setConsultationTab('consultation')">Consultation</button>
+          <button type="button" class="btn" [class.btn-primary]="consultationActiveTab() === 'documents'" [class.btn-outline-primary]="consultationActiveTab() !== 'documents'" (click)="setConsultationTab('documents')">Documents patient</button>
+          <button type="button" class="btn" [class.btn-primary]="consultationActiveTab() === 'courriers'" [class.btn-outline-primary]="consultationActiveTab() !== 'courriers'" (click)="setConsultationTab('courriers')">Courriers sortants</button>
+          <button type="button" class="btn" [class.btn-primary]="consultationActiveTab() === 'paiement'" [class.btn-outline-primary]="consultationActiveTab() !== 'paiement'" (click)="setConsultationTab('paiement')">Paiement</button>
+        </div>
+
+        @if (consultationActiveTab() === 'consultation') {
+          <div class="row g-3 mb-3">
+            <div class="col-12 col-lg-4">
+              <label class="form-label">Debut de consultation</label>
+              <input type="text" class="form-control" [value]="consultationStartedAtLabel()" readonly />
+            </div>
+            <div class="col-12 col-lg-5">
+              <label class="form-label" for="consultationPractitioner">Praticien</label>
+              <input
+                id="consultationPractitioner"
+                type="text"
+                class="form-control"
+                list="consultationPractitioners"
+                [value]="consultationPractitioner()"
+                (input)="setConsultationPractitioner($any($event.target).value)"
+                placeholder="Selectionner un praticien" />
+              <datalist id="consultationPractitioners">
+                @for (practitioner of practitioners(); track practitioner.id) {
+                  <option [value]="practitioner.username"></option>
+                }
+              </datalist>
+            </div>
+            <div class="col-12 col-lg-3 d-flex align-items-end">
+              <div class="form-check mb-2">
+                <input id="consultationImportant" class="form-check-input" type="checkbox" [checked]="consultationImportant()" (change)="setConsultationImportant($any($event.target).checked)" />
+                <label class="form-check-label" for="consultationImportant">Consultation importante</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="consultationTitle">Titre de la consultation</label>
+            <input
+              id="consultationTitle"
+              type="text"
+              class="form-control"
+              [value]="consultationTitle()"
+              (input)="setConsultationTitle($any($event.target).value)"
+              placeholder="Ex: Lombalgie aigue post-effort" />
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-6 col-lg-3">
+              <label class="form-label" for="consultationHeightCm">Taille (cm)</label>
+              <input id="consultationHeightCm" type="number" class="form-control" min="0" step="1" [value]="consultationHeightCm() ?? ''" (input)="setConsultationHeightCm($any($event.target).value)" />
+            </div>
+            <div class="col-6 col-lg-3">
+              <label class="form-label" for="consultationWeightKg">Poids (kg)</label>
+              <input id="consultationWeightKg" type="number" class="form-control" min="0" step="0.1" [value]="consultationWeightKg() ?? ''" (input)="setConsultationWeightKg($any($event.target).value)" />
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label">IMC</label>
+              <div class="consultation-kpi">{{ bmi() === null ? '-' : bmi() }}</div>
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label" for="consultationProfile">Profil</label>
+              <select id="consultationProfile" class="form-select" [value]="consultationProfile()" (change)="setConsultationProfile($any($event.target).value)">
+                @for (option of consultationProfileOptions; track option) {
+                  <option [value]="option">{{ option }}</option>
+                }
+              </select>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-12 col-lg-6">
+              <label class="form-label" for="evaBefore">EVA au debut: {{ consultationEvaBefore() }}/10</label>
+              <input id="evaBefore" type="range" class="form-range" min="0" max="10" step="1" [value]="consultationEvaBefore()" (input)="setConsultationEvaBefore($any($event.target).value)" />
+            </div>
+            <div class="col-12 col-lg-6">
+              <label class="form-label" for="evaAfter">EVA en fin de consultation: {{ consultationEvaAfter() }}/10</label>
+              <input id="evaAfter" type="range" class="form-range" min="0" max="10" step="1" [value]="consultationEvaAfter()" (input)="setConsultationEvaAfter($any($event.target).value)" />
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Motif principal</label>
+            <div class="wysiwyg-toolbar">
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('motifMain', 'bold')"><i class="fa-solid fa-bold"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('motifMain', 'italic')"><i class="fa-solid fa-italic"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('motifMain', 'underline')"><i class="fa-solid fa-underline"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('motifMain', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('motifMain', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
+            </div>
+            <div #motifMainEditor class="wysiwyg-editor" contenteditable="true" [innerHTML]="consultationMotifMainHtml()" (input)="onConsultationRichTextInput('motifMain', $event)"></div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Tests</label>
+            <div class="wysiwyg-toolbar">
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('tests', 'bold')"><i class="fa-solid fa-bold"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('tests', 'italic')"><i class="fa-solid fa-italic"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('tests', 'underline')"><i class="fa-solid fa-underline"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('tests', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('tests', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
+            </div>
+            <div #testsEditor class="wysiwyg-editor" contenteditable="true" [innerHTML]="consultationTestsHtml()" (input)="onConsultationRichTextInput('tests', $event)"></div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Schema</label>
+            <div class="wysiwyg-toolbar">
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('schema', 'bold')"><i class="fa-solid fa-bold"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('schema', 'italic')"><i class="fa-solid fa-italic"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('schema', 'underline')"><i class="fa-solid fa-underline"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('schema', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('schema', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
+            </div>
+            <div #schemaEditor class="wysiwyg-editor" contenteditable="true" [innerHTML]="consultationSchemaHtml()" (input)="onConsultationRichTextInput('schema', $event)"></div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Traitements proposes</label>
+            <div class="wysiwyg-toolbar">
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('treatments', 'bold')"><i class="fa-solid fa-bold"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('treatments', 'italic')"><i class="fa-solid fa-italic"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('treatments', 'underline')"><i class="fa-solid fa-underline"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('treatments', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('treatments', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
+            </div>
+            <div #treatmentsEditor class="wysiwyg-editor" contenteditable="true" [innerHTML]="consultationTreatmentsHtml()" (input)="onConsultationRichTextInput('treatments', $event)"></div>
+          </div>
+
+          <div class="mb-0">
+            <label class="form-label fw-semibold">Remarques</label>
+            <div class="wysiwyg-toolbar">
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('remarks', 'bold')"><i class="fa-solid fa-bold"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('remarks', 'italic')"><i class="fa-solid fa-italic"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('remarks', 'underline')"><i class="fa-solid fa-underline"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('remarks', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('remarks', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
+            </div>
+            <div #remarksEditor class="wysiwyg-editor" contenteditable="true" [innerHTML]="consultationRemarksHtml()" (input)="onConsultationRichTextInput('remarks', $event)"></div>
+          </div>
+        }
+
+        @if (consultationActiveTab() === 'documents') {
+          <div class="empty-tab-state">
+            <i class="fa-regular fa-folder-open"></i>
+            <h3>Documents patient</h3>
+            <p>Ajoutez ici les documents importes ou scannes pendant la consultation.</p>
+          </div>
+        }
+
+        @if (consultationActiveTab() === 'courriers') {
+          <div class="empty-tab-state">
+            <i class="fa-regular fa-envelope-open"></i>
+            <h3>Courriers sortants</h3>
+            <p>Preparez et suivez les courriers de sortie et comptes-rendus adresses aux correspondants.</p>
+          </div>
+        }
+
+        @if (consultationActiveTab() === 'paiement') {
+          <div class="empty-tab-state">
+            <i class="fa-solid fa-receipt"></i>
+            <h3>Paiement</h3>
+            <p>Renseignez les reglements, mutuelle et informations de facturation de la consultation.</p>
+          </div>
+        }
+
+        @if (errorMessage()) {
+          <div class="alert alert-danger mt-3 mb-0" role="alert">
+            <i class="fa-solid fa-circle-exclamation me-2"></i>{{ errorMessage() }}
+          </div>
+        }
+
+      </div>
+      <div class="draft-indicator px-4 py-2 border-top" [class.saving]="draftSaveState() === 'saving'" [class.error]="draftSaveState() === 'error'">
+        <i class="fa-solid fa-floppy-disk me-1"></i>{{ draftStatusText() }}
+      </div>
+      <div class="wizard-actions">
+        <button class="btn btn-outline-secondary" type="button" (click)="goPrev()">
+          <i class="fa-solid fa-arrow-left me-1"></i> Retour
+        </button>
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-primary" type="button" (click)="skipAndSave()" [disabled]="isSaving()">
+            Ignorer la consultation
+          </button>
+          <button class="btn btn-success px-4" type="submit" [disabled]="isSaving()">
+            @if (isSaving()) {
+              <span class="spinner-border spinner-border-sm me-1" role="status"></span> Enregistrement...
+            } @else {
+              <i class="fa-solid fa-check me-1"></i> Creer le patient
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </form>
+</div>

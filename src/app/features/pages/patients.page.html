@@ -1,0 +1,49 @@
+<section class="page-head d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+  <a class="page-head-link" routerLink="/accueil" aria-label="Aller a la page d'accueil">
+    <h1 class="h3 mb-1"><i class="fa-solid fa-user-group text-primary me-2"></i>Patients</h1>
+    <p class="text-secondary mb-0">Recherche rapide et suivi des dernières consultations.</p>
+  </a>
+</section>
+
+<section class="panel card border-0 shadow-sm mb-3">
+  <div class="card-body">
+    <label class="form-label" for="search-input">Rechercher un patient</label>
+    <div class="input-group">
+      <span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
+      <input
+        id="search-input"
+        class="form-control search"
+        type="search"
+        [value]="search()"
+        (input)="onSearch($event)"
+        placeholder="Nom du patient"
+      />
+    </div>
+  </div>
+</section>
+
+<section class="panel card border-0 shadow-sm">
+  <div class="card-body">
+    <h2 class="h5 mb-3"><i class="fa-solid fa-address-card me-2 text-primary"></i>Fiche patient</h2>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Nom</th>
+            <th>Téléphone</th>
+            <th>Dernière visite</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (patient of filteredPatients(); track patient.fullName) {
+            <tr class="cursor-pointer" [routerLink]="['/patients', patient.id]">
+              <td>{{ patient.fullName }}</td>
+              <td>{{ patient.phone }}</td>
+              <td>{{ patient.lastVisit }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

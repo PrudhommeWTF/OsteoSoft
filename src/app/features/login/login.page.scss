@@ -1,0 +1,55 @@
+:host {
+  display: block;
+}
+
+.login-screen {
+  min-height: 100dvh;
+  padding: clamp(1rem, 2vw, 2rem);
+  background:
+    radial-gradient(circle at 20% 10%, rgb(25 65 95 / 24%), transparent 40%),
+    radial-gradient(circle at 95% 92%, rgb(36 142 122 / 24%), transparent 42%),
+    linear-gradient(145deg, #0d1b2a 0%, #12314a 50%, #0f2d44 100%);
+}
+
+.login-card {
+  width: min(460px, 100%);
+  border-radius: 1.25rem;
+  background: rgb(243 249 252 / 96%);
+  backdrop-filter: blur(8px);
+  animation: rise 350ms ease-out;
+}
+
+.brand-badge {
+  width: 4rem;
+  height: 4rem;
+  display: grid;
+  place-items: center;
+  border-radius: 1.25rem;
+  background: linear-gradient(180deg, #ee5f5f 0%, #d83a3a 100%);
+  color: #fff;
+  font-size: 1.5rem;
+}
+
+.form-label {
+  color: #1f4254;
+  font-weight: 600;
+}
+
+.input-group-text {
+  background: #f5f9fb;
+}
+
+.license {
+  letter-spacing: 0.01em;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

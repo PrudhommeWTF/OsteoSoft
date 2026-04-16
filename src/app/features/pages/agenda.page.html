@@ -1,0 +1,203 @@
+<section class="page-head d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+  <div>
+    <h1 class="h3 mb-1"><i class="fa-solid fa-calendar-days text-primary me-2"></i>Agenda</h1>
+    <p class="text-secondary mb-0">Vue synthétique de votre journée de consultation.</p>
+  </div>
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    @if (canExportAgenda()) {
+      <button type="button" class="btn btn-outline-primary" (click)="openExportModal()">
+        <i class="fa-solid fa-file-export me-2"></i>Exporter
+      </button>
+    }
+
+    <button type="button" class="btn btn-primary" (click)="openCreateModal()">
+      <i class="fa-solid fa-plus me-2"></i>Nouveau rendez-vous
+    </button>
+  </div>
+</section>
+
+<section class="row g-3" aria-label="Indicateurs">
+  @for (stat of stats(); track stat.label) {
+    <article class="col-12 col-md-4">
+      <div class="panel stat-panel card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <p class="muted text-uppercase small mb-1">{{ stat.label }}</p>
+          <p class="kpi mb-0">{{ stat.value }}</p>
+        </div>
+      </div>
+    </article>
+  }
+</section>
+
+<section class="panel card border-0 shadow-sm mt-3">
+  <div class="card-body">
+    <h2 class="h5 mb-3"><i class="fa-solid fa-calendar-week me-2 text-primary"></i>Calendrier des consultations</h2>
+
+    @if (localCalendars().length > 0) {
+      <div class="d-flex flex-wrap align-items-center gap-3 mb-3 pb-3 border-bottom">
+        @for (calendar of localCalendars(); track calendar.id) {
+          <div class="form-check form-check-inline mb-0">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              [id]="'cal-filter-' + calendar.id"
+              [checked]="isCalendarSelected(calendar.id!)"
+              (change)="toggleCalendar(calendar.id!)"
+            />
+            <label class="form-check-label d-flex align-items-center gap-2" [for]="'cal-filter-' + calendar.id">
+              <span
+                class="d-inline-block rounded-circle"
+                style="width: 10px; height: 10px;"
+                [style.background-color]="calendar.colorHex"
+              ></span>
+              {{ calendar.name }}
+            </label>
+          </div>
+        }
+      </div>
+    }
+
+    @if (agendaSettings()) {
+      <app-week-calendar
+        [events]="filteredEvents()"
+        [settings]="agendaSettings()!"
+        [selectedCalendars]="selectedCalendars()"
+        (visibleEventsChange)="onVisibleEventsChange($event)"
+      ></app-week-calendar>
+    }
+  </div>
+</section>
+
+@if (isExportModalOpen()) {
+  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="export-agenda-modal-title">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="export-agenda-modal-title" class="modal-title h5 mb-0">Exporter l'agenda visible</h3>
+          <button type="button" class="btn-close" aria-label="Fermer" (click)="closeExportModal()" [disabled]="isExportingAgenda()"></button>
+        </div>
+
+        <div class="modal-body">
+          <p class="mb-3 text-secondary">
+            Choisissez le format d'export pour les rendez-vous actuellement visibles dans l'agenda.
+          </p>
+
+          @if (exportAgendaError()) {
+            <div class="alert alert-danger mb-0">{{ exportAgendaError() }}</div>
+          }
+        </div>
+
+        <div class="modal-footer gap-2">
+          <button type="button" class="btn btn-secondary" (click)="closeExportModal()" [disabled]="isExportingAgenda()">
+            Annuler
+          </button>
+          <button type="button" class="btn btn-outline-primary" (click)="exportAgenda('json')" [disabled]="isExportingAgenda()">
+            <i class="fa-solid fa-file-code me-2"></i>JSON
+          </button>
+          <button type="button" class="btn btn-primary" (click)="exportAgenda('excel')" [disabled]="isExportingAgenda()">
+            <i class="fa-solid fa-file-excel me-2"></i>Excel
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop fade show"></div>
+}
+
+<!-- Modal Créer Rendez-vous -->
+@if (isCreateModalOpen()) {
+  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="create-appointment-modal-title">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="create-appointment-modal-title" class="modal-title h5 mb-0">Nouveau rendez-vous</h3>
+          <button type="button" class="btn-close" aria-label="Fermer" (click)="closeCreateModal()" [disabled]="isCreatingAppointment()"></button>
+        </div>
+
+        <div class="modal-body">
+          @if (createAppointmentError()) {
+            <div class="alert alert-danger mb-3">{{ createAppointmentError() }}</div>
+          }
+
+          @if (createAppointmentSuccess()) {
+            <div class="alert alert-success mb-3">{{ createAppointmentSuccess() }}</div>
+          }
+
+          <form [formGroup]="createAppointmentForm" (ngSubmit)="createAppointment()" novalidate>
+            <div class="mb-3">
+              <label class="form-label fw-semibold" for="create-patient">Patient</label>
+              @if (isLoadingPatients()) {
+                <div class="small text-secondary">Chargement des patients...</div>
+              } @else {
+                <select
+                  id="create-patient"
+                  class="form-select"
+                  formControlName="patientId"
+                  [disabled]="isCreatingAppointment()"
+                >
+                  <option [value]="0" disabled selected>Sélectionner un patient</option>
+                  @for (patient of patients(); track patient.id) {
+                    <option [value]="patient.id">{{ patient.fullName }}</option>
+                  }
+                </select>
+              }
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold" for="create-start">Date et heure</label>
+              <input
+                id="create-start"
+                type="datetime-local"
+                class="form-control"
+                formControlName="startsAt"
+                [disabled]="isCreatingAppointment()"
+              />
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold" for="create-reason">Motif de la consultation</label>
+              <input
+                id="create-reason"
+                type="text"
+                class="form-control"
+                formControlName="reason"
+                placeholder="Ex: Suivi, bilan, traitement..."
+                [disabled]="isCreatingAppointment()"
+              />
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold" for="create-status">Statut</label>
+              <select
+                id="create-status"
+                class="form-select"
+                formControlName="status"
+                [disabled]="isCreatingAppointment()"
+              >
+                <option value="A confirmer">À confirmer</option>
+                <option value="En attente">En attente</option>
+                <option value="Termine">Terminé</option>
+              </select>
+            </div>
+          </form>
+        </div>
+
+        <div class="modal-footer gap-2">
+          <button type="button" class="btn btn-secondary" (click)="closeCreateModal()" [disabled]="isCreatingAppointment()">
+            Annuler
+          </button>
+          <button type="button" class="btn btn-primary" (click)="createAppointment()" [disabled]="!createAppointmentForm.valid || isCreatingAppointment()">
+            @if (isCreatingAppointment()) {
+              <span>Création en cours...</span>
+            } @else {
+              <span><i class="fa-solid fa-check me-2"></i>Créer le rendez-vous</span>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop fade show"></div>
+}

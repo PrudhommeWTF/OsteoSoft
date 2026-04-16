@@ -1,1 +1,46 @@
-/* You can add global styles to this file, and also import other style files */
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap');
+@import 'bootstrap/dist/css/bootstrap.min.css';
+@import '@fortawesome/fontawesome-free/css/all.min.css';
+
+:root {
+  color-scheme: light;
+  font-family: Manrope, 'Segoe UI', sans-serif;
+  --bs-body-font-family: Manrope, 'Segoe UI', sans-serif;
+  --bs-primary: #4d92d1;
+  --bs-primary-rgb: 77, 146, 209;
+  --bs-border-color: #dbe4ea;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: #edf3f7;
+}
+
+body {
+  color: #23333f;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.fa-fw {
+  width: 1.25em;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.datepicker {
+  z-index: 2000 !important;
+}

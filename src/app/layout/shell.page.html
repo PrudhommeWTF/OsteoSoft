@@ -1,0 +1,120 @@
+<div class="shell" [class.shell-mobile-open]="isMenuOpen()">
+  <aside class="sidebar" aria-label="Menu principal">
+    <div class="logo-block">
+      <a class="logo-link" routerLink="/accueil" (click)="closeMenu()" aria-label="Aller a la page d'accueil">
+        <p class="brand-lockup mb-0">
+          <span class="brand-mark"><i class="fa-solid fa-calendar-days"></i></span>
+          <span>
+            <span class="title">OsteoSoft</span>
+            <span class="subtitle">logiciel pour osteopathes</span>
+          </span>
+        </p>
+      </a>
+    </div>
+
+    <label class="sidebar-search-label" for="sidebar-search">Rechercher un patient</label>
+    <div class="input-group input-group-sm">
+      <span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
+      <input id="sidebar-search" class="form-control sidebar-search" type="search" placeholder="Rechercher un patient" />
+    </div>
+
+    <nav class="main-nav">
+      @for (item of visibleNavItems(); track item.label) {
+        @if (item.path) {
+          <a
+            [routerLink]="item.path"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
+            (click)="closeMenu()"
+          >
+            <span class="nav-icon" aria-hidden="true"><i [class]="item.icon + ' fa-fw'"></i></span>
+            <span class="nav-label">{{ item.label }}</span>
+            @if (item.badge) {
+              <span class="badge rounded-pill text-bg-secondary ms-auto">{{ item.badge }}</span>
+            }
+          </a>
+        } @else {
+          <button type="button" class="nav-button" disabled>
+            <span class="nav-icon" aria-hidden="true"><i [class]="item.icon + ' fa-fw'"></i></span>
+            <span class="nav-label">{{ item.label }}</span>
+            @if (item.badge) {
+              <span class="badge rounded-pill text-bg-secondary ms-auto">{{ item.badge }}</span>
+            }
+          </button>
+        }
+      }
+    </nav>
+
+    <div class="sidebar-footer">
+      <section class="account-block" aria-label="Compte utilisateur">
+        <p class="account-caption">Connecte(e) en tant que</p>
+        <p class="account-name">{{ username() || 'admin' }} <span>({{ role() || 'admin' }})</span></p>
+      </section>
+
+      <nav class="utility-nav" aria-label="Actions secondaires">
+        @for (item of utilityItems(); track item.label) {
+          @if (item.path) {
+            <a class="utility-button" [routerLink]="item.path" (click)="closeMenu()">
+              <span class="nav-icon" aria-hidden="true"><i [class]="item.icon + ' fa-fw'"></i></span>
+              <span>{{ item.label }}</span>
+            </a>
+          } @else {
+            <button type="button" class="utility-button" disabled>
+              <span class="nav-icon" aria-hidden="true"><i [class]="item.icon + ' fa-fw'"></i></span>
+              <span>{{ item.label }}</span>
+            </button>
+          }
+        }
+        <button type="button" class="utility-button logout-link" (click)="logout()">
+          <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-right-from-bracket fa-fw"></i></span>
+          <span>Deconnexion</span>
+        </button>
+      </nav>
+
+      <p class="sidebar-license">© {{ configService.getAppName() }} v{{ configService.getVersion() }}</p>
+    </div>
+  </aside>
+
+  <div class="content-zone">
+    <header class="topbar border-bottom bg-white shadow-sm">
+      <button
+        type="button"
+        class="menu-btn btn btn-outline-secondary btn-sm"
+        (click)="toggleMenu()"
+        [attr.aria-expanded]="isMenuOpen()"
+        aria-label="Ouvrir le menu"
+      >
+        <i class="fa-solid fa-bars"></i>
+      </button>
+
+      @if (topbar.actions().length) {
+        <div class="topbar-actions">
+          @for (action of topbar.actions(); track action.id) {
+            <button
+              type="button"
+              [class]="'btn btn-sm ' + action.btnClass"
+              [disabled]="action.disabled?.()"
+              (click)="action.onClick()"
+            >
+              @if (action.loading?.()) {
+                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                {{ action.loadingLabel ?? action.label }}
+              } @else {
+                @if (action.icon) { <i [class]="'fa-solid ' + action.icon + ' me-1'"></i> }
+                {{ action.label }}
+              }
+            </button>
+          }
+        </div>
+      }
+
+      <div class="topbar-datetime" aria-live="polite">
+        <p class="date">{{ currentDateTime() }}</p>
+      </div>
+    </header>
+
+    <main class="page-content container-fluid py-3 px-3 px-lg-4">
+      <router-outlet />
+    </main>
+  </div>
+</div>

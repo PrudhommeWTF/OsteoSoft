@@ -1,0 +1,407 @@
+:host {
+  display: block;
+}
+
+// ── Wizard container ──────────────────────────────────────────
+.wizard-container {
+  max-width: 780px;
+  margin: 0 auto;
+}
+
+// ── Progress stepper ─────────────────────────────────────────
+.wizard-progress {
+  display: flex;
+  align-items: flex-start;
+
+  .progress-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+
+    .step-circle {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 2px solid #dee2e6;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: #adb5bd;
+      transition: all 0.25s ease;
+    }
+
+    .step-label {
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+      color: #adb5bd;
+      white-space: nowrap;
+      transition: color 0.25s ease;
+    }
+
+    &.active {
+      .step-circle {
+        border-color: #2f7cb8;
+        background: #2f7cb8;
+        color: #fff;
+      }
+
+      .step-label {
+        color: #2f7cb8;
+        font-weight: 600;
+      }
+    }
+
+    &.done {
+      .step-circle {
+        border-color: #198754;
+        background: #198754;
+        color: #fff;
+      }
+
+      .step-label { color: #198754; }
+    }
+  }
+
+  .progress-connector {
+    flex: 1;
+    height: 2px;
+    background: #dee2e6;
+    margin-top: 19px;
+    transition: background 0.25s ease;
+
+    &.done { background: #198754; }
+  }
+}
+
+// ── Wizard card ───────────────────────────────────────────────
+.wizard-card {
+  border: 1px solid #dee2e6;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+
+  .wizard-card-header {
+    padding: 1rem 1.5rem;
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+
+    h2 {
+      margin: 0 0 0.15rem;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #1e2d3d;
+    }
+
+    .step-subtitle {
+      font-size: 0.85rem;
+      color: #6c757d;
+    }
+  }
+
+  .wizard-card-body {
+    padding: 1.5rem;
+  }
+}
+
+// ── Wizard action bar ────────────────────────────────────────
+.wizard-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #dee2e6;
+  background: #f8f9fa;
+}
+
+.draft-indicator {
+  font-size: 0.82rem;
+  color: #5b6773;
+  background: #fbfcfd;
+
+  &.saving {
+    color: #0b5ed7;
+    background: #f4f8ff;
+  }
+
+  &.error {
+    color: #b4232f;
+    background: #fff5f6;
+  }
+}
+
+// ── Sex toggle cards ─────────────────────────────────────────
+.sex-cards {
+  display: flex;
+  gap: 0.75rem;
+
+  .sex-card {
+    flex: 1;
+    border: 2px solid #dee2e6;
+    border-radius: 10px;
+    padding: 0.8rem 0.5rem;
+    background: #fff;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+
+    i { font-size: 1.4rem; }
+    span { font-size: 0.85rem; font-weight: 500; }
+
+    &:hover { border-color: #adb5bd; background: #f8f9fa; }
+
+    &.active-indeterminate {
+      border-color: #6c757d;
+      background: #f8f9fa;
+      color: #495057;
+    }
+
+    &.active-femme {
+      border-color: #ce8a95;
+      background: #fdf0f2;
+      color: #a0566a;
+    }
+
+    &.active-homme {
+      border-color: #2f7cb8;
+      background: #e8f1f8;
+      color: #2f7cb8;
+    }
+  }
+}
+
+// ── Age badge ────────────────────────────────────────────────
+.age-badge {
+  display: inline-flex;
+  align-items: center;
+  background: #e8f1f8;
+  color: #2f7cb8;
+  border-radius: 20px;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.related-pill {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 500;
+
+  .btn-close {
+    font-size: 0.55rem;
+    padding: 0.2rem;
+  }
+}
+
+.autocomplete-list {
+  position: absolute;
+  top: calc(100% + 0.2rem);
+  left: 0;
+  right: 0;
+  z-index: 1200;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #ced4da;
+  border-radius: 0.5rem;
+
+  .list-group-item {
+    background: #fff;
+    color: #1e2d3d;
+    cursor: pointer;
+  }
+
+  .list-group-item:hover {
+    background: #f1f5f9;
+  }
+}
+
+.antecedent-timeline {
+  position: relative;
+  padding-left: 1.25rem;
+}
+
+.antecedent-timeline::before {
+  content: '';
+  position: absolute;
+  left: 0.42rem;
+  top: 0.2rem;
+  bottom: 0.2rem;
+  width: 2px;
+  background: #d8dee5;
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 0.85rem;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+
+  .timeline-marker {
+    position: absolute;
+    left: -1.02rem;
+    top: 0.45rem;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 50%;
+    background: #2f7cb8;
+    box-shadow: 0 0 0 3px #fff;
+  }
+
+  .timeline-content {
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 0.75rem 0.85rem;
+    background: #fff;
+  }
+
+  &.important {
+    .timeline-marker {
+      background: #dc3545;
+    }
+
+    .timeline-content {
+      border-color: #f1b0b7;
+      background: #fff8f8;
+    }
+  }
+}
+
+.antecedent-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 1050;
+}
+
+.antecedent-modal {
+  position: fixed;
+  z-index: 1060;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(680px, calc(100vw - 1.5rem));
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #dfe3e7;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
+}
+
+.antecedent-modal-header,
+.antecedent-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  background: #f8f9fa;
+}
+
+.antecedent-modal-header {
+  border-bottom: 1px solid #dee2e6;
+}
+
+.antecedent-modal-footer {
+  border-top: 1px solid #dee2e6;
+  justify-content: flex-end;
+}
+
+.antecedent-modal-body {
+  padding: 1rem;
+}
+
+.consultation-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.consultation-kpi {
+  height: 38px;
+  border: 1px solid #ced4da;
+  border-radius: 0.375rem;
+  background: #f8f9fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: #1e2d3d;
+}
+
+.wysiwyg-toolbar {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+}
+
+.wysiwyg-editor {
+  border: 1px solid #ced4da;
+  border-radius: 0.5rem;
+  min-height: 110px;
+  padding: 0.65rem 0.75rem;
+  background: #fff;
+  overflow-wrap: anywhere;
+
+  &:focus {
+    outline: none;
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.2);
+  }
+}
+
+.empty-tab-state {
+  border: 1px dashed #cfd6de;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  text-align: center;
+  background: #fbfcfd;
+
+  i {
+    font-size: 1.5rem;
+    color: #4f6f8d;
+    margin-bottom: 0.5rem;
+  }
+
+  h3 {
+    font-size: 1rem;
+    margin-bottom: 0.35rem;
+    color: #1e2d3d;
+  }
+
+  p {
+    margin-bottom: 0;
+    color: #5b6773;
+  }
+}
+
+// ── Responsive ───────────────────────────────────────────────
+@media (max-width: 576px) {
+  .wizard-container { max-width: 100%; }
+
+  .sex-cards .sex-card span { font-size: 0.75rem; }
+
+  .wizard-actions {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .antecedent-modal {
+    width: calc(100vw - 1rem);
+  }
+
+  .consultation-tabs .btn {
+    flex: 1 1 calc(50% - 0.5rem);
+  }
+}

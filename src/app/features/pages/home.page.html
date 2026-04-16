@@ -1,0 +1,116 @@
+<section class="page-head d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+  <div>
+    <h1 class="h3 mb-1"><i class="fa-solid fa-house text-primary me-2"></i>Accueil</h1>
+    <p class="text-secondary mb-0">Vue globale des consultations, patients et reglements.</p>
+  </div>
+</section>
+
+@if (isLoading()) {
+  <section class="panel card border-0 shadow-sm">
+    <div class="card-body py-4">Chargement du tableau de bord...</div>
+  </section>
+} @else {
+  <section class="panel card border-0 shadow-sm mb-3">
+    <div class="card-body">
+      <h2 class="h5 mb-3"><i class="fa-solid fa-calendar-days me-2 text-primary"></i>Agenda des consultations</h2>
+      @if (calendarSettings(); as settings) {
+        <app-week-calendar [events]="calendarEvents()" [settings]="settings" />
+      }
+    </div>
+  </section>
+
+  <section class="row g-3 mb-3" aria-label="Indicateurs graphiques">
+    <article class="col-12 col-xl-6">
+      <div class="panel card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3"><i class="fa-solid fa-chart-line me-2 text-primary"></i>Evolution des consultations par mois</h2>
+          <div class="chart-wrap">
+            <canvas #monthlyChartHost aria-label="Graphique des consultations mensuelles"></canvas>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="col-12 col-xl-6">
+      <div class="panel card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3"><i class="fa-solid fa-venus-mars me-2 text-primary"></i>Repartition des patients</h2>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <p class="muted small text-uppercase mb-2">Par sexe</p>
+              <div class="chart-wrap chart-wrap-sm">
+                <canvas #sexChartHost aria-label="Graphique de repartition des patients par sexe"></canvas>
+              </div>
+            </div>
+            <div class="col-12 col-md-6">
+              <p class="muted small text-uppercase mb-2">Par tranche d'age</p>
+              <div class="chart-wrap chart-wrap-sm">
+                <canvas #ageChartHost aria-label="Graphique de repartition des patients par tranche d'age"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <section class="row g-3" aria-label="Listes principales">
+    <article class="col-12 col-xl-6">
+      <div class="panel card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3"><i class="fa-solid fa-user-clock me-2 text-primary"></i>10 derniers patients ayant consulte</h2>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Nom</th>
+                  <th>Telephone</th>
+                  <th>Derniere visite</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (patient of recentPatients(); track patient.id) {
+                  <tr class="cursor-pointer" [routerLink]="['/patients', patient.id]">
+                    <td>{{ patient.fullName }}</td>
+                    <td>{{ patient.phone }}</td>
+                    <td>{{ patient.lastVisit }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="col-12 col-xl-6">
+      <div class="panel card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3"><i class="fa-solid fa-hourglass-half me-2 text-primary"></i>Paiements en attente</h2>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Facture</th>
+                  <th>Patient</th>
+                  <th>Echeance</th>
+                  <th class="text-end">Montant</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (payment of pendingPayments(); track payment.invoiceNumber) {
+                  <tr>
+                    <td>{{ payment.invoiceNumber }}</td>
+                    <td>{{ payment.patientName }}</td>
+                    <td>{{ payment.dueAt }}</td>
+                    <td class="text-end">{{ payment.amountEur.toFixed(2) }} EUR</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </article>
+  </section>
+}

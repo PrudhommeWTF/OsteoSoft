@@ -1,0 +1,1648 @@
+<section class="page-head d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+  <div>
+    <h1 class="h3 mb-1"><i class="fa-solid fa-gear text-primary me-2"></i>Paramètres</h1>
+    <p class="text-secondary mb-0">Configuration fonctionnelle et technique de l'application.</p>
+  </div>
+</section>
+
+<section class="settings-layout" aria-label="Configuration de l'application">
+  <nav class="panel card border-0 shadow-sm settings-tabs" aria-label="Onglets des paramètres">
+    <div class="card-body p-2">
+      <div class="nav settings-tab-list" role="tablist" aria-orientation="vertical">
+        @for (section of sections; track section.id) {
+          <button
+            type="button"
+            class="settings-tab"
+            role="tab"
+            [class.active]="activeSectionId() === section.id"
+            [attr.aria-selected]="activeSectionId() === section.id"
+            [attr.aria-controls]="section.id + '-panel'"
+            [id]="section.id + '-tab'"
+            (click)="selectSection(section.id)"
+          >
+            <span class="settings-tab-icon"><i [class]="section.icon"></i></span>
+            <span class="settings-tab-copy">
+              <span class="settings-tab-label">{{ section.label }}</span>
+              <span class="settings-tab-summary">{{ section.summary }}</span>
+            </span>
+          </button>
+        }
+      </div>
+    </div>
+  </nav>
+
+  <article
+    class="panel card border-0 shadow-sm settings-panel"
+    role="tabpanel"
+    [attr.aria-labelledby]="activeSection().id + '-tab'"
+    [id]="activeSection().id + '-panel'"
+  >
+    <div class="card-body p-4">
+      <div class="settings-panel-hero mb-4">
+        <span class="settings-panel-icon"><i [class]="activeSection().icon"></i></span>
+        <div>
+          <p class="settings-panel-kicker mb-1">Espace de configuration</p>
+          <h2 class="h4 mb-2">{{ activeSection().label }}</h2>
+          <p class="text-secondary mb-0">{{ activeSection().description }}</p>
+        </div>
+      </div>
+
+      @if (activeSection().id === 'data-management') {
+        <section class="row g-3 mb-4" aria-label="Sauvegarde et restauration des données">
+          <div class="col-12 col-xl-6">
+            <article class="settings-card h-100">
+              <p class="settings-card-status mb-2">Sauvegarde</p>
+              <h3 class="settings-card-title">Télécharger une sauvegarde</h3>
+              <p class="settings-card-copy mb-3">Exportez l'intégralité des données dans un fichier JSON pour archivage ou transfert.</p>
+              <button type="button" class="btn btn-primary" [disabled]="isDownloadingBackup()" (click)="downloadBackup()">
+                <i class="fa-solid fa-download me-1"></i>Télécharger la sauvegarde
+              </button>
+            </article>
+          </div>
+
+          <div class="col-12 col-xl-6">
+            <article class="settings-card h-100">
+              <p class="settings-card-status mb-2">Restauration</p>
+              <h3 class="settings-card-title">Restaurer une sauvegarde</h3>
+              <p class="settings-card-copy mb-3">Importez un fichier de sauvegarde JSON pour rétablir les données.</p>
+
+              <div class="mb-3">
+                <label class="form-label mb-1" for="backup-file">Fichier de sauvegarde (.json)</label>
+                <input
+                  id="backup-file"
+                  type="file"
+                  class="form-control"
+                  accept="application/json,.json"
+                  [disabled]="isRestoringBackup()"
+                  (change)="onBackupFileSelected($event)"
+                />
+                @if (selectedBackupFileName()) {
+                  <p class="small text-secondary mt-2 mb-0">Fichier sélectionné: {{ selectedBackupFileName() }}</p>
+                }
+              </div>
+
+              <button
+                type="button"
+                class="btn btn-outline-primary"
+                [disabled]="isRestoringBackup() || !selectedBackupPayload()"
+                (click)="restoreBackup()"
+              >
+                <i class="fa-solid fa-rotate-left me-1"></i>Restaurer la sauvegarde
+              </button>
+            </article>
+          </div>
+
+          <div class="col-12">
+            <article class="settings-card">
+              <p class="settings-card-status mb-2">Export RGPD</p>
+              <h3 class="settings-card-title">Exporter les données d'un patient</h3>
+              <p class="settings-card-copy mb-3">
+                Sélectionnez un patient depuis la base puis générez son export RGPD complet (données patient, consultations, rendez-vous et historique).
+              </p>
+
+              <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <label class="form-label fw-semibold mb-0">Patient concerné</label>
+                  <button type="button" class="btn btn-outline-primary btn-sm" [disabled]="isExportingRgpdPatient()" (click)="toggleRgpdPatientPicker()">
+                    <i class="fa-solid fa-user-plus me-1"></i>
+                    {{ showRgpdPatientPicker() ? 'Fermer' : 'Ajouter' }}
+                  </button>
+                </div>
+
+                @if (selectedRgpdPatient()) {
+                  <div class="d-flex flex-wrap gap-2 mb-2">
+                    <span class="badge text-bg-light border related-pill d-flex align-items-center gap-1 p-2">
+                      <i [class]="getRelatedPatientIcon(selectedRgpdPatient()!.sex) + ' me-1'"></i>
+                      {{ selectedRgpdPatient()!.fullName }}
+                      <button
+                        type="button"
+                        class="btn-close ms-1"
+                        style="font-size:0.55rem;"
+                        aria-label="Retirer"
+                        [disabled]="isExportingRgpdPatient()"
+                        (click)="clearRgpdPatientSelection()"
+                      ></button>
+                    </span>
+                  </div>
+                }
+
+                @if (showRgpdPatientPicker()) {
+                  <div class="border rounded p-2 bg-light-subtle">
+                    <label class="form-label small mb-1" for="rgpdPatientSearch">Rechercher un patient existant</label>
+                    <input
+                      id="rgpdPatientSearch"
+                      type="search"
+                      class="form-control form-control-sm"
+                      placeholder="Nom ou prénom (2 caractères min.)"
+                      [value]="rgpdPatientSearch()"
+                      [disabled]="isExportingRgpdPatient()"
+                      (input)="onRgpdPatientSearchChange($any($event.target).value || '')"
+                    />
+
+                    @if (isSearchingRgpdPatients()) {
+                      <div class="small text-muted mt-2">Recherche en cours...</div>
+                    } @else if (rgpdPatientSearch().trim().length >= 2 && rgpdSearchResults().length === 0) {
+                      <div class="small text-muted mt-2">Aucun patient trouvé.</div>
+                    }
+
+                    @if (rgpdSearchResults().length > 0) {
+                      <ul class="list-group list-group-flush mt-2">
+                        @for (result of rgpdSearchResults(); track result.id) {
+                          <li class="list-group-item list-group-item-action cursor-pointer py-2 px-2" (click)="selectRgpdPatient(result)">
+                            <div class="d-flex align-items-center gap-2">
+                              <i [class]="getRelatedPatientIcon(result.sex) + ' text-secondary'"></i>
+                              <span class="fw-semibold">{{ result.fullName }}</span>
+                              <span class="text-muted small ms-auto">{{ getRelatedPatientMeta(result) }}</span>
+                            </div>
+                          </li>
+                        }
+                      </ul>
+                    }
+                  </div>
+                }
+              </div>
+
+              <div>
+                <button
+                  type="button"
+                  class="btn btn-outline-primary"
+                  [disabled]="isSearchingRgpdPatients() || isExportingRgpdPatient() || !selectedRgpdPatient()"
+                  (click)="exportSelectedPatientRgpd()"
+                >
+                  <i class="fa-solid fa-file-export me-1"></i>Exporter
+                </button>
+              </div>
+            </article>
+          </div>
+
+          <div class="col-12">
+            <article class="settings-card">
+              <p class="settings-card-status mb-2">Configuration</p>
+              <h3 class="settings-card-title">Rappel de sauvegarde</h3>
+              <p class="settings-card-copy mb-3">Réglez la fréquence de rappel pour effectuer une sauvegarde complète des données.</p>
+
+              <div class="mb-3">
+                <p class="small text-secondary">Cette option peut être configurée dans les paramètres généraux du système.</p>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        @if (dataManagementError()) {
+          <div class="alert alert-danger py-2" role="alert">{{ dataManagementError() }}</div>
+        }
+
+        @if (dataManagementSuccess()) {
+          <div class="alert alert-success py-2" role="status">{{ dataManagementSuccess() }}</div>
+        }
+      } @else if (activeSection().id === 'audit-logs') {
+        <section class="settings-card" aria-label="Journal d'audit">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <div>
+              <p class="settings-card-status mb-1">Traçabilité</p>
+              <h3 class="settings-card-title mb-0">Journal d'audit</h3>
+            </div>
+
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <div class="input-group input-group-sm">
+                <label class="input-group-text" for="audit-log-limit">Derniers</label>
+                <select
+                  id="audit-log-limit"
+                  class="form-select"
+                  [value]="selectedAuditLogLimit()"
+                  [disabled]="isAuditLogsLoading()"
+                  (change)="onAuditLogLimitChange($any($event.target).value || '')"
+                >
+                  @for (limit of auditLogLimitOptions; track limit) {
+                    <option [value]="limit">{{ limit }}</option>
+                  }
+                </select>
+              </div>
+
+              <button type="button" class="btn btn-sm btn-outline-primary" [disabled]="isAuditLogsLoading()" (click)="refreshAuditLogs()">
+                <i class="fa-solid fa-rotate me-1"></i>Actualiser
+              </button>
+            </div>
+          </div>
+
+          @if (isAuditLogsLoading()) {
+            <p class="text-secondary mb-0">Chargement des logs d'audit...</p>
+          } @else if (auditLogsError()) {
+            <div class="alert alert-danger py-2 mb-0" role="alert">{{ auditLogsError() }}</div>
+          } @else if (auditLogs().length === 0) {
+            <p class="text-secondary mb-0">Aucun log d'audit disponible.</p>
+          } @else {
+            <div class="table-responsive">
+              <table class="table table-sm align-middle settings-audit-table mb-0">
+                <thead>
+                  <tr>
+                    <th scope="col">Date</th>
+                    <th scope="col">Utilisateur</th>
+                    <th scope="col">Action</th>
+                    <th scope="col">Entité</th>
+                    <th scope="col">Détails</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (log of auditLogs(); track log.id) {
+                    <tr>
+                      <td>{{ formatAuditLogDateTime(log.createdAt) }}</td>
+                      <td>{{ log.username }}</td>
+                      <td><span class="badge text-bg-light border">{{ log.action }}</span></td>
+                      <td>
+                        <span class="fw-semibold">{{ log.entity }}</span>
+                        @if (log.entityId) {
+                          <span class="text-secondary">#{{ log.entityId }}</span>
+                        }
+                      </td>
+                      <td class="settings-audit-details">{{ formatAuditLogMetadata(log.metadata) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </section>
+      } @else if (activeSection().id === 'roles-and-access') {
+        <section class="settings-access-intro mb-4" aria-label="Présentation de la gestion des accès">
+          <div class="settings-access-intro-copy">
+            <h3 class="h6 mb-2">Présentation par type d'accès</h3>
+            <p class="mb-0 text-secondary">
+              La gestion des profils d'accès est organisée par domaine fonctionnel pour clarifier, module par module, ce que chaque profil peut consulter, modifier ou administrer.
+            </p>
+          </div>
+          <div class="settings-access-intro-metrics" aria-label="Synthèse des domaines">
+            <div class="settings-metric">
+              <span class="settings-metric-value">{{ accessDomains.length }}</span>
+              <span class="settings-metric-label">domaines d'accès</span>
+            </div>
+            <div class="settings-metric">
+              <span class="settings-metric-value">3</span>
+              <span class="settings-metric-label">niveaux de droits cibles</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-profiles-layout mb-4" aria-label="Gestion des profils">
+          <article class="settings-profiles-card">
+            <h3 class="h6 mb-3">Profils d'accès</h3>
+
+            @if (isProfilesLoading()) {
+              <p class="text-secondary mb-3">Chargement des profils...</p>
+            }
+
+            <div class="settings-profile-list" role="list" aria-label="Profils disponibles">
+              @for (profile of profiles(); track profile.id) {
+                <button
+                  type="button"
+                  class="settings-profile-item"
+                  role="listitem"
+                  [class.active]="selectedProfile().id === profile.id"
+                  (click)="selectProfile(profile.id)"
+                >
+                  <span class="settings-profile-item-head">
+                    <span class="settings-profile-item-label">{{ profile.label }}</span>
+                    @if (profile.immutable) {
+                      <span class="settings-profile-badge">Système</span>
+                    }
+                  </span>
+                  <span class="settings-profile-item-copy">{{ profile.description }}</span>
+                </button>
+              }
+            </div>
+          </article>
+
+          <article class="settings-profile-form-card">
+            <h3 class="h6 mb-3">Ajouter un nouveau profil</h3>
+
+            <form class="row g-2" [formGroup]="profileForm" (ngSubmit)="createProfile()" novalidate>
+              <div class="col-12">
+                <label class="form-label mb-1" for="profile-label">Nom du profil</label>
+                <input
+                  id="profile-label"
+                  type="text"
+                  class="form-control"
+                  formControlName="label"
+                  placeholder="Ex: Assistant médical"
+                />
+              </div>
+
+              <div class="col-12">
+                <label class="form-label mb-1" for="profile-description">Description</label>
+                <input
+                  id="profile-description"
+                  type="text"
+                  class="form-control"
+                  formControlName="description"
+                  placeholder="Description courte du profil"
+                />
+              </div>
+
+              @if (profileFormError()) {
+                <div class="col-12">
+                  <div class="alert alert-danger py-2 mb-0" role="alert">{{ profileFormError() }}</div>
+                </div>
+              }
+
+              <div class="col-12 d-flex justify-content-end">
+                <button type="submit" class="btn btn-primary" [disabled]="isCreatingProfile()">
+                  <i class="fa-solid fa-plus me-1"></i>Créer le profil
+                </button>
+              </div>
+            </form>
+          </article>
+        </section>
+
+        <section class="settings-selected-profile mb-4" aria-live="polite">
+          <h3 class="h6 mb-2">Compte connecté: {{ currentUser()?.username || 'Utilisateur' }}</h3>
+          <form class="row g-2 align-items-end" (ngSubmit)="saveCurrentUserProfile()" novalidate>
+            <div class="col-12 col-md-8">
+              <label class="form-label mb-1" for="current-user-profile">Profil appliqué à ce compte</label>
+              <select
+                id="current-user-profile"
+                class="form-select"
+                [value]="currentUserProfileId()"
+                (change)="updateCurrentUserProfileId($any($event.target).value || '')"
+              >
+                @for (profile of profiles(); track profile.id) {
+                  <option [value]="profile.id">{{ profile.label }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-12 col-md-4 d-grid">
+              <button type="submit" class="btn btn-outline-primary" [disabled]="isSavingCurrentUserProfile()">
+                Associer le profil
+              </button>
+            </div>
+            @if (profileLinkError()) {
+              <div class="col-12">
+                <div class="alert alert-danger py-2 mb-0" role="alert">{{ profileLinkError() }}</div>
+              </div>
+            }
+            @if (profileLinkSuccess()) {
+              <div class="col-12">
+                <div class="alert alert-success py-2 mb-0" role="status">{{ profileLinkSuccess() }}</div>
+              </div>
+            }
+          </form>
+        </section>
+
+        <section class="settings-selected-profile mb-3" aria-live="polite">
+          <h3 class="h6 mb-1">Profil sélectionné: {{ selectedProfile().label }}</h3>
+          <p class="text-secondary mb-0">
+            {{ selectedProfile().description }}
+            @if (isSuperAdminSelected()) {
+              <span class="settings-inline-note">Le profil Super Administrateur conserve tous les droits activés.</span>
+            }
+          </p>
+        </section>
+
+        <div class="row g-3 mb-4" aria-label="Domaines d'accès">
+          @for (domain of accessDomains; track domain.id) {
+            <div class="col-12 col-xl-6">
+              <section class="settings-access-card h-100">
+                <div class="settings-access-card-head mb-3">
+                  <span class="settings-access-card-icon"><i [class]="domain.icon"></i></span>
+                  <div>
+                    <h3 class="settings-access-card-title mb-1">{{ domain.label }}</h3>
+                    <p class="settings-access-card-description mb-0">{{ domain.description }}</p>
+                  </div>
+                </div>
+
+                <div class="table-responsive">
+                  <table class="table table-sm settings-rights-table mb-0" [attr.aria-label]="'Droits pour ' + domain.label">
+                    <thead>
+                      <tr>
+                        <th scope="col" class="settings-rights-col-label">Fonctionnalité</th>
+                        <th scope="col" class="settings-rights-col-toggle">
+                          <button
+                            type="button"
+                            class="settings-switch"
+                            role="switch"
+                            [class.is-on]="isDomainFullyEnabled(domain)"
+                            [disabled]="isSuperAdminSelected()"
+                            (click)="setDomainAll(domain, !isDomainFullyEnabled(domain))"
+                            [attr.aria-checked]="isDomainFullyEnabled(domain)"
+                            [attr.aria-label]="'Activer ou désactiver tous les droits du domaine ' + domain.label"
+                          >
+                            <span class="settings-switch-knob" aria-hidden="true"></span>
+                          </button>
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      @for (permission of domain.permissions; track permission.id) {
+                        <tr>
+                          <td>{{ permission.label }}</td>
+                          <td class="settings-rights-toggle-cell">
+                            <button
+                              type="button"
+                              class="settings-switch"
+                              role="switch"
+                              [class.is-on]="isPermissionEnabled(domain.id, permission.id)"
+                              [disabled]="isSuperAdminSelected()"
+                              (click)="setPermission(domain.id, permission.id, !isPermissionEnabled(domain.id, permission.id))"
+                              [attr.aria-checked]="isPermissionEnabled(domain.id, permission.id)"
+                              [attr.aria-label]="'Basculer le droit ' + permission.label + ' pour le profil ' + selectedProfile().label"
+                            >
+                              <span class="settings-switch-knob" aria-hidden="true"></span>
+                            </button>
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          }
+        </div>
+
+        @if (rightsSaveError()) {
+          <div class="alert alert-danger py-2" role="alert">{{ rightsSaveError() }}</div>
+        }
+      } @else if (activeSection().id === 'user-management') {
+        <section class="card border-0 shadow-sm mb-4" aria-label="Liste des comptes utilisateurs">
+          <div class="card-body p-3 p-lg-4">
+            <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
+              <h3 class="h6 mb-0">Comptes utilisateurs</h3>
+              <button type="button" class="btn btn-sm btn-primary" (click)="openCreateUserModal()">
+                <i class="fa-solid fa-user-plus me-1"></i>Nouveau compte
+              </button>
+            </div>
+
+            @if (userProfileLinkError()) {
+              <div class="alert alert-danger py-2 mb-3" role="alert">{{ userProfileLinkError() }}</div>
+            }
+
+            @if (userProfileLinkSuccess()) {
+              <div class="alert alert-success py-2 mb-3" role="status">{{ userProfileLinkSuccess() }}</div>
+            }
+
+            @if (isUsersLoading()) {
+              <p class="text-secondary mb-0">Chargement des utilisateurs...</p>
+            } @else {
+              <div class="table-responsive">
+                <table class="table table-sm align-middle settings-users-table mb-0">
+                  <thead>
+                    <tr>
+                      <th scope="col">Login</th>
+                      <th scope="col">Nom</th>
+                      <th scope="col">Couleur</th>
+                      <th scope="col">Profil</th>
+                      <th scope="col">Cabinet</th>
+                      <th scope="col">Retrocession</th>
+                      <th scope="col">Créé le</th>
+                      <th scope="col">Actif</th>
+                      <th scope="col" class="text-end">Supprimer</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (user of users(); track user.id) {
+                      <tr>
+                        <td>
+                          <button type="button" class="btn btn-link p-0 text-decoration-none" (click)="openEditUserModal(user.id)">
+                            {{ user.username }}
+                          </button>
+                        </td>
+                        <td>{{ formatUserName(user) }}</td>
+                        <td>
+                          <span class="d-inline-block rounded-circle border" [style.background]="user.colorHex || '#4d92d1'" style="width: 1rem; height: 1rem;"></span>
+                        </td>
+                        <td>{{ user.profileLabel || '-' }}</td>
+                        <td>{{ user.cabinetName || '-' }}</td>
+                        <td>{{ user.retrocessionPercent }}%</td>
+                        <td>{{ formatCreatedDate(user.createdAt) }}</td>
+                        <td>
+                          <span class="badge" [class.text-bg-success]="user.isActive" [class.text-bg-secondary]="!user.isActive">
+                            {{ user.isActive ? 'Oui' : 'Non' }}
+                          </span>
+                        </td>
+                        <td class="text-end">
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-outline-danger"
+                            [disabled]="deletingUserId() === user.id || !canDeleteUser(user)"
+                            (click)="deleteUser(user)"
+                            aria-label="Supprimer ce compte"
+                          >
+                            <i class="fa-solid fa-trash"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </div>
+        </section>
+
+        @if (isUserModalOpen()) {
+          <div class="modal fade show d-block settings-user-modal" tabindex="-1" role="dialog" aria-modal="true" [attr.aria-labelledby]="'user-account-modal-title'">
+            <div class="modal-dialog modal-xl settings-user-modal-dialog">
+              <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                  <h4 id="user-account-modal-title" class="modal-title h5 mb-0">
+                    {{ isCreatingUserMode() ? 'Créer un utilisateur' : 'Modifier un utilisateur' }}
+                  </h4>
+                  <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeUserModal()"></button>
+                </div>
+
+                <form class="settings-user-modal-form" [formGroup]="userForm" (ngSubmit)="saveUserAccount()" novalidate>
+                  <div class="modal-body settings-user-modal-body">
+                    <div class="row g-2">
+                      <div class="col-12 col-md-3">
+                        <div class="input-group">
+                          <span class="input-group-text" id="user-active-label">Actif</span>
+                          <div class="form-control d-flex align-items-center">
+                            <div class="form-check form-switch mb-0">
+                              <input id="user-active" type="checkbox" class="form-check-input" formControlName="isActive" aria-labelledby="user-active-label" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-4">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-profile">Profil</label>
+                          <select id="user-profile" class="form-select" formControlName="profileId">
+                            @for (profile of profiles(); track profile.id) {
+                              <option [value]="profile.id">{{ profile.label }}</option>
+                            }
+                          </select>
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-5">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-cabinet">Cabinets</label>
+                          <select
+                            id="user-cabinet"
+                            class="form-select"
+                            multiple
+                            size="4"
+                            (change)="onUserCabinetSelectionChange($event)"
+                          >
+                            @for (office of userCabinetOptions(); track office.id) {
+                              <option [value]="office.id" [selected]="selectedUserOfficeIds().includes(office.id)">{{ office.name }}</option>
+                            }
+                          </select>
+                        </div>
+                        <div class="form-text">Vous pouvez rattacher l'utilisateur à un ou plusieurs cabinets.</div>
+                        @if (!isOfficesLoading() && userCabinetOptions().length === 0) {
+                          <div class="form-text">Aucun cabinet disponible. Ajoutez d'abord un cabinet dans la section "Gestion des cabinets".</div>
+                        }
+                      </div>
+
+                      <div class="col-12 col-md-6">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-username">Login</label>
+                          <input id="user-username" type="text" class="form-control" formControlName="username" />
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-6">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-password">Mot de passe</label>
+                          <input
+                            id="user-password"
+                            type="password"
+                            class="form-control"
+                            formControlName="password"
+                            [placeholder]="isCreatingUserMode() ? 'Obligatoire' : 'Laisser vide pour conserver'"
+                          />
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-6">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-last-name">Nom</label>
+                          <input id="user-last-name" type="text" class="form-control" formControlName="lastName" />
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-6">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-first-name">Prénom</label>
+                          <input id="user-first-name" type="text" class="form-control" formControlName="firstName" />
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-6">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-email">Email</label>
+                          <input id="user-email" type="email" class="form-control" formControlName="email" />
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-6">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-mobile-phone">Téléphone</label>
+                          <input id="user-mobile-phone" type="text" class="form-control" formControlName="mobilePhone" />
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-6">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-country">Pays</label>
+                          <select id="user-country" class="form-select" formControlName="country">
+                            @for (country of countryOptions; track country) {
+                              <option [value]="country">{{ country }}</option>
+                            }
+                          </select>
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-6">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-siret">N° SIRET</label>
+                          <input id="user-siret" type="text" class="form-control" formControlName="siret" />
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-4">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-adeli">Code ADELI</label>
+                          <input id="user-adeli" type="text" class="form-control" formControlName="adeliCode" />
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-4">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-rpps">Code RPPS</label>
+                          <input id="user-rpps" type="text" class="form-control" formControlName="rppsCode" />
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-4">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-ape-naf">Code APE / NAF</label>
+                          <input id="user-ape-naf" type="text" class="form-control" formControlName="apeNafCode" />
+                        </div>
+                      </div>
+
+                      <div class="col-12">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-name-suffix">Texte à côté du nom</label>
+                          <input id="user-name-suffix" type="text" class="form-control" formControlName="nameSuffixText" />
+                        </div>
+                      </div>
+
+                      <div class="col-12">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-letter-header">Entête courriers</label>
+                          <input id="user-letter-header" type="text" class="form-control" formControlName="letterHeader" />
+                        </div>
+                      </div>
+
+                      <div class="col-12">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-letter-footer">Pied de page courriers</label>
+                          <input id="user-letter-footer" type="text" class="form-control" formControlName="letterFooter" />
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-6">
+                        <label class="form-label mb-1" for="user-signature-upload">Signature</label>
+
+                        @if (!isCreatingUserMode() && userSignatureValue()) {
+                          <div class="border rounded p-2 mb-2 bg-light-subtle">
+                            <div class="small text-secondary mb-1">Valeur actuelle</div>
+                            @if (isUserSignatureImage()) {
+                              <img
+                                [src]="userSignatureValue()"
+                                alt="Signature actuelle"
+                                class="img-fluid rounded border"
+                                style="max-height: 110px;"
+                              />
+                            } @else {
+                              <div class="small text-break">{{ getUserSignaturePreviewText() }}</div>
+                            }
+                          </div>
+                        }
+
+                        <input
+                          id="user-signature-upload"
+                          type="file"
+                          class="form-control"
+                          accept="image/*,.pdf"
+                          (change)="onUserSignatureFileSelected($event)"
+                        />
+
+                        @if (selectedUserSignatureFileName()) {
+                          <p class="small text-secondary mt-1 mb-0">Nouveau fichier: {{ selectedUserSignatureFileName() }}</p>
+                        }
+
+                        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" (click)="clearUserSignature()">
+                          Effacer la signature
+                        </button>
+
+                        @if (userSignatureError()) {
+                          <div class="small text-danger mt-1">{{ userSignatureError() }}</div>
+                        }
+                      </div>
+
+                      <div class="col-12 col-md-6">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-color">Couleur</label>
+                          <input id="user-color" type="color" class="form-control form-control-color" formControlName="colorHex" />
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-6">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-bank-name">Banque</label>
+                          <input id="user-bank-name" type="text" class="form-control" formControlName="bankName" />
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-6">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-iban">IBAN</label>
+                          <input id="user-iban" type="text" class="form-control" formControlName="iban" />
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-4">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-retrocession">Rétrocession</label>
+                          <input id="user-retrocession" type="number" class="form-control" formControlName="retrocessionPercent" min="0" max="100" />
+                          <span class="input-group-text">%</span>
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-8">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                          <label class="form-label mb-0">Destinataire rétrocession</label>
+                          <span class="small text-secondary">Sélection unique</span>
+                        </div>
+
+                        <div class="settings-people-picker">
+                          <div class="settings-people-picker-search mb-2">
+                            <input
+                              id="user-retrocession-recipient-search"
+                              type="search"
+                              class="form-control form-control-sm"
+                              placeholder="Rechercher par nom, prénom ou login"
+                              [value]="retrocessionRecipientSearch()"
+                              (input)="onRetrocessionRecipientSearchChange($any($event.target).value || '')"
+                            />
+                          </div>
+
+                          @if (retrocessionRecipientOptions().length === 0) {
+                            <div class="small text-muted border rounded p-2">Aucun compte correspondant.</div>
+                          } @else {
+                            <div class="settings-people-picker-list">
+                              @for (result of retrocessionRecipientOptions(); track result.id) {
+                                <button
+                                  type="button"
+                                  class="settings-people-picker-item"
+                                  [class.is-selected]="isRetrocessionRecipientSelected(result)"
+                                  (click)="selectRetrocessionRecipient(result)"
+                                >
+                                  <span class="settings-people-avatar">{{ getUserInitials(result) }}</span>
+                                  <span class="settings-people-copy">
+                                    <span class="settings-people-name">{{ getUserDisplayName(result) }}</span>
+                                    <span class="settings-people-login">{{ result.username }}</span>
+                                  </span>
+                                  <span class="settings-people-radio" aria-hidden="true">
+                                    <i [class]="isRetrocessionRecipientSelected(result) ? 'fa-solid fa-circle-dot' : 'fa-regular fa-circle'"></i>
+                                  </span>
+                                </button>
+                              }
+                            </div>
+                          }
+                        </div>
+
+                        @if (selectedRetrocessionRecipient()) {
+                          <div class="settings-selected-recipient mt-2">
+                            <span class="small text-secondary">Compte sélectionné:</span>
+                            <span class="fw-semibold">{{ getUserDisplayName(selectedRetrocessionRecipient()!) }}</span>
+                            <span class="text-secondary">({{ selectedRetrocessionRecipient()!.username }})</span>
+                            <button type="button" class="btn btn-link btn-sm p-0 ms-2" (click)="clearRetrocessionRecipient()">Retirer</button>
+                          </div>
+                        }
+                      </div>
+
+                      <div class="col-12 col-md-4">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-agenda-view">Vue agenda</label>
+                          <select id="user-agenda-view" class="form-select" formControlName="defaultAgendaView">
+                            @for (view of agendaViewOptions; track view) {
+                              <option [value]="view">{{ view }}</option>
+                            }
+                          </select>
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-4">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-calendars">Calendriers</label>
+                          <select id="user-calendars" class="form-select" formControlName="visibleCalendars">
+                            @for (calendar of calendarOptions; track calendar) {
+                              <option [value]="calendar">{{ calendar }}</option>
+                            }
+                          </select>
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-md-4">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-default-service">Prestations</label>
+                          <select id="user-default-service" class="form-select" formControlName="defaultService">
+                            <option value="Aucune prestation">Aucune prestation</option>
+                            @for (serviceLabel of serviceTypeLabels(); track serviceLabel) {
+                              <option [value]="serviceLabel">{{ serviceLabel }}</option>
+                            }
+                          </select>
+                        </div>
+                      </div>
+
+                      <div class="col-12">
+                        <div class="input-group">
+                          <label class="input-group-text" for="user-invoice-mentions">Mentions factures</label>
+                          <textarea id="user-invoice-mentions" class="form-control" formControlName="invoiceMentions" rows="3"></textarea>
+                        </div>
+                      </div>
+
+                      <div class="col-12">
+                        <hr />
+                        <h6 class="text-secondary mb-3">
+                          <i class="fa-solid fa-chart-line me-2"></i>Comptabilité et Statistiques
+                        </h6>
+                      </div>
+
+                      <div class="col-12">
+                        <div class="form-check form-switch">
+                          <input id="user-include-free-consultations" type="checkbox" class="form-check-input" formControlName="includeFreeConsultations" />
+                          <label class="form-check-label" for="user-include-free-consultations">
+                            Afficher les consultations gratuites dans la comptabilité et les statistiques
+                          </label>
+                        </div>
+                      </div>
+
+                      <div class="col-12">
+                        <div class="form-check form-switch">
+                          <input id="user-show-consultation-hour" type="checkbox" class="form-check-input" formControlName="showConsultationHour" />
+                          <label class="form-check-label" for="user-show-consultation-hour">
+                            Afficher l'heure des consultations dans la comptabilité
+                          </label>
+                        </div>
+                      </div>
+
+                      @if (userProfileLinkError()) {
+                        <div class="col-12">
+                          <div class="alert alert-danger py-2 mb-0" role="alert">{{ userProfileLinkError() }}</div>
+                        </div>
+                      }
+                    </div>
+                  </div>
+
+                  <div class="modal-footer settings-user-modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" (click)="closeUserModal()">Annuler</button>
+                    <button type="submit" class="btn btn-success" [disabled]="isCreatingUserAccount() || isSavingUserAccount()">
+                      <i class="fa-solid fa-check me-1"></i>{{ isCreatingUserMode() ? 'Créer le compte' : 'Enregistrer' }}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+          <div class="modal-backdrop fade show" (click)="closeUserModal()"></div>
+        }
+      } @else if (activeSection().id !== 'offices') {
+        <div class="row g-3 mb-4" aria-label="Champs à prévoir">
+          @for (item of activeSection().items; track item) {
+            <div class="col-12 col-md-6 col-xl-4">
+              <section class="settings-card h-100">
+                <p class="settings-card-status mb-2">À configurer</p>
+                <h3 class="settings-card-title">{{ item }}</h3>
+                <p class="settings-card-copy mb-0">Cette zone est prête à accueillir la logique métier correspondante.</p>
+              </section>
+            </div>
+          }
+        </div>
+      }
+
+      @if (activeSection().id === 'offices') {
+        <section class="settings-card mb-4" aria-label="Gestion des cabinets">
+          @if (isOfficesLoading()) {
+            <p class="text-secondary mb-0">Chargement des cabinets...</p>
+          } @else {
+            <div class="mb-3">
+              <button type="button" class="btn btn-primary" (click)="openOfficeModal()">
+                <i class="fa-solid fa-plus me-1"></i>Ajouter un cabinet
+              </button>
+            </div>
+
+            @if (officesError()) {
+              <div class="alert alert-danger mb-3">{{ officesError() }}</div>
+            }
+
+            @if (officesSuccess()) {
+              <div class="alert alert-success mb-3">{{ officesSuccess() }}</div>
+            }
+
+            @if (offices().length === 0) {
+              <p class="text-secondary">Aucun cabinet enregistré. Cliquez sur "Ajouter un cabinet" pour commencer.</p>
+            } @else {
+              <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                  <thead>
+                    <tr>
+                      <th scope="col">Nom</th>
+                      <th scope="col">Ville</th>
+                      <th scope="col">Téléphone</th>
+                      <th scope="col">Email</th>
+                      <th scope="col">Horaires</th>
+                      <th scope="col" class="text-end">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (office of offices(); track office.id) {
+                      <tr>
+                        <td class="fw-semibold">{{ office.name }}</td>
+                        <td>{{ office.city || '—' }}</td>
+                        <td>{{ office.phoneMobile || office.phoneLandline || '—' }}</td>
+                        <td>{{ office.email || '—' }}</td>
+                        <td>{{ officeOpeningHoursSummary(office.openingHours) }}</td>
+                        <td class="text-end">
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-outline-primary me-1"
+                            (click)="openOfficeModal(office.id)"
+                            [disabled]="isUpdatingOffice() === office.id"
+                          >
+                            <i class="fa-solid fa-pencil"></i>
+                          </button>
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-outline-danger"
+                            (click)="deleteOffice(office.id)"
+                            [disabled]="isDeletingOffice() === office.id"
+                          >
+                            @if (isDeletingOffice() === office.id) {
+                              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            } @else {
+                              <i class="fa-solid fa-trash"></i>
+                            }
+                          </button>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+
+          <!-- Office Modal -->
+          @if (isOfficeModalOpen()) {
+            <div class="modal d-block" role="dialog" style="background-color: rgba(0, 0, 0, 0.5)">
+              <div class="modal-dialog modal-xl">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title">
+                      @if (editingOfficeId()) {
+                        Modifier le cabinet
+                      } @else {
+                        Ajouter un cabinet
+                      }
+                    </h5>
+                    <button type="button" class="btn-close" (click)="closeOfficeModal()"></button>
+                  </div>
+
+                  <div class="modal-body pb-0">
+                    <div class="nav nav-tabs" role="tablist" aria-label="Sections de configuration du cabinet">
+                      <button
+                        type="button"
+                        class="nav-link"
+                        [class.active]="officeModalTab() === 'general'"
+                        role="tab"
+                        [attr.aria-selected]="officeModalTab() === 'general'"
+                        [attr.aria-controls]="'office-tab-general'"
+                        (click)="selectOfficeModalTab('general')"
+                      >
+                        Générale
+                      </button>
+                      <button
+                        type="button"
+                        class="nav-link"
+                        [class.active]="officeModalTab() === 'opening-hours'"
+                        role="tab"
+                        [attr.aria-selected]="officeModalTab() === 'opening-hours'"
+                        [attr.aria-controls]="'office-tab-opening-hours'"
+                        (click)="selectOfficeModalTab('opening-hours')"
+                      >
+                        Heures d'ouvertures
+                      </button>
+                      <button
+                        type="button"
+                        class="nav-link"
+                        [class.active]="officeModalTab() === 'agendas'"
+                        role="tab"
+                        [attr.aria-selected]="officeModalTab() === 'agendas'"
+                        [attr.aria-controls]="'office-tab-agendas'"
+                        [disabled]="!editingOfficeId()"
+                        (click)="selectOfficeModalTab('agendas')"
+                      >
+                        Agendas
+                      </button>
+                    </div>
+                  </div>
+
+                  <form [formGroup]="officeForm" (ngSubmit)="saveOffice()" novalidate>
+                    <div class="modal-body">
+                      @if (officeModalTab() === 'general') {
+                        <div id="office-tab-general" role="tabpanel">
+                          <div class="mb-3">
+                            <label for="office-name" class="form-label">Nom du cabinet <span class="text-danger">*</span></label>
+                            <input 
+                              id="office-name" 
+                              type="text" 
+                              class="form-control"
+                              placeholder="Eg. Cabinet Ostéo"
+                              formControlName="name"
+                            />
+                          </div>
+
+                          <div class="mb-3">
+                            <label for="office-default-duration" class="form-label">
+                              Durée par défaut des séances: {{ officeForm.controls.defaultSessionDurationMinutes.value }} min
+                            </label>
+                            <input
+                              id="office-default-duration"
+                              type="range"
+                              class="form-range"
+                              formControlName="defaultSessionDurationMinutes"
+                              min="15"
+                              max="90"
+                              step="5"
+                            />
+                          </div>
+
+                          <div class="row g-2">
+                            <div class="col-12 col-md-6">
+                              <label for="office-address-line1" class="form-label">Adresse</label>
+                              <input 
+                                id="office-address-line1" 
+                                type="text" 
+                                class="form-control"
+                                placeholder="Rue"
+                                formControlName="addressLine1"
+                              />
+                            </div>
+                            <div class="col-12 col-md-6">
+                              <label for="office-address-line2" class="form-label">Adresse (suite)</label>
+                              <input 
+                                id="office-address-line2" 
+                                type="text" 
+                                class="form-control"
+                                placeholder="Bâtiment"
+                                formControlName="addressLine2"
+                              />
+                            </div>
+                          </div>
+
+                          <div class="row g-2 mt-2">
+                            <div class="col-12 col-md-4">
+                              <label for="office-postal-code" class="form-label">Code Postal</label>
+                              <input 
+                                id="office-postal-code" 
+                                type="text" 
+                                class="form-control"
+                                placeholder="75000"
+                                formControlName="postalCode"
+                              />
+                            </div>
+                            <div class="col-12 col-md-8">
+                              <label for="office-city" class="form-label">Ville</label>
+                              <input 
+                                id="office-city" 
+                                type="text" 
+                                class="form-control"
+                                placeholder="Paris"
+                                formControlName="city"
+                              />
+                            </div>
+                          </div>
+
+                          <div class="row g-2 mt-2">
+                            <div class="col-12 col-md-4">
+                              <label for="office-phone-mobile" class="form-label">Téléphone Mobile</label>
+                              <input 
+                                id="office-phone-mobile" 
+                                type="tel" 
+                                class="form-control"
+                                placeholder="06 12 34 56 78"
+                                formControlName="phoneMobile"
+                              />
+                            </div>
+                            <div class="col-12 col-md-4">
+                              <label for="office-phone-landline" class="form-label">Téléphone Fixe</label>
+                              <input 
+                                id="office-phone-landline" 
+                                type="tel" 
+                                class="form-control"
+                                placeholder="01 23 45 67 89"
+                                formControlName="phoneLandline"
+                              />
+                            </div>
+                            <div class="col-12 col-md-4">
+                              <label for="office-phone-fax" class="form-label">Fax</label>
+                              <input 
+                                id="office-phone-fax" 
+                                type="tel" 
+                                class="form-control"
+                                placeholder="01 23 45 67 80"
+                                formControlName="phoneFax"
+                              />
+                            </div>
+                          </div>
+
+                          <div class="row g-2 mt-2">
+                            <div class="col-12">
+                              <label for="office-email" class="form-label">Email</label>
+                              <input 
+                                id="office-email" 
+                                type="email" 
+                                class="form-control"
+                                placeholder="contact@cabinet.fr"
+                                formControlName="email"
+                              />
+                            </div>
+                          </div>
+
+                          <div class="row g-2 mt-2">
+                            <div class="col-12 col-md-6">
+                              <label for="office-country" class="form-label">Pays</label>
+                              <select id="office-country" class="form-select" formControlName="country">
+                                @for (country of countryOptions; track country) {
+                                  <option [value]="country">{{ country }}</option>
+                                }
+                              </select>
+                            </div>
+                            <div class="col-12 col-md-6">
+                              <label for="office-devise" class="form-label">Devise</label>
+                              <select id="office-devise" class="form-select" formControlName="devise">
+                                @for (devise of generalDeviseOptions; track devise) {
+                                  <option [value]="devise">{{ devise }}</option>
+                                }
+                              </select>
+                            </div>
+                          </div>
+
+                          <div class="mt-4">
+                            <h6 class="mb-3">Paramètres de facturation</h6>
+
+                            <div class="row g-2">
+                              <div class="col-12">
+                                <label for="office-invoice-number-format" class="form-label">Format numérotation</label>
+                                <select id="office-invoice-number-format" class="form-select" formControlName="invoiceNumberFormat">
+                                  @for (option of invoiceNumberFormatOptions; track option) {
+                                    <option [value]="option">{{ option }}</option>
+                                  }
+                                </select>
+                              </div>
+
+                              <div class="col-12 col-md-8">
+                                <label for="office-numbering-configuration" class="form-label">Configuration numérotation</label>
+                                <select id="office-numbering-configuration" class="form-select" formControlName="numberingConfiguration">
+                                  @for (option of numberingConfigurationOptions; track option) {
+                                    <option [value]="option">{{ option }}</option>
+                                  }
+                                </select>
+                              </div>
+
+                              <div class="col-12">
+                                <div class="form-check form-switch">
+                                  <input id="office-show-insurance-fields" type="checkbox" class="form-check-input" formControlName="alwaysShowSocialSecurityAndMutuelle" />
+                                  <label class="form-check-label" for="office-show-insurance-fields">Toujours afficher Sécurité Sociale et Mutuelle sur les factures</label>
+                                </div>
+                              </div>
+
+                              <div class="col-12">
+                                <div class="form-check form-switch">
+                                  <input id="office-hide-vat-mention" type="checkbox" class="form-check-input" formControlName="hideVatMention" />
+                                  <label class="form-check-label" for="office-hide-vat-mention">Ne pas mentionner la TVA sur les factures</label>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div class="mt-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                              <h6 class="mb-0">Prestations proposées</h6>
+                              <button type="button" class="btn btn-sm btn-outline-primary" (click)="openServiceTypeModal()">
+                                <i class="fa-solid fa-plus me-1"></i>Ajouter une prestation
+                              </button>
+                            </div>
+
+                            <div class="table-responsive">
+                              <table class="table table-sm align-middle settings-general-table mb-0">
+                                <thead>
+                                  <tr>
+                                    <th scope="col">Libellé</th>
+                                    <th scope="col">Montant HT</th>
+                                    <th scope="col">TVA</th>
+                                    <th scope="col" class="text-end">Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  @for (serviceType of serviceTypes(); track serviceType.tempKey) {
+                                    <tr draggable="true" (dragstart)="onServiceTypeDragStart($event, serviceType.tempKey)" (dragover)="allowDrop($event)" (drop)="onServiceTypeDrop($event, serviceType.tempKey)">
+                                      <td>
+                                        <input type="text" class="form-control form-control-sm" [value]="serviceType.label" (input)="updateServiceTypeLabel(serviceType.tempKey, $any($event.target).value || '')" />
+                                      </td>
+                                      <td>
+                                        <input type="number" class="form-control form-control-sm" step="0.01" min="0" [value]="serviceType.amountHt" (input)="updateServiceTypeAmount(serviceType.tempKey, $any($event.target).value || '0')" />
+                                      </td>
+                                      <td>
+                                        <select class="form-select form-select-sm" [value]="serviceType.vatRate" (change)="updateServiceTypeVat(serviceType.tempKey, $any($event.target).value || '0')">
+                                          @for (rate of vatRateOptions; track rate) {
+                                            <option [value]="rate">{{ rate }}%</option>
+                                          }
+                                        </select>
+                                      </td>
+                                      <td class="text-end">
+                                        <div class="d-inline-flex gap-1">
+                                          <button type="button" class="btn btn-sm btn-outline-secondary" aria-label="Réorganiser la ligne">
+                                            <i class="fa-solid fa-grip-vertical"></i>
+                                          </button>
+                                          <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeServiceType(serviceType.tempKey)" aria-label="Supprimer la prestation">
+                                            <i class="fa-solid fa-trash"></i>
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  }
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+
+                          <div class="mt-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                              <h6 class="mb-0">Moyens de paiement</h6>
+                              <button type="button" class="btn btn-sm btn-outline-primary" (click)="addPaymentMethod()">
+                                <i class="fa-solid fa-plus me-1"></i>Ajouter un moyen
+                              </button>
+                            </div>
+
+                            <div class="table-responsive">
+                              <table class="table table-sm align-middle settings-general-table mb-0">
+                                <thead>
+                                  <tr>
+                                    <th scope="col">Libellé</th>
+                                    <th scope="col">Actif</th>
+                                    <th scope="col" class="text-end">Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  @for (paymentMethod of paymentMethods(); track paymentMethod.tempKey) {
+                                    <tr draggable="true" (dragstart)="onPaymentMethodDragStart($event, paymentMethod.tempKey)" (dragover)="allowDrop($event)" (drop)="onPaymentMethodDrop($event, paymentMethod.tempKey)">
+                                      <td>
+                                        <input type="text" class="form-control form-control-sm" [value]="paymentMethod.label" (input)="updatePaymentMethodLabel(paymentMethod.tempKey, $any($event.target).value || '')" />
+                                      </td>
+                                      <td>
+                                        <div class="form-check form-switch mb-0">
+                                          <input type="checkbox" class="form-check-input" [checked]="paymentMethod.isActive" (change)="togglePaymentMethodActive(paymentMethod.tempKey)" />
+                                        </div>
+                                      </td>
+                                      <td class="text-end">
+                                        <div class="d-inline-flex gap-1">
+                                          <button type="button" class="btn btn-sm btn-outline-secondary" aria-label="Réorganiser la ligne">
+                                            <i class="fa-solid fa-grip-vertical"></i>
+                                          </button>
+                                          <button type="button" class="btn btn-sm btn-outline-danger" (click)="removePaymentMethod(paymentMethod.tempKey)" aria-label="Supprimer le moyen de paiement">
+                                            <i class="fa-solid fa-trash"></i>
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  }
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+
+                          <div class="row g-2 mt-2">
+                            <div class="col-12 col-md-6">
+                              <label for="office-website" class="form-label">Site Internet</label>
+                              <input 
+                                id="office-website" 
+                                type="url" 
+                                class="form-control"
+                                placeholder="https://cabinet.fr"
+                                formControlName="website"
+                              />
+                            </div>
+                            <div class="col-12 col-md-6">
+                              <label for="office-vat-number" class="form-label">N° de TVA</label>
+                              <input 
+                                id="office-vat-number" 
+                                type="text" 
+                                class="form-control"
+                                placeholder="FR12345678901"
+                                formControlName="vatNumber"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      } @else if (officeModalTab() === 'opening-hours') {
+                        <div id="office-tab-opening-hours" role="tabpanel">
+
+                      <div class="mt-3">
+                        <input type="hidden" formControlName="openingHoursJson" />
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                          <h6 class="mb-0">Horaires d'ouverture hebdomadaires</h6>
+                          <small class="text-secondary">Plusieurs plages par jour possibles</small>
+                        </div>
+
+                        <div class="table-responsive mb-3">
+                          <table class="table table-sm align-middle mb-0">
+                            <thead>
+                              <tr>
+                                <th scope="col">Jour</th>
+                                <th scope="col">Plages</th>
+                                <th scope="col" class="text-end">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              @for (day of officeWeekDays; track day) {
+                                <tr>
+                                  <td class="fw-semibold">{{ officeDayLabel(day) }}</td>
+                                  <td>
+                                    <div class="d-flex flex-column gap-2">
+                                      @for (range of officeOpeningHoursDraft()[day]; track $index; let rangeIndex = $index) {
+                                        <div class="d-flex align-items-center gap-2">
+                                          <input
+                                            type="time"
+                                            class="form-control form-control-sm"
+                                            [value]="range.start"
+                                            (input)="updateOfficeOpeningRange(day, rangeIndex, 'start', $any($event.target).value || '')"
+                                          />
+                                          <span class="text-secondary">à</span>
+                                          <input
+                                            type="time"
+                                            class="form-control form-control-sm"
+                                            [value]="range.end"
+                                            (input)="updateOfficeOpeningRange(day, rangeIndex, 'end', $any($event.target).value || '')"
+                                          />
+                                          <button
+                                            type="button"
+                                            class="btn btn-sm btn-outline-danger"
+                                            (click)="removeOfficeOpeningRange(day, rangeIndex)"
+                                            aria-label="Supprimer cette plage"
+                                          >
+                                            <i class="fa-solid fa-trash"></i>
+                                          </button>
+                                        </div>
+                                      }
+                                      @if (officeOpeningHoursDraft()[day].length === 0) {
+                                        <small class="text-secondary">Fermé</small>
+                                      }
+                                    </div>
+                                  </td>
+                                  <td class="text-end">
+                                    <button
+                                      type="button"
+                                      class="btn btn-sm btn-outline-primary"
+                                      (click)="addOfficeOpeningRange(day)"
+                                    >
+                                      <i class="fa-solid fa-plus me-1"></i>Ajouter
+                                    </button>
+                                  </td>
+                                </tr>
+                              }
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <label for="office-logo" class="form-label">Logo</label>
+                        <input 
+                          id="office-logo" 
+                          type="file" 
+                          class="form-control"
+                          accept="image/*"
+                          (change)="onOfficeLogoSelected($event)"
+                        />
+                        <small class="text-secondary">Format: PNG, JPG, GIF (max 2MB)</small>
+                        </div>
+                        </div>
+                      } @else {
+                        <div id="office-tab-agendas" role="tabpanel">
+                          @if (!editingOfficeId()) {
+                            <div class="alert alert-info mb-0">
+                              Enregistrez d'abord le cabinet pour configurer ses agendas.
+                            </div>
+                          } @else {
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                              <h6 class="mb-0">Agendas du cabinet</h6>
+                              <button type="button" class="btn btn-sm btn-outline-primary" (click)="openCreateLocalCalendarModal(editingOfficeId()!)">
+                                <i class="fa-solid fa-plus me-1"></i>Ajouter un agenda
+                              </button>
+                            </div>
+
+                            @if (officeCalendars().length === 0) {
+                              <p class="text-secondary mb-3">Aucun agenda pour ce cabinet.</p>
+                            } @else {
+                              <div class="table-responsive mb-3">
+                                <table class="table table-sm align-middle mb-0">
+                                  <thead>
+                                    <tr>
+                                      <th scope="col">Nom</th>
+                                      <th scope="col">Description</th>
+                                      <th scope="col">Couleur</th>
+                                      <th scope="col">Visibilité</th>
+                                      <th scope="col" class="text-end">Action</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    @for (calendar of officeCalendars(); track calendar.tempKey) {
+                                      <tr class="settings-clickable-row" (click)="openEditLocalCalendarModal(calendar.tempKey)">
+                                        <td class="fw-semibold">{{ calendar.name }}</td>
+                                        <td>{{ calendar.description || '—' }}</td>
+                                        <td>
+                                          <span class="rounded-circle border" style="width: 1rem; height: 1rem; display: inline-block;" [style.background-color]="calendar.colorHex" aria-label="Pastille couleur"></span>
+                                        </td>
+                                        <td>{{ getLocalCalendarVisibilityText(calendar) }}</td>
+                                        <td class="text-end">
+                                          <button type="button" class="btn btn-sm btn-outline-danger" [disabled]="isSavingAgendaSettings()" (click)="$event.stopPropagation(); removeLocalCalendar(calendar.tempKey)">
+                                            <i class="fa-solid fa-trash"></i>
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    }
+                                  </tbody>
+                                </table>
+                              </div>
+                            }
+                          }
+                        </div>
+                      }
+                    </div>
+
+                    <div class="modal-footer">
+                      <button type="button" class="btn btn-outline-secondary" (click)="closeOfficeModal()">Annuler</button>
+                      <button
+                        type="submit"
+                        class="btn btn-primary"
+                        [disabled]="isCreatingOffice() || isUpdatingOffice() !== null || !officeForm.valid"
+                      >
+                        @if (isCreatingOffice() || isUpdatingOffice() !== null) {
+                          <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        }
+                        @if (editingOfficeId()) {
+                          Mettre à jour
+                        } @else {
+                          Créer le cabinet
+                        }
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          }
+
+          @if (isServiceTypeModalOpen()) {
+            <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" [attr.aria-labelledby]="'service-type-modal-title'">
+              <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                  <div class="modal-header bg-primary text-white">
+                    <h4 id="service-type-modal-title" class="modal-title h6 mb-0">Ajouter une prestation type</h4>
+                    <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeServiceTypeModal()"></button>
+                  </div>
+
+                  <form [formGroup]="serviceTypeForm" (ngSubmit)="addServiceType()" novalidate>
+                    <div class="modal-body">
+                      <div class="row g-2">
+                        <div class="col-12">
+                          <label class="form-label mb-1" for="service-type-label">Libellé</label>
+                          <input id="service-type-label" type="text" class="form-control" formControlName="label" />
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                          <label class="form-label mb-1" for="service-type-amount">Montant HT</label>
+                          <input id="service-type-amount" type="number" class="form-control" step="0.01" min="0" formControlName="amountHt" />
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                          <label class="form-label mb-1" for="service-type-vat">TVA</label>
+                          <select id="service-type-vat" class="form-select" formControlName="vatRate">
+                            @for (rate of vatRateOptions; track rate) {
+                              <option [value]="rate">{{ rate }}%</option>
+                            }
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="modal-footer">
+                      <button type="button" class="btn btn-outline-secondary" (click)="closeServiceTypeModal()">Annuler</button>
+                      <button type="submit" class="btn btn-primary">Ajouter</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+            <div class="modal-backdrop fade show" (click)="closeServiceTypeModal()"></div>
+          }
+
+          @if (isLocalCalendarModalOpen()) {
+            <div class="modal d-block" role="dialog" style="background-color: rgba(0, 0, 0, 0.5)">
+              <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title">
+                      @if (editingLocalCalendarTempKey()) {
+                        Modifier l'agenda
+                      } @else {
+                        Ajouter un agenda
+                      }
+                    </h5>
+                    <button type="button" class="btn-close" [disabled]="isSavingAgendaSettings()" (click)="closeLocalCalendarModal()"></button>
+                  </div>
+
+                  <form [formGroup]="localCalendarForm" (ngSubmit)="saveLocalCalendarModal()" novalidate>
+                    <div class="modal-body">
+                      <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                          <label class="form-label" for="calendar-modal-name">Nom</label>
+                          <input id="calendar-modal-name" type="text" class="form-control" formControlName="name" [class.is-invalid]="localCalendarForm.controls.name.invalid && localCalendarForm.controls.name.touched" />
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                          <label class="form-label" for="calendar-modal-color">Couleur</label>
+                          <input id="calendar-modal-color" type="color" class="form-control form-control-color" formControlName="colorHex" [class.is-invalid]="localCalendarForm.controls.colorHex.invalid && localCalendarForm.controls.colorHex.touched" />
+                        </div>
+
+                        <div class="col-12">
+                          <label class="form-label" for="calendar-modal-description">Description</label>
+                          <input id="calendar-modal-description" type="text" class="form-control" formControlName="description" [class.is-invalid]="localCalendarForm.controls.description.invalid && localCalendarForm.controls.description.touched" />
+                        </div>
+
+                        <div class="col-12">
+                          <label class="form-label" for="calendar-modal-visibility">Visibilité</label>
+                          <select id="calendar-modal-visibility" class="form-select" formControlName="visibility">
+                            @for (option of calendarVisibilityOptions; track option.value) {
+                              <option [value]="option.value">{{ option.label }}</option>
+                            }
+                          </select>
+                        </div>
+
+                        @if (localCalendarForm.controls.visibility.value === 'selected') {
+                          <div class="col-12">
+                            <label class="form-label" for="calendar-modal-users">Comptes visibles</label>
+                            <select
+                              id="calendar-modal-users"
+                              class="form-select"
+                              multiple
+                              (change)="onLocalCalendarModalVisibleUsersChange($event)"
+                            >
+                              @for (userOption of agendaUserVisibilityOptions(); track userOption.id) {
+                                <option [value]="userOption.id" [selected]="localCalendarModalSelectedUserIds().includes(userOption.id)">
+                                  {{ userOption.label }}
+                                </option>
+                              }
+                            </select>
+                            <div class="form-text">Maintenez Ctrl/Cmd pour sélectionner plusieurs comptes.</div>
+                          </div>
+                        }
+                      </div>
+                    </div>
+
+                    <div class="modal-footer">
+                      <button type="button" class="btn btn-outline-secondary" [disabled]="isSavingAgendaSettings()" (click)="closeLocalCalendarModal()">Annuler</button>
+                      <button type="submit" class="btn btn-primary" [disabled]="localCalendarForm.invalid || isSavingAgendaSettings()">Enregistrer</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          }
+        </section>
+      }
+
+      @if (activeSection().id !== 'offices' && activeSection().id !== 'roles-and-access' && activeSection().id !== 'user-management') {
+        <section class="settings-placeholder" aria-label="Prochaine étape">
+          <div>
+            <h3 class="h6 mb-2">Prochaine étape d'implémentation</h3>
+            @if (activeSection().id === 'data-management') {
+              <p class="mb-0 text-secondary">
+                Les actions de sauvegarde et restauration sont actives. Pour sécuriser l'exploitation, vous pouvez maintenant planifier une sauvegarde automatique côté serveur.
+              </p>
+            } @else {
+              <p class="mb-0 text-secondary">
+                Cet onglet pose la structure de navigation. Les formulaires, tableaux et actions métier pourront être ajoutés section par section sans refondre l'ergonomie.
+              </p>
+            }
+          </div>
+        </section>
+      }
+    </div>
+  </article>
+</section>

@@ -1,0 +1,259 @@
+<div class="wc-root">
+  <!-- Toolbar -->
+  <div class="wc-toolbar d-flex align-items-center flex-wrap gap-2 mb-2">
+    <div class="btn-group btn-group-sm" role="group" aria-label="Navigation calendrier">
+      <button type="button" class="btn btn-outline-secondary" (click)="goToPrev()" aria-label="Période précédente">
+        <i class="fa-solid fa-chevron-left"></i>
+      </button>
+      <button type="button" class="btn btn-outline-secondary" (click)="goToToday()">Aujourd'hui</button>
+      <button type="button" class="btn btn-outline-secondary" (click)="goToNext()" aria-label="Période suivante">
+        <i class="fa-solid fa-chevron-right"></i>
+      </button>
+    </div>
+
+    <span class="wc-title">{{ calendarTitle() }}</span>
+
+    <div class="ms-auto btn-group btn-group-sm" role="group" aria-label="Mode d'affichage">
+      <button
+        type="button"
+        class="btn btn-outline-primary"
+        [class.active]="viewMode() === 'month'"
+        (click)="viewMode.set('month')"
+      >Mois</button>
+      <button
+        type="button"
+        class="btn btn-outline-primary"
+        [class.active]="viewMode() === 'week'"
+        (click)="viewMode.set('week')"
+      >Semaine</button>
+      <button
+        type="button"
+        class="btn btn-outline-primary"
+        [class.active]="viewMode() === 'day'"
+        (click)="viewMode.set('day')"
+      >Jour</button>
+    </div>
+  </div>
+
+  @if (isMonthView()) {
+    <div class="wc-month" role="grid" [attr.aria-label]="calendarTitle()" [style.--wc-month-cols]="weekdayLabels().length">
+      <div class="wc-month-head" role="row">
+        @for (label of weekdayLabels(); track label) {
+          <div class="wc-month-head-cell" role="columnheader">{{ label }}</div>
+        }
+      </div>
+
+      <div class="wc-month-body">
+        @for (week of monthGrid(); track $index) {
+          <div class="wc-month-row" role="row">
+            @for (day of week; track day.dateStr) {
+              <div
+                class="wc-month-cell"
+                role="gridcell"
+                [class.wc-month-cell--outside]="!day.inCurrentMonth"
+                [class.wc-month-cell--today]="day.isToday"
+                [attr.aria-label]="day.longLabel + ' ' + day.dayNum"
+              >
+                <div class="wc-month-daynum" [class.wc-month-daynum--today]="day.isToday">{{ day.dayNum }}</div>
+
+                <div class="wc-month-events">
+                  @for (ev of day.events.slice(0, 3); track ev.event.id) {
+                    <div
+                      class="wc-month-event"
+                      [style.border-left-color]="ev.borderColor"
+                      [style.background-color]="ev.bgColor"
+                      [attr.title]="ev.title"
+                      role="button"
+                      tabindex="0"
+                      (click)="openAppointmentModal(ev.event)"
+                    >
+                      <span class="wc-month-event-time">{{ ev.timeLabel }}</span>
+                      @if (ev.sexIconClass) {
+                        <i class="wc-month-event-sex" [class]="ev.sexIconClass + ' ' + (ev.sexColorClass || '')"></i>
+                      }
+                      <span class="wc-month-event-label" [class]="ev.patientColorClass || ''">{{ ev.patientLabel }}</span>
+                    </div>
+                  }
+
+                  @if (day.events.length > 3) {
+                    <div class="wc-month-more">+{{ day.events.length - 3 }} autres</div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  } @else {
+  <!-- Calendrier -->
+  <div class="wc-scroll" role="grid" [attr.aria-label]="calendarTitle()">
+    <!-- En-têtes des jours (sticky) -->
+    <div class="wc-header-row" role="row">
+      <div class="wc-gutter" role="columnheader" aria-label="Horaires"></div>
+      @for (day of calendarData(); track day.dateStr) {
+        <div
+          class="wc-day-head"
+          role="columnheader"
+          [class.wc-day-head--today]="day.isToday"
+          [attr.aria-label]="day.shortLabel + ' ' + day.dayNum + (day.isToday ? ' - Aujourd\'hui' : '')"
+        >
+          <span class="wc-weekday">{{ day.shortLabel }}</span>
+          <span class="wc-daynum" [class.wc-daynum--today]="day.isToday">{{ day.dayNum }}</span>
+        </div>
+      }
+    </div>
+
+    <!-- Corps : colonne horaires + colonnes jours -->
+    <div class="wc-body">
+      <!-- Horaires -->
+      <div class="wc-time-col" role="presentation">
+        @for (slotInfo of timeSlotsWithLunch(); track slotInfo.time) {
+          <div
+            class="wc-slot-label"
+            [style.height.px]="settings().displayHeight"
+            [class.wc-slot-label--lunch]="slotInfo.isLunch"
+          >
+            {{ slotInfo.time }}
+          </div>
+        }
+      </div>
+
+      <!-- Colonnes jours -->
+      @for (day of calendarData(); track day.dateStr) {
+        <div
+          class="wc-day-col"
+          role="gridcell"
+          [class.wc-day-col--today]="day.isToday"
+          [style.height.px]="totalHeight()"
+          [attr.aria-label]="day.shortLabel + ' ' + day.dayNum"
+        >
+          <!-- Lignes de créneaux -->
+          @for (slotInfo of timeSlotsWithLunch(); track slotInfo.time) {
+            <div
+              class="wc-slot"
+              [style.height.px]="settings().displayHeight"
+              [class.wc-slot--lunch]="slotInfo.isLunch"
+              role="presentation"
+            ></div>
+          }
+
+          <!-- Rendez-vous -->
+          @for (ev of day.positionedEvents; track ev.event.id) {
+            <div
+              class="wc-event"
+              role="button"
+              tabindex="0"
+              [style.top.px]="ev.top"
+              [style.height.px]="ev.height"
+              [style.left]="ev.leftStyle"
+              [style.width]="ev.widthStyle"
+              [style.border-left-color]="ev.borderColor"
+              [style.background-color]="ev.bgColor"
+              [attr.title]="ev.title"
+              [attr.aria-label]="ev.timeLabel + ' – ' + ev.title"
+              (click)="openAppointmentModal(ev.event)"
+            >
+              <span class="wc-event-time">{{ ev.timeLabel }}</span>
+              <span class="wc-event-label wc-event-label--patient">
+                @if (ev.sexIconClass) {
+                  <i class="wc-event-sex" [class]="ev.sexIconClass + ' ' + (ev.sexColorClass || '')"></i>
+                }
+                <span [class]="ev.patientColorClass || ''">{{ ev.patientLabel }}</span>
+              </span>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+  }
+
+  @if (selectedEvent(); as event) {
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="appointment-detail-modal-title">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3 id="appointment-detail-modal-title" class="modal-title h5 mb-0">
+              Détail du rendez-vous
+            </h3>
+            <button type="button" class="btn-close" aria-label="Fermer" (click)="closeAppointmentModal()"></button>
+          </div>
+
+          <div class="modal-body">
+            <div class="wc-modal-patient mb-3" [style.border-left-color]="selectedEventColor()">
+              <p class="wc-modal-patient-name mb-1">
+                @if (settings().showPatientSex && getSexIcon(event.patientSex)) {
+                  <i [class]="(getSexIcon(event.patientSex) || '') + ' ' + (getSexColorClass(event.patientSex) || '')"></i>
+                }
+                <span [class]="getSexColorClass(event.patientSex) || ''">{{ event.patient }}</span>
+              </p>
+              <p class="text-secondary mb-0">{{ formatEventDateTime(event.start) }}</p>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold" for="consultation-title-input">Titre de la consultation</label>
+              <input
+                id="consultation-title-input"
+                type="text"
+                class="form-control"
+                placeholder="Saisir le titre de la consultation"
+                [value]="consultationTitleDraft()"
+                [disabled]="isSavingConsultationMeta()"
+                (input)="setConsultationTitleDraft($any($event.target).value || '')"
+              />
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold" for="consultation-practitioner-picker">Praticien</label>
+              @if (isPractitionersLoading()) {
+                <div class="small text-secondary">Chargement des utilisateurs...</div>
+              } @else {
+                <select
+                  id="consultation-practitioner-picker"
+                  class="form-select"
+                  [value]="consultationPractitionerDraft()"
+                  [disabled]="isSavingConsultationMeta()"
+                  (change)="setConsultationPractitionerDraft($any($event.target).value || '')"
+                >
+                  <option value="">Aucun praticien</option>
+                  @for (practitioner of practitioners(); track practitioner.id) {
+                    <option [value]="practitioner.username">
+                      {{ practitioner.username }}
+                    </option>
+                  }
+                </select>
+              }
+            </div>
+
+            @if (consultationMetaError()) {
+              <div class="alert alert-danger py-2" role="alert">{{ consultationMetaError() }}</div>
+            }
+
+            @if (consultationMetaSuccess()) {
+              <div class="alert alert-success py-2" role="status">{{ consultationMetaSuccess() }}</div>
+            }
+
+            <dl class="row mb-0">
+              @for (item of getEventDetailItems(event); track item.label) {
+                <dt class="col-12 col-sm-5 text-secondary fw-semibold mb-1 mb-sm-2">{{ item.label }}</dt>
+                <dd class="col-12 col-sm-7 mb-2">{{ item.value }}</dd>
+              }
+            </dl>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-primary" (click)="openPatientRecord()">
+              Voir la fiche patient
+            </button>
+            <button type="button" class="btn btn-success" [disabled]="isSavingConsultationMeta()" (click)="saveConsultationMeta()">
+              Enregistrer
+            </button>
+            <button type="button" class="btn btn-outline-secondary" (click)="closeAppointmentModal()">Fermer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-backdrop fade show" (click)="closeAppointmentModal()"></div>
+  }
+</div>

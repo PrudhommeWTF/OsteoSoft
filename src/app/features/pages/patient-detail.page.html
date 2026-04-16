@@ -1,0 +1,629 @@
+@if (isLoading()) {
+  <div class="d-flex justify-content-center py-5">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">Chargement...</span>
+    </div>
+  </div>
+} @else if (!patient()) {
+  <div class="alert alert-danger mt-4">
+    <i class="fa-solid fa-triangle-exclamation me-2"></i>Patient introuvable.
+    <a routerLink="/patients" class="alert-link ms-2">Retour à la liste</a>
+  </div>
+} @else {
+
+  <!-- ── Header ──────────────────────────────────────────── -->
+  <section class="detail-header mb-4">
+    <div class="patient-hero">
+      <div class="patient-hero-icon">
+        <i [class]="'fa-2x ' + sexIcon() + ' ' + sexColorClass()"></i>
+      </div>
+      <div class="patient-hero-info">
+        <h1 class="h2 mb-1">
+          {{ patient()!.fullName }}
+          @if (patient()!.isDeceased) {
+            <span class="badge text-bg-dark ms-2 align-middle fs-6">Décédé(e)</span>
+          }
+          <button
+            type="button"
+            class="btn btn-outline-secondary btn-sm ms-2 align-middle"
+            (click)="openAuditModal()"
+          >
+            <i class="fa-solid fa-clock-rotate-left me-1"></i>Historique
+          </button>
+        </h1>
+        <div class="patient-hero-meta text-secondary">
+          @if (patient()!.age !== null) {
+            <span><i class="fa-regular fa-calendar me-1"></i>{{ patient()!.age }} ans</span>
+            <span class="meta-sep">·</span>
+          }
+          @if (birthDateLabel()) {
+            <span>Né(e) le {{ birthDateLabel() }}</span>
+            <span class="meta-sep">·</span>
+          }
+          <span>
+            <i class="fa-solid fa-stethoscope me-1"></i>
+            {{ totalConsultationCount() }} consultation{{ totalConsultationCount() > 1 ? 's' : '' }}
+          </span>
+          @if (patient()!.lastVisit) {
+            <span class="meta-sep">·</span>
+            <span>Dernière visite&nbsp;: {{ formatShortDate(patient()!.lastVisit) }}</span>
+          }
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Accordion ───────────────────────────────────────── -->
+  <div class="patient-accordion">
+
+    <!-- ═══ INFORMATIONS ════════════════════════════════════ -->
+    <div class="accordion-section panel card border-0 shadow-sm mb-3">
+      <button
+        type="button"
+        class="accordion-toggle"
+        (click)="toggleSection('informations')"
+        [attr.aria-expanded]="expandedSections().has('informations')"
+      >
+        <span class="accordion-toggle-label">
+          <i class="fa-solid fa-id-card text-primary me-2"></i>Informations
+        </span>
+        <i [class]="'fa-solid ' + (expandedSections().has('informations') ? 'fa-chevron-up' : 'fa-chevron-down') + ' text-secondary'"></i>
+      </button>
+
+      @if (expandedSections().has('informations')) {
+        <div class="accordion-body border-top">
+          <form [formGroup]="editForm" (ngSubmit)="saveEdit()">
+
+              <!-- Sexe -->
+              <div class="mb-4">
+                <label class="form-label fw-semibold">Sexe</label>
+                <div class="sex-cards">
+                  <button type="button" class="sex-card" [class.active-indeterminate]="editSexValue() === 'Non renseigne'" (click)="setEditSex('Non renseigne')">
+                    <i class="fa-solid fa-circle-question"></i>
+                    <span>Indéterminé</span>
+                  </button>
+                  <button type="button" class="sex-card" [class.active-femme]="editSexValue() === 'Femme'" (click)="setEditSex('Femme')">
+                    <i class="fa-solid fa-venus"></i>
+                    <span>Femme</span>
+                  </button>
+                  <button type="button" class="sex-card" [class.active-homme]="editSexValue() === 'Homme'" (click)="setEditSex('Homme')">
+                    <i class="fa-solid fa-mars"></i>
+                    <span>Homme</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Nom / Prénom -->
+              <div class="row g-3 mb-3">
+                <div class="col-6">
+                  <label class="form-label fw-semibold" for="edit-lastname">Nom <span class="text-danger">*</span></label>
+                  <input
+                    id="edit-lastname" type="text" class="form-control"
+                    formControlName="lastName" placeholder="NOM"
+                    [class.is-invalid]="editForm.controls.lastName.invalid && editForm.controls.lastName.touched"
+                  >
+                  @if (editForm.controls.lastName.touched && editForm.controls.lastName.errors?.['required']) {
+                    <div class="invalid-feedback">Le nom est obligatoire.</div>
+                  }
+                </div>
+                <div class="col-6">
+                  <label class="form-label" for="edit-firstname">Prénom <span class="text-danger">*</span></label>
+                  <input
+                    id="edit-firstname" type="text" class="form-control"
+                    formControlName="firstName" placeholder="Prénom"
+                    [class.is-invalid]="editForm.controls.firstName.invalid && editForm.controls.firstName.touched"
+                  >
+                  @if (editForm.controls.firstName.touched && editForm.controls.firstName.errors?.['required']) {
+                    <div class="invalid-feedback">Le prénom est obligatoire.</div>
+                  }
+                </div>
+              </div>
+
+              <!-- Date de naissance -->
+              <div class="row g-3 mb-3">
+                <div class="col-8 col-md-6">
+                  <label class="form-label fw-semibold" for="edit-birthdate">Date de naissance</label>
+                  <input
+                    #birthDateInput
+                    id="edit-birthdate"
+                    class="form-control"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="jj/mm/aaaa"
+                    readonly
+                    style="cursor: pointer;"
+                    formControlName="birthDate"
+                  />
+                </div>
+                @if (editAgeText()) {
+                  <div class="col-4 col-md-2 d-flex align-items-end pb-1">
+                    <span class="age-badge">{{ editAgeText() }}</span>
+                  </div>
+
+                  @if (showAuditModal()) {
+                    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+                      <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                        <div class="modal-content">
+                          <div class="modal-header">
+                            <h5 class="modal-title">Historique des modifications</h5>
+                            <button type="button" class="btn-close" aria-label="Fermer" (click)="closeAuditModal()"></button>
+                          </div>
+
+                          <div class="modal-body">
+                            @if (isLoadingAuditLogs()) {
+                              <div class="d-flex justify-content-center py-4">
+                                <div class="spinner-border text-primary" role="status">
+                                  <span class="visually-hidden">Chargement...</span>
+                                </div>
+                              </div>
+                            } @else if (auditLoadError()) {
+                              <div class="alert alert-danger mb-0">{{ auditLoadError() }}</div>
+                            } @else if (auditRows().length === 0) {
+                              <div class="alert alert-light border mb-0">Aucune modification enregistrée pour ce patient.</div>
+                            } @else {
+                              <div class="table-responsive">
+                                <table class="table table-sm table-striped align-middle mb-0">
+                                  <thead>
+                                    <tr>
+                                      <th>Date</th>
+                                      <th>Utilisateur</th>
+                                      <th>Champ</th>
+                                      <th>Avant</th>
+                                      <th>Après</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    @for (row of auditRows(); track row.id) {
+                                      <tr>
+                                        <td>{{ formatConsultationDate(row.createdAt) }}</td>
+                                        <td>{{ row.username }}</td>
+                                        <td>{{ row.field }}</td>
+                                        <td class="audit-cell">{{ row.before || '—' }}</td>
+                                        <td class="audit-cell">{{ row.after || '—' }}</td>
+                                      </tr>
+                                    }
+                                  </tbody>
+                                </table>
+                              </div>
+                            }
+                          </div>
+
+                          <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" (click)="closeAuditModal()">Fermer</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="modal-backdrop fade show"></div>
+                  }
+                }
+              </div>
+
+              <!-- Téléphones -->
+              <div class="row g-3 mb-3">
+                <div class="col-6">
+                  <label class="form-label" for="edit-mobile-phone">Téléphone portable</label>
+                  <input
+                    id="edit-mobile-phone"
+                    type="text"
+                    class="form-control"
+                    formControlName="mobilePhone"
+                    placeholder="06 xx xx xx xx"
+                  >
+                </div>
+                <div class="col-6">
+                  <label class="form-label" for="edit-landline-phone">Téléphone fixe</label>
+                  <input
+                    id="edit-landline-phone"
+                    type="text"
+                    class="form-control"
+                    formControlName="landlinePhone"
+                    placeholder="01 xx xx xx xx"
+                  >
+                </div>
+              </div>
+
+              <!-- Email -->
+              <div class="mb-3">
+                <label class="form-label" for="edit-email">Email</label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="fa-solid fa-envelope"></i></span>
+                  <input id="edit-email" type="email" class="form-control" formControlName="email" placeholder="email@exemple.fr">
+                </div>
+              </div>
+
+              <!-- Adresse -->
+              <div class="mb-3">
+                <label class="form-label" for="edit-address1">Adresse</label>
+                <input id="edit-address1" type="text" class="form-control mb-2" formControlName="address1" placeholder="Numéro et rue">
+                <input id="edit-address2" type="text" class="form-control" formControlName="address2" placeholder="Complément (bâtiment, étage...)">
+              </div>
+
+              <div class="row g-3 mb-3">
+                <div class="col-3 position-relative">
+                  <label class="form-label" for="edit-postalcode">Code postal</label>
+                  <input
+                    id="edit-postalcode"
+                    type="text"
+                    class="form-control"
+                    formControlName="postalCode"
+                    (input)="onPostalCodeInput($any($event.target).value)"
+                    (focus)="onPostalCodeFocus()"
+                    (blur)="onPostalCodeBlur()"
+                  >
+                  @if (showPostalCodeSuggestions()) {
+                    <ul class="autocomplete-list list-group shadow-sm">
+                      @for (postalCode of postalCodeSuggestions(); track postalCode) {
+                        <li class="list-group-item list-group-item-action" (mousedown)="applyPostalCodeSuggestion(postalCode)">
+                          {{ postalCode }}
+                        </li>
+                      }
+                    </ul>
+                  }
+                </div>
+                <div class="col-5 position-relative">
+                  <label class="form-label" for="edit-city">Ville</label>
+                  <input
+                    id="edit-city"
+                    type="text"
+                    class="form-control"
+                    formControlName="city"
+                    (input)="onCityInput($any($event.target).value)"
+                    (focus)="onCityFocus()"
+                    (blur)="onCityBlur()"
+                  >
+                  @if (showCitySuggestions()) {
+                    <ul class="autocomplete-list list-group shadow-sm">
+                      @for (city of citySuggestions(); track city) {
+                        <li class="list-group-item list-group-item-action" (mousedown)="applyCitySuggestion(city)">
+                          {{ city }}
+                        </li>
+                      }
+                    </ul>
+                  }
+                </div>
+                <div class="col-4">
+                  <label class="form-label" for="edit-country">Pays</label>
+                  <input id="edit-country" type="text" class="form-control" formControlName="country">
+                </div>
+              </div>
+
+              <!-- Remarques générales -->
+              <div class="mb-3">
+                <label class="form-label fw-semibold" for="edit-remarks">
+                  Remarques générales <span class="text-muted fw-normal">(optionnel)</span>
+                </label>
+                <textarea id="edit-remarks" class="form-control" rows="4"
+                          formControlName="generalRemarks"
+                          placeholder="Informations complémentaires à noter..."></textarea>
+              </div>
+
+              <!-- Liens de parenté -->
+              <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <label class="form-label fw-semibold mb-0">Liens de parenté avec d'autres patients</label>
+                  <button type="button" class="btn btn-outline-primary btn-sm" (click)="toggleRelatedPicker()">
+                    <i class="fa-solid fa-user-plus me-1"></i>
+                    {{ showRelatedPicker() ? 'Fermer' : 'Ajouter' }}
+                  </button>
+                </div>
+
+                @if (selectedRelatedPatients().length > 0) {
+                  <div class="d-flex flex-wrap gap-2 mb-2">
+                    @for (person of selectedRelatedPatients(); track person.id) {
+                      <span class="badge text-bg-light border d-flex align-items-center gap-1 related-pill p-2">
+                        <i [class]="getRelatedPatientIcon(person.sex) + ' me-1'"></i>
+                        {{ person.fullName }}
+                        <button
+                          type="button"
+                          class="btn-close ms-1"
+                          style="font-size:0.55rem;"
+                          aria-label="Retirer"
+                          (click)="removeRelatedPatient(person.id)"
+                        ></button>
+                      </span>
+                    }
+                  </div>
+                }
+
+                @if (showRelatedPicker()) {
+                  <div class="border rounded p-2 bg-light-subtle">
+                    <label class="form-label small mb-1" for="relatedPatientSearch">Rechercher un patient existant</label>
+                    <input
+                      id="relatedPatientSearch"
+                      type="search"
+                      class="form-control form-control-sm"
+                      placeholder="Nom ou prénom (2 caractères min.)"
+                      [value]="relatedSearch()"
+                      (input)="onRelatedSearchChange($any($event.target).value)"
+                    />
+                    @if (isSearchingRelated()) {
+                      <div class="small text-muted mt-2">Recherche en cours...</div>
+                    } @else if (relatedSearch().trim().length >= 2 && relatedSearchResults().length === 0) {
+                      <div class="small text-muted mt-2">Aucun patient trouvé.</div>
+                    }
+                    @if (relatedSearchResults().length > 0) {
+                      <ul class="list-group list-group-flush mt-2">
+                        @for (result of relatedSearchResults(); track result.id) {
+                          <li class="list-group-item list-group-item-action cursor-pointer py-2 px-2" (click)="addRelatedPatient(result)">
+                            <div class="d-flex align-items-center gap-2">
+                              <i [class]="getRelatedPatientIcon(result.sex) + ' text-secondary'"></i>
+                              <span class="fw-semibold">{{ result.fullName }}</span>
+                              <span class="text-muted small ms-auto">{{ getRelatedPatientMeta(result) }}</span>
+                            </div>
+                          </li>
+                        }
+                      </ul>
+                    }
+                  </div>
+                }
+              </div>
+
+              @if (saveError()) {
+                <div class="alert alert-danger mt-3 mb-0">{{ saveError() }}</div>
+              }
+          </form>
+        </div>
+      }
+    </div>
+
+    <!-- ═══ ANTÉCÉDENTS ══════════════════════════════════════ -->
+    <div class="accordion-section panel card border-0 shadow-sm mb-3">
+      <button
+        type="button"
+        class="accordion-toggle"
+        (click)="toggleSection('antecedents')"
+        [attr.aria-expanded]="expandedSections().has('antecedents')"
+      >
+        <span class="accordion-toggle-label">
+          <i class="fa-solid fa-heart-pulse text-primary me-2"></i>Antécédents médicaux
+          @if (antecedents().length) {
+            <span class="badge text-bg-secondary ms-2">{{ antecedents().length }}</span>
+          }
+        </span>
+        <i [class]="'fa-solid ' + (expandedSections().has('antecedents') ? 'fa-chevron-up' : 'fa-chevron-down') + ' text-secondary'"></i>
+      </button>
+
+      @if (expandedSections().has('antecedents')) {
+        <div class="accordion-body border-top">
+          @if (!antecedentGroups().length) {
+            <p class="text-secondary mb-0">Aucun antécédent enregistré.</p>
+          } @else {
+            @for (group of antecedentGroups(); track group.category) {
+              <div class="antecedent-group mb-4">
+                <h3 class="antecedent-category">
+                  <span class="badge text-bg-primary-subtle text-primary-emphasis rounded-pill">{{ group.category }}</span>
+                </h3>
+                <ul class="antecedent-list list-unstyled mb-0">
+                  @for (item of group.items; track item.label) {
+                    <li class="antecedent-item">
+                      <i class="fa-solid fa-circle-dot text-primary me-2 small"></i>
+                      <span>{{ item.label }}</span>
+                      @if (item.date) {
+                        <span class="text-secondary ms-2 small">{{ item.date }}</span>
+                      }
+                    </li>
+                  }
+                </ul>
+              </div>
+            }
+          }
+        </div>
+      }
+    </div>
+
+    <!-- ═══ DOCUMENTS ═══════════════════════════════════════ -->
+    <div class="accordion-section panel card border-0 shadow-sm mb-3">
+      <button
+        type="button"
+        class="accordion-toggle"
+        (click)="toggleSection('documents')"
+        [attr.aria-expanded]="expandedSections().has('documents')"
+      >
+        <span class="accordion-toggle-label">
+          <i class="fa-regular fa-folder-open text-primary me-2"></i>Documents patient
+        </span>
+        <i [class]="'fa-solid ' + (expandedSections().has('documents') ? 'fa-chevron-up' : 'fa-chevron-down') + ' text-secondary'"></i>
+      </button>
+
+      @if (expandedSections().has('documents')) {
+        <div class="accordion-body border-top">
+          <div class="documents-empty">
+            <i class="fa-regular fa-folder-open fa-2x text-secondary mb-3"></i>
+            <p class="text-secondary mb-0">Aucun document pour ce patient.</p>
+            <p class="text-secondary small">Cette fonctionnalité sera disponible prochainement.</p>
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- ═══ CONSULTATIONS ════════════════════════════════════ -->
+    <div class="accordion-section panel card border-0 shadow-sm mb-3">
+      <button
+        type="button"
+        class="accordion-toggle"
+        (click)="toggleSection('consultations')"
+        [attr.aria-expanded]="expandedSections().has('consultations')"
+      >
+        <span class="accordion-toggle-label">
+          <i class="fa-solid fa-stethoscope text-primary me-2"></i>Consultations
+          @if (totalConsultationCount()) {
+            <span class="badge text-bg-primary ms-2">{{ totalConsultationCount() }}</span>
+          }
+        </span>
+        <i [class]="'fa-solid ' + (expandedSections().has('consultations') ? 'fa-chevron-up' : 'fa-chevron-down') + ' text-secondary'"></i>
+      </button>
+
+      @if (expandedSections().has('consultations')) {
+        <div class="accordion-body border-top">
+          @if (!groupedConsultations().length) {
+            <div class="text-center py-4 text-secondary">
+              <i class="fa-solid fa-stethoscope fa-2x mb-3"></i>
+              <p class="mb-0">Aucune consultation enregistrée.</p>
+            </div>
+          } @else {
+            @for (group of groupedConsultations(); track (group.type === 'recent' ? 'recent' : group.year)) {
+
+              @if (group.type === 'recent') {
+                <div class="timeline-section mb-3">
+                  <h2 class="timeline-section-title">
+                    <i class="fa-solid fa-clock-rotate-left me-2"></i>Dernière année
+                    <span class="badge text-bg-primary ms-2">{{ group.consultations.length }}</span>
+                  </h2>
+                  @for (c of group.consultations; track c.id) {
+                    <ng-container *ngTemplateOutlet="consultationCard; context: { c: c }"></ng-container>
+                  }
+                </div>
+              } @else {
+                <div class="timeline-section timeline-year-section mb-2">
+                  <button
+                    type="button"
+                    class="timeline-year-header"
+                    (click)="toggleYear(group.year)"
+                    [attr.aria-expanded]="expandedYears().has(group.year)"
+                  >
+                    <span>
+                      <i class="fa-solid fa-calendar-days me-2"></i>{{ group.year }}
+                      <span class="badge text-bg-secondary ms-2">{{ group.consultations.length }}</span>
+                    </span>
+                    <i [class]="'fa-solid ' + (expandedYears().has(group.year) ? 'fa-chevron-up' : 'fa-chevron-down')"></i>
+                  </button>
+                  @if (expandedYears().has(group.year)) {
+                    <div class="timeline-year-body">
+                      @for (c of group.consultations; track c.id) {
+                        <ng-container *ngTemplateOutlet="consultationCard; context: { c: c }"></ng-container>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            }
+          }
+        </div>
+      }
+    </div>
+
+  </div><!-- /patient-accordion -->
+}
+
+<!-- ── Consultation card template ─────────────────────── -->
+<ng-template #consultationCard let-c="c">
+  <div class="consultation-card card border-0 bg-light mb-2" [class.consultation-card--important]="c.important">
+    <div
+      class="consultation-card-header"
+      role="button"
+      (click)="toggleConsultation(c.id)"
+      [attr.aria-expanded]="expandedConsultations().has(c.id)"
+    >
+      <div class="consultation-card-main">
+        <span class="consultation-type-badge" [class.badge--appointment]="c.type === 'appointment'">
+          @if (c.type === 'consultation') {
+            <i class="fa-solid fa-stethoscope me-1"></i>Consultation
+          } @else {
+            <i class="fa-solid fa-calendar-check me-1"></i>Rendez-vous
+          }
+        </span>
+        @if (c.important) {
+          <span class="badge text-bg-warning ms-1"><i class="fa-solid fa-star me-1"></i>Important</span>
+        }
+        <span class="consultation-title ms-2">{{ c.title || formatConsultationDate(c.startedAt) }}</span>
+      </div>
+      <div class="consultation-card-meta">
+        @if (c.title) {
+          <span class="text-secondary small me-2">{{ formatConsultationDate(c.startedAt) }}</span>
+        }
+        @if (c.practitioner) {
+          <span class="text-secondary small me-2"><i class="fa-solid fa-user-doctor me-1"></i>{{ c.practitioner }}</span>
+        }
+        @if (c.evaBefore || c.evaAfter) {
+          <span class="eva-meta small me-2">
+            <span class="eva-before">EVA {{ c.evaBefore }}</span>
+            <i class="fa-solid fa-arrow-right mx-1 text-muted"></i>
+            <span class="eva-after">{{ c.evaAfter }}</span>
+          </span>
+        }
+        <i [class]="'fa-solid ms-1 ' + (expandedConsultations().has(c.id) ? 'fa-chevron-up' : 'fa-chevron-down') + ' text-secondary small'"></i>
+      </div>
+    </div>
+
+    @if (expandedConsultations().has(c.id)) {
+      <div class="consultation-card-body">
+        @if (c.type === 'consultation') {
+          @if (c.heightCm || c.weightKg) {
+            <div class="d-flex flex-wrap gap-2 mb-3">
+              @if (c.heightCm) {
+                <div class="physio-kpi">
+                  <span class="physio-kpi-label">Taille</span>
+                  <span class="physio-kpi-value">{{ c.heightCm }} cm</span>
+                </div>
+              }
+              @if (c.weightKg) {
+                <div class="physio-kpi">
+                  <span class="physio-kpi-label">Poids</span>
+                  <span class="physio-kpi-value">{{ c.weightKg }} kg</span>
+                </div>
+              }
+              @if (consultationBmi(c)) {
+                <div class="physio-kpi">
+                  <span class="physio-kpi-label">IMC</span>
+                  <span class="physio-kpi-value">{{ consultationBmi(c) }}</span>
+                </div>
+              }
+              @if (c.profile && c.profile !== 'Adulte') {
+                <span class="badge text-bg-info-subtle text-info-emphasis align-self-center">{{ c.profile }}</span>
+              }
+            </div>
+          }
+
+          @if (c.evaBefore || c.evaAfter) {
+            <div class="eva-detail mb-3">
+              <span class="eva-label">Avant&nbsp;:</span>
+              <span class="eva-bar"><span class="eva-fill eva-fill--before" [style.width.%]="c.evaBefore * 10"></span></span>
+              <span class="eva-score">{{ c.evaBefore }}/10</span>
+              <i class="fa-solid fa-arrow-right mx-2 text-muted small"></i>
+              <span class="eva-label">Après&nbsp;:</span>
+              <span class="eva-bar"><span class="eva-fill eva-fill--after" [style.width.%]="c.evaAfter * 10"></span></span>
+              <span class="eva-score">{{ c.evaAfter }}/10</span>
+            </div>
+          }
+
+          @if (c.motifMainHtml) {
+            <div class="rich-section mb-3">
+              <h4 class="rich-section-title">Motif principal</h4>
+              <div class="rich-content" [innerHTML]="c.motifMainHtml"></div>
+            </div>
+          }
+          @if (c.testsHtml) {
+            <div class="rich-section mb-3">
+              <h4 class="rich-section-title">Tests</h4>
+              <div class="rich-content" [innerHTML]="c.testsHtml"></div>
+            </div>
+          }
+          @if (c.schemaHtml) {
+            <div class="rich-section mb-3">
+              <h4 class="rich-section-title">Schéma</h4>
+              <div class="rich-content" [innerHTML]="c.schemaHtml"></div>
+            </div>
+          }
+          @if (c.treatmentsHtml) {
+            <div class="rich-section mb-3">
+              <h4 class="rich-section-title">Traitements proposés</h4>
+              <div class="rich-content" [innerHTML]="c.treatmentsHtml"></div>
+            </div>
+          }
+          @if (c.remarksHtml) {
+            <div class="rich-section mb-3">
+              <h4 class="rich-section-title">Remarques</h4>
+              <div class="rich-content" [innerHTML]="c.remarksHtml"></div>
+            </div>
+          }
+          @if (!c.motifMainHtml && !c.testsHtml && !c.schemaHtml && !c.treatmentsHtml && !c.remarksHtml) {
+            <p class="text-secondary mb-0 small">Aucune note clinique enregistrée.</p>
+          }
+        } @else {
+          <span class="badge" [class]="'text-bg-' + (c.status === 'Termine' ? 'success' : c.status === 'En attente' ? 'warning' : 'info') + '-subtle'">{{ c.status }}</span>
+        }
+      </div>
+    }
+  </div>
+</ng-template>
