@@ -5,6 +5,13 @@ import { Router } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { AgendaSettings, DashboardEvent, LocalAgendaCalendar, Practitioner } from '../../core/api.types';
 
+type ConsultationConflictCandidate = {
+  id: number;
+  title: string;
+  practitioner: string;
+  startedAt: string;
+};
+
 interface CalendarDay {
   date: Date;
   dateStr: string;
@@ -78,6 +85,8 @@ export class WeekCalendar {
   readonly consultationMetaSuccess = signal('');
   readonly consultationTitleDraft = signal('');
   readonly consultationPractitionerDraft = signal('');
+  readonly isConsultationConflictModalOpen = signal(false);
+  readonly consultationConflictCandidate = signal<ConsultationConflictCandidate | null>(null);
 
   readonly isMonthView = computed((): boolean => this.viewMode() === 'month');
 
@@ -266,6 +275,12 @@ export class WeekCalendar {
     this.selectedEvent.set(null);
     this.consultationMetaError.set('');
     this.consultationMetaSuccess.set('');
+    this.closeConsultationConflictModal();
+  }
+
+  closeConsultationConflictModal(): void {
+    this.isConsultationConflictModalOpen.set(false);
+    this.consultationConflictCandidate.set(null);
   }
 
   async openPatientRecord(): Promise<void> {
@@ -288,6 +303,34 @@ export class WeekCalendar {
     await this.router.navigate(['/patients', patientId]);
   }
 
+  async openConsultationRecord(): Promise<void> {
+    const event = this.selectedEvent();
+    if (!event) {
+      return;
+    }
+
+    if (!Number.isInteger(event.consultationId) || Number(event.consultationId) <= 0) {
+      this.consultationMetaError.set('Aucune consultation liée à ce rendez-vous.');
+      return;
+    }
+
+    let patientId = Number(event.patientId);
+    if (!Number.isInteger(patientId) || patientId <= 0) {
+      try {
+        patientId = await this.api.getPatientIdByAppointment(event.id);
+      } catch {
+        this.consultationMetaError.set('Impossible d\'ouvrir la consultation liée.');
+        return;
+      }
+    }
+
+    const consultationId = Number(event.consultationId);
+    this.closeAppointmentModal();
+    await this.router.navigate(['/patients', patientId], {
+      queryParams: { consultationId }
+    });
+  }
+
   saveButtonLabel(): string {
     return this.isSavingConsultationMeta() ? 'Enregistrement...' : 'Enregistrer';
   }
@@ -304,7 +347,7 @@ export class WeekCalendar {
     this.consultationPractitionerDraft.set(value.trim());
   }
 
-  async saveConsultationMeta(): Promise<void> {
+  async saveConsultationMeta(linkStrategy?: 'attach-existing' | 'create-new'): Promise<void> {
     const event = this.selectedEvent();
     if (!event || this.isSavingConsultationMeta()) {
       return;
@@ -317,7 +360,8 @@ export class WeekCalendar {
     try {
       const consultation = await this.api.updateAppointmentConsultationMeta(event.id, {
         title: this.consultationTitleDraft().trim(),
-        practitioner: this.consultationPractitionerDraft().trim()
+        practitioner: this.consultationPractitionerDraft().trim(),
+        linkStrategy
       });
 
       this.selectedEvent.set({
@@ -326,6 +370,7 @@ export class WeekCalendar {
         consultationTitle: consultation.title,
         consultationPractitioner: consultation.practitioner
       });
+      this.closeConsultationConflictModal();
       this.consultationMetaSuccess.set('Consultation mise à jour.');
     } catch (error) {
       if (error instanceof HttpErrorResponse) {
@@ -333,6 +378,20 @@ export class WeekCalendar {
           this.consultationMetaError.set('Droit insuffisant pour enregistrer la consultation.');
         } else if (error.status === 404) {
           this.consultationMetaError.set('Rendez-vous introuvable.');
+        } else if (error.status === 409) {
+          const existing = error.error?.conflict?.existingConsultation;
+          if (existing && Number.isInteger(Number(existing.id)) && Number(existing.id) > 0) {
+            this.consultationConflictCandidate.set({
+              id: Number(existing.id),
+              title: String(existing.title ?? '').trim(),
+              practitioner: String(existing.practitioner ?? '').trim(),
+              startedAt: String(existing.startedAt ?? '')
+            });
+            this.isConsultationConflictModalOpen.set(true);
+            this.consultationMetaError.set('Un rendez-vous similaire existe deja. Choisissez une action.');
+          } else {
+            this.consultationMetaError.set('Conflit detecte sur la liaison consultation/rendez-vous.');
+          }
         } else {
           this.consultationMetaError.set('Impossible d\'enregistrer la consultation.');
         }
@@ -342,6 +401,28 @@ export class WeekCalendar {
     } finally {
       this.isSavingConsultationMeta.set(false);
     }
+  }
+
+  formatConflictConsultationDate(iso: string): string {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) {
+      return iso;
+    }
+    return new Intl.DateTimeFormat('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(date);
+  }
+
+  resolveConsultationConflict(attachExisting: boolean): void {
+    if (!this.isConsultationConflictModalOpen()) {
+      return;
+    }
+
+    void this.saveConsultationMeta(attachExisting ? 'attach-existing' : 'create-new');
   }
 
   getSexIcon(sex: DashboardEvent['patientSex']): string | null {

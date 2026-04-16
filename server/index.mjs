@@ -95,8 +95,10 @@ db.exec(`
     starts_at TEXT NOT NULL,
     reason_cipher TEXT NOT NULL,
     status TEXT NOT NULL,
+    consultation_id INTEGER,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(patient_id) REFERENCES patients(id)
+    FOREIGN KEY(patient_id) REFERENCES patients(id),
+    FOREIGN KEY(consultation_id) REFERENCES consultations(id) ON DELETE SET NULL
   );
 
   CREATE TABLE IF NOT EXISTS invoices (
@@ -255,6 +257,33 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(patient_id) REFERENCES patients(id)
   );
+
+  CREATE TABLE IF NOT EXISTS directory_contacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    office_id INTEGER NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'person',
+    first_name TEXT NOT NULL DEFAULT '',
+    last_name TEXT NOT NULL DEFAULT '',
+    organization TEXT NOT NULL DEFAULT '',
+    role TEXT NOT NULL DEFAULT '',
+    email TEXT NOT NULL DEFAULT '',
+    mobile_phone TEXT NOT NULL DEFAULT '',
+    landline_phone TEXT NOT NULL DEFAULT '',
+    address_line1 TEXT NOT NULL DEFAULT '',
+    address_line2 TEXT NOT NULL DEFAULT '',
+    postal_code TEXT NOT NULL DEFAULT '',
+    city TEXT NOT NULL DEFAULT '',
+    country TEXT NOT NULL DEFAULT 'France',
+    notes TEXT NOT NULL DEFAULT '',
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_by INTEGER,
+    updated_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE CASCADE,
+    FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL
+  );
 `);
 
 const rawDataKey = process.env.OSTEOSOFT_DATA_KEY;
@@ -313,7 +342,7 @@ const ACCESS_DOMAIN_DEFINITIONS = {
   agenda: ['read-agenda', 'create-appointment', 'edit-appointment', 'delete-appointment', 'export-agenda'],
   billing: ['read-billing-kpis', 'create-invoice', 'mark-payment', 'export-billing'],
   statistics: ['read-dashboard', 'read-advanced-statistics', 'export-statistics'],
-  'contact-directory': ['read-directory', 'create-directory-contact', 'edit-directory-contact', 'delete-directory-contact']
+  'contact-directory': ['read-directory', 'create-directory-contact', 'edit-directory-contact', 'delete-directory-contact', 'export-directory']
 };
 
 function buildAccessRights(defaultValue = false) {
@@ -1012,6 +1041,48 @@ function getUserOfficeOptions(userId) {
     .map((row) => ({ id: Number(row.id), name: String(row.name ?? '').trim() }));
 }
 
+function getScopedOfficeOptions(userAccess, isAdmin) {
+  if (isAdmin) {
+    return db
+      .prepare('SELECT id, name FROM offices WHERE is_active = 1 ORDER BY lower(name) ASC, id ASC')
+      .all()
+      .map((row) => ({ id: Number(row.id), name: String(row.name ?? '').trim() }));
+  }
+
+  return Array.isArray(userAccess?.offices) ? userAccess.offices : [];
+}
+
+function mapDirectoryContactRow(row) {
+  const firstName = String(row.first_name ?? '').trim();
+  const lastName = String(row.last_name ?? '').trim();
+  const organization = String(row.organization ?? '').trim();
+  const displayName = `${lastName} ${firstName}`.trim() || organization || 'Contact';
+
+  return {
+    id: Number(row.id),
+    officeId: Number(row.office_id),
+    officeName: String(row.office_name ?? '').trim(),
+    kind: row.kind === 'company' ? 'company' : 'person',
+    firstName,
+    lastName,
+    organization,
+    displayName,
+    role: String(row.role ?? '').trim(),
+    email: String(row.email ?? '').trim(),
+    mobilePhone: String(row.mobile_phone ?? '').trim(),
+    landlinePhone: String(row.landline_phone ?? '').trim(),
+    address1: String(row.address_line1 ?? '').trim(),
+    address2: String(row.address_line2 ?? '').trim(),
+    postalCode: String(row.postal_code ?? '').trim(),
+    city: String(row.city ?? '').trim(),
+    country: String(row.country ?? 'France').trim() || 'France',
+    notes: String(row.notes ?? '').trim(),
+    isActive: Number(row.is_active) === 1,
+    createdAt: String(row.created_at ?? ''),
+    updatedAt: String(row.updated_at ?? '')
+  };
+}
+
 function getAccessibleCalendarIdsForUser(userId, officeIdFilter = null) {
   const userOfficeIds = new Set(getUserOfficeIds(userId));
   const filterOfficeId = Number(officeIdFilter);
@@ -1153,7 +1224,7 @@ function buildDataBackupSnapshot() {
          ORDER BY id ASC`
       ).all(),
       appointments: db.prepare(
-        `SELECT id, patient_id, starts_at, reason_cipher, status, local_calendar_id, created_at
+        `SELECT id, patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, created_at
          FROM appointments
          ORDER BY id ASC`
       ).all(),
@@ -1191,6 +1262,14 @@ function buildDataBackupSnapshot() {
          FROM local_calendars
          ORDER BY display_order ASC, id ASC`
       ).all(),
+      directoryContacts: db.prepare(
+        `SELECT id, office_id, kind, first_name, last_name, organization, role,
+                email, mobile_phone, landline_phone,
+                address_line1, address_line2, postal_code, city, country,
+                notes, is_active, created_by, updated_by, created_at, updated_at
+         FROM directory_contacts
+         ORDER BY id ASC`
+      ).all(),
       config: db.prepare('SELECT key, value FROM config ORDER BY key ASC').all(),
       patientDrafts: db.prepare(
         `SELECT user_id, flow_key, draft_json, step, updated_at
@@ -1226,6 +1305,7 @@ function restoreDataBackupSnapshot(backupPayload) {
     db.prepare('DELETE FROM service_types').run();
     db.prepare('DELETE FROM payment_methods').run();
     db.prepare('DELETE FROM local_calendars').run();
+    db.prepare('DELETE FROM directory_contacts').run();
     db.prepare('DELETE FROM config').run();
 
     const insertAccessProfile = db.prepare(
@@ -1255,8 +1335,8 @@ function restoreDataBackupSnapshot(backupPayload) {
        VALUES (?, ?, ?)`
     );
     const insertAppointment = db.prepare(
-      `INSERT INTO appointments (id, patient_id, starts_at, reason_cipher, status, local_calendar_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO appointments (id, patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const insertInvoice = db.prepare(
       `INSERT INTO invoices (id, patient_id, invoice_number, amount_cents, status, issued_at, due_at, notes_cipher, created_at)
@@ -1285,6 +1365,14 @@ function restoreDataBackupSnapshot(backupPayload) {
     const insertLocalCalendar = db.prepare(
       `INSERT INTO local_calendars (id, name, description, color_hex, is_visible_to_all, visible_user_ids, office_id, display_order, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    const insertDirectoryContact = db.prepare(
+      `INSERT INTO directory_contacts (
+         id, office_id, kind, first_name, last_name, organization, role,
+         email, mobile_phone, landline_phone,
+         address_line1, address_line2, postal_code, city, country,
+         notes, is_active, created_by, updated_by, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const insertConfig = db.prepare(
       'INSERT INTO config (key, value) VALUES (?, ?)'
@@ -1410,6 +1498,32 @@ function restoreDataBackupSnapshot(backupPayload) {
       );
     }
 
+    for (const row of Array.isArray(backup.directoryContacts) ? backup.directoryContacts : []) {
+      insertDirectoryContact.run(
+        Number(row.id),
+        Number(row.office_id),
+        row.kind === 'company' ? 'company' : 'person',
+        String(row.first_name ?? ''),
+        String(row.last_name ?? ''),
+        String(row.organization ?? ''),
+        String(row.role ?? ''),
+        String(row.email ?? ''),
+        String(row.mobile_phone ?? ''),
+        String(row.landline_phone ?? ''),
+        String(row.address_line1 ?? ''),
+        String(row.address_line2 ?? ''),
+        String(row.postal_code ?? ''),
+        String(row.city ?? ''),
+        String(row.country ?? 'France'),
+        String(row.notes ?? ''),
+        Number(row.is_active) ? 1 : 0,
+        row.created_by != null ? Number(row.created_by) : null,
+        row.updated_by != null ? Number(row.updated_by) : null,
+        row.created_at ?? new Date().toISOString(),
+        row.updated_at ?? new Date().toISOString()
+      );
+    }
+
     for (const row of Array.isArray(backup.patients) ? backup.patients : []) {
       insertPatient.run(
         Number(row.id),
@@ -1435,6 +1549,7 @@ function restoreDataBackupSnapshot(backupPayload) {
         row.reason_cipher,
         row.status,
         row.local_calendar_id != null ? Number(row.local_calendar_id) : null,
+        row.consultation_id != null ? Number(row.consultation_id) : null,
         row.created_at ?? new Date().toISOString()
       );
     }
@@ -1885,6 +2000,7 @@ async function ensureSeedData() {
   ensureColumn('users', 'default_service', "default_service TEXT NOT NULL DEFAULT 'Aucune prestation'");
   ensureColumn('users', 'invoice_mentions', "invoice_mentions TEXT NOT NULL DEFAULT ''");
   ensureColumn('appointments', 'local_calendar_id', 'local_calendar_id INTEGER');
+  ensureColumn('appointments', 'consultation_id', 'consultation_id INTEGER');
   ensureColumn('local_calendars', 'description', "description TEXT NOT NULL DEFAULT ''");
   ensureColumn('local_calendars', 'color_hex', "color_hex TEXT NOT NULL DEFAULT '#4d92d1'");
   ensureColumn('local_calendars', 'is_visible_to_all', 'is_visible_to_all INTEGER NOT NULL DEFAULT 1');
@@ -2106,7 +2222,8 @@ async function ensureSeedData() {
         'delete-appointment',
         'read-directory',
         'create-directory-contact',
-        'edit-directory-contact'
+        'edit-directory-contact',
+        'export-directory'
       ])
     },
     {
@@ -2854,11 +2971,98 @@ function synchronizeBidirectionalRelatedPeople({
   }
 }
 
-function insertConsultationFromNote(patientId, consultationNoteRaw) {
+function getDefaultCalendarForUser(userId) {
+  const accessibleCalendarIds = getAccessibleCalendarIdsForUser(userId, null);
+  if (!accessibleCalendarIds.length) {
+    return null;
+  }
+
+  const placeholders = accessibleCalendarIds.map(() => '?').join(', ');
+  const row = db
+    .prepare(
+      `SELECT id, office_id
+       FROM local_calendars
+       WHERE id IN (${placeholders})
+       ORDER BY display_order ASC, id ASC
+       LIMIT 1`
+    )
+    .get(...accessibleCalendarIds);
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: Number(row.id),
+    officeId: row.office_id != null ? Number(row.office_id) : null
+  };
+}
+
+function getFirstOpeningMinute(openingHours, date) {
+  const dayKey = OFFICE_OPENING_DAY_KEYS[(date.getDay() + 6) % 7];
+  const ranges = Array.isArray(openingHours?.[dayKey]) ? openingHours[dayKey] : [];
+  if (!ranges.length) {
+    return 9 * 60;
+  }
+
+  const start = String(ranges[0]?.start ?? '').trim();
+  const [hoursRaw, minutesRaw] = start.split(':');
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) {
+    return 9 * 60;
+  }
+  return Math.min(Math.max((hours * 60) + minutes, 0), 23 * 60 + 59);
+}
+
+function alignDateToOfficeSlot(date, firstOpeningMinute, slotDurationMinutes) {
+  const aligned = new Date(date);
+  const targetMinutes = (aligned.getHours() * 60) + aligned.getMinutes();
+  const boundedTarget = Math.max(targetMinutes, firstOpeningMinute);
+  const offset = boundedTarget - firstOpeningMinute;
+  const slotIndex = Math.floor(offset / slotDurationMinutes);
+  const alignedMinutes = firstOpeningMinute + (slotIndex * slotDurationMinutes);
+
+  aligned.setHours(Math.floor(alignedMinutes / 60), alignedMinutes % 60, 0, 0);
+  return aligned;
+}
+
+function findOverlappingAppointmentForPatient(patientId, localCalendarId, startsAtIso, durationMinutes) {
+  const startDate = new Date(startsAtIso);
+  if (Number.isNaN(startDate.getTime())) {
+    return null;
+  }
+  const endDate = new Date(startDate.getTime() + (durationMinutes * 60 * 1000));
+
+  const rows = db
+    .prepare(
+      `SELECT id, starts_at
+       FROM appointments
+       WHERE patient_id = ?
+         AND ((local_calendar_id IS NULL AND ? IS NULL) OR local_calendar_id = ?)
+       ORDER BY datetime(starts_at) ASC, id ASC`
+    )
+    .all(patientId, localCalendarId, localCalendarId);
+
+  for (const row of rows) {
+    const currentStart = new Date(row.starts_at);
+    if (Number.isNaN(currentStart.getTime())) {
+      continue;
+    }
+    const currentEnd = new Date(currentStart.getTime() + (durationMinutes * 60 * 1000));
+    if (currentStart < endDate && currentEnd > startDate) {
+      return Number(row.id);
+    }
+  }
+
+  return null;
+}
+
+function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}) {
   const raw = String(consultationNoteRaw ?? '').trim();
-  if (!raw) return;
+  if (!raw) return null;
   let data;
-  try { data = JSON.parse(raw); } catch { return; }
+  try { data = JSON.parse(raw); } catch { return null; }
 
   const hasContent =
     String(data.title ?? '').trim() ||
@@ -2868,10 +3072,43 @@ function insertConsultationFromNote(patientId, consultationNoteRaw) {
     String(data.treatmentsHtml ?? '').trim() ||
     String(data.remarksHtml ?? '').trim();
 
-  if (!hasContent) return;
+  if (!hasContent) return null;
+
+  const userId = Number(options.userId);
+  const linkStrategy = options.linkStrategy === 'create-new' ? 'create-new' : 'attach-existing';
+
+  let localCalendarId = null;
+  let slotDurationMinutes = 60;
+  let alignedStartIso = String(data.startedAt ?? new Date().toISOString());
+
+  if (Number.isInteger(userId) && userId > 0) {
+    const defaultCalendar = getDefaultCalendarForUser(userId);
+    if (defaultCalendar) {
+      localCalendarId = defaultCalendar.id;
+      if (defaultCalendar.officeId != null) {
+        const office = db
+          .prepare(
+            `SELECT default_session_duration_minutes AS durationMinutes, opening_hours_json AS openingHoursJson
+             FROM offices
+             WHERE id = ?`
+          )
+          .get(defaultCalendar.officeId);
+
+        slotDurationMinutes = normalizeOfficeDefaultSessionDurationMinutes(office?.durationMinutes);
+
+        const sourceDate = new Date(String(data.startedAt ?? new Date().toISOString()));
+        if (!Number.isNaN(sourceDate.getTime())) {
+          const openingHours = parseOfficeOpeningHours(office?.openingHoursJson);
+          const firstOpeningMinute = getFirstOpeningMinute(openingHours, sourceDate);
+          const alignedDate = alignDateToOfficeSlot(sourceDate, firstOpeningMinute, slotDurationMinutes);
+          alignedStartIso = alignedDate.toISOString();
+        }
+      }
+    }
+  }
 
   try {
-    db.prepare(`
+    const createdConsultation = db.prepare(`
       INSERT INTO consultations
         (patient_id, started_at, practitioner, title, important, height_cm, weight_kg,
          eva_before, eva_after, profile,
@@ -2879,7 +3116,7 @@ function insertConsultationFromNote(patientId, consultationNoteRaw) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       patientId,
-      String(data.startedAt ?? new Date().toISOString()),
+      alignedStartIso,
       String(data.practitioner ?? '').trim(),
       String(data.title ?? '').trim(),
       data.important ? 1 : 0,
@@ -2894,7 +3131,49 @@ function insertConsultationFromNote(patientId, consultationNoteRaw) {
       data.treatmentsHtml ? encryptSensitiveField(data.treatmentsHtml) : null,
       data.remarksHtml ? encryptSensitiveField(data.remarksHtml) : null
     );
+
+    const consultationId = Number(createdConsultation.lastInsertRowid);
+    const title = String(data.title ?? '').trim();
+    const reason = title || 'Consultation';
+
+    const overlappingAppointmentId = findOverlappingAppointmentForPatient(
+      patientId,
+      localCalendarId,
+      alignedStartIso,
+      slotDurationMinutes
+    );
+
+    if (overlappingAppointmentId && linkStrategy === 'attach-existing') {
+      db.prepare('UPDATE appointments SET consultation_id = ? WHERE id = ?').run(consultationId, overlappingAppointmentId);
+      return {
+        consultationId,
+        appointmentId: overlappingAppointmentId,
+        linkedToExisting: true
+      };
+    }
+
+    const createdAppointment = db
+      .prepare(
+        `INSERT INTO appointments (patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        patientId,
+        alignedStartIso,
+        encryptSensitiveField(reason),
+        'A confirmer',
+        localCalendarId,
+        consultationId
+      );
+
+    return {
+      consultationId,
+      appointmentId: Number(createdAppointment.lastInsertRowid),
+      linkedToExisting: false
+    };
   } catch { /* table might not exist on first run – will be created on restart */ }
+
+  return null;
 }
 
 function storeAntecedentTypes(labels) {
@@ -4442,6 +4721,403 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
   });
 });
 
+app.get('/api/directory/contacts', authMiddleware, requirePermission('read-directory'), (req, res) => {
+  const isAdmin = req.user.role === 'admin';
+  const offices = getScopedOfficeOptions(req.userAccess, isAdmin);
+  const allowedOfficeIds = new Set(offices.map((office) => Number(office.id)).filter((id) => Number.isInteger(id) && id > 0));
+
+  const requestedOfficeId = Number(req.query.officeId);
+  const officeIdFilter = Number.isInteger(requestedOfficeId) && requestedOfficeId > 0 ? requestedOfficeId : null;
+
+  if (officeIdFilter != null && !allowedOfficeIds.has(officeIdFilter)) {
+    return res.status(403).json({ message: 'Acces refuse a ce cabinet' });
+  }
+
+  if (!isAdmin && allowedOfficeIds.size === 0) {
+    return res.json({ contacts: [], offices, selectedOfficeId: officeIdFilter });
+  }
+
+  const search = String(req.query.search ?? '').trim().toLowerCase();
+  const kindFilter = String(req.query.kind ?? '').trim().toLowerCase();
+  const activeFilterRaw = String(req.query.isActive ?? '').trim().toLowerCase();
+
+  const whereParts = [];
+  const params = [];
+
+  if (!isAdmin) {
+    const placeholders = [...allowedOfficeIds].map(() => '?').join(', ');
+    whereParts.push(`dc.office_id IN (${placeholders})`);
+    params.push(...allowedOfficeIds);
+  }
+
+  if (officeIdFilter != null) {
+    whereParts.push('dc.office_id = ?');
+    params.push(officeIdFilter);
+  }
+
+  if (kindFilter === 'person' || kindFilter === 'company') {
+    whereParts.push('dc.kind = ?');
+    params.push(kindFilter);
+  }
+
+  if (activeFilterRaw === 'true' || activeFilterRaw === 'false') {
+    whereParts.push('dc.is_active = ?');
+    params.push(activeFilterRaw === 'true' ? 1 : 0);
+  }
+
+  const rows = db
+    .prepare(
+      `SELECT dc.id, dc.office_id, o.name AS office_name, dc.kind,
+              dc.first_name, dc.last_name, dc.organization, dc.role,
+              dc.email, dc.mobile_phone, dc.landline_phone,
+              dc.address_line1, dc.address_line2, dc.postal_code, dc.city, dc.country,
+              dc.notes, dc.is_active, dc.created_at, dc.updated_at
+       FROM directory_contacts dc
+       INNER JOIN offices o ON o.id = dc.office_id
+       ${whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''}
+       ORDER BY lower(dc.last_name) ASC, lower(dc.first_name) ASC, lower(dc.organization) ASC, dc.id ASC`
+    )
+    .all(...params)
+    .map(mapDirectoryContactRow)
+    .filter((contact) => {
+      if (!search) {
+        return true;
+      }
+
+      return [
+        contact.displayName,
+        contact.firstName,
+        contact.lastName,
+        contact.organization,
+        contact.role,
+        contact.email,
+        contact.mobilePhone,
+        contact.landlinePhone,
+        contact.city,
+        contact.postalCode,
+        contact.officeName
+      ]
+        .map((value) => String(value ?? '').toLowerCase())
+        .some((value) => value.includes(search));
+    });
+
+  return res.json({ contacts: rows, offices, selectedOfficeId: officeIdFilter });
+});
+
+app.post('/api/directory/contacts', authMiddleware, requirePermission('create-directory-contact'), (req, res) => {
+  const parsed = z
+    .object({
+      officeId: z.number().int().positive(),
+      kind: z.enum(['person', 'company']).optional().default('person'),
+      firstName: z.string().trim().max(120).optional().default(''),
+      lastName: z.string().trim().max(120).optional().default(''),
+      organization: z.string().trim().max(200).optional().default(''),
+      role: z.string().trim().max(120).optional().default(''),
+      email: z.string().trim().max(160).optional().default(''),
+      mobilePhone: z.string().trim().max(50).optional().default(''),
+      landlinePhone: z.string().trim().max(50).optional().default(''),
+      address1: z.string().trim().max(200).optional().default(''),
+      address2: z.string().trim().max(200).optional().default(''),
+      postalCode: z.string().trim().max(20).optional().default(''),
+      city: z.string().trim().max(120).optional().default(''),
+      country: z.string().trim().max(80).optional().default('France'),
+      notes: z.string().trim().max(4000).optional().default(''),
+      isActive: z.boolean().optional().default(true)
+    })
+    .safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Payload invalide' });
+  }
+
+  const isAdmin = req.user.role === 'admin';
+  const offices = getScopedOfficeOptions(req.userAccess, isAdmin);
+  const allowedOfficeIds = new Set(offices.map((office) => Number(office.id)).filter((id) => Number.isInteger(id) && id > 0));
+
+  if (!allowedOfficeIds.has(parsed.data.officeId)) {
+    return res.status(403).json({ message: 'Acces refuse a ce cabinet' });
+  }
+
+  const officeExists = db.prepare('SELECT id FROM offices WHERE id = ?').get(parsed.data.officeId);
+  if (!officeExists) {
+    return res.status(404).json({ message: 'Cabinet introuvable' });
+  }
+
+  if (!parsed.data.firstName && !parsed.data.lastName && !parsed.data.organization) {
+    return res.status(400).json({ message: 'Renseignez au moins un nom ou une organisation' });
+  }
+
+  const result = db
+    .prepare(
+      `INSERT INTO directory_contacts (
+         office_id, kind, first_name, last_name, organization, role,
+         email, mobile_phone, landline_phone,
+         address_line1, address_line2, postal_code, city, country,
+         notes, is_active, created_by, updated_by
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      parsed.data.officeId,
+      parsed.data.kind,
+      parsed.data.firstName,
+      parsed.data.lastName,
+      parsed.data.organization,
+      parsed.data.role,
+      parsed.data.email,
+      parsed.data.mobilePhone,
+      parsed.data.landlinePhone,
+      parsed.data.address1,
+      parsed.data.address2,
+      parsed.data.postalCode,
+      parsed.data.city,
+      parsed.data.country,
+      parsed.data.notes,
+      parsed.data.isActive ? 1 : 0,
+      req.user.sub,
+      req.user.sub
+    );
+
+  const row = db
+    .prepare(
+      `SELECT dc.id, dc.office_id, o.name AS office_name, dc.kind,
+              dc.first_name, dc.last_name, dc.organization, dc.role,
+              dc.email, dc.mobile_phone, dc.landline_phone,
+              dc.address_line1, dc.address_line2, dc.postal_code, dc.city, dc.country,
+              dc.notes, dc.is_active, dc.created_at, dc.updated_at
+       FROM directory_contacts dc
+       INNER JOIN offices o ON o.id = dc.office_id
+       WHERE dc.id = ?`
+    )
+    .get(Number(result.lastInsertRowid));
+
+  writeAuditLog(req.user.sub, 'CREATE', 'directory_contacts', String(result.lastInsertRowid), {
+    officeId: parsed.data.officeId,
+    kind: parsed.data.kind
+  });
+
+  return res.status(201).json({ contact: mapDirectoryContactRow(row) });
+});
+
+app.put('/api/directory/contacts/:id', authMiddleware, requirePermission('edit-directory-contact'), (req, res) => {
+  const contactId = Number(req.params.id);
+  if (!Number.isInteger(contactId) || contactId <= 0) {
+    return res.status(400).json({ message: 'ID invalide' });
+  }
+
+  const parsed = z
+    .object({
+      officeId: z.number().int().positive(),
+      kind: z.enum(['person', 'company']).optional().default('person'),
+      firstName: z.string().trim().max(120).optional().default(''),
+      lastName: z.string().trim().max(120).optional().default(''),
+      organization: z.string().trim().max(200).optional().default(''),
+      role: z.string().trim().max(120).optional().default(''),
+      email: z.string().trim().max(160).optional().default(''),
+      mobilePhone: z.string().trim().max(50).optional().default(''),
+      landlinePhone: z.string().trim().max(50).optional().default(''),
+      address1: z.string().trim().max(200).optional().default(''),
+      address2: z.string().trim().max(200).optional().default(''),
+      postalCode: z.string().trim().max(20).optional().default(''),
+      city: z.string().trim().max(120).optional().default(''),
+      country: z.string().trim().max(80).optional().default('France'),
+      notes: z.string().trim().max(4000).optional().default(''),
+      isActive: z.boolean().optional().default(true)
+    })
+    .safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Payload invalide' });
+  }
+
+  const existing = db.prepare('SELECT id, office_id FROM directory_contacts WHERE id = ?').get(contactId);
+  if (!existing) {
+    return res.status(404).json({ message: 'Contact introuvable' });
+  }
+
+  const isAdmin = req.user.role === 'admin';
+  const offices = getScopedOfficeOptions(req.userAccess, isAdmin);
+  const allowedOfficeIds = new Set(offices.map((office) => Number(office.id)).filter((id) => Number.isInteger(id) && id > 0));
+
+  if (!allowedOfficeIds.has(Number(existing.office_id)) || !allowedOfficeIds.has(parsed.data.officeId)) {
+    return res.status(403).json({ message: 'Acces refuse a ce cabinet' });
+  }
+
+  if (!parsed.data.firstName && !parsed.data.lastName && !parsed.data.organization) {
+    return res.status(400).json({ message: 'Renseignez au moins un nom ou une organisation' });
+  }
+
+  db.prepare(
+    `UPDATE directory_contacts
+     SET office_id = ?, kind = ?, first_name = ?, last_name = ?, organization = ?, role = ?,
+         email = ?, mobile_phone = ?, landline_phone = ?,
+         address_line1 = ?, address_line2 = ?, postal_code = ?, city = ?, country = ?,
+         notes = ?, is_active = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+  ).run(
+    parsed.data.officeId,
+    parsed.data.kind,
+    parsed.data.firstName,
+    parsed.data.lastName,
+    parsed.data.organization,
+    parsed.data.role,
+    parsed.data.email,
+    parsed.data.mobilePhone,
+    parsed.data.landlinePhone,
+    parsed.data.address1,
+    parsed.data.address2,
+    parsed.data.postalCode,
+    parsed.data.city,
+    parsed.data.country,
+    parsed.data.notes,
+    parsed.data.isActive ? 1 : 0,
+    req.user.sub,
+    contactId
+  );
+
+  const row = db
+    .prepare(
+      `SELECT dc.id, dc.office_id, o.name AS office_name, dc.kind,
+              dc.first_name, dc.last_name, dc.organization, dc.role,
+              dc.email, dc.mobile_phone, dc.landline_phone,
+              dc.address_line1, dc.address_line2, dc.postal_code, dc.city, dc.country,
+              dc.notes, dc.is_active, dc.created_at, dc.updated_at
+       FROM directory_contacts dc
+       INNER JOIN offices o ON o.id = dc.office_id
+       WHERE dc.id = ?`
+    )
+    .get(contactId);
+
+  writeAuditLog(req.user.sub, 'UPDATE', 'directory_contacts', String(contactId), {
+    officeId: parsed.data.officeId,
+    kind: parsed.data.kind
+  });
+
+  return res.json({ contact: mapDirectoryContactRow(row) });
+});
+
+app.delete('/api/directory/contacts/:id', authMiddleware, requirePermission('delete-directory-contact'), (req, res) => {
+  const contactId = Number(req.params.id);
+  if (!Number.isInteger(contactId) || contactId <= 0) {
+    return res.status(400).json({ message: 'ID invalide' });
+  }
+
+  const existing = db.prepare('SELECT id, office_id FROM directory_contacts WHERE id = ?').get(contactId);
+  if (!existing) {
+    return res.status(404).json({ message: 'Contact introuvable' });
+  }
+
+  const isAdmin = req.user.role === 'admin';
+  const offices = getScopedOfficeOptions(req.userAccess, isAdmin);
+  const allowedOfficeIds = new Set(offices.map((office) => Number(office.id)).filter((id) => Number.isInteger(id) && id > 0));
+  if (!allowedOfficeIds.has(Number(existing.office_id))) {
+    return res.status(403).json({ message: 'Acces refuse a ce cabinet' });
+  }
+
+  db.prepare('DELETE FROM directory_contacts WHERE id = ?').run(contactId);
+  writeAuditLog(req.user.sub, 'DELETE', 'directory_contacts', String(contactId));
+  return res.status(204).send();
+});
+
+app.get('/api/directory/contacts/export', authMiddleware, requirePermission('export-directory'), (req, res) => {
+  const isAdmin = req.user.role === 'admin';
+  const offices = getScopedOfficeOptions(req.userAccess, isAdmin);
+  const allowedOfficeIds = new Set(offices.map((office) => Number(office.id)).filter((id) => Number.isInteger(id) && id > 0));
+
+  if (!isAdmin && allowedOfficeIds.size === 0) {
+    return res.status(403).json({ message: 'Aucun cabinet disponible pour export' });
+  }
+
+  const requestedOfficeId = Number(req.query.officeId);
+  const officeIdFilter = Number.isInteger(requestedOfficeId) && requestedOfficeId > 0 ? requestedOfficeId : null;
+  if (officeIdFilter != null && !allowedOfficeIds.has(officeIdFilter)) {
+    return res.status(403).json({ message: 'Acces refuse a ce cabinet' });
+  }
+
+  const whereParts = [];
+  const params = [];
+
+  if (!isAdmin) {
+    const placeholders = [...allowedOfficeIds].map(() => '?').join(', ');
+    whereParts.push(`dc.office_id IN (${placeholders})`);
+    params.push(...allowedOfficeIds);
+  }
+
+  if (officeIdFilter != null) {
+    whereParts.push('dc.office_id = ?');
+    params.push(officeIdFilter);
+  }
+
+  const rows = db
+    .prepare(
+      `SELECT dc.id, dc.office_id, o.name AS office_name, dc.kind,
+              dc.first_name, dc.last_name, dc.organization, dc.role,
+              dc.email, dc.mobile_phone, dc.landline_phone,
+              dc.address_line1, dc.address_line2, dc.postal_code, dc.city, dc.country,
+              dc.notes, dc.is_active, dc.created_at, dc.updated_at
+       FROM directory_contacts dc
+       INNER JOIN offices o ON o.id = dc.office_id
+       ${whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''}
+       ORDER BY lower(dc.last_name) ASC, lower(dc.first_name) ASC, lower(dc.organization) ASC, dc.id ASC`
+    )
+    .all(...params)
+    .map(mapDirectoryContactRow);
+
+  const header = [
+    'id',
+    'cabinet',
+    'type',
+    'nom',
+    'prenom',
+    'organisation',
+    'fonction',
+    'email',
+    'mobile',
+    'fixe',
+    'adresse1',
+    'adresse2',
+    'code_postal',
+    'ville',
+    'pays',
+    'actif'
+  ];
+
+  const escapeCsv = (value) => {
+    const raw = String(value ?? '');
+    if (raw.includes(';') || raw.includes('"') || raw.includes('\n')) {
+      return `"${raw.replace(/"/g, '""')}"`;
+    }
+    return raw;
+  };
+
+  const lines = [header.join(';')];
+  for (const row of rows) {
+    lines.push([
+      row.id,
+      row.officeName,
+      row.kind,
+      row.lastName,
+      row.firstName,
+      row.organization,
+      row.role,
+      row.email,
+      row.mobilePhone,
+      row.landlinePhone,
+      row.address1,
+      row.address2,
+      row.postalCode,
+      row.city,
+      row.country,
+      row.isActive ? 'oui' : 'non'
+    ].map(escapeCsv).join(';'));
+  }
+
+  const fileName = `repertoire-${new Date().toISOString().slice(0, 10)}.csv`;
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  writeAuditLog(req.user.sub, 'EXPORT', 'directory_contacts', null, { count: rows.length });
+  return res.status(200).send(lines.join('\n'));
+});
+
 app.get('/api/people/search', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
   const query = String(req.query.search ?? '').trim().toLowerCase();
   if (query.length < 2) {
@@ -4580,7 +5256,10 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
   });
 
   storeAntecedentTypes(antecedentCategories);
-  insertConsultationFromNote(Number(inserted.lastInsertRowid), payload.consultationNote);
+  insertConsultationFromNote(Number(inserted.lastInsertRowid), payload.consultationNote, {
+    userId: req.user.sub,
+    linkStrategy: 'attach-existing'
+  });
   synchronizeBidirectionalRelatedPeople({
     targetPatientId: Number(inserted.lastInsertRowid),
     targetCurrentFullName: fullName,
@@ -5324,7 +6003,7 @@ app.get('/api/appointments', authMiddleware, requirePermission('read-agenda'), (
 });
 
 app.post('/api/appointments', authMiddleware, requirePermission('write-agenda'), (req, res) => {
-  const { patientId, startsAt, reason, status, localCalendarId } = req.body;
+  const { patientId, startsAt, reason, status, localCalendarId, consultationId } = req.body;
 
   // Validate required fields
   if (!Number.isInteger(Number(patientId)) || Number(patientId) <= 0) {
@@ -5351,14 +6030,27 @@ app.post('/api/appointments', authMiddleware, requirePermission('write-agenda'),
   }
 
   const effectiveCalendarId = Number.isInteger(Number(localCalendarId)) && Number(localCalendarId) > 0 ? Number(localCalendarId) : null;
+  const effectiveConsultationId = Number.isInteger(Number(consultationId)) && Number(consultationId) > 0 ? Number(consultationId) : null;
+
+  if (effectiveConsultationId !== null) {
+    const consultation = db
+      .prepare('SELECT id, patient_id FROM consultations WHERE id = ?')
+      .get(effectiveConsultationId);
+    if (!consultation) {
+      return res.status(404).json({ error: 'Consultation not found' });
+    }
+    if (Number(consultation.patient_id) !== Number(patientId)) {
+      return res.status(400).json({ error: 'Consultation does not belong to patient' });
+    }
+  }
 
   try {
     const result = db
       .prepare(
-        `INSERT INTO appointments (patient_id, starts_at, reason_cipher, status, local_calendar_id)
-         VALUES (?, ?, ?, ?, ?)`
+        `INSERT INTO appointments (patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id)
+        VALUES (?, ?, ?, ?, ?, ?)`
       )
-      .run(patientId, startsAt, encryptSensitiveField(reason.trim()), status, effectiveCalendarId);
+      .run(patientId, startsAt, encryptSensitiveField(reason.trim()), status, effectiveCalendarId, effectiveConsultationId);
 
     const newAppointment = db
       .prepare(
@@ -5404,12 +6096,15 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
               c.id AS consultation_id, c.title AS consultation_title, c.practitioner AS consultation_practitioner
        FROM appointments a
        INNER JOIN patients p ON p.id = a.patient_id
-       LEFT JOIN consultations c ON c.id = (
-         SELECT c2.id
-         FROM consultations c2
-         WHERE c2.patient_id = a.patient_id AND date(c2.started_at) = date(a.starts_at)
-         ORDER BY datetime(c2.started_at) DESC, c2.id DESC
-         LIMIT 1
+       LEFT JOIN consultations c ON c.id = COALESCE(
+         a.consultation_id,
+         (
+           SELECT c2.id
+           FROM consultations c2
+           WHERE c2.patient_id = a.patient_id AND date(c2.started_at) = date(a.starts_at)
+           ORDER BY datetime(c2.started_at) DESC, c2.id DESC
+           LIMIT 1
+         )
        )
        WHERE p.is_deleted = 0
        ORDER BY a.starts_at ASC`
@@ -5599,7 +6294,8 @@ app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePerm
   const parsed = z
     .object({
       title: z.string().trim().max(255).optional(),
-      practitioner: z.string().trim().max(255).optional()
+      practitioner: z.string().trim().max(255).optional(),
+      linkStrategy: z.enum(['attach-existing', 'create-new']).optional()
     })
     .safeParse(req.body);
 
@@ -5608,7 +6304,7 @@ app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePerm
   }
 
   const appointment = db
-    .prepare('SELECT id, patient_id, starts_at FROM appointments WHERE id = ?')
+    .prepare('SELECT id, patient_id, starts_at, consultation_id FROM appointments WHERE id = ?')
     .get(id);
 
   if (!appointment) {
@@ -5617,25 +6313,51 @@ app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePerm
 
   const title = String(parsed.data.title ?? '').trim();
   const practitioner = String(parsed.data.practitioner ?? '').trim();
+  const linkStrategy = parsed.data.linkStrategy;
 
-  const existingConsultation = db
-    .prepare(
-      `SELECT id, title, practitioner
-       FROM consultations
-       WHERE patient_id = ? AND date(started_at) = date(?)
-       ORDER BY datetime(started_at) DESC, id DESC
-       LIMIT 1`
-    )
-    .get(appointment.patient_id, appointment.starts_at);
+  let existingConsultation = null;
+  if (appointment.consultation_id != null) {
+    existingConsultation = db
+      .prepare('SELECT id, title, practitioner, started_at FROM consultations WHERE id = ?')
+      .get(appointment.consultation_id);
+  }
+
+  if (!existingConsultation) {
+    existingConsultation = db
+      .prepare(
+        `SELECT id, title, practitioner, started_at
+         FROM consultations
+         WHERE patient_id = ? AND date(started_at) = date(?)
+         ORDER BY datetime(started_at) DESC, id DESC
+         LIMIT 1`
+      )
+      .get(appointment.patient_id, appointment.starts_at);
+  }
+
+  if (existingConsultation && appointment.consultation_id == null && !linkStrategy) {
+    return res.status(409).json({
+      message: 'Une consultation existe deja sur ce creneau.',
+      conflict: {
+        existingConsultation: {
+          id: Number(existingConsultation.id),
+          title: String(existingConsultation.title ?? '').trim(),
+          practitioner: String(existingConsultation.practitioner ?? '').trim(),
+          startedAt: String(existingConsultation.started_at ?? appointment.starts_at)
+        }
+      }
+    });
+  }
 
   let consultationId;
-  if (existingConsultation) {
+  let linkedToExisting = false;
+  if (existingConsultation && (appointment.consultation_id != null || linkStrategy !== 'create-new')) {
     consultationId = Number(existingConsultation.id);
     db.prepare('UPDATE consultations SET title = ?, practitioner = ? WHERE id = ?').run(
       title,
       practitioner,
       consultationId
     );
+    linkedToExisting = true;
   } else {
     const created = db
       .prepare(
@@ -5648,6 +6370,8 @@ app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePerm
     consultationId = Number(created.lastInsertRowid);
   }
 
+  db.prepare('UPDATE appointments SET consultation_id = ? WHERE id = ?').run(consultationId, id);
+
   writeAuditLog(req.user.sub, 'UPDATE', 'consultations', String(consultationId), {
     source: 'agenda-modal',
     appointmentId: id,
@@ -5659,7 +6383,8 @@ app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePerm
     consultation: {
       id: consultationId,
       title,
-      practitioner
+      practitioner,
+      linkedToExisting
     }
   });
 });

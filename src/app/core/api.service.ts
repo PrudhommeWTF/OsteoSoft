@@ -14,10 +14,14 @@ import {
   AppointmentsPayload,
   AuthUser,
   ConsultationRecord,
+  AppointmentConsultationConflict,
   ConsultationMetaSummary,
   CreateAppointmentPayload,
   CreatePatientPayload,
   CreateOfficePayload,
+  DirectoryContact,
+  DirectoryContactPayload,
+  DirectoryContactsPayload,
   CreatedPatient,
   DashboardPayload,
   GeneralSettingsPayload,
@@ -119,6 +123,61 @@ export class ApiService {
     );
 
     return response.locations;
+  }
+
+  async getDirectoryContacts(filters?: {
+    search?: string;
+    officeId?: number | null;
+    kind?: 'person' | 'company' | 'all';
+    isActive?: boolean | null;
+  }): Promise<DirectoryContactsPayload> {
+    let params = new HttpParams();
+    if (filters?.search?.trim()) {
+      params = params.set('search', filters.search.trim());
+    }
+    if (Number.isInteger(filters?.officeId) && Number(filters?.officeId) > 0) {
+      params = params.set('officeId', String(filters?.officeId));
+    }
+    if (filters?.kind === 'person' || filters?.kind === 'company') {
+      params = params.set('kind', filters.kind);
+    }
+    if (filters?.isActive === true || filters?.isActive === false) {
+      params = params.set('isActive', String(filters.isActive));
+    }
+
+    return firstValueFrom(this.http.get<DirectoryContactsPayload>(`${this.baseUrl}/directory/contacts`, { params }));
+  }
+
+  async createDirectoryContact(payload: DirectoryContactPayload): Promise<DirectoryContact> {
+    const response = await firstValueFrom(
+      this.http.post<{ contact: DirectoryContact }>(`${this.baseUrl}/directory/contacts`, payload)
+    );
+    return response.contact;
+  }
+
+  async updateDirectoryContact(contactId: number, payload: DirectoryContactPayload): Promise<DirectoryContact> {
+    const response = await firstValueFrom(
+      this.http.put<{ contact: DirectoryContact }>(`${this.baseUrl}/directory/contacts/${contactId}`, payload)
+    );
+    return response.contact;
+  }
+
+  async deleteDirectoryContact(contactId: number): Promise<void> {
+    await firstValueFrom(this.http.delete<void>(`${this.baseUrl}/directory/contacts/${contactId}`));
+  }
+
+  async exportDirectoryContacts(officeId?: number | null): Promise<Blob> {
+    let params = new HttpParams();
+    if (Number.isInteger(officeId) && Number(officeId) > 0) {
+      params = params.set('officeId', String(officeId));
+    }
+
+    return firstValueFrom(
+      this.http.get(`${this.baseUrl}/directory/contacts/export`, {
+        params,
+        responseType: 'blob'
+      })
+    );
   }
 
   async createPatient(payload: CreatePatientPayload): Promise<CreatedPatient> {

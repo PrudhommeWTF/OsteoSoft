@@ -33,3 +33,22 @@ export const adminGuard: CanActivateFn = () => {
     return authService.role() === 'admin' ? true : router.createUrlTree(['/accueil']);
   });
 };
+
+export const permissionGuard = (permissionId: string): CanActivateFn => {
+  return () => {
+    const authService = inject(AuthService);
+    const router = inject(Router);
+
+    return authService.ensureSessionChecked().then((isAuthenticated) => {
+      if (!isAuthenticated) {
+        return router.createUrlTree(['/login']);
+      }
+
+      if (authService.hasPermission(permissionId)) {
+        return true;
+      }
+
+      return router.createUrlTree(['/accueil']);
+    });
+  };
+};

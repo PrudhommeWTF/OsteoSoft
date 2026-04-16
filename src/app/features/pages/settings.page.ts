@@ -169,7 +169,8 @@ export class SettingsPage {
         { id: 'read-directory', label: 'Consulter le répertoire' },
         { id: 'create-directory-contact', label: 'Ajouter un contact' },
         { id: 'edit-directory-contact', label: 'Modifier un contact' },
-        { id: 'delete-directory-contact', label: 'Supprimer un contact' }
+        { id: 'delete-directory-contact', label: 'Supprimer un contact' },
+        { id: 'export-directory', label: 'Exporter le répertoire' }
       ],
       impactedProfiles: ['Administrateur', 'Praticien', 'Secrétariat']
     }

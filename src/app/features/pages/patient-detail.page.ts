@@ -50,6 +50,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   private pendingBirthDateIso = '';
   private relatedSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
   private relatedSearchRequestId = 0;
+  private pendingFocusedConsultationId: number | null = null;
 
   readonly isLoading = signal(true);
   readonly patient = signal<PatientDetail | null>(null);
@@ -242,6 +243,10 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit(): void {
     const id = Number(this.route.snapshot.paramMap.get('id'));
+    const consultationIdRaw = this.route.snapshot.queryParamMap.get('consultationId');
+    const consultationId = Number(consultationIdRaw);
+    this.pendingFocusedConsultationId = Number.isInteger(consultationId) && consultationId > 0 ? consultationId : null;
+
     void this.loadLocationPairs();
     this.topbar.set([
       {
@@ -330,6 +335,10 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       this.patient.set(patient);
       this.consultations.set(consultations);
       this.startEdit();
+
+      if (this.pendingFocusedConsultationId != null) {
+        this.focusConsultationById(this.pendingFocusedConsultationId);
+      }
     } catch {
       this.patient.set(null);
     } finally {
@@ -630,5 +639,38 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return iso;
     return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+  }
+
+  private focusConsultationById(consultationId: number): void {
+    const target = this.consultations().find((entry) => entry.id === consultationId);
+    if (!target) {
+      return;
+    }
+
+    this.expandedSections.update((sections) => {
+      const next = new Set(sections);
+      next.add('consultations');
+      return next;
+    });
+
+    this.expandedConsultations.update((consultations) => {
+      const next = new Set(consultations);
+      next.add(consultationId);
+      return next;
+    });
+
+    const targetYear = new Date(target.startedAt).getFullYear();
+    this.expandedYears.update((years) => {
+      const next = new Set(years);
+      next.add(targetYear);
+      return next;
+    });
+
+    setTimeout(() => {
+      const element = document.getElementById(`consultation-card-${consultationId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 0);
   }
 }

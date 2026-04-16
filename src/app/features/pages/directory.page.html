@@ -1,0 +1,286 @@
+<section class="page-head d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+  <div>
+    <h1 class="h3 mb-1"><i class="fa-solid fa-address-book text-primary me-2"></i>Repertoire</h1>
+    <p class="text-secondary mb-0">Contacts professionnels partages par cabinet.</p>
+  </div>
+
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    @if (canExport()) {
+      <button type="button" class="btn btn-outline-primary" (click)="exportContacts()" [disabled]="isExporting()">
+        <i class="fa-solid fa-file-export me-2"></i>Exporter
+      </button>
+    }
+
+    @if (canCreate()) {
+      <button type="button" class="btn btn-primary" (click)="openCreateModal()">
+        <i class="fa-solid fa-user-plus me-2"></i>Nouveau contact
+      </button>
+    }
+  </div>
+</section>
+
+@if (errorMessage()) {
+  <div class="alert alert-danger">{{ errorMessage() }}</div>
+}
+
+@if (successMessage()) {
+  <div class="alert alert-success">{{ successMessage() }}</div>
+}
+
+<section class="panel card border-0 shadow-sm mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-12 col-lg-4">
+        <label class="form-label" for="directory-search-input">Recherche</label>
+        <div class="input-group">
+          <span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
+          <input
+            id="directory-search-input"
+            class="form-control"
+            type="search"
+            placeholder="Nom, organisation, email..."
+            [value]="search()"
+            (input)="onSearch($any($event.target).value || '')"
+          />
+        </div>
+      </div>
+
+      <div class="col-12 col-md-4 col-lg-3">
+        <label class="form-label" for="directory-office-filter">Cabinet</label>
+        <select
+          id="directory-office-filter"
+          class="form-select"
+          [value]="selectedOfficeId() ?? ''"
+          (change)="onOfficeChange($any($event.target).value || '')"
+        >
+          <option value="">Tous les cabinets</option>
+          @for (office of offices(); track office.id) {
+            <option [value]="office.id">{{ office.name }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="col-6 col-md-4 col-lg-2">
+        <label class="form-label" for="directory-kind-filter">Type</label>
+        <select
+          id="directory-kind-filter"
+          class="form-select"
+          [value]="kindFilter()"
+          (change)="onKindFilterChange($any($event.target).value || 'all')"
+        >
+          <option value="all">Tous</option>
+          <option value="person">Personnes</option>
+          <option value="company">Societes</option>
+        </select>
+      </div>
+
+      <div class="col-6 col-md-4 col-lg-3">
+        <label class="form-label" for="directory-active-filter">Statut</label>
+        <select
+          id="directory-active-filter"
+          class="form-select"
+          [value]="activeFilter()"
+          (change)="onActiveFilterChange($any($event.target).value || 'all')"
+        >
+          <option value="all">Tous</option>
+          <option value="active">Actifs</option>
+          <option value="inactive">Inactifs</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="panel card border-0 shadow-sm">
+  <div class="card-body">
+    @if (isLoading()) {
+      <div class="d-flex align-items-center gap-2 text-secondary">
+        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+        Chargement du repertoire...
+      </div>
+    } @else {
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Nom</th>
+              <th>Type</th>
+              <th>Cabinet</th>
+              <th>Fonction</th>
+              <th>Contact</th>
+              <th>Ville</th>
+              <th>Statut</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (filteredContacts().length === 0) {
+              <tr>
+                <td colspan="8" class="text-center text-secondary py-4">Aucun contact pour ces filtres.</td>
+              </tr>
+            }
+
+            @for (contact of filteredContacts(); track contact.id) {
+              <tr>
+                <td>
+                  <div class="fw-semibold">{{ contactName(contact) }}</div>
+                  @if (contact.organization && contact.kind === 'person') {
+                    <div class="small text-secondary">{{ contact.organization }}</div>
+                  }
+                </td>
+                <td>{{ kindLabel(contact.kind) }}</td>
+                <td>{{ contact.officeName }}</td>
+                <td>{{ contact.role || '-' }}</td>
+                <td>
+                  <div>{{ contact.email || '-' }}</div>
+                  <div class="small text-secondary">{{ contact.mobilePhone || contact.landlinePhone || '-' }}</div>
+                </td>
+                <td>{{ contact.city || '-' }}</td>
+                <td>
+                  <span class="badge" [class]="contact.isActive ? 'text-bg-success' : 'text-bg-secondary'">
+                    {{ contact.isActive ? 'Actif' : 'Inactif' }}
+                  </span>
+                </td>
+                <td class="text-end">
+                  <div class="btn-group btn-group-sm" role="group" aria-label="Actions contact">
+                    @if (canEdit()) {
+                      <button type="button" class="btn btn-outline-primary" (click)="openEditModal(contact)">
+                        Modifier
+                      </button>
+                    }
+                    @if (canDelete()) {
+                      <button
+                        type="button"
+                        class="btn btn-outline-danger"
+                        [disabled]="isDeletingId() === contact.id"
+                        (click)="deleteContact(contact)"
+                      >
+                        Supprimer
+                      </button>
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</section>
+
+@if (isModalOpen()) {
+  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="directory-contact-modal-title">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="directory-contact-modal-title" class="modal-title h5 mb-0">
+            {{ editingContactId() !== null ? 'Modifier le contact' : 'Nouveau contact' }}
+          </h2>
+          <button type="button" class="btn-close" aria-label="Fermer" (click)="closeModal()" [disabled]="isSaving()"></button>
+        </div>
+
+        <div class="modal-body">
+          @if (modalError()) {
+            <div class="alert alert-danger">{{ modalError() }}</div>
+          }
+
+          <form [formGroup]="form" class="row g-3">
+            <div class="col-12 col-md-4">
+              <label class="form-label" for="contact-office-id">Cabinet</label>
+              <select id="contact-office-id" class="form-select" formControlName="officeId">
+                @for (office of offices(); track office.id) {
+                  <option [value]="office.id">{{ office.name }}</option>
+                }
+              </select>
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label class="form-label" for="contact-kind">Type</label>
+              <select id="contact-kind" class="form-select" formControlName="kind">
+                <option value="person">Personne</option>
+                <option value="company">Societe</option>
+              </select>
+            </div>
+
+            <div class="col-12 col-md-4 d-flex align-items-end">
+              <div class="form-check mb-2">
+                <input id="contact-active" class="form-check-input" type="checkbox" formControlName="isActive" />
+                <label class="form-check-label" for="contact-active">Contact actif</label>
+              </div>
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="contact-last-name">Nom</label>
+              <input id="contact-last-name" class="form-control" type="text" formControlName="lastName" />
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="contact-first-name">Prenom</label>
+              <input id="contact-first-name" class="form-control" type="text" formControlName="firstName" />
+            </div>
+
+            <div class="col-12">
+              <label class="form-label" for="contact-organization">Organisation</label>
+              <input id="contact-organization" class="form-control" type="text" formControlName="organization" />
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="contact-role">Fonction</label>
+              <input id="contact-role" class="form-control" type="text" formControlName="role" />
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="contact-email">Email</label>
+              <input id="contact-email" class="form-control" type="email" formControlName="email" />
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="contact-mobile-phone">Telephone mobile</label>
+              <input id="contact-mobile-phone" class="form-control" type="text" formControlName="mobilePhone" />
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="contact-landline-phone">Telephone fixe</label>
+              <input id="contact-landline-phone" class="form-control" type="text" formControlName="landlinePhone" />
+            </div>
+
+            <div class="col-12">
+              <label class="form-label" for="contact-address1">Adresse</label>
+              <input id="contact-address1" class="form-control mb-2" type="text" formControlName="address1" />
+              <input class="form-control" type="text" formControlName="address2" placeholder="Complement" />
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label class="form-label" for="contact-postal-code">Code postal</label>
+              <input id="contact-postal-code" class="form-control" type="text" formControlName="postalCode" />
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label class="form-label" for="contact-city">Ville</label>
+              <input id="contact-city" class="form-control" type="text" formControlName="city" />
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label class="form-label" for="contact-country">Pays</label>
+              <input id="contact-country" class="form-control" type="text" formControlName="country" />
+            </div>
+
+            <div class="col-12">
+              <label class="form-label" for="contact-notes">Notes</label>
+              <textarea id="contact-notes" class="form-control" rows="3" formControlName="notes"></textarea>
+            </div>
+          </form>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="closeModal()" [disabled]="isSaving()">Annuler</button>
+          <button type="button" class="btn btn-primary" (click)="saveContact()" [disabled]="isSaving()">
+            {{ isSaving() ? 'Enregistrement...' : 'Enregistrer' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop fade show"></div>
+}

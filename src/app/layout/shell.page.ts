@@ -66,7 +66,7 @@ export class ShellPage implements OnInit, OnDestroy {
     { path: '/patients/nouveau', label: 'Nouveau patient', icon: 'fa-solid fa-user-plus', exact: true, requiredPermission: 'create-patient-record' },
     { path: '/agenda', label: 'Agenda', icon: 'fa-solid fa-calendar-days', exact: true, requiredPermission: 'read-agenda' },
     { path: '/patients', label: 'Listing patients', icon: 'fa-solid fa-list-ul', badge: '...', exact: true, requiredPermission: 'read-patient-list' },
-    { label: 'Repertoire', icon: 'fa-solid fa-address-book', badge: '5', disabled: true, requiredPermission: 'read-directory' },
+    { path: '/repertoire', label: 'Repertoire', icon: 'fa-solid fa-address-book', exact: true, requiredPermission: 'read-directory' },
     { path: '/facturation', label: 'Comptabilite', icon: 'fa-solid fa-file-invoice-dollar', badge: '414', requiredPermission: 'read-billing-kpis' },
     { label: 'Statistiques', icon: 'fa-solid fa-chart-column', disabled: true, requiredPermission: 'read-advanced-statistics' },
     { path: '/parametres', label: 'Parametres', icon: 'fa-solid fa-gear', exact: true, adminOnly: true }

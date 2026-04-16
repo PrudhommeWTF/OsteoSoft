@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 
-import { adminGuard, authGuard, guestGuard } from './core/auth.guard';
+import { adminGuard, authGuard, guestGuard, permissionGuard } from './core/auth.guard';
 
 export const routes: Routes = [
   {
@@ -25,6 +25,11 @@ export const routes: Routes = [
       {
         path: 'agenda',
         loadComponent: () => import('./features/pages/agenda.page').then((m) => m.AgendaPage)
+      },
+      {
+        path: 'repertoire',
+        canActivate: [permissionGuard('read-directory')],
+        loadComponent: () => import('./features/pages/directory.page').then((m) => m.DirectoryPage)
       },
       {
         path: 'mon-profil',

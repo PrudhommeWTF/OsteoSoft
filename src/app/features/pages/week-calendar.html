@@ -252,6 +252,11 @@
             <button type="button" class="btn btn-outline-primary" (click)="openPatientRecord()">
               Voir la fiche patient
             </button>
+            @if (event.consultationId) {
+              <button type="button" class="btn btn-outline-success" (click)="openConsultationRecord()">
+                Voir la consultation
+              </button>
+            }
             <button type="button" class="btn btn-success" [disabled]="isSavingConsultationMeta()" (click)="saveConsultationMeta()">
               Enregistrer
             </button>
@@ -261,5 +266,41 @@
       </div>
     </div>
     <div class="modal-backdrop fade show" (click)="closeAppointmentModal()"></div>
+  }
+
+  @if (isConsultationConflictModalOpen() && consultationConflictCandidate(); as conflict) {
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="consultation-conflict-modal-title">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3 id="consultation-conflict-modal-title" class="modal-title h5 mb-0">Consultation existante detectee</h3>
+            <button type="button" class="btn-close" aria-label="Fermer" (click)="closeConsultationConflictModal()" [disabled]="isSavingConsultationMeta()"></button>
+          </div>
+
+          <div class="modal-body">
+            <p class="mb-2">Une consultation existe deja pour ce patient autour de ce creneau.</p>
+            <div class="alert alert-secondary py-2 mb-0">
+              <div><strong>Titre:</strong> {{ conflict.title || 'Sans titre' }}</div>
+              <div><strong>Praticien:</strong> {{ conflict.practitioner || 'Non renseigne' }}</div>
+              <div><strong>Date:</strong> {{ formatConflictConsultationDate(conflict.startedAt) }}</div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" (click)="closeConsultationConflictModal()" [disabled]="isSavingConsultationMeta()">
+              Annuler
+            </button>
+            <button type="button" class="btn btn-outline-primary" (click)="resolveConsultationConflict(false)" [disabled]="isSavingConsultationMeta()">
+              Non, creer une nouvelle consultation
+            </button>
+            <button type="button" class="btn btn-success" (click)="resolveConsultationConflict(true)" [disabled]="isSavingConsultationMeta()">
+              Oui, rattacher l'existante
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop fade show"></div>
   }
 </div>

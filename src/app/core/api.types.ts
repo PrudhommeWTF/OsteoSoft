@@ -124,6 +124,7 @@ export type CreateAppointmentPayload = {
   reason: string;
   status: 'A confirmer' | 'En attente' | 'Termine';
   localCalendarId?: number | null;
+  consultationId?: number | null;
 };
 
 export type Patient = {
@@ -139,6 +140,55 @@ export type Patient = {
 export type LocationPair = {
   postalCode: string;
   city: string;
+};
+
+export type DirectoryContact = {
+  id: number;
+  officeId: number;
+  officeName: string;
+  kind: 'person' | 'company';
+  firstName: string;
+  lastName: string;
+  organization: string;
+  displayName: string;
+  role: string;
+  email: string;
+  mobilePhone: string;
+  landlinePhone: string;
+  address1: string;
+  address2: string;
+  postalCode: string;
+  city: string;
+  country: string;
+  notes: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DirectoryContactPayload = {
+  officeId: number;
+  kind: 'person' | 'company';
+  firstName: string;
+  lastName: string;
+  organization: string;
+  role: string;
+  email: string;
+  mobilePhone: string;
+  landlinePhone: string;
+  address1: string;
+  address2: string;
+  postalCode: string;
+  city: string;
+  country: string;
+  notes: string;
+  isActive: boolean;
+};
+
+export type DirectoryContactsPayload = {
+  contacts: DirectoryContact[];
+  offices: OfficeOption[];
+  selectedOfficeId?: number | null;
 };
 
 export type CreatePatientPayload = {
@@ -209,12 +259,23 @@ export type DashboardEvent = {
 export type UpdateAppointmentConsultationMetaPayload = {
   title: string;
   practitioner: string;
+  linkStrategy?: 'attach-existing' | 'create-new';
 };
 
 export type ConsultationMetaSummary = {
   id: number;
   title: string;
   practitioner: string;
+  linkedToExisting?: boolean;
+};
+
+export type AppointmentConsultationConflict = {
+  existingConsultation: {
+    id: number;
+    title: string;
+    practitioner: string;
+    startedAt: string;
+  };
 };
 
 export type LocalAgendaCalendar = {

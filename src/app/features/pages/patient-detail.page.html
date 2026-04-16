@@ -508,7 +508,11 @@
 
 <!-- ── Consultation card template ─────────────────────── -->
 <ng-template #consultationCard let-c="c">
-  <div class="consultation-card card border-0 bg-light mb-2" [class.consultation-card--important]="c.important">
+  <div
+    class="consultation-card card border-0 bg-light mb-2"
+    [class.consultation-card--important]="c.important"
+    [id]="'consultation-card-' + c.id"
+  >
     <div
       class="consultation-card-header"
       role="button"
