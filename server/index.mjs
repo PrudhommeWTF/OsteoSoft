@@ -5158,7 +5158,7 @@ app.get('/api/people/search', authMiddleware, requirePermission('create-patient-
     return res.json({ contacts: [] });
   }
 
-  const rows = db
+  const userRows = db
     .prepare(
       `SELECT id, username, role, first_name, last_name
        FROM users
@@ -5167,20 +5167,95 @@ app.get('/api/people/search', authMiddleware, requirePermission('create-patient-
     )
     .all();
 
-  const contacts = rows
+  const userContacts = userRows
     .map((row) => {
       const fullName = `${String(row.last_name ?? '').trim()} ${String(row.first_name ?? '').trim()}`.trim();
       const label = fullName || String(row.username ?? '').trim();
       return {
         id: Number(row.id),
         fullName: label,
-        role: String(row.role ?? '').trim()
+        role: String(row.role ?? '').trim(),
+        city: ''
       };
     })
     .filter((contact) =>
-      contact.fullName.toLowerCase().includes(query)
-    )
-    .slice(0, 12);
+      [contact.fullName, contact.role]
+        .map((value) => String(value ?? '').toLowerCase())
+        .some((value) => value.includes(query))
+    );
+
+  const isAdmin = req.user.role === 'admin';
+  const scopedOffices = getScopedOfficeOptions(req.userAccess, isAdmin);
+  const allowedOfficeIds = scopedOffices
+    .map((office) => Number(office.id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+
+  let directoryRows = [];
+
+  try {
+    if (isAdmin) {
+      directoryRows = db
+        .prepare(
+           `SELECT id, kind, first_name, last_name, organization, role, city, is_active
+           FROM directory_contacts
+           ORDER BY lower(last_name) ASC, lower(first_name) ASC, lower(organization) ASC, id ASC`
+        )
+        .all();
+    } else if (allowedOfficeIds.length > 0) {
+      const placeholders = allowedOfficeIds.map(() => '?').join(', ');
+      directoryRows = db
+        .prepare(
+           `SELECT id, kind, first_name, last_name, organization, role, city, is_active
+           FROM directory_contacts
+           WHERE office_id IN (${placeholders})
+           ORDER BY lower(last_name) ASC, lower(first_name) ASC, lower(organization) ASC, id ASC`
+        )
+        .all(...allowedOfficeIds);
+    }
+  } catch {
+    // Keep suggestions working even if directory schema is not ready yet.
+    directoryRows = [];
+  }
+
+  const directoryContacts = directoryRows
+    .filter((row) => Number(row.is_active) === 1)
+    .map((row) => {
+      const firstName = String(row.first_name ?? '').trim();
+      const lastName = String(row.last_name ?? '').trim();
+      const organization = String(row.organization ?? '').trim();
+      const fullName = `${lastName} ${firstName}`.trim() || organization;
+      const role = String(row.role ?? '').trim() || (row.kind === 'company' ? 'Structure' : 'Contact');
+      const city = String(row.city ?? '').trim();
+
+      return {
+        // Offset ids to avoid collisions with users in ng @for track contact.id.
+        id: 1_000_000_000 + Number(row.id),
+        fullName,
+        role,
+        city
+      };
+    })
+    .filter((contact) =>
+      [contact.fullName, contact.role, contact.city]
+        .map((value) => String(value ?? '').toLowerCase())
+        .some((value) => value.includes(query))
+    );
+
+  const mergedContacts = [...directoryContacts, ...userContacts];
+  const seenNames = new Set();
+  const contacts = [];
+
+  for (const contact of mergedContacts) {
+    const key = `${contact.fullName.toLowerCase()}|${contact.role.toLowerCase()}`;
+    if (seenNames.has(key)) {
+      continue;
+    }
+    seenNames.add(key);
+    contacts.push(contact);
+    if (contacts.length >= 12) {
+      break;
+    }
+  }
 
   return res.json({ contacts });
 });

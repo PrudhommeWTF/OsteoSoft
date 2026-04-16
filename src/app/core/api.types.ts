@@ -222,6 +222,7 @@ export type PeoplePickerContact = {
   id: number;
   fullName: string;
   role: string;
+  city?: string;
 };
 
 export type CreatedPatient = {

@@ -255,8 +255,32 @@
 }
 
 .suggestion-list {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  right: 0;
+  z-index: 2200;
   max-height: 220px;
   overflow-y: auto;
+  box-shadow: 0 10px 24px rgb(31 63 86 / 12%);
+}
+
+.suggestion-feedback {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  right: 0;
+  z-index: 2200;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid #d0dde8;
+  border-radius: 0.5rem;
+  background: #fff;
+  color: #5b6773;
+  font-size: 0.82rem;
+  box-shadow: 0 10px 24px rgb(31 63 86 / 12%);
 }
 
 .autocomplete-list {

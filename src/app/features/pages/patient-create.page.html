@@ -366,11 +366,14 @@
             (blur)="primaryDoctorSuggestions.set([])" />
 
           @if (isSearchingPrimaryDoctor()) {
-            <div class="small text-muted mt-1">Recherche en cours...</div>
+            <div class="suggestion-feedback" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+              Recherche en cours...
+            </div>
           }
 
           @if (primaryDoctorSuggestions().length > 0) {
-            <div class="list-group mt-2 suggestion-list">
+            <div class="list-group suggestion-list">
               @for (contact of primaryDoctorSuggestions(); track contact.id) {
                 <button
                   type="button"
@@ -379,6 +382,9 @@
                   (click)="applyPrimaryDoctorSuggestion(contact)">
                   <strong>{{ contact.fullName }}</strong>
                   <span class="small text-muted ms-2">{{ contact.role }}</span>
+                  @if ((contact.city ?? '').trim()) {
+                    <span class="small text-muted ms-2">{{ contact.city }}</span>
+                  }
                 </button>
               }
             </div>
@@ -413,11 +419,14 @@
               (blur)="referredBySuggestions.set([])" />
 
             @if (isSearchingReferredBy()) {
-              <div class="small text-muted mt-1">Recherche des referals existants...</div>
+              <div class="suggestion-feedback" aria-live="polite">
+                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                Recherche en cours...
+              </div>
             }
 
             @if (referredBySuggestions().length > 0) {
-              <div class="list-group mt-2 suggestion-list">
+              <div class="list-group suggestion-list">
                 @for (item of referredBySuggestions(); track item) {
                   <button
                     type="button"
