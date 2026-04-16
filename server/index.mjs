@@ -2724,6 +2724,14 @@ function formatRelatedPeople(names) {
   return parseRelatedPeople(names.join(', ')).join(', ');
 }
 
+function normalizeManualPreference(value) {
+  const raw = String(value ?? '').trim();
+  if (raw === 'Droitier' || raw === 'Gaucher') {
+    return raw;
+  }
+  return 'Non renseigne';
+}
+
 function synchronizeBidirectionalRelatedPeople({
   targetPatientId,
   targetCurrentFullName,
@@ -2925,6 +2933,12 @@ function buildPatientUpdateChanges(beforeSnapshot, afterSnapshot) {
     postalCode: 'Code postal',
     city: 'Ville',
     country: 'Pays',
+    occupationOrSchool: 'Profession / Scolarite',
+    hobbies: 'Loisirs',
+    primaryDoctor: 'Medecin traitant',
+    socialSecurityNumber: 'Numero de securite sociale',
+    referredBy: 'Envoye par',
+    manualPreference: 'Preference manuelle',
     generalRemarks: 'Remarques generales',
     relatedPeople: 'Liens de parente',
     medicalHistory: 'Antecedents medicaux'
@@ -3054,6 +3068,12 @@ const createPatientSchema = z.object({
   postalCode: z.string().max(20).optional().default(''),
   city: z.string().max(100).optional().default(''),
   country: z.string().max(80).optional().default('France'),
+  occupationOrSchool: z.string().max(200).optional().default(''),
+  hobbies: z.string().max(500).optional().default(''),
+  primaryDoctor: z.string().max(160).optional().default(''),
+  socialSecurityNumber: z.string().max(32).optional().default(''),
+  referredBy: z.string().max(160).optional().default(''),
+  manualPreference: z.enum(['Non renseigne', 'Droitier', 'Gaucher']).optional().default('Non renseigne'),
   generalRemarks: z.string().max(5000).optional().default(''),
   relatedPeople: z.string().max(500).optional().default(''),
   isDeceased: z.boolean().optional().default(false),
@@ -3062,7 +3082,7 @@ const createPatientSchema = z.object({
 });
 
 const patientDraftSchema = z.object({
-  step: z.number().int().min(1).max(4),
+  step: z.number().int().min(1).max(5),
   payload: createPatientSchema
 });
 
@@ -3080,6 +3100,12 @@ const updatePatientSchema = z.object({
   postalCode: z.string().max(20).optional(),
   city: z.string().max(100).optional(),
   country: z.string().max(80).optional(),
+  occupationOrSchool: z.string().max(200).optional(),
+  hobbies: z.string().max(500).optional(),
+  primaryDoctor: z.string().max(160).optional(),
+  socialSecurityNumber: z.string().max(32).optional(),
+  referredBy: z.string().max(160).optional(),
+  manualPreference: z.enum(['Non renseigne', 'Droitier', 'Gaucher']).optional(),
   generalRemarks: z.string().max(5000).optional(),
   relatedPeople: z.string().max(500).optional(),
   medicalHistory: z.string().max(5000).optional()
@@ -4416,6 +4442,76 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
   });
 });
 
+app.get('/api/people/search', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+  const query = String(req.query.search ?? '').trim().toLowerCase();
+  if (query.length < 2) {
+    return res.json({ contacts: [] });
+  }
+
+  const rows = db
+    .prepare(
+      `SELECT id, username, role, first_name, last_name
+       FROM users
+       WHERE is_active = 1
+       ORDER BY lower(last_name) ASC, lower(first_name) ASC, lower(username) ASC`
+    )
+    .all();
+
+  const contacts = rows
+    .map((row) => {
+      const fullName = `${String(row.last_name ?? '').trim()} ${String(row.first_name ?? '').trim()}`.trim();
+      const label = fullName || String(row.username ?? '').trim();
+      return {
+        id: Number(row.id),
+        fullName: label,
+        role: String(row.role ?? '').trim()
+      };
+    })
+    .filter((contact) =>
+      contact.fullName.toLowerCase().includes(query)
+    )
+    .slice(0, 12);
+
+  return res.json({ contacts });
+});
+
+app.get('/api/patients/referrals', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+  const query = String(req.query.search ?? '').trim().toLowerCase();
+  const rows = db.prepare('SELECT cipher_medical_notes FROM patients WHERE is_deleted = 0').all();
+
+  const unique = new Set();
+  const referrals = [];
+
+  for (const row of rows) {
+    let notes = {};
+    try {
+      notes = JSON.parse(decryptSensitiveField(row.cipher_medical_notes)) ?? {};
+    } catch {
+      notes = {};
+    }
+
+    const candidate = String(notes.referredBy ?? '').trim();
+    if (!candidate) {
+      continue;
+    }
+
+    if (query && !candidate.toLowerCase().includes(query)) {
+      continue;
+    }
+
+    const key = candidate.toLowerCase();
+    if (unique.has(key)) {
+      continue;
+    }
+
+    unique.add(key);
+    referrals.push(candidate);
+  }
+
+  referrals.sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
+  return res.json({ referrals: referrals.slice(0, 20) });
+});
+
 app.post('/api/patients', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
   const parsed = createPatientSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -4449,6 +4545,12 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
     postalCode: payload.postalCode.trim(),
     city: payload.city.trim(),
     country: payload.country.trim() || 'France',
+    occupationOrSchool: payload.occupationOrSchool.trim(),
+    hobbies: payload.hobbies.trim(),
+    primaryDoctor: payload.primaryDoctor.trim(),
+    socialSecurityNumber: payload.socialSecurityNumber.trim(),
+    referredBy: payload.referredBy.trim(),
+    manualPreference: normalizeManualPreference(payload.manualPreference),
     isDeceased: Boolean(payload.isDeceased)
   };
 
@@ -4657,6 +4759,12 @@ app.get('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
       postalCode: notes.postalCode ?? '',
       city: notes.city ?? '',
       country: notes.country ?? 'France',
+      occupationOrSchool: notes.occupationOrSchool ?? '',
+      hobbies: notes.hobbies ?? '',
+      primaryDoctor: notes.primaryDoctor ?? '',
+      socialSecurityNumber: notes.socialSecurityNumber ?? '',
+      referredBy: notes.referredBy ?? '',
+      manualPreference: normalizeManualPreference(notes.manualPreference),
       generalRemarks: notes.generalRemarks ?? '',
       medicalHistory: notes.medicalHistory ?? '',
       relatedPeople: notes.relatedPeople ?? '',
@@ -4827,6 +4935,12 @@ app.put('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
     ...(data.postalCode !== undefined && { postalCode: data.postalCode.trim() }),
     ...(data.city !== undefined && { city: data.city.trim() }),
     ...(data.country !== undefined && { country: data.country.trim() }),
+    ...(data.occupationOrSchool !== undefined && { occupationOrSchool: data.occupationOrSchool.trim() }),
+    ...(data.hobbies !== undefined && { hobbies: data.hobbies.trim() }),
+    ...(data.primaryDoctor !== undefined && { primaryDoctor: data.primaryDoctor.trim() }),
+    ...(data.socialSecurityNumber !== undefined && { socialSecurityNumber: data.socialSecurityNumber.trim() }),
+    ...(data.referredBy !== undefined && { referredBy: data.referredBy.trim() }),
+    ...(data.manualPreference !== undefined && { manualPreference: normalizeManualPreference(data.manualPreference) }),
     ...(data.generalRemarks !== undefined && { generalRemarks: data.generalRemarks.trim() }),
     ...(data.relatedPeople !== undefined && { relatedPeople: formatRelatedPeople(parseRelatedPeople(data.relatedPeople)) }),
     ...(data.medicalHistory !== undefined && { medicalHistory: data.medicalHistory.trim() })
@@ -4844,6 +4958,12 @@ app.put('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
     postalCode: existingNotes.postalCode ?? '',
     city: existingNotes.city ?? '',
     country: existingNotes.country ?? '',
+    occupationOrSchool: existingNotes.occupationOrSchool ?? '',
+    hobbies: existingNotes.hobbies ?? '',
+    primaryDoctor: existingNotes.primaryDoctor ?? '',
+    socialSecurityNumber: existingNotes.socialSecurityNumber ?? '',
+    referredBy: existingNotes.referredBy ?? '',
+    manualPreference: normalizeManualPreference(existingNotes.manualPreference),
     generalRemarks: existingNotes.generalRemarks ?? '',
     relatedPeople: existingNotes.relatedPeople ?? '',
     medicalHistory: existingNotes.medicalHistory ?? ''
@@ -4877,6 +4997,12 @@ app.put('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
     postalCode: updatedNotes.postalCode ?? '',
     city: updatedNotes.city ?? '',
     country: updatedNotes.country ?? '',
+    occupationOrSchool: updatedNotes.occupationOrSchool ?? '',
+    hobbies: updatedNotes.hobbies ?? '',
+    primaryDoctor: updatedNotes.primaryDoctor ?? '',
+    socialSecurityNumber: updatedNotes.socialSecurityNumber ?? '',
+    referredBy: updatedNotes.referredBy ?? '',
+    manualPreference: normalizeManualPreference(updatedNotes.manualPreference),
     generalRemarks: updatedNotes.generalRemarks ?? '',
     relatedPeople: updatedNotes.relatedPeople ?? '',
     medicalHistory: updatedNotes.medicalHistory ?? ''

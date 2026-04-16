@@ -5,7 +5,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
-import { LocationPair, Patient, PatientDetail, Practitioner } from '../../core/api.types';
+import { LocationPair, Patient, PatientDetail, PeoplePickerContact, Practitioner } from '../../core/api.types';
 
 declare const $: any;
 
@@ -93,13 +93,14 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   private readonly treatmentsEditorRef = viewChild<ElementRef<HTMLDivElement>>('treatmentsEditor');
   private readonly remarksEditorRef = viewChild<ElementRef<HTMLDivElement>>('remarksEditor');
 
-  readonly currentStep = signal<1 | 2 | 3 | 4>(1);
+  readonly currentStep = signal<1 | 2 | 3 | 4 | 5>(1);
   readonly isSaving = signal(false);
   readonly errorMessage = signal('');
   readonly showRelatedPicker = signal(false);
   readonly relatedSearch = signal('');
   readonly relatedSearchResults = signal<Patient[]>([]);
   readonly selectedRelatedPatients = signal<Patient[]>([]);
+  readonly relatedContactCards = signal<ParentPrefillCandidate[]>([]);
   readonly isSearchingRelated = signal(false);
   readonly isParentPrefillModalOpen = signal(false);
   readonly parentPrefillCandidates = signal<ParentPrefillCandidate[]>([]);
@@ -121,6 +122,11 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   readonly draftSaveState = signal<DraftSaveState>('idle');
   readonly lastDraftSavedAt = signal<number | null>(null);
   readonly draftStatusNowTick = signal(Date.now());
+  readonly primaryDoctorSearch = signal('');
+  readonly primaryDoctorSuggestions = signal<PeoplePickerContact[]>([]);
+  readonly isSearchingPrimaryDoctor = signal(false);
+  readonly referredBySuggestions = signal<string[]>([]);
+  readonly isSearchingReferredBy = signal(false);
 
   readonly draftStatusText = computed(() => {
     this.draftStatusNowTick();
@@ -211,6 +217,10 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
 
   private relatedSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
   private relatedSearchRequestId = 0;
+  private primaryDoctorSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
+  private primaryDoctorSearchRequestId = 0;
+  private referredBySearchDebounceId: ReturnType<typeof setTimeout> | null = null;
+  private referredBySearchRequestId = 0;
   private antecedentIdSequence = 1;
   private autosaveTimer: ReturnType<typeof setInterval> | null = null;
   private draftStatusTimer: ReturnType<typeof setInterval> | null = null;
@@ -236,6 +246,12 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     postalCode: ['', [Validators.maxLength(20)]],
     city: ['', [Validators.maxLength(100)]],
     country: ['France', [Validators.maxLength(80)]],
+    occupationOrSchool: ['', [Validators.maxLength(200)]],
+    hobbies: ['', [Validators.maxLength(500)]],
+    primaryDoctor: ['', [Validators.maxLength(160)]],
+    socialSecurityNumber: ['', [Validators.maxLength(32)]],
+    referredBy: ['', [Validators.maxLength(160)]],
+    manualPreference: this.formBuilder.nonNullable.control<'Non renseigne' | 'Droitier' | 'Gaucher'>('Non renseigne'),
     generalRemarks: ['', [Validators.maxLength(5000)]],
     relatedPeople: ['', [Validators.maxLength(500)]],
     isDeceased: [false],
@@ -364,11 +380,23 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     this.relatedSearch.set('');
     this.relatedSearchResults.set([]);
     this.syncRelatedPeopleField();
+    void this.refreshRelatedContactCards();
   }
 
   removeRelatedPatient(patientId: number): void {
     this.selectedRelatedPatients.update((items) => items.filter((item) => item.id !== patientId));
     this.syncRelatedPeopleField();
+    void this.refreshRelatedContactCards();
+  }
+
+  async applyRelatedContactCard(candidateId: number): Promise<void> {
+    const candidate = this.relatedContactCards().find((item) => item.id === candidateId);
+    if (!candidate) {
+      return;
+    }
+
+    this.applyParentCandidateCoordinates(candidate, false);
+    await this.persistDraft();
   }
 
   closeParentPrefillModal(): void {
@@ -452,6 +480,67 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     const ageText = patient.age === null ? 'Age inconnu' : `${patient.age} ans`;
     const consultationText = `${patient.consultationCount} consultation${patient.consultationCount > 1 ? 's' : ''}`;
     return `${ageText} - ${consultationText}`;
+  }
+
+  formatCandidateAddress(candidate: ParentPrefillCandidate): string {
+    return [candidate.contacts.address1, candidate.contacts.postalCode, candidate.contacts.city]
+      .map((value) => String(value ?? '').trim())
+      .filter((value) => value.length > 0)
+      .join(' ');
+  }
+
+  onPrimaryDoctorSearchChange(value: string): void {
+    this.primaryDoctorSearch.set(value);
+    this.form.controls.primaryDoctor.setValue(value.trim());
+
+    if (this.primaryDoctorSearchDebounceId !== null) {
+      clearTimeout(this.primaryDoctorSearchDebounceId);
+      this.primaryDoctorSearchDebounceId = null;
+    }
+
+    const term = value.trim();
+    if (term.length < 2) {
+      this.primaryDoctorSuggestions.set([]);
+      this.isSearchingPrimaryDoctor.set(false);
+      return;
+    }
+
+    this.isSearchingPrimaryDoctor.set(true);
+    this.primaryDoctorSearchDebounceId = setTimeout(() => {
+      void this.searchPrimaryDoctorSuggestions(term);
+    }, 220);
+  }
+
+  applyPrimaryDoctorSuggestion(contact: PeoplePickerContact): void {
+    this.form.controls.primaryDoctor.setValue(contact.fullName);
+    this.primaryDoctorSearch.set(contact.fullName);
+    this.primaryDoctorSuggestions.set([]);
+  }
+
+  onReferredByInput(value: string): void {
+    this.form.controls.referredBy.setValue(value);
+
+    if (this.referredBySearchDebounceId !== null) {
+      clearTimeout(this.referredBySearchDebounceId);
+      this.referredBySearchDebounceId = null;
+    }
+
+    const term = value.trim();
+    if (term.length < 2) {
+      this.referredBySuggestions.set([]);
+      this.isSearchingReferredBy.set(false);
+      return;
+    }
+
+    this.isSearchingReferredBy.set(true);
+    this.referredBySearchDebounceId = setTimeout(() => {
+      void this.searchReferredBySuggestions(term);
+    }, 220);
+  }
+
+  applyReferredBySuggestion(value: string): void {
+    this.form.controls.referredBy.setValue(value);
+    this.referredBySuggestions.set([]);
   }
 
   openAntecedentModal(): void {
@@ -622,12 +711,14 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
         return;
       }
 
-      await this.prefillCoordinatesFromRelatedParentsIfNeeded();
       this.currentStep.set(2);
+      await this.refreshRelatedContactCards();
     } else if (this.currentStep() === 2) {
       this.currentStep.set(3);
     } else if (this.currentStep() === 3) {
       this.currentStep.set(4);
+    } else if (this.currentStep() === 4) {
+      this.currentStep.set(5);
     }
 
     await this.persistDraft();
@@ -637,6 +728,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     if (this.currentStep() === 2) this.currentStep.set(1);
     else if (this.currentStep() === 3) this.currentStep.set(2);
     else if (this.currentStep() === 4) this.currentStep.set(3);
+    else if (this.currentStep() === 5) this.currentStep.set(4);
 
     await this.persistDraft();
   }
@@ -660,7 +752,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
 
     this.autosaveTimer = setInterval(() => {
       const step = this.currentStep();
-      if (step === 3 || step === 4) {
+      if (step === 4 || step === 5) {
         void this.persistDraft();
       }
     }, 3 * 60 * 1000);
@@ -700,6 +792,16 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     if (this.autosaveTimer !== null) {
       clearInterval(this.autosaveTimer);
       this.autosaveTimer = null;
+    }
+
+    if (this.primaryDoctorSearchDebounceId !== null) {
+      clearTimeout(this.primaryDoctorSearchDebounceId);
+      this.primaryDoctorSearchDebounceId = null;
+    }
+
+    if (this.referredBySearchDebounceId !== null) {
+      clearTimeout(this.referredBySearchDebounceId);
+      this.referredBySearchDebounceId = null;
     }
 
     if (this.draftStatusTimer !== null) {
@@ -768,6 +870,62 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     } finally {
       if (requestId === this.relatedSearchRequestId) {
         this.isSearchingRelated.set(false);
+      }
+    }
+  }
+
+  private async refreshRelatedContactCards(): Promise<void> {
+    const related = this.selectedRelatedPatients();
+    if (related.length === 0) {
+      this.relatedContactCards.set([]);
+      return;
+    }
+
+    const candidates = await this.loadParentPrefillCandidates(related);
+    const cards = candidates.filter((candidate) =>
+      this.parentPrefillFields.some((field) => candidate.contacts[field].trim().length > 0)
+    );
+    this.relatedContactCards.set(cards);
+  }
+
+  private async searchPrimaryDoctorSuggestions(term: string): Promise<void> {
+    const requestId = ++this.primaryDoctorSearchRequestId;
+    try {
+      const contacts = await this.api.searchPeopleContacts(term);
+      if (requestId !== this.primaryDoctorSearchRequestId) {
+        return;
+      }
+
+      this.primaryDoctorSuggestions.set(contacts.slice(0, 8));
+    } catch {
+      if (requestId !== this.primaryDoctorSearchRequestId) {
+        return;
+      }
+      this.primaryDoctorSuggestions.set([]);
+    } finally {
+      if (requestId === this.primaryDoctorSearchRequestId) {
+        this.isSearchingPrimaryDoctor.set(false);
+      }
+    }
+  }
+
+  private async searchReferredBySuggestions(term: string): Promise<void> {
+    const requestId = ++this.referredBySearchRequestId;
+    try {
+      const referrals = await this.api.getPatientReferralSuggestions(term);
+      if (requestId !== this.referredBySearchRequestId) {
+        return;
+      }
+
+      this.referredBySuggestions.set(referrals.slice(0, 8));
+    } catch {
+      if (requestId !== this.referredBySearchRequestId) {
+        return;
+      }
+      this.referredBySuggestions.set([]);
+    } finally {
+      if (requestId === this.referredBySearchRequestId) {
+        this.isSearchingReferredBy.set(false);
       }
     }
   }
@@ -999,9 +1157,10 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
 
       loadedFromApi = true;
 
-      const safeStep = draft.step >= 1 && draft.step <= 4 ? draft.step : 1;
-      this.currentStep.set(safeStep as 1 | 2 | 3 | 4);
+      const safeStep = draft.step >= 1 && draft.step <= 5 ? draft.step : 1;
+      this.currentStep.set(safeStep as 1 | 2 | 3 | 4 | 5);
       this.form.patchValue({ ...draft.payload, isDeceased: false });
+      this.primaryDoctorSearch.set(String(draft.payload.primaryDoctor ?? ''));
       this.updateLocationSuggestions(
         String(draft.payload.postalCode ?? ''),
         String(draft.payload.city ?? '')
@@ -1160,11 +1319,12 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
         return;
       }
 
-      const safeStep = (parsed.step ?? 1) >= 1 && (parsed.step ?? 1) <= 4 ? (parsed.step as number) : 1;
+      const safeStep = (parsed.step ?? 1) >= 1 && (parsed.step ?? 1) <= 5 ? (parsed.step as number) : 1;
       const payload = parsed.payload as typeof this.form.value;
 
-      this.currentStep.set(safeStep as 1 | 2 | 3 | 4);
+      this.currentStep.set(safeStep as 1 | 2 | 3 | 4 | 5);
       this.form.patchValue({ ...payload, isDeceased: false });
+      this.primaryDoctorSearch.set(String(payload.primaryDoctor ?? ''));
       this.updateLocationSuggestions(String(payload.postalCode ?? ''), String(payload.city ?? ''));
 
       const birthDate = String(payload.birthDate ?? '').trim();

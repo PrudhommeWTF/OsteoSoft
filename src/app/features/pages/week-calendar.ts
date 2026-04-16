@@ -67,7 +67,7 @@ export class WeekCalendar {
   readonly selectedCalendars = input<LocalAgendaCalendar[]>([]);
   readonly visibleEventsChange = output<DashboardEvent[]>();
 
-  readonly viewMode = signal<'month' | 'week' | 'day'>('week');
+  readonly viewMode = signal<'month' | 'week' | 'three-days' | 'day'>('week');
   readonly referenceDate = signal<Date>(new Date());
   readonly selectedEvent = signal<DashboardEvent | null>(null);
   readonly selectedEventColor = signal<string>('#4d92d1');
@@ -231,7 +231,7 @@ export class WeekCalendar {
     if (this.viewMode() === 'month') {
       d.setMonth(d.getMonth() - 1);
     } else {
-      d.setDate(d.getDate() - (this.viewMode() === 'day' ? 1 : 7));
+      d.setDate(d.getDate() - (this.viewMode() === 'day' ? 1 : this.viewMode() === 'three-days' ? 3 : 7));
     }
     this.referenceDate.set(d);
   }
@@ -241,7 +241,7 @@ export class WeekCalendar {
     if (this.viewMode() === 'month') {
       d.setMonth(d.getMonth() + 1);
     } else {
-      d.setDate(d.getDate() + (this.viewMode() === 'day' ? 1 : 7));
+      d.setDate(d.getDate() + (this.viewMode() === 'day' ? 1 : this.viewMode() === 'three-days' ? 3 : 7));
     }
     this.referenceDate.set(d);
   }
@@ -404,13 +404,21 @@ export class WeekCalendar {
     }).format(d);
   }
 
-  private buildVisibleDays(ref: Date, mode: 'month' | 'week' | 'day', s: AgendaSettings, todayStr: string): CalendarDay[] {
+  private buildVisibleDays(ref: Date, mode: 'month' | 'week' | 'three-days' | 'day', s: AgendaSettings, todayStr: string): CalendarDay[] {
     if (mode === 'month') {
       return [];
     }
 
     if (mode === 'day') {
       return [this.buildDay(ref, todayStr)];
+    }
+
+    if (mode === 'three-days') {
+      return Array.from({ length: 3 }, (_, i) => {
+        const d = new Date(ref);
+        d.setDate(ref.getDate() + i);
+        return this.buildDay(d, todayStr);
+      }).filter((day) => s.showWeekend || ![0, 6].includes(day.date.getDay()));
     }
 
     const dow = ref.getDay();
@@ -443,51 +451,104 @@ export class WeekCalendar {
     const startMin = (s.dayStartHour ?? 8) * 60;
     const totalMin = ((s.dayEndHour ?? 20) - (s.dayStartHour ?? 8)) * 60;
     const slotH = s.displayHeight;
-    const calCount = selectedCals.length;
 
-    return events
+    const dayEvents = events
       .filter((e) => e.start.startsWith(day.dateStr))
-      .map((e) => {
-        const d = new Date(e.start);
-        const evMin = d.getHours() * 60 + d.getMinutes();
-        const clampedStart = Math.max(evMin, startMin);
-        const top = ((clampedStart - startMin) / totalMin) * totalHeight;
-        const height = Math.max((s.defaultSessionDurationMinutes / totalMin) * totalHeight, slotH);
+      .map((event) => {
+        const startDate = new Date(event.start);
+        const startMinutes = startDate.getHours() * 60 + startDate.getMinutes();
+        const endMinutes = startMinutes + Math.max(5, s.defaultSessionDurationMinutes);
+        return { event, startDate, startMinutes, endMinutes };
+      })
+      .sort((a, b) => (a.startMinutes - b.startMinutes) || (a.endMinutes - b.endMinutes));
 
-        const { borderColor, bgColor } = this.resolveEventColors(e, s, selectedCals);
-        const sexIconClass = s.showPatientSex ? this.getSexIcon(e.patientSex) : null;
-        const sexColorClass = s.showPatientSex ? this.getSexColorClass(e.patientSex) : null;
-        const patientColorClass = this.getSexColorClass(e.patientSex);
+    const layout = new Map<number, { column: number; columnsCount: number }>();
+    let cluster: Array<{ id: number; startMinutes: number; endMinutes: number }> = [];
+    let clusterEnd = -1;
 
-        const timeLabel = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    const flushCluster = (): void => {
+      if (cluster.length === 0) {
+        return;
+      }
 
-        let leftStyle: string;
-        let widthStyle: string;
-        if (calCount > 1) {
-          const calIdx = Math.max(0, selectedCals.findIndex((c) => c.id === e.calendarId));
-          leftStyle = `calc(${(calIdx * 100) / calCount}% + 2px)`;
-          widthStyle = `calc(${100 / calCount}% - 4px)`;
+      const sorted = [...cluster].sort((a, b) => (a.startMinutes - b.startMinutes) || (a.endMinutes - b.endMinutes));
+      const columnEndMinutes: number[] = [];
+      const assigned: Array<{ id: number; column: number }> = [];
+      let maxColumns = 1;
+
+      for (const item of sorted) {
+        let column = columnEndMinutes.findIndex((endValue) => item.startMinutes >= endValue);
+        if (column < 0) {
+          column = columnEndMinutes.length;
+          columnEndMinutes.push(item.endMinutes);
         } else {
-          leftStyle = '3px';
-          widthStyle = 'calc(100% - 6px)';
+          columnEndMinutes[column] = item.endMinutes;
         }
 
-        return {
-          event: e,
-          top,
-          height,
-          borderColor,
-          bgColor,
-          title: this.buildTitle(e),
-          timeLabel,
-          patientLabel: e.patient,
-          patientColorClass,
-          sexIconClass,
-          sexColorClass,
-          leftStyle,
-          widthStyle
-        };
-      });
+        maxColumns = Math.max(maxColumns, column + 1);
+        assigned.push({ id: item.id, column });
+      }
+
+      for (const item of assigned) {
+        layout.set(item.id, { column: item.column, columnsCount: maxColumns });
+      }
+
+      cluster = [];
+      clusterEnd = -1;
+    };
+
+    for (const item of dayEvents) {
+      if (cluster.length === 0) {
+        cluster.push({ id: item.event.id, startMinutes: item.startMinutes, endMinutes: item.endMinutes });
+        clusterEnd = item.endMinutes;
+        continue;
+      }
+
+      if (item.startMinutes < clusterEnd) {
+        cluster.push({ id: item.event.id, startMinutes: item.startMinutes, endMinutes: item.endMinutes });
+        clusterEnd = Math.max(clusterEnd, item.endMinutes);
+      } else {
+        flushCluster();
+        cluster.push({ id: item.event.id, startMinutes: item.startMinutes, endMinutes: item.endMinutes });
+        clusterEnd = item.endMinutes;
+      }
+    }
+
+    flushCluster();
+
+    return dayEvents.map(({ event, startDate, startMinutes, endMinutes }) => {
+      const clampedStart = Math.max(startMinutes, startMin);
+      const clampedEnd = Math.min(endMinutes, startMin + totalMin);
+      const top = ((clampedStart - startMin) / totalMin) * totalHeight;
+      const eventDurationMinutes = Math.max(5, clampedEnd - clampedStart);
+      const height = Math.max((eventDurationMinutes / totalMin) * totalHeight, slotH);
+
+      const { borderColor, bgColor } = this.resolveEventColors(event, s, selectedCals);
+      const sexIconClass = s.showPatientSex ? this.getSexIcon(event.patientSex) : null;
+      const sexColorClass = s.showPatientSex ? this.getSexColorClass(event.patientSex) : null;
+      const patientColorClass = this.getSexColorClass(event.patientSex);
+
+      const timeLabel = `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`;
+      const position = layout.get(event.id) ?? { column: 0, columnsCount: 1 };
+      const leftPct = (position.column * 100) / position.columnsCount;
+      const widthPct = 100 / position.columnsCount;
+
+      return {
+        event,
+        top,
+        height,
+        borderColor,
+        bgColor,
+        title: this.buildTitle(event),
+        timeLabel,
+        patientLabel: event.patient,
+        patientColorClass,
+        sexIconClass,
+        sexColorClass,
+        leftStyle: `calc(${leftPct}% + 2px)`,
+        widthStyle: `calc(${widthPct}% - 4px)`
+      };
+    });
   }
 
   private buildMonthEvents(day: CalendarDay, events: DashboardEvent[], s: AgendaSettings): MonthEventChip[] {

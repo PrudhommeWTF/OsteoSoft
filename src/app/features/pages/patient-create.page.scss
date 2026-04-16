@@ -201,6 +201,64 @@
   }
 }
 
+.related-contact-prefill {
+  padding: 0.85rem;
+  border: 1px solid #d8e3eb;
+  border-radius: 0.75rem;
+  background: linear-gradient(180deg, #fcfdff 0%, #f6f9fc 100%);
+}
+
+.contact-prefill-card {
+  width: 100%;
+  border: 1px solid #d0dde8;
+  border-radius: 0.75rem;
+  padding: 0.7rem;
+  background: #fff;
+  text-align: left;
+  display: grid;
+  gap: 0.4rem;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.contact-prefill-card:hover,
+.contact-prefill-card:focus-visible {
+  border-color: #6a9fc4;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgb(57 87 111 / 12%);
+  outline: none;
+}
+
+.contact-prefill-card-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #1f3f56;
+}
+
+.contact-prefill-card-lines {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.83rem;
+  color: #455e70;
+}
+
+.contact-prefill-card-lines span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.contact-prefill-card-cta {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #2f7cb8;
+}
+
+.suggestion-list {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
 .autocomplete-list {
   position: absolute;
   top: calc(100% + 0.2rem);

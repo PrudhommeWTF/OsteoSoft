@@ -17,12 +17,21 @@
     </div>
     <div class="progress-connector" [class.done]="currentStep() > 2"></div>
     <div class="progress-step" [class.active]="currentStep() >= 3" [class.done]="currentStep() > 3">
-      <div class="step-circle">3</div>
-      <span class="step-label">Antecedents</span>
+      <div class="step-circle">
+        @if (currentStep() > 3) { <i class="fa-solid fa-check"></i> } @else { 3 }
+      </div>
+      <span class="step-label">Autres infos</span>
     </div>
     <div class="progress-connector" [class.done]="currentStep() > 3"></div>
-    <div class="progress-step" [class.active]="currentStep() >= 4">
-      <div class="step-circle">4</div>
+    <div class="progress-step" [class.active]="currentStep() >= 4" [class.done]="currentStep() > 4">
+      <div class="step-circle">
+        @if (currentStep() > 4) { <i class="fa-solid fa-check"></i> } @else { 4 }
+      </div>
+      <span class="step-label">Antecedents</span>
+    </div>
+    <div class="progress-connector" [class.done]="currentStep() > 4"></div>
+    <div class="progress-step" [class.active]="currentStep() >= 5">
+      <div class="step-circle">5</div>
       <span class="step-label">Consultation</span>
     </div>
   </div>
@@ -183,6 +192,43 @@
       </div>
       <div class="wizard-card-body">
 
+        @if (relatedContactCards().length > 0) {
+          <div class="related-contact-prefill mb-3">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+              <label class="form-label fw-semibold mb-0">Coordonnees disponibles via les patients lies</label>
+              <span class="small text-muted">Cliquez sur une carte pour utiliser ses coordonnees</span>
+            </div>
+
+            <div class="row g-2">
+              @for (candidate of relatedContactCards(); track candidate.id) {
+                <div class="col-12 col-lg-6">
+                  <button type="button" class="contact-prefill-card" (click)="applyRelatedContactCard(candidate.id)">
+                    <span class="contact-prefill-card-head">
+                      <i class="fa-solid fa-address-card"></i>
+                      <strong>{{ candidate.fullName }}</strong>
+                    </span>
+                    <span class="contact-prefill-card-lines">
+                      @if (candidate.contacts.mobilePhone) {
+                        <span><i class="fa-solid fa-mobile-screen-button"></i>{{ candidate.contacts.mobilePhone }}</span>
+                      }
+                      @if (candidate.contacts.email) {
+                        <span><i class="fa-solid fa-envelope"></i>{{ candidate.contacts.email }}</span>
+                      }
+                      @if (candidate.contacts.address1 || candidate.contacts.city || candidate.contacts.postalCode) {
+                        <span>
+                          <i class="fa-solid fa-location-dot"></i>
+                          {{ formatCandidateAddress(candidate) }}
+                        </span>
+                      }
+                    </span>
+                    <span class="contact-prefill-card-cta">Utiliser cette carte</span>
+                  </button>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
         <div class="row g-3 mb-3">
           <div class="col-6">
             <label class="form-label" for="mobilePhone">Telephone portable</label>
@@ -281,8 +327,129 @@
       </div>
     </div>
 
-    <!-- ── ETAPE 3 : Antecedents ─────────────────────────── -->
+    <!-- ── ETAPE 3 : Autres informations ─────────────────── -->
     <div [hidden]="currentStep() !== 3" class="wizard-card">
+      <div class="wizard-card-header">
+        <h2>Autres informations <span class="badge bg-secondary fw-normal fs-6 ms-2">Optionnel</span></h2>
+        <p class="step-subtitle mb-0">Informations administratives et contexte patient pour le suivi et les statistiques.</p>
+      </div>
+      <div class="wizard-card-body">
+        <div class="row g-3 mb-3">
+          <div class="col-12 col-lg-6">
+            <label class="form-label" for="occupationOrSchool">Profession / Scolarite</label>
+            <input id="occupationOrSchool" class="form-control" type="text" formControlName="occupationOrSchool" />
+          </div>
+          <div class="col-12 col-lg-6">
+            <label class="form-label" for="manualPreference">Preference manuelle</label>
+            <select id="manualPreference" class="form-select" formControlName="manualPreference">
+              <option value="Non renseigne">Non renseigne</option>
+              <option value="Droitier">Droitier</option>
+              <option value="Gaucher">Gaucher</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" for="hobbies">Loisirs</label>
+          <textarea id="hobbies" rows="2" class="form-control" formControlName="hobbies" placeholder="Ex: course a pied, danse, natation..."></textarea>
+        </div>
+
+        <div class="mb-3 position-relative">
+          <label class="form-label" for="primaryDoctorSearch">Medecin traitant</label>
+          <input
+            id="primaryDoctorSearch"
+            type="search"
+            class="form-control"
+            placeholder="Rechercher une personne par nom..."
+            [value]="primaryDoctorSearch()"
+            (input)="onPrimaryDoctorSearchChange($any($event.target).value)"
+            (blur)="primaryDoctorSuggestions.set([])" />
+
+          @if (isSearchingPrimaryDoctor()) {
+            <div class="small text-muted mt-1">Recherche en cours...</div>
+          }
+
+          @if (primaryDoctorSuggestions().length > 0) {
+            <div class="list-group mt-2 suggestion-list">
+              @for (contact of primaryDoctorSuggestions(); track contact.id) {
+                <button
+                  type="button"
+                  class="list-group-item list-group-item-action"
+                  (mousedown)="$event.preventDefault()"
+                  (click)="applyPrimaryDoctorSuggestion(contact)">
+                  <strong>{{ contact.fullName }}</strong>
+                  <span class="small text-muted ms-2">{{ contact.role }}</span>
+                </button>
+              }
+            </div>
+          }
+
+          <input type="hidden" formControlName="primaryDoctor" />
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-12 col-lg-6">
+            <label class="form-label" for="socialSecurityNumber">Numero de securite sociale</label>
+            <input
+              id="socialSecurityNumber"
+              class="form-control"
+              type="text"
+              autocomplete="off"
+              inputmode="numeric"
+              formControlName="socialSecurityNumber"
+              placeholder="1 85 01 99 999 999 99" />
+            <div class="form-text">Stocke de maniere chiffree dans la fiche patient.</div>
+          </div>
+
+          <div class="col-12 col-lg-6 position-relative">
+            <label class="form-label" for="referredBy">Envoye par</label>
+            <input
+              id="referredBy"
+              class="form-control"
+              type="text"
+              formControlName="referredBy"
+              placeholder="Ex: Medecin traitant, bouche-a-oreille..."
+              (input)="onReferredByInput($any($event.target).value)"
+              (blur)="referredBySuggestions.set([])" />
+
+            @if (isSearchingReferredBy()) {
+              <div class="small text-muted mt-1">Recherche des referals existants...</div>
+            }
+
+            @if (referredBySuggestions().length > 0) {
+              <div class="list-group mt-2 suggestion-list">
+                @for (item of referredBySuggestions(); track item) {
+                  <button
+                    type="button"
+                    class="list-group-item list-group-item-action"
+                    (mousedown)="$event.preventDefault()"
+                    (click)="applyReferredBySuggestion(item)">
+                    {{ item }}
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+      <div class="draft-indicator px-4 py-2 border-top" [class.saving]="draftSaveState() === 'saving'" [class.error]="draftSaveState() === 'error'">
+        <i class="fa-solid fa-floppy-disk me-1"></i>{{ draftStatusText() }}
+      </div>
+      <div class="wizard-actions">
+        <button class="btn btn-outline-secondary" type="button" (click)="goPrev()">
+          <i class="fa-solid fa-arrow-left me-1"></i> Retour
+        </button>
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-primary" type="button" (click)="goNext()">Passer cette etape</button>
+          <button class="btn btn-primary px-4" type="button" (click)="goNext()">
+            Suivant <i class="fa-solid fa-arrow-right ms-1"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ETAPE 4 : Antecedents ─────────────────────────── -->
+    <div [hidden]="currentStep() !== 4" class="wizard-card">
       <div class="wizard-card-header">
         <h2>Antecedents <span class="badge bg-secondary fw-normal fs-6 ms-2">Optionnel</span></h2>
         <p class="step-subtitle mb-0">Renseignez l'historique clinique du patient.</p>
@@ -477,8 +644,8 @@
       </div>
     }
 
-    <!-- ── ETAPE 4 : Consultation ─────────────────────────── -->
-    <div [hidden]="currentStep() !== 4" class="wizard-card">
+    <!-- ── ETAPE 5 : Consultation ─────────────────────────── -->
+    <div [hidden]="currentStep() !== 5" class="wizard-card">
       <div class="wizard-card-header">
         <h2>Premiere consultation <span class="badge bg-secondary fw-normal fs-6 ms-2">Optionnel</span></h2>
         <p class="step-subtitle mb-0">Consultation du {{ consultationStartedAtLabel() }}.</p>

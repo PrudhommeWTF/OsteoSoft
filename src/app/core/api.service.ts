@@ -32,6 +32,7 @@ import {
   Practitioner,
   PractitionersPayload,
   Patient,
+  PeoplePickerContact,
   UserAccountPayload,
   SystemAuditLog,
   UpdateAppointmentConsultationMetaPayload,
@@ -91,6 +92,24 @@ export class ApiService {
     );
 
     return response.patients;
+  }
+
+  async searchPeopleContacts(search: string): Promise<PeoplePickerContact[]> {
+    const params = new HttpParams().set('search', search);
+    const response = await firstValueFrom(
+      this.http.get<{ contacts: PeoplePickerContact[] }>(`${this.baseUrl}/people/search`, { params })
+    );
+
+    return response.contacts;
+  }
+
+  async getPatientReferralSuggestions(search: string): Promise<string[]> {
+    const params = new HttpParams().set('search', search);
+    const response = await firstValueFrom(
+      this.http.get<{ referrals: string[] }>(`${this.baseUrl}/patients/referrals`, { params })
+    );
+
+    return response.referrals;
   }
 
   async getPatientLocations(): Promise<LocationPair[]> {

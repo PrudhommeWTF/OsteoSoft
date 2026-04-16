@@ -154,11 +154,23 @@ export type CreatePatientPayload = {
   postalCode: string;
   city: string;
   country: string;
+  occupationOrSchool: string;
+  hobbies: string;
+  primaryDoctor: string;
+  socialSecurityNumber: string;
+  referredBy: string;
+  manualPreference: 'Non renseigne' | 'Droitier' | 'Gaucher';
   generalRemarks: string;
   relatedPeople: string;
   isDeceased: boolean;
   medicalHistory: string;
   consultationNote: string;
+};
+
+export type PeoplePickerContact = {
+  id: number;
+  fullName: string;
+  role: string;
 };
 
 export type CreatedPatient = {
@@ -330,6 +342,12 @@ export type PatientDetail = {
   postalCode: string;
   city: string;
   country: string;
+  occupationOrSchool: string;
+  hobbies: string;
+  primaryDoctor: string;
+  socialSecurityNumber: string;
+  referredBy: string;
+  manualPreference: 'Non renseigne' | 'Droitier' | 'Gaucher';
   generalRemarks: string;
   medicalHistory: string;
   relatedPeople: string;
@@ -420,6 +438,12 @@ export type UpdatePatientPayload = {
   postalCode?: string;
   city?: string;
   country?: string;
+  occupationOrSchool?: string;
+  hobbies?: string;
+  primaryDoctor?: string;
+  socialSecurityNumber?: string;
+  referredBy?: string;
+  manualPreference?: 'Non renseigne' | 'Droitier' | 'Gaucher';
   generalRemarks?: string;
   relatedPeople?: string;
   medicalHistory?: string;

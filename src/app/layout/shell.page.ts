@@ -64,7 +64,7 @@ export class ShellPage implements OnInit, OnDestroy {
   readonly navItems = signal<NavItem[]>([
     { path: '/accueil', label: 'Accueil', icon: 'fa-solid fa-house', exact: true, requiredPermission: 'read-dashboard' },
     { path: '/patients/nouveau', label: 'Nouveau patient', icon: 'fa-solid fa-user-plus', exact: true, requiredPermission: 'create-patient-record' },
-    { path: '/agenda', label: 'Agenda', icon: 'fa-solid fa-calendar-days', badge: '9', exact: true, requiredPermission: 'read-agenda' },
+    { path: '/agenda', label: 'Agenda', icon: 'fa-solid fa-calendar-days', exact: true, requiredPermission: 'read-agenda' },
     { path: '/patients', label: 'Listing patients', icon: 'fa-solid fa-list-ul', badge: '...', exact: true, requiredPermission: 'read-patient-list' },
     { label: 'Repertoire', icon: 'fa-solid fa-address-book', badge: '5', disabled: true, requiredPermission: 'read-directory' },
     { path: '/facturation', label: 'Comptabilite', icon: 'fa-solid fa-file-invoice-dollar', badge: '414', requiredPermission: 'read-billing-kpis' },
@@ -104,6 +104,35 @@ export class ShellPage implements OnInit, OnDestroy {
         items.map((item) =>
           item.label === 'Listing patients' ? { ...item, badge: '?' } : item
         )
+      );
+    });
+
+    this.api.getAppointments().then((payload) => {
+      const value = Number(payload?.stats?.consultationsToday ?? 0);
+      this.navItems.update((items) =>
+        items.map((item) => {
+          if (item.label !== 'Agenda') {
+            return item;
+          }
+
+          if (value > 0) {
+            return { ...item, badge: String(value) };
+          }
+
+          const { badge: _badge, ...withoutBadge } = item;
+          return withoutBadge;
+        })
+      );
+    }).catch(() => {
+      this.navItems.update((items) =>
+        items.map((item) => {
+          if (item.label !== 'Agenda') {
+            return item;
+          }
+
+          const { badge: _badge, ...withoutBadge } = item;
+          return withoutBadge;
+        })
       );
     });
   }
