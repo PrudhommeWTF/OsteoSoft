@@ -1999,6 +1999,8 @@ async function ensureSeedData() {
   ensureColumn('users', 'visible_calendars', "visible_calendars TEXT NOT NULL DEFAULT 'Tous les calendriers'");
   ensureColumn('users', 'default_service', "default_service TEXT NOT NULL DEFAULT 'Aucune prestation'");
   ensureColumn('users', 'invoice_mentions', "invoice_mentions TEXT NOT NULL DEFAULT ''");
+  ensureColumn('users', 'include_free_consultations', 'include_free_consultations INTEGER NOT NULL DEFAULT 1');
+  ensureColumn('users', 'show_consultation_hour', 'show_consultation_hour INTEGER NOT NULL DEFAULT 1');
   ensureColumn('appointments', 'local_calendar_id', 'local_calendar_id INTEGER');
   ensureColumn('appointments', 'consultation_id', 'consultation_id INTEGER');
   ensureColumn('local_calendars', 'description', "description TEXT NOT NULL DEFAULT ''");
