@@ -24,10 +24,7 @@ type SettingsSectionId =
   | 'audit-logs'
   | 'user-management'
   | 'roles-and-access'
-  | 'offices'
-  | 'consultation-reasons-and-patient-profiles'
-  | 'medical-history'
-  | 'patient-letters';
+  | 'offices';
 
 type SettingsSection = {
   id: SettingsSectionId;
@@ -75,7 +72,13 @@ type EditableLocalCalendar = LocalAgendaCalendar & {
   tempKey: string;
 };
 
-type OfficeModalTabId = 'general' | 'opening-hours' | 'agendas';
+type OfficeModalTabId =
+  | 'general'
+  | 'opening-hours'
+  | 'agendas'
+  | 'consultation-reasons'
+  | 'medical-history'
+  | 'patient-letters';
 
 @Component({
   selector: 'app-settings-page',
@@ -319,6 +322,7 @@ export class SettingsPage {
   readonly isOfficeModalOpen = signal(false);
   readonly editingOfficeId = signal<number | null>(null);
   readonly officeModalTab = signal<OfficeModalTabId>('general');
+  readonly officeConfigTargetId = signal<number | null>(null);
   readonly officeOpeningHoursDraft = signal<OfficeOpeningHours>(this.createDefaultOfficeOpeningHours());
   readonly serviceTypes = signal<EditableServiceType[]>([]);
   readonly paymentMethods = signal<EditablePaymentMethod[]>([]);
@@ -445,42 +449,6 @@ export class SettingsPage {
         'Liste des cabinets',
         'Coordonnées et contacts',
         'Logo et identité visuelle'
-      ]
-    },
-    {
-      id: 'consultation-reasons-and-patient-profiles',
-      label: 'Motifs de consultation et profils patients',
-      icon: 'fa-solid fa-notes-medical',
-      summary: 'Référentiels utilisés dans la création de dossier et les consultations.',
-      description: 'Maintenez ici les listes fonctionnelles utilisées par les praticiens au quotidien.',
-      items: [
-        'Motifs de consultation récurrents',
-        'Profils patients disponibles',
-        'Ordre et libellés métier'
-      ]
-    },
-    {
-      id: 'medical-history',
-      label: 'Antécédents médicaux',
-      icon: 'fa-solid fa-heart-pulse',
-      summary: 'Référentiel des familles et types d’antécédents médicaux.',
-      description: 'Cette zone servira à gérer les catégories proposées dans le dossier patient.',
-      items: [
-        'Types d’antécédents disponibles',
-        'Libellés métier normalisés',
-        'Ordre d’affichage dans les formulaires'
-      ]
-    },
-    {
-      id: 'patient-letters',
-      label: 'Lettres types aux patients',
-      icon: 'fa-solid fa-envelope-open-text',
-      summary: 'Modèles de lettres, notifications et documents standardisés à destination des patients.',
-      description: 'Préparez vos futurs modèles réutilisables pour gagner du temps sur la correspondance.',
-      items: [
-        'Bibliothèque de modèles',
-        'Variables dynamiques insérables',
-        'Versions et archivage des modèles'
       ]
     },
     {
@@ -2111,6 +2079,23 @@ export class SettingsPage {
     }
 
     this.isOfficeModalOpen.set(true);
+  }
+
+  setOfficeConfigTarget(value: string): void {
+    const parsed = Number(value);
+    this.officeConfigTargetId.set(Number.isInteger(parsed) && parsed > 0 ? parsed : null);
+  }
+
+  openMovedOfficeConfiguration(tabId: 'consultation-reasons' | 'medical-history' | 'patient-letters'): void {
+    const targetOfficeId = this.officeConfigTargetId() ?? this.offices()[0]?.id ?? null;
+
+    if (!targetOfficeId) {
+      this.officesError.set('Aucun cabinet disponible. Ajoutez d\'abord un cabinet.');
+      return;
+    }
+
+    this.openOfficeModal(targetOfficeId);
+    this.selectOfficeModalTab(tabId);
   }
 
   closeOfficeModal(): void {

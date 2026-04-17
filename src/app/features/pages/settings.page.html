@@ -871,7 +871,6 @@
                 <i class="fa-solid fa-plus me-1"></i>Ajouter un cabinet
               </button>
             </div>
-
             @if (officesError()) {
               <div class="alert alert-danger mb-3">{{ officesError() }}</div>
             }
@@ -984,6 +983,42 @@
                         (click)="selectOfficeModalTab('agendas')"
                       >
                         Agendas
+                      </button>
+                      <button
+                        type="button"
+                        class="nav-link"
+                        [class.active]="officeModalTab() === 'consultation-reasons'"
+                        role="tab"
+                        [attr.aria-selected]="officeModalTab() === 'consultation-reasons'"
+                        [attr.aria-controls]="'office-tab-consultation-reasons'"
+                        [disabled]="!editingOfficeId()"
+                        (click)="selectOfficeModalTab('consultation-reasons')"
+                      >
+                        Motifs & profils patients
+                      </button>
+                      <button
+                        type="button"
+                        class="nav-link"
+                        [class.active]="officeModalTab() === 'medical-history'"
+                        role="tab"
+                        [attr.aria-selected]="officeModalTab() === 'medical-history'"
+                        [attr.aria-controls]="'office-tab-medical-history'"
+                        [disabled]="!editingOfficeId()"
+                        (click)="selectOfficeModalTab('medical-history')"
+                      >
+                        Antécédents médicaux
+                      </button>
+                      <button
+                        type="button"
+                        class="nav-link"
+                        [class.active]="officeModalTab() === 'patient-letters'"
+                        role="tab"
+                        [attr.aria-selected]="officeModalTab() === 'patient-letters'"
+                        [attr.aria-controls]="'office-tab-patient-letters'"
+                        [disabled]="!editingOfficeId()"
+                        (click)="selectOfficeModalTab('patient-letters')"
+                      >
+                        Lettres types patients
                       </button>
                     </div>
                   </div>
@@ -1367,7 +1402,7 @@
                         <small class="text-secondary">Format: PNG, JPG, GIF (max 2MB)</small>
                         </div>
                         </div>
-                      } @else {
+                      } @else if (officeModalTab() === 'agendas') {
                         <div id="office-tab-agendas" role="tabpanel">
                           @if (!editingOfficeId()) {
                             <div class="alert alert-info mb-0">
@@ -1416,6 +1451,36 @@
                               </div>
                             }
                           }
+                        </div>
+                      } @else if (officeModalTab() === 'consultation-reasons') {
+                        <div id="office-tab-consultation-reasons" role="tabpanel">
+                          <article class="settings-card mb-0">
+                            <p class="settings-card-status mb-2">Cabinet</p>
+                            <h6 class="settings-card-title mb-2">Motifs de consultation et profils patients</h6>
+                            <p class="settings-card-copy mb-0">
+                              Cette configuration est désormais rattachée au cabinet. Les règles métier de cette section s'appliqueront aux praticiens de ce cabinet.
+                            </p>
+                          </article>
+                        </div>
+                      } @else if (officeModalTab() === 'medical-history') {
+                        <div id="office-tab-medical-history" role="tabpanel">
+                          <article class="settings-card mb-0">
+                            <p class="settings-card-status mb-2">Cabinet</p>
+                            <h6 class="settings-card-title mb-2">Antécédents médicaux</h6>
+                            <p class="settings-card-copy mb-0">
+                              Cette configuration est désormais rattachée au cabinet. Les catégories d'antécédents seront gérées au niveau du cabinet.
+                            </p>
+                          </article>
+                        </div>
+                      } @else if (officeModalTab() === 'patient-letters') {
+                        <div id="office-tab-patient-letters" role="tabpanel">
+                          <article class="settings-card mb-0">
+                            <p class="settings-card-status mb-2">Cabinet</p>
+                            <h6 class="settings-card-title mb-2">Lettres types aux patients</h6>
+                            <p class="settings-card-copy mb-0">
+                              Cette configuration est désormais rattachée au cabinet. Les modèles de lettres seront gérés par cabinet.
+                            </p>
+                          </article>
                         </div>
                       }
                     </div>
