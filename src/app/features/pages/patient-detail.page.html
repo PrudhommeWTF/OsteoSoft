@@ -590,12 +590,10 @@
                     <input id="consultation-weight" type="number" class="form-control" formControlName="weightKg" min="0" step="0.1" />
                   </div>
 
-                  @if (activeConsultation(); as consultation) {
-                    <div class="mb-3">
-                      <label class="form-label">IMC</label>
-                      <div class="consultation-kpi">{{ consultationBmi(consultation) || '-' }}</div>
-                    </div>
-                  }
+                  <div class="mb-3">
+                    <label class="form-label">IMC</label>
+                    <div class="consultation-kpi">{{ consultationFormBmi() || '-' }}</div>
+                  </div>
 
                   <div class="mb-3">
                     <label class="form-label" for="consultation-profile">Profil</label>
@@ -799,6 +797,9 @@
                     multiple
                     (change)="onConsultationDocumentFileSelected($event)" />
                   <p class="text-muted small mb-0 mt-2">Les documents sont chiffrés et liés au patient/à la consultation.</p>
+                  @if (isUploadingConsultationDocuments()) {
+                    <p class="small text-muted mt-2 mb-0">Téléversement en cours...</p>
+                  }
                 </div>
               </div>
 
@@ -849,20 +850,31 @@
                 </div>
               }
             } @else {
-              <div class="mb-3 d-flex flex-wrap gap-2 align-items-center">
-                <label class="btn btn-outline-primary btn-sm mb-0" for="consultation-document-upload-input">
-                  <i class="fa-solid fa-upload me-1"></i>Ajouter des documents
-                </label>
-                <input
-                  id="consultation-document-upload-input"
-                  type="file"
-                  class="d-none"
-                  multiple
-                  (change)="onConsultationDocumentFileSelected($event)"
-                />
-                @if (isUploadingConsultationDocuments()) {
-                  <span class="small text-muted">Téléversement en cours...</span>
-                }
+              <div class="mb-3">
+                <label class="form-label fw-semibold d-block">Documents patient</label>
+                <div
+                  class="border rounded-3 p-4 text-center"
+                  [class.bg-light]="!isConsultationDocumentDragOver()"
+                  [class.bg-primary-subtle]="isConsultationDocumentDragOver()"
+                  (dragover)="onConsultationDocumentDragOver($event)"
+                  (dragleave)="onConsultationDocumentDragLeave($event)"
+                  (drop)="onConsultationDocumentDrop($event)">
+                  <i class="fa-regular fa-file-lines fs-2 text-secondary d-block mb-2"></i>
+                  <p class="mb-2">Glissez-deposez vos documents ici</p>
+                  <label class="btn btn-outline-primary btn-sm mb-0" for="consultation-document-upload-input">
+                    Ou cliquez pour choisir un fichier
+                  </label>
+                  <input
+                    id="consultation-document-upload-input"
+                    type="file"
+                    class="d-none"
+                    multiple
+                    (change)="onConsultationDocumentFileSelected($event)" />
+                  <p class="text-muted small mb-0 mt-2">Les documents sont chiffrés et liés au patient/à la consultation.</p>
+                  @if (isUploadingConsultationDocuments()) {
+                    <p class="small text-muted mt-2 mb-0">Téléversement en cours...</p>
+                  }
+                </div>
               </div>
 
               @if (activeConsultationDocuments().length === 0) {
@@ -928,20 +940,49 @@
           }
 
           @if (consultationActiveTab() === 'paiement') {
-            <div class="empty-tab-state">
-              <i class="fa-solid fa-receipt"></i>
-              <h3>Paiement</h3>
-              <p>Renseignez les règlements, mutuelle et informations de facturation de la consultation.</p>
+            <div class="alert alert-warning">
+              <div class="fw-semibold mb-2">Choisissez une option pour cette consultation</div>
+              <p class="mb-3">Définissez maintenant si la consultation doit être facturée ou enregistrée comme acte gratuit.</p>
+              <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-primary" (click)="prepareConsultationInvoice()">
+                  <i class="fa-solid fa-file-invoice-dollar me-2"></i>Facturer cette consultation
+                </button>
+                <button type="button" class="btn btn-outline-secondary" (click)="markConsultationAsFreeAct()">
+                  <i class="fa-solid fa-hand-holding-heart me-2"></i>Définir comme acte gratuit
+                </button>
+              </div>
             </div>
+
+            @if (consultationBillingChoice() === 'bill') {
+              <div class="alert alert-info mb-0">Facturation en préparation pour cette consultation.</div>
+            } @else if (consultationBillingChoice() === 'free') {
+              <div class="alert alert-success mb-0">Cette consultation est marquée comme acte gratuit.</div>
+            }
           }
 
           @if (consultationSaveError()) {
             <div class="alert alert-danger mt-4 mb-0">{{ consultationSaveError() }}</div>
           }
+
+          @if (consultationPdfError()) {
+            <div class="alert alert-danger mt-3 mb-0">{{ consultationPdfError() }}</div>
+          }
         </div>
 
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" (click)="closeConsultationModal()">Fermer</button>
+          <button
+            type="button"
+            class="btn btn-outline-primary"
+            [disabled]="isGeneratingConsultationPdf()"
+            (click)="generateConsultationSummaryPdf()">
+            @if (isGeneratingConsultationPdf()) {
+              <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+              Generation PDF...
+            } @else {
+              <i class="fa-solid fa-file-pdf me-2"></i>Compte rendu PDF
+            }
+          </button>
           <button type="button" class="btn btn-primary" [disabled]="isSavingConsultation()" (click)="saveConsultation()">
             @if (isSavingConsultation()) {
               <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
@@ -956,4 +997,111 @@
       </div>
     </div>
   </div>
+
+  @if (isConsultationBillingModalOpen()) {
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="consultation-billing-modal-title">
+      <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h3 id="consultation-billing-modal-title" class="modal-title h5 mb-0">Facturer une consultation</h3>
+            <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeConsultationBillingModal()"></button>
+          </div>
+
+          <div class="modal-body" [formGroup]="consultationBillingForm">
+            <div class="table-responsive mb-4">
+              <table class="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Prestation</th>
+                    <th>Quantité</th>
+                    <th>Montant HT</th>
+                    <th>TVA</th>
+                    <th>Montant TTC</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <select
+                        class="form-select form-select-sm"
+                        formControlName="serviceLabel"
+                        (change)="onConsultationBillingServiceChange($any($event.target).value)">
+                        @if (consultationBillingServiceOptions().length === 0) {
+                          <option value="">Aucune prestation configurée</option>
+                        } @else {
+                          @for (service of consultationBillingServiceOptions(); track service.label) {
+                            <option [value]="service.label">{{ service.label }}</option>
+                          }
+                        }
+                      </select>
+                    </td>
+                    <td><input type="number" class="form-control form-control-sm" min="1" formControlName="quantity" /></td>
+                    <td><input type="number" class="form-control form-control-sm" min="0" step="0.01" formControlName="amountHt" /></td>
+                    <td><input type="number" class="form-control form-control-sm" min="0" step="0.01" formControlName="tvaRate" /></td>
+                    <td class="fw-semibold">{{ consultationBillingTotalTtc() }} EUR</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h4 class="text-center fw-bold mb-4">FACTURER {{ consultationBillingTotalTtc() }} EUR</h4>
+
+            <div class="row g-3">
+              <div class="col-12 col-lg-3 fw-semibold">Sexe :</div>
+              <div class="col-12 col-lg-9 d-flex flex-wrap gap-3">
+                <label class="form-check-label"><input class="form-check-input me-1" type="radio" value="Non renseigne" formControlName="sex" />Indéterminé</label>
+                <label class="form-check-label"><input class="form-check-input me-1" type="radio" value="Femme" formControlName="sex" />Femme</label>
+                <label class="form-check-label"><input class="form-check-input me-1" type="radio" value="Homme" formControlName="sex" />Homme</label>
+              </div>
+
+              <div class="col-12 col-lg-3 fw-semibold">Nom :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="lastName" /></div>
+              <div class="col-12 col-lg-3 fw-semibold">Prénom :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="firstName" /></div>
+              <div class="col-12 col-lg-3 fw-semibold">Téléphone portable :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="mobilePhone" /></div>
+              <div class="col-12 col-lg-3 fw-semibold">Email :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="email" /></div>
+              <div class="col-12 col-lg-3 fw-semibold">Date de naissance :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="birthDate" /></div>
+              <div class="col-12 col-lg-3 fw-semibold">Adresse :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="address1" /></div>
+              <div class="col-12 col-lg-3 fw-semibold">Adresse (suite) :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="address2" /></div>
+              <div class="col-12 col-lg-3 fw-semibold">Code postal :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="postalCode" /></div>
+              <div class="col-12 col-lg-3 fw-semibold">Ville :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="city" /></div>
+              <div class="col-12 col-lg-3 fw-semibold">Pays :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="country" /></div>
+              <div class="col-12 col-lg-3 fw-semibold">N° de Sécurité Sociale :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="socialSecurityNumber" /></div>
+              <div class="col-12 col-lg-3 fw-semibold">Mutuelle :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="insurance" /></div>
+              <div class="col-12 col-lg-3 fw-semibold">Nom du document :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="documentName" /></div>
+              <div class="col-12 col-lg-3 fw-semibold">Mentions supplémentaires :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="additionalMentions" /></div>
+              <div class="col-12 col-lg-3 fw-semibold">Intégrer la signature :</div><div class="col-12 col-lg-9"><input class="form-check-input mt-1" type="checkbox" formControlName="includeSignature" /></div>
+              <div class="col-12 col-lg-3 fw-semibold">Commentaire interne :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="internalComment" /></div>
+              <div class="col-12 col-lg-3 fw-semibold">Moyen de paiement :</div>
+              <div class="col-12 col-lg-9">
+                <select
+                  class="form-select form-select-sm"
+                  formControlName="paymentMethod"
+                  [class.border-warning]="isConsultationBillingPaymentPending()">
+                  <option value="Paiement en attente">Paiement en attente</option>
+                  @for (method of consultationBillingPaymentMethodOptions(); track method) {
+                    <option [value]="method">{{ method }}</option>
+                  }
+                </select>
+                @if (isConsultationBillingPaymentPending()) {
+                  <div class="text-warning small mt-1">Sélectionnez un moyen de paiement pour valider la facturation.</div>
+                }
+              </div>
+            </div>
+
+            <div class="alert alert-warning mt-4 mb-0">
+              <i class="fa-solid fa-circle-exclamation me-2"></i>
+              Attention, une fois enregistrée, cette facture entrera en comptabilité. En cas d'annulation, une facture d'avoir sera générée.
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" (click)="closeConsultationBillingModal()">Annuler</button>
+            <button type="button" class="btn btn-success" (click)="saveConsultationBillingDraft()">
+              <i class="fa-solid fa-check me-1"></i>Enregistrer
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+  }
 }

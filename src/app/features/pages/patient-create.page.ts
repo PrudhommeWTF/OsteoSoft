@@ -3,10 +3,11 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { jsPDF } from 'jspdf';
 
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
-import { ConsultationReasonItem, LocationPair, OfficeConsultationProfile, Patient, PatientDetail, PeoplePickerContact, Practitioner } from '../../core/api.types';
+import { ConsultationReasonItem, LocationPair, Office, OfficeConsultationProfile, Patient, PatientDetail, PeoplePickerContact, Practitioner } from '../../core/api.types';
 import { ConsultationDocumentUploadPayload, CreatePatientPayload } from '../../core/api.types';
 
 declare const $: any;
@@ -24,6 +25,7 @@ type AntecedentItem = {
 };
 
 const LOCAL_DRAFT_KEY = 'osteosoft:new-patient-draft';
+const PAYMENT_PENDING_LABEL = 'Paiement en attente';
 
 type DraftSaveState = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -209,6 +211,13 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   readonly consultationReasonSelections = signal<Record<string, ConsultationReasonSelection>>({});
   readonly consultationDocuments = signal<ConsultationUploadDocument[]>([]);
   readonly isConsultationDocumentDragOver = signal(false);
+  readonly isGeneratingConsultationPdf = signal(false);
+  readonly consultationPdfError = signal('');
+  readonly consultationPdfDisplayMode = signal<'browser' | 'download'>('browser');
+  readonly consultationBillingChoice = signal<'bill' | 'free' | null>(null);
+  readonly isConsultationBillingModalOpen = signal(false);
+  readonly consultationBillingServiceOptions = signal<Array<{ label: string; amountHt: number; tvaRate: number }>>([]);
+  readonly consultationBillingPaymentMethodOptions = signal<string[]>([]);
   readonly consultationMotifMainHtml = signal('');
   readonly consultationTestsHtml = signal('');
   readonly consultationSchemaHtml = signal('');
@@ -283,6 +292,44 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
 
     const heightM = heightCm / 100;
     return Number((weightKg / (heightM * heightM)).toFixed(1));
+  });
+
+  readonly consultationBillingForm = this.formBuilder.nonNullable.group({
+    serviceLabel: ['Consultation d\'ostéopathie'],
+    quantity: [1],
+    amountHt: [55],
+    tvaRate: [0],
+    sex: ['Non renseigne'],
+    lastName: [''],
+    firstName: [''],
+    mobilePhone: [''],
+    email: [''],
+    birthDate: [''],
+    address1: [''],
+    address2: [''],
+    postalCode: [''],
+    city: [''],
+    country: ['France'],
+    socialSecurityNumber: [''],
+    insurance: [''],
+    documentName: ['Facture acquittee'],
+    additionalMentions: ['Non renseigne'],
+    includeSignature: [true],
+    internalComment: [''],
+    paymentMethod: [PAYMENT_PENDING_LABEL]
+  });
+
+  readonly consultationBillingTotalTtc = computed(() => {
+    const quantity = Math.max(0, Number(this.consultationBillingForm.controls.quantity.value) || 0);
+    const amountHt = Math.max(0, Number(this.consultationBillingForm.controls.amountHt.value) || 0);
+    const tvaRate = Math.max(0, Number(this.consultationBillingForm.controls.tvaRate.value) || 0);
+    const total = quantity * amountHt * (1 + (tvaRate / 100));
+    return Number.isFinite(total) ? Number(total.toFixed(2)) : 0;
+  });
+
+  readonly isConsultationBillingPaymentPending = computed(() => {
+    const value = String(this.consultationBillingForm.controls.paymentMethod.value ?? '').trim();
+    return !value || value === PAYMENT_PENDING_LABEL;
   });
 
   readonly practitionerPickerOptions = computed(() => {
@@ -1029,6 +1076,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   ngOnInit(): void {
     void this.loadAntecedentTypes();
     void this.loadLocationPairs();
+    void this.loadConsultationPdfDisplayMode();
 
     this.syncConsultationNoteFromState();
     void this.loadDraft();
@@ -1043,6 +1091,244 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
         void this.persistDraft();
       }
     }, 3 * 60 * 1000);
+  }
+
+  async generateConsultationSummaryPdf(): Promise<void> {
+    if (this.isGeneratingConsultationPdf()) {
+      return;
+    }
+
+    const preferDownload = this.consultationPdfDisplayMode() === 'download';
+    const previewWindow = !preferDownload
+      ? window.open('', '_blank', 'noopener,noreferrer')
+      : null;
+
+    this.consultationPdfError.set('');
+    this.isGeneratingConsultationPdf.set(true);
+
+    try {
+      const profile = await this.api.getMyUserProfile();
+      const consultationDate = this.formatConsultationDate(this.consultationStartedAtIso());
+      const firstName = String(this.form.controls.firstName.value ?? '').trim();
+      const lastName = String(this.form.controls.lastName.value ?? '').trim();
+      const fullName = `${firstName} ${lastName}`.trim() || 'Patient';
+
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 14;
+      const contentWidth = pageWidth - margin * 2;
+
+      let y = margin;
+      const ensureSpace = (requiredHeight: number): void => {
+        if (y + requiredHeight <= pageHeight - margin) {
+          return;
+        }
+
+        pdf.addPage();
+        y = margin;
+      };
+
+      const writeParagraph = (text: string, fontSize = 11, spacingAfter = 4): void => {
+        const normalized = this.normalizeMultilineText(text);
+        if (!normalized) {
+          return;
+        }
+
+        pdf.setFontSize(fontSize);
+        const lines = pdf.splitTextToSize(normalized, contentWidth) as string[];
+        ensureSpace(lines.length * 5 + spacingAfter);
+        pdf.text(lines, margin, y);
+        y += lines.length * 5 + spacingAfter;
+      };
+
+      const writeSection = (title: string, content: string): void => {
+        const normalized = this.normalizeMultilineText(content);
+        if (!normalized) {
+          return;
+        }
+
+        ensureSpace(12);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(12);
+        pdf.text(title, margin, y);
+        y += 6;
+
+        pdf.setFont('helvetica', 'normal');
+        writeParagraph(normalized, 11, 6);
+      };
+
+      const letterHeader = this.normalizeMultilineText(profile.letterHeader);
+      const cabinetName = this.normalizeMultilineText(profile.cabinetName || this.consultationOfficeName() || 'Cabinet');
+      const headerText = letterHeader || cabinetName;
+
+      pdf.setFont('helvetica', 'bold');
+      writeParagraph(headerText, 11, 2);
+
+      ensureSpace(8);
+      pdf.setDrawColor(210, 219, 230);
+      pdf.line(margin, y, pageWidth - margin, y);
+      y += 7;
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(16);
+      pdf.text('Compte rendu de consultation', margin, y);
+      y += 8;
+
+      pdf.setFont('helvetica', 'normal');
+      writeParagraph(`Patient : ${this.normalizeMultilineText(fullName)}`, 11, 1);
+      writeParagraph(`Date de consultation : ${consultationDate}`, 11, 1);
+      writeParagraph(`Praticien : ${this.normalizeMultilineText(this.consultationPractitioner() || '-')}`, 11, 1);
+      writeParagraph(`Titre : ${this.normalizeMultilineText(this.consultationTitle() || '-')}`, 11, 4);
+
+      const selectedReasons = this.consultationSelectedReasonItems()
+        .map((item) => {
+          const label = this.normalizeMultilineText(item.label);
+          const value = this.normalizeMultilineText(item.value);
+          const important = item.important ? ' (important)' : '';
+          return value ? `- ${label} : ${value}${important}` : `- ${label}${important}`;
+        })
+        .join('\n');
+
+      writeSection(
+        'Informations cliniques',
+        [
+          `Profil : ${this.normalizeMultilineText(this.consultationProfile() || '-')}`,
+          `Taille : ${this.consultationHeightCm() ?? '-'}`,
+          `Poids : ${this.consultationWeightKg() ?? '-'}`,
+          `EVA debut : ${this.consultationEvaBefore()}/10`,
+          `EVA fin : ${this.consultationEvaAfter()}/10`
+        ].join('\n')
+      );
+
+      writeSection('Motifs selectionnes', selectedReasons || '- Aucun motif selectionne');
+      writeSection('Motif principal', this.htmlToPlainText(this.consultationMotifMainHtml()));
+      writeSection('Tests', this.htmlToPlainText(this.consultationTestsHtml()));
+      writeSection('Schema', this.htmlToPlainText(this.consultationSchemaHtml()));
+      writeSection('Traitements proposes', this.htmlToPlainText(this.consultationTreatmentsHtml()));
+      writeSection('Remarques', this.htmlToPlainText(this.consultationRemarksHtml()));
+
+      const filename = `${this.toFileSlug(fullName)}_consultation_${this.toFileSlug(consultationDate) || 'date'}.pdf`;
+
+      if (preferDownload) {
+        pdf.save(filename);
+      } else {
+        const blob = pdf.output('blob');
+        const url = URL.createObjectURL(blob);
+        if (previewWindow) {
+          previewWindow.location.href = url;
+        } else {
+          pdf.save(filename);
+        }
+
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      }
+    } catch {
+      if (previewWindow && !previewWindow.closed) {
+        previewWindow.close();
+      }
+      this.consultationPdfError.set('Impossible de générer le PDF du compte rendu.');
+    } finally {
+      this.isGeneratingConsultationPdf.set(false);
+    }
+  }
+
+  prepareConsultationInvoice(): void {
+    this.consultationBillingChoice.set('bill');
+    this.populateConsultationBillingForm();
+    this.isConsultationBillingModalOpen.set(true);
+  }
+
+  markConsultationAsFreeAct(): void {
+    this.consultationBillingChoice.set('free');
+    this.isConsultationBillingModalOpen.set(false);
+  }
+
+  closeConsultationBillingModal(): void {
+    this.isConsultationBillingModalOpen.set(false);
+  }
+
+  saveConsultationBillingDraft(): void {
+    this.consultationBillingChoice.set('bill');
+    this.isConsultationBillingModalOpen.set(false);
+  }
+
+  onConsultationBillingServiceChange(serviceLabel: string): void {
+    const selectedLabel = String(serviceLabel ?? '').trim();
+    this.consultationBillingForm.controls.serviceLabel.setValue(selectedLabel);
+
+    const selected = this.consultationBillingServiceOptions().find((item) => item.label === selectedLabel);
+    if (!selected) {
+      return;
+    }
+
+    this.consultationBillingForm.patchValue({
+      amountHt: selected.amountHt,
+      tvaRate: selected.tvaRate
+    });
+  }
+  private async loadConsultationPdfDisplayMode(): Promise<void> {
+    try {
+      const preferences = await this.api.getMyAgendaPreferences();
+      this.consultationPdfDisplayMode.set(preferences.pdfDisplayMode === 'download' ? 'download' : 'browser');
+    } catch {
+      this.consultationPdfDisplayMode.set('browser');
+    }
+  }
+
+  private populateConsultationBillingForm(): void {
+    this.consultationBillingForm.patchValue({
+      sex: this.form.controls.sex.value,
+      lastName: this.form.controls.lastName.value,
+      firstName: this.form.controls.firstName.value,
+      mobilePhone: this.form.controls.mobilePhone.value,
+      email: this.form.controls.email.value,
+      birthDate: this.form.controls.birthDate.value,
+      address1: this.form.controls.address1.value,
+      address2: this.form.controls.address2.value,
+      postalCode: this.form.controls.postalCode.value,
+      city: this.form.controls.city.value,
+      country: this.form.controls.country.value || 'France',
+      socialSecurityNumber: this.form.controls.socialSecurityNumber.value,
+      insurance: '',
+      documentName: 'Facture acquittee',
+      internalComment: '',
+      paymentMethod: PAYMENT_PENDING_LABEL,
+      amountHt: this.consultationBillingForm.controls.amountHt.value || 55,
+      quantity: this.consultationBillingForm.controls.quantity.value || 1,
+      tvaRate: this.consultationBillingForm.controls.tvaRate.value || 0
+    });
+
+    this.applyConsultationBillingDefaults();
+  }
+
+  private htmlToPlainText(html: string): string {
+    const withBreaks = String(html ?? '')
+      .replace(/<\s*br\s*\/?>/gi, '\n')
+      .replace(/<\s*\/p\s*>/gi, '\n\n')
+      .replace(/<\s*li\s*>/gi, '- ')
+      .replace(/<\s*\/li\s*>/gi, '\n');
+
+    const container = globalThis.document.createElement('div');
+    container.innerHTML = withBreaks;
+    return this.normalizeMultilineText(container.textContent ?? '');
+  }
+
+  private normalizeMultilineText(value: string): string {
+    return String(value ?? '')
+      .replace(/\r\n/g, '\n')
+      .replace(/[\t\f\v ]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  private toFileSlug(value: string): string {
+    return String(value ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
   }
 
   ngAfterViewInit(): void {
@@ -2005,6 +2291,8 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       const officeProfiles = Array.isArray(context.profiles) ? context.profiles : [];
       this.consultationOfficeProfiles.set(officeProfiles);
 
+      await this.loadConsultationBillingCatalog(context.officeId ?? officeId);
+
       const profileNames = officeProfiles
         .map((item) => String(item.name ?? '').trim())
         .filter((name, index, all) => Boolean(name) && all.indexOf(name) === index);
@@ -2045,7 +2333,77 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       this.consultationProfileOptions.set([]);
       this.consultationProfile.set('');
       this.consultationReasonSelections.set({});
+      this.consultationBillingServiceOptions.set([]);
+      this.consultationBillingPaymentMethodOptions.set([]);
+      this.applyConsultationBillingDefaults();
     }
+  }
+
+  private async loadConsultationBillingCatalog(activeOfficeId: number | null): Promise<void> {
+    try {
+      const offices = await this.api.getOffices();
+      const officeId = Number.isInteger(activeOfficeId) && Number(activeOfficeId) > 0
+        ? Number(activeOfficeId)
+        : null;
+
+      const office = (officeId !== null
+        ? offices.find((item) => item.id === officeId)
+        : undefined) ?? null;
+
+      this.applyBillingCatalogFromOffice(office);
+    } catch {
+      this.consultationBillingServiceOptions.set([]);
+      this.consultationBillingPaymentMethodOptions.set([]);
+      this.applyConsultationBillingDefaults();
+    }
+  }
+
+  private applyBillingCatalogFromOffice(office: Office | null): void {
+    const serviceOptions = (office?.serviceTypes ?? [])
+      .map((item) => ({
+        label: String(item.label ?? '').trim(),
+        amountHt: Number(item.amountHt) || 0,
+        tvaRate: Number(item.vatRate) || 0,
+        displayOrder: Number(item.displayOrder) || 0
+      }))
+      .filter((item) => Boolean(item.label))
+      .sort((a, b) => a.displayOrder - b.displayOrder)
+      .map(({ displayOrder: _displayOrder, ...rest }) => rest);
+
+    const paymentMethods = (office?.paymentMethods ?? [])
+      .filter((item) => item.isActive)
+      .map((item) => ({
+        label: String(item.label ?? '').trim(),
+        displayOrder: Number(item.displayOrder) || 0
+      }))
+      .filter((item) => Boolean(item.label))
+      .sort((a, b) => a.displayOrder - b.displayOrder)
+      .map((item) => item.label);
+
+    this.consultationBillingServiceOptions.set(serviceOptions);
+    this.consultationBillingPaymentMethodOptions.set(paymentMethods);
+    this.applyConsultationBillingDefaults();
+  }
+
+  private applyConsultationBillingDefaults(): void {
+    const services = this.consultationBillingServiceOptions();
+    const paymentMethods = this.consultationBillingPaymentMethodOptions();
+    const currentServiceLabel = String(this.consultationBillingForm.controls.serviceLabel.value ?? '').trim();
+    const currentPaymentMethod = String(this.consultationBillingForm.controls.paymentMethod.value ?? '').trim();
+
+    const selectedService = services.find((item) => item.label === currentServiceLabel) ?? services[0] ?? null;
+    if (selectedService) {
+      this.consultationBillingForm.patchValue({
+        serviceLabel: selectedService.label,
+        amountHt: selectedService.amountHt,
+        tvaRate: selectedService.tvaRate
+      });
+    }
+
+    const resolvedPayment = paymentMethods.includes(currentPaymentMethod)
+      ? currentPaymentMethod
+      : PAYMENT_PENDING_LABEL;
+    this.consultationBillingForm.controls.paymentMethod.setValue(resolvedPayment);
   }
 
   private interpolateColor(startHex: string, endHex: string, ratio: number): string {
@@ -2090,6 +2448,21 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     const hour = String(parsed.getHours()).padStart(2, '0');
     const minute = String(parsed.getMinutes()).padStart(2, '0');
     return `${year}-${month}-${day}T${hour}:${minute}`;
+  }
+
+  private formatConsultationDate(value: string): string {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return value;
+    }
+
+    return new Intl.DateTimeFormat('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(parsed);
   }
 
   private fromDateTimeLocalValue(value: string): string | null {

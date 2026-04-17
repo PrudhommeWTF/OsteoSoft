@@ -9,8 +9,10 @@ const RESULTS_PER_REQUEST = 500; // API limit
 const REQUEST_TIMEOUT_MS = 12000;
 const MAX_RETRIES = 3;
 
-const countArg = Number(process.argv[2] ?? DEFAULT_COUNT);
+const args = process.argv.slice(2);
+const countArg = Number(args.find((arg) => /^\d+$/.test(arg)) ?? DEFAULT_COUNT);
 const targetCount = Number.isFinite(countArg) && countArg > 0 ? Math.floor(countArg) : DEFAULT_COUNT;
+const appendMode = args.includes('--append');
 
 const rawDataKey = process.env.OSTEOSOFT_DATA_KEY;
 const dataKey = rawDataKey
@@ -187,10 +189,13 @@ async function deleteAllPatients() {
 async function run() {
   console.log(`[seed] Source: ${SOURCE_URL}`);
   console.log(`[seed] Target count: ${targetCount}`);
+  console.log(`[seed] Mode: ${appendMode ? 'append' : 'replace'}`);
 
-  // Delete all existing patients
-  console.log('[seed] Deleting all existing patients...');
-  await deleteAllPatients();
+  if (!appendMode) {
+    // Delete all existing patients
+    console.log('[seed] Deleting all existing patients...');
+    await deleteAllPatients();
+  }
 
   const profiles = [];
   const dedupe = new Set();
