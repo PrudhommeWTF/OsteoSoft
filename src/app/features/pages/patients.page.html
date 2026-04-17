@@ -1,12 +1,56 @@
 <section class="page-head d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
-  <a class="page-head-link flex-grow-1" routerLink="/accueil" aria-label="Aller a la page d'accueil">
+  <div>
     <h1 class="h3 mb-1"><i class="fa-solid fa-user-group text-primary me-2"></i>Patients</h1>
     <p class="text-secondary mb-0">Recherche rapide et suivi des dernières consultations.</p>
-  </a>
-  <a class="btn btn-primary" routerLink="/patients/nouveau">
-    <i class="fa-solid fa-user-plus me-2"></i>Nouveau patient
-  </a>
+  </div>
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    @if (canExportPatients()) {
+      <button type="button" class="btn btn-outline-secondary" (click)="openExportModal()">
+        <i class="fa-solid fa-file-export me-2"></i>Exporter
+      </button>
+    }
+    <a class="btn btn-primary" routerLink="/patients/nouveau">
+      <span class="fw-bold me-2">+</span>Nouveau patient
+    </a>
+  </div>
 </section>
+
+@if (isExportModalOpen()) {
+  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="export-patients-modal-title">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="export-patients-modal-title" class="modal-title h5 mb-0">Exporter la liste des patients</h3>
+          <button type="button" class="btn-close" aria-label="Fermer" (click)="closeExportModal()" [disabled]="isExportingPatients()"></button>
+        </div>
+
+        <div class="modal-body">
+          <p class="mb-3 text-secondary">
+            Choisissez le format d'export pour la liste des patients actuellement affichée.
+          </p>
+
+          @if (exportPatientsError()) {
+            <div class="alert alert-danger mb-0">{{ exportPatientsError() }}</div>
+          }
+        </div>
+
+        <div class="modal-footer gap-2">
+          <button type="button" class="btn btn-secondary" (click)="closeExportModal()" [disabled]="isExportingPatients()">
+            Annuler
+          </button>
+          <button type="button" class="btn btn-outline-primary" (click)="exportPatients('json')" [disabled]="isExportingPatients()">
+            <i class="fa-solid fa-file-code me-2"></i>JSON
+          </button>
+          <button type="button" class="btn btn-primary" (click)="exportPatients('excel')" [disabled]="isExportingPatients()">
+            <i class="fa-solid fa-file-excel me-2"></i>Excel
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop fade show"></div>
+}
 
 <section class="panel card border-0 shadow-sm mb-3">
   <div class="card-body">
