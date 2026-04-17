@@ -468,9 +468,17 @@
 }
 
 .eva-range {
+  --eva-range-background: linear-gradient(90deg, #28a745 0%, #28a745 0%, #d9e2ec 0%, #d9e2ec 100%);
   border-radius: 999px;
   height: 0.55rem;
   appearance: none;
+  background: transparent;
+}
+
+.eva-range::-webkit-slider-runnable-track {
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--eva-range-background);
 }
 
 .eva-range::-webkit-slider-thumb {
@@ -482,6 +490,13 @@
   background: #1f2933;
   box-shadow: 0 1px 3px rgb(0 0 0 / 20%);
   cursor: pointer;
+  margin-top: -0.22rem;
+}
+
+.eva-range::-moz-range-track {
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--eva-range-background);
 }
 
 .eva-range::-moz-range-thumb {

@@ -16,12 +16,18 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { ApiService } from '../../core/api.service';
 import {
+  ConsultationContextPayload,
+  ConsultationDocumentUploadPayload,
   ConsultationRecord,
+  ConsultationReasonItem,
+  ConsultationUpdatePayload,
   LocationPair,
+  OfficeConsultationProfile,
   Patient,
   PatientAuditLog,
   PatientDetail,
   PatientDocumentSummary,
+  Practitioner,
   UserAgendaPreferences
 } from '../../core/api.types';
 import { TopbarService } from '../../core/topbar.service';
@@ -32,6 +38,20 @@ declare const bootstrap: any;
 type AccordionSection = 'identity' | 'patient-info' | 'antecedents' | 'documents' | 'consultations';
 type AntecedentPrecision = 'date' | 'month' | 'year';
 type ConsultationEditorSection = 'motifMainHtml' | 'testsHtml' | 'schemaHtml' | 'treatmentsHtml' | 'remarksHtml';
+type ConsultationModalTab = 'consultation' | 'documents' | 'courriers' | 'paiement';
+type ConsultationAutoSaveState = 'idle' | 'saving' | 'saved' | 'error' | 'disabled';
+type ConsultationModalMode = 'edit' | 'create';
+
+type ConsultationReasonSelection = {
+  checked: boolean;
+  value: string;
+  important: boolean;
+};
+
+type ConsultationUploadDocument = Omit<ConsultationDocumentUploadPayload, 'documentRef'> & {
+  documentRef: string;
+  tempKey: string;
+};
 
 type ConsultationTimelineGroup = {
   key: string;
@@ -80,6 +100,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   private pendingFocusedConsultationId: number | null = null;
   private relatedSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
   private relatedSearchRequestId = 0;
+  private consultationAutosaveTimer: ReturnType<typeof setInterval> | null = null;
+  private consultationAutosaveStatusTimer: ReturnType<typeof setInterval> | null = null;
 
   readonly isLoading = signal(true);
   readonly patient = signal<PatientDetail | null>(null);
@@ -91,13 +113,34 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   readonly saveError = signal('');
   readonly isLoadingDocuments = signal(false);
   readonly documentActionError = signal('');
+  readonly isUploadingConsultationDocuments = signal(false);
+  readonly documentSavingRefs = signal<Record<string, boolean>>({});
   readonly showAuditModal = signal(false);
   readonly isLoadingAuditLogs = signal(false);
   readonly auditLoadError = signal('');
   readonly auditLogs = signal<PatientAuditLog[]>([]);
   readonly activeConsultation = signal<ConsultationRecord | null>(null);
+  readonly consultationModalMode = signal<ConsultationModalMode>('edit');
   readonly isSavingConsultation = signal(false);
+  readonly isCreatingConsultation = signal(false);
   readonly consultationSaveError = signal('');
+  readonly consultationActiveTab = signal<ConsultationModalTab>('consultation');
+  readonly consultationAutosaveState = signal<ConsultationAutoSaveState>('idle');
+  readonly consultationLastSavedAt = signal<number | null>(null);
+  readonly consultationAutosaveNowTick = signal(Date.now());
+  readonly consultationOfficeId = signal<number | null>(null);
+  readonly consultationOfficeName = signal<string | null>(null);
+  readonly practitioners = signal<Practitioner[]>([]);
+  readonly consultationOfficeProfiles = signal<OfficeConsultationProfile[]>([]);
+  readonly consultationReasonSelections = signal<Record<string, ConsultationReasonSelection>>({});
+  readonly consultationPendingDocuments = signal<ConsultationUploadDocument[]>([]);
+  readonly isConsultationDocumentDragOver = signal(false);
+  readonly isLoadingConsultationContext = signal(false);
+  readonly consultationMotifMainHtml = signal('');
+  readonly consultationTestsHtml = signal('');
+  readonly consultationSchemaHtml = signal('');
+  readonly consultationTreatmentsHtml = signal('');
+  readonly consultationRemarksHtml = signal('');
 
   readonly showRelatedPicker = signal(false);
   readonly relatedSearch = signal('');
@@ -302,12 +345,160 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   });
 
   readonly consultationModalTitle = computed(() => {
+    if (this.consultationModalMode() === 'create') {
+      return 'Nouvelle consultation';
+    }
+
     const consultation = this.activeConsultation();
     if (!consultation) {
       return 'Consultation';
     }
 
     return consultation.title.trim() || this.formatConsultationDate(consultation.startedAt);
+  });
+
+  readonly consultationStartedAtLabel = computed(() => {
+    const raw = this.consultationEditForm.controls.startedAtLocal.value;
+    const normalized = this.fromDateTimeLocalValue(raw) ?? new Date().toISOString();
+    const parsed = new Date(normalized);
+    const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+    return new Intl.DateTimeFormat('fr-FR', {
+      weekday: 'long',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(date);
+  });
+
+  readonly activeConsultationDocuments = computed(() => {
+    const consultationId = this.activeConsultation()?.id;
+    if (!consultationId) {
+      return [];
+    }
+
+    return this.patientDocuments().filter((document) => document.consultationId === consultationId);
+  });
+
+  readonly practitionerPickerOptions = computed(() => {
+    return this.practitioners().map((practitioner) => {
+      const displayName = String(practitioner.displayName ?? '').trim() || practitioner.username;
+      const label = `${displayName} - ${practitioner.role}`;
+      return {
+        username: practitioner.username,
+        displayName,
+        label
+      };
+    });
+  });
+
+  readonly consultationProfileOptions = computed(() => {
+    return this.consultationOfficeProfiles().map((profile) => profile.name);
+  });
+
+  readonly consultationProfileReasons = computed(() => {
+    const selectedProfile = this.consultationEditForm.controls.profile.value.trim();
+    if (!selectedProfile) {
+      return [];
+    }
+
+    const profile = this.consultationOfficeProfiles().find((item) => item.name === selectedProfile);
+    if (!profile) {
+      return [];
+    }
+
+    return profile.reasons
+      .map((reason) => String(reason ?? '').trim())
+      .filter((reason, index, all) => Boolean(reason) && all.indexOf(reason) === index);
+  });
+
+  readonly consultationReasonItems = computed(() => {
+    return this.consultationProfileReasons().map((reason) => {
+      const selection = this.consultationReasonSelections()[reason] ?? {
+        checked: false,
+        value: '',
+        important: false
+      };
+
+      return {
+        reason,
+        checked: selection.checked,
+        value: selection.value,
+        important: selection.important
+      };
+    });
+  });
+
+  readonly consultationSelectedReasonItems = computed((): ConsultationReasonItem[] => {
+    return this.consultationReasonItems()
+      .filter((item) => item.checked)
+      .map((item) => ({
+        label: item.reason,
+        value: item.value.trim(),
+        important: item.important
+      }));
+  });
+
+  readonly consultationAutosaveStatusText = computed(() => {
+    if (this.consultationModalMode() === 'create') {
+      return 'Nouvelle consultation non encore enregistrée';
+    }
+
+    this.consultationAutosaveNowTick();
+    const frequency = this.preferences()?.patientAutoSaveFrequency ?? 'Jamais';
+    const state = this.consultationAutosaveState();
+
+    if (frequency === 'Jamais') {
+      return 'Sauvegarde automatique désactivée dans votre profil';
+    }
+
+    if (state === 'saving') {
+      return `Sauvegarde automatique en cours (${frequency})`;
+    }
+
+    if (state === 'error') {
+      return `Échec de la sauvegarde automatique (${frequency})`;
+    }
+
+    const savedAt = this.consultationLastSavedAt();
+    if (!savedAt) {
+      return `Sauvegarde automatique active (${frequency})`;
+    }
+
+    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - savedAt) / 1000));
+    if (elapsedSeconds < 5) {
+      return `Dernière sauvegarde à l'instant (${frequency})`;
+    }
+    if (elapsedSeconds < 60) {
+      return `Dernière sauvegarde il y a ${elapsedSeconds}s (${frequency})`;
+    }
+
+    const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+    if (elapsedMinutes < 60) {
+      return `Dernière sauvegarde il y a ${elapsedMinutes} min (${frequency})`;
+    }
+
+    const elapsedHours = Math.floor(elapsedMinutes / 60);
+    return `Dernière sauvegarde il y a ${elapsedHours} h (${frequency})`;
+  });
+
+  readonly consultationAutosaveBadgeClass = computed(() => {
+    if (this.consultationModalMode() === 'create') {
+      return 'text-bg-primary';
+    }
+
+    const state = this.consultationAutosaveState();
+    if (state === 'saving') {
+      return 'text-bg-info';
+    }
+    if (state === 'error') {
+      return 'text-bg-danger';
+    }
+    if (state === 'disabled') {
+      return 'text-bg-secondary';
+    }
+    return 'text-bg-success';
   });
 
   ngOnInit(): void {
@@ -347,6 +538,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.topbar.clear();
+    this.stopConsultationAutosave();
 
     const input = this.birthDateInputRef()?.nativeElement;
     if (input) {
@@ -547,13 +739,126 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  async onConsultationDocumentFileSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement | null;
+    const files = input?.files;
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    this.isConsultationDocumentDragOver.set(false);
+
+    if (this.consultationModalMode() === 'create') {
+      await this.addPendingConsultationDocuments(Array.from(files));
+    } else {
+      await this.uploadConsultationDocuments(Array.from(files));
+    }
+
+    input.value = '';
+  }
+
+  onConsultationDocumentDragOver(event: DragEvent): void {
+    event.preventDefault();
+    this.isConsultationDocumentDragOver.set(true);
+  }
+
+  onConsultationDocumentDragLeave(event: DragEvent): void {
+    event.preventDefault();
+    this.isConsultationDocumentDragOver.set(false);
+  }
+
+  async onConsultationDocumentDrop(event: DragEvent): Promise<void> {
+    event.preventDefault();
+    this.isConsultationDocumentDragOver.set(false);
+
+    const files = event.dataTransfer?.files;
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    if (this.consultationModalMode() === 'create') {
+      await this.addPendingConsultationDocuments(Array.from(files));
+    } else {
+      await this.uploadConsultationDocuments(Array.from(files));
+    }
+  }
+
+  removePendingConsultationDocument(tempKey: string): void {
+    this.consultationPendingDocuments.update((items) => items.filter((item) => item.tempKey !== tempKey));
+  }
+
+  updatePendingConsultationDocumentTitle(tempKey: string, title: string): void {
+    this.consultationPendingDocuments.update((items) =>
+      items.map((item) => (item.tempKey === tempKey ? { ...item, title } : item))
+    );
+  }
+
+  updatePendingConsultationDocumentComment(tempKey: string, comment: string): void {
+    this.consultationPendingDocuments.update((items) =>
+      items.map((item) => (item.tempKey === tempKey ? { ...item, comment } : item))
+    );
+  }
+
+  async saveConsultationDocumentMeta(documentRef: string, title: string, comment: string): Promise<void> {
+    this.documentActionError.set('');
+    this.documentSavingRefs.update((items) => ({ ...items, [documentRef]: true }));
+
+    try {
+      const updated = await this.api.updatePatientDocument(documentRef, { title, comment });
+      this.patientDocuments.update((items) =>
+        items.map((item) => (item.documentRef === documentRef ? { ...item, ...updated } : item))
+      );
+    } catch {
+      this.documentActionError.set('Impossible de mettre à jour le document.');
+    } finally {
+      this.documentSavingRefs.update((items) => {
+        const next = { ...items };
+        delete next[documentRef];
+        return next;
+      });
+    }
+  }
+
+  async deleteConsultationDocument(documentRef: string): Promise<void> {
+    this.documentActionError.set('');
+    this.documentSavingRefs.update((items) => ({ ...items, [documentRef]: true }));
+
+    try {
+      await this.api.deletePatientDocument(documentRef);
+      this.patientDocuments.update((items) => items.filter((item) => item.documentRef !== documentRef));
+    } catch {
+      this.documentActionError.set('Impossible de supprimer le document.');
+    } finally {
+      this.documentSavingRefs.update((items) => {
+        const next = { ...items };
+        delete next[documentRef];
+        return next;
+      });
+    }
+  }
+
+  isDocumentSaving(documentRef: string): boolean {
+    return Boolean(this.documentSavingRefs()[documentRef]);
+  }
+
   openConsultationModal(consultation: ConsultationRecord): void {
     if (consultation.type === 'appointment') {
       return;
     }
 
     this.activeConsultation.set(consultation);
+    this.consultationModalMode.set('edit');
     this.consultationSaveError.set('');
+    this.consultationActiveTab.set('consultation');
+    this.consultationAutosaveState.set('idle');
+    this.consultationLastSavedAt.set(null);
+    this.consultationReasonSelections.set({});
+    this.consultationPendingDocuments.set([]);
+    this.consultationMotifMainHtml.set(consultation.motifMainHtml);
+    this.consultationTestsHtml.set(consultation.testsHtml);
+    this.consultationSchemaHtml.set(consultation.schemaHtml);
+    this.consultationTreatmentsHtml.set(consultation.treatmentsHtml);
+    this.consultationRemarksHtml.set(consultation.remarksHtml);
     this.consultationEditForm.reset({
       startedAtLocal: this.toDateTimeLocalValue(consultation.startedAt),
       practitioner: consultation.practitioner,
@@ -566,13 +871,65 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       profile: consultation.profile || 'Adulte'
     });
 
-    queueMicrotask(() => {
-      this.setConsultationEditorContent('motifMainHtml', consultation.motifMainHtml);
-      this.setConsultationEditorContent('testsHtml', consultation.testsHtml);
-      this.setConsultationEditorContent('schemaHtml', consultation.schemaHtml);
-      this.setConsultationEditorContent('treatmentsHtml', consultation.treatmentsHtml);
-      this.setConsultationEditorContent('remarksHtml', consultation.remarksHtml);
+    this.hydrateConsultationReasonsFromRecord(consultation.reasonItems);
 
+    this.cdr.detectChanges();
+
+    queueMicrotask(() => {
+      this.hydrateConsultationEditorsFromState();
+
+      const modalElement = this.consultationModalRef()?.nativeElement;
+      if (modalElement) {
+        bootstrap.Modal.getOrCreateInstance(modalElement).show();
+      }
+
+      this.startConsultationAutosave();
+    });
+  }
+
+  async openNewConsultationModal(): Promise<void> {
+    const patientId = this.patient()?.id;
+    if (!patientId) {
+      return;
+    }
+
+    this.stopConsultationAutosave();
+    this.consultationModalMode.set('create');
+    this.activeConsultation.set(null);
+    this.consultationSaveError.set('');
+    this.consultationActiveTab.set('consultation');
+    this.consultationAutosaveState.set('disabled');
+    this.consultationLastSavedAt.set(null);
+    this.consultationReasonSelections.set({});
+    this.consultationPendingDocuments.set([]);
+    this.isConsultationDocumentDragOver.set(false);
+    this.consultationMotifMainHtml.set('');
+    this.consultationTestsHtml.set('');
+    this.consultationSchemaHtml.set('');
+    this.consultationTreatmentsHtml.set('');
+    this.consultationRemarksHtml.set('');
+
+    await this.loadConsultationContext();
+
+    const defaultProfile = this.consultationProfileOptions()[0] ?? '';
+    const nowIso = new Date().toISOString();
+    this.consultationEditForm.reset({
+      startedAtLocal: this.toDateTimeLocalValue(nowIso),
+      practitioner: this.practitionerPickerOptions()[0]?.displayName ?? '',
+      title: '',
+      important: false,
+      heightCm: '',
+      weightKg: '',
+      evaBefore: 0,
+      evaAfter: 0,
+      profile: defaultProfile
+    });
+
+    this.setConsultationProfile(defaultProfile);
+    this.cdr.detectChanges();
+
+    queueMicrotask(() => {
+      this.hydrateConsultationEditorsFromState();
       const modalElement = this.consultationModalRef()?.nativeElement;
       if (modalElement) {
         bootstrap.Modal.getOrCreateInstance(modalElement).show();
@@ -581,48 +938,177 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   closeConsultationModal(): void {
+    this.stopConsultationAutosave();
     const modalElement = this.consultationModalRef()?.nativeElement;
     if (modalElement) {
       bootstrap.Modal.getOrCreateInstance(modalElement).hide();
     }
   }
 
-  async saveConsultation(): Promise<void> {
+  setConsultationTab(tab: ConsultationModalTab): void {
+    this.consultationActiveTab.set(tab);
+    if (tab === 'consultation') {
+      this.cdr.detectChanges();
+      queueMicrotask(() => this.hydrateConsultationEditorsFromState());
+    }
+  }
+
+  setConsultationProfile(value: string): void {
+    const selected = value.trim();
+    this.consultationEditForm.controls.profile.setValue(selected);
+    const availableReasons = new Set(this.consultationProfileReasons());
+    this.consultationReasonSelections.update((items) => {
+      const next: Record<string, ConsultationReasonSelection> = {};
+      for (const reason of availableReasons) {
+        const current = items[reason];
+        next[reason] = current
+          ? { ...current }
+          : { checked: false, value: '', important: false };
+      }
+      return next;
+    });
+  }
+
+  setConsultationReasonChecked(reason: string, checked: boolean): void {
+    const normalized = reason.trim();
+    if (!normalized) {
+      return;
+    }
+
+    this.consultationReasonSelections.update((items) => {
+      const current = items[normalized] ?? { checked: false, value: '', important: false };
+      return {
+        ...items,
+        [normalized]: {
+          ...current,
+          checked,
+          value: checked ? current.value : ''
+        }
+      };
+    });
+  }
+
+  setConsultationReasonValue(reason: string, value: string): void {
+    const normalized = reason.trim();
+    if (!normalized) {
+      return;
+    }
+
+    const nextValue = value;
+    this.consultationReasonSelections.update((items) => {
+      const current = items[normalized] ?? { checked: false, value: '', important: false };
+      return {
+        ...items,
+        [normalized]: {
+          ...current,
+          checked: nextValue.trim().length > 0 || current.checked,
+          value: nextValue
+        }
+      };
+    });
+  }
+
+  setConsultationReasonImportant(reason: string, important: boolean): void {
+    const normalized = reason.trim();
+    if (!normalized) {
+      return;
+    }
+
+    this.consultationReasonSelections.update((items) => {
+      const current = items[normalized] ?? { checked: false, value: '', important: false };
+      return {
+        ...items,
+        [normalized]: {
+          ...current,
+          checked: current.checked || important,
+          important
+        }
+      };
+    });
+  }
+
+  applyConsultationEditorCommand(
+    section: ConsultationEditorSection,
+    command: 'bold' | 'italic' | 'underline' | 'insertUnorderedList' | 'insertOrderedList'
+  ): void {
+    const editor = this.getConsultationEditorElement(section);
+    if (!editor) {
+      return;
+    }
+
+    editor.focus();
+    document.execCommand(command, false);
+  }
+
+  getEvaRangeBackground(value: number): string {
+    const normalized = Math.max(0, Math.min(10, Number(value) || 0));
+    const progress = normalized * 10;
+    let color = '#28a745';
+
+    if (normalized <= 5) {
+      const ratio = normalized / 5;
+      color = this.interpolateColor('#28a745', '#fd7e14', ratio);
+    } else {
+      const ratio = (normalized - 5) / 5;
+      color = this.interpolateColor('#fd7e14', '#dc3545', ratio);
+    }
+
+    return `linear-gradient(90deg, ${color} 0%, ${color} ${progress}%, #d9e2ec ${progress}%, #d9e2ec 100%)`;
+  }
+
+  async saveConsultation(options: { closeOnSuccess?: boolean; isAutoSave?: boolean } = {}): Promise<void> {
+    const closeOnSuccess = options.closeOnSuccess ?? true;
+    const isAutoSave = options.isAutoSave ?? false;
+
+    if (this.consultationModalMode() === 'create') {
+      await this.createConsultationFromModal(closeOnSuccess);
+      return;
+    }
+
     const active = this.activeConsultation();
     if (!active || this.consultationEditForm.invalid || this.isSavingConsultation()) {
       return;
     }
 
+    if (isAutoSave && !this.hasConsultationChanges(active)) {
+      return;
+    }
+
     this.isSavingConsultation.set(true);
-    this.consultationSaveError.set('');
+    if (!isAutoSave) {
+      this.consultationSaveError.set('');
+    }
+    this.consultationAutosaveState.set(isAutoSave ? 'saving' : 'idle');
 
     try {
-      const raw = this.consultationEditForm.getRawValue();
-      const updated = await this.api.updateConsultation(active.id, {
-        startedAt: this.fromDateTimeLocalValue(raw.startedAtLocal) ?? active.startedAt,
-        practitioner: raw.practitioner,
-        title: raw.title,
-        important: raw.important,
-        heightCm: this.parseNullableNumber(raw.heightCm),
-        weightKg: this.parseNullableNumber(raw.weightKg),
-        evaBefore: Number(raw.evaBefore) || 0,
-        evaAfter: Number(raw.evaAfter) || 0,
-        profile: raw.profile,
-        motifMainHtml: this.getConsultationEditorContent('motifMainHtml'),
-        testsHtml: this.getConsultationEditorContent('testsHtml'),
-        schemaHtml: this.getConsultationEditorContent('schemaHtml'),
-        treatmentsHtml: this.getConsultationEditorContent('treatmentsHtml'),
-        remarksHtml: this.getConsultationEditorContent('remarksHtml')
-      });
+      const payload = this.buildConsultationUpdatePayload(active);
+      const updated = await this.api.updateConsultation(active.id, payload);
 
       this.consultations.update((items) => items.map((item) => (item.id === updated.id ? updated : item)));
       this.activeConsultation.set(updated);
-      this.closeConsultationModal();
+      this.consultationLastSavedAt.set(Date.now());
+      this.consultationAutosaveState.set('saved');
+
+      if (closeOnSuccess) {
+        this.closeConsultationModal();
+      }
     } catch {
-      this.consultationSaveError.set('Impossible d’enregistrer la consultation.');
+      if (!isAutoSave) {
+        this.consultationSaveError.set('Impossible d’enregistrer la consultation.');
+      }
+      this.consultationAutosaveState.set('error');
     } finally {
       this.isSavingConsultation.set(false);
     }
+  }
+
+  onConsultationRichTextInput(section: ConsultationEditorSection, event: Event): void {
+    const html = (event.target as HTMLDivElement).innerHTML;
+    if (section === 'motifMainHtml') this.consultationMotifMainHtml.set(html);
+    else if (section === 'testsHtml') this.consultationTestsHtml.set(html);
+    else if (section === 'schemaHtml') this.consultationSchemaHtml.set(html);
+    else if (section === 'treatmentsHtml') this.consultationTreatmentsHtml.set(html);
+    else this.consultationRemarksHtml.set(html);
   }
 
   consultationBmi(consultation: ConsultationRecord): string | null {
@@ -1057,6 +1543,311 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     return Number.isFinite(parsed) ? parsed : null;
   }
 
+  private async uploadConsultationDocuments(files: File[]): Promise<void> {
+    const patientId = this.patient()?.id ?? null;
+    const consultationId = this.activeConsultation()?.id ?? null;
+
+    if (!patientId || !consultationId || this.isUploadingConsultationDocuments()) {
+      return;
+    }
+
+    this.documentActionError.set('');
+    this.isUploadingConsultationDocuments.set(true);
+
+    try {
+      for (const file of files) {
+        const contentBase64 = await this.fileToBase64(file);
+        const created = await this.api.createPatientDocument(patientId, {
+          consultationId,
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          sizeBytes: file.size,
+          title: file.name,
+          comment: '',
+          contentBase64
+        });
+
+        this.patientDocuments.update((items) => [created, ...items]);
+      }
+    } catch {
+      this.documentActionError.set('Impossible d\'ajouter le document.');
+    } finally {
+      this.isUploadingConsultationDocuments.set(false);
+    }
+  }
+
+  private async createConsultationFromModal(closeOnSuccess: boolean): Promise<void> {
+    const patientId = this.patient()?.id ?? null;
+    if (!patientId || this.consultationEditForm.invalid || this.isSavingConsultation()) {
+      return;
+    }
+
+    this.isSavingConsultation.set(true);
+    this.isCreatingConsultation.set(true);
+    this.consultationSaveError.set('');
+
+    try {
+      const raw = this.consultationEditForm.getRawValue();
+      const created = await this.api.createPatientConsultation(patientId, {
+        startedAt: this.fromDateTimeLocalValue(raw.startedAtLocal) ?? new Date().toISOString(),
+        practitioner: raw.practitioner,
+        title: raw.title,
+        important: raw.important,
+        heightCm: this.parseNullableNumber(raw.heightCm),
+        weightKg: this.parseNullableNumber(raw.weightKg),
+        evaBefore: Number(raw.evaBefore) || 0,
+        evaAfter: Number(raw.evaAfter) || 0,
+        profile: raw.profile,
+        reasonItems: this.consultationSelectedReasonItems(),
+        motifMainHtml: this.consultationMotifMainHtml(),
+        testsHtml: this.consultationTestsHtml(),
+        schemaHtml: this.consultationSchemaHtml(),
+        treatmentsHtml: this.consultationTreatmentsHtml(),
+        remarksHtml: this.consultationRemarksHtml(),
+        officeId: this.consultationOfficeId(),
+        consultationDocuments: this.consultationPendingDocuments().map((doc) => ({
+          documentRef: doc.documentRef,
+          fileName: doc.fileName,
+          mimeType: doc.mimeType,
+          sizeBytes: doc.sizeBytes,
+          title: doc.title,
+          comment: doc.comment,
+          contentBase64: doc.contentBase64
+        }))
+      });
+
+      this.consultations.update((items) => [created, ...items]);
+      this.activeConsultation.set(created);
+      this.consultationModalMode.set('edit');
+      this.consultationPendingDocuments.set([]);
+      const docs = await this.api.getPatientDocuments(patientId);
+      this.patientDocuments.set(docs);
+
+      if (closeOnSuccess) {
+        this.closeConsultationModal();
+      }
+    } catch {
+      this.consultationSaveError.set('Impossible de créer la consultation.');
+    } finally {
+      this.isCreatingConsultation.set(false);
+      this.isSavingConsultation.set(false);
+    }
+  }
+
+  private async addPendingConsultationDocuments(files: File[]): Promise<void> {
+    if (this.isUploadingConsultationDocuments()) {
+      return;
+    }
+
+    this.documentActionError.set('');
+    this.isUploadingConsultationDocuments.set(true);
+    try {
+      const created: ConsultationUploadDocument[] = [];
+      for (const file of files) {
+        const contentBase64 = await this.fileToBase64(file);
+        created.push({
+          tempKey: this.createTempKey('consultation-doc'),
+          documentRef: this.createDocumentRef(),
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          sizeBytes: file.size,
+          title: file.name,
+          comment: '',
+          contentBase64
+        });
+      }
+
+      this.consultationPendingDocuments.update((items) => [...items, ...created]);
+    } catch {
+      this.documentActionError.set('Impossible d\'ajouter le document.');
+    } finally {
+      this.isUploadingConsultationDocuments.set(false);
+    }
+  }
+
+  private createDocumentRef(): string {
+    const random = Math.random().toString(36).slice(2, 10);
+    return `doc_${Date.now().toString(36)}_${random}`;
+  }
+
+  private createTempKey(prefix: string): string {
+    return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  private async loadConsultationContext(): Promise<void> {
+    if (this.isLoadingConsultationContext()) {
+      return;
+    }
+
+    this.isLoadingConsultationContext.set(true);
+    try {
+      const context: ConsultationContextPayload = await this.api.getConsultationContext();
+      this.consultationOfficeId.set(context.officeId ?? null);
+      this.consultationOfficeName.set(context.officeName ?? null);
+      this.practitioners.set(Array.isArray(context.practitioners) ? context.practitioners : []);
+      this.consultationOfficeProfiles.set(Array.isArray(context.profiles) ? context.profiles : []);
+    } catch {
+      this.consultationOfficeId.set(null);
+      this.consultationOfficeName.set(null);
+      this.practitioners.set([]);
+      this.consultationOfficeProfiles.set([]);
+    } finally {
+      this.isLoadingConsultationContext.set(false);
+    }
+  }
+
+  private hydrateConsultationReasonsFromRecord(reasonItems: ConsultationReasonItem[]): void {
+    const next: Record<string, ConsultationReasonSelection> = {};
+    for (const item of reasonItems ?? []) {
+      const label = String(item?.label ?? '').trim();
+      if (!label) {
+        continue;
+      }
+
+      next[label] = {
+        checked: true,
+        value: String(item?.value ?? ''),
+        important: Boolean(item?.important)
+      };
+    }
+
+    this.consultationReasonSelections.set(next);
+  }
+
+  private fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = typeof reader.result === 'string' ? reader.result : '';
+        const marker = 'base64,';
+        const markerIndex = result.indexOf(marker);
+        resolve(markerIndex >= 0 ? result.slice(markerIndex + marker.length) : result);
+      };
+      reader.onerror = () => reject(new Error('File read failed'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  private hasConsultationChanges(active: ConsultationRecord): boolean {
+    const current = this.buildConsultationUpdatePayload(active);
+    const baseline: ConsultationUpdatePayload = {
+      startedAt: active.startedAt,
+      practitioner: active.practitioner,
+      title: active.title,
+      important: active.important,
+      heightCm: active.heightCm,
+      weightKg: active.weightKg,
+      evaBefore: active.evaBefore,
+      evaAfter: active.evaAfter,
+      profile: active.profile,
+      reasonItems: active.reasonItems,
+      motifMainHtml: active.motifMainHtml,
+      testsHtml: active.testsHtml,
+      schemaHtml: active.schemaHtml,
+      treatmentsHtml: active.treatmentsHtml,
+      remarksHtml: active.remarksHtml
+    };
+
+    return JSON.stringify(current) !== JSON.stringify(baseline);
+  }
+
+  private buildConsultationUpdatePayload(active: ConsultationRecord): ConsultationUpdatePayload {
+    const raw = this.consultationEditForm.getRawValue();
+    return {
+      startedAt: this.fromDateTimeLocalValue(raw.startedAtLocal) ?? active.startedAt,
+      practitioner: raw.practitioner,
+      title: raw.title,
+      important: raw.important,
+      heightCm: this.parseNullableNumber(raw.heightCm),
+      weightKg: this.parseNullableNumber(raw.weightKg),
+      evaBefore: Number(raw.evaBefore) || 0,
+      evaAfter: Number(raw.evaAfter) || 0,
+      profile: raw.profile,
+      reasonItems: this.consultationSelectedReasonItems(),
+      motifMainHtml: this.consultationMotifMainHtml(),
+      testsHtml: this.consultationTestsHtml(),
+      schemaHtml: this.consultationSchemaHtml(),
+      treatmentsHtml: this.consultationTreatmentsHtml(),
+      remarksHtml: this.consultationRemarksHtml()
+    };
+  }
+
+  private startConsultationAutosave(): void {
+    this.stopConsultationAutosave();
+    this.consultationAutosaveNowTick.set(Date.now());
+
+    const intervalMs = this.getConsultationAutosaveIntervalMs();
+    if (intervalMs === null) {
+      this.consultationAutosaveState.set('disabled');
+      return;
+    }
+
+    this.consultationAutosaveState.set('idle');
+    this.consultationAutosaveStatusTimer = setInterval(() => {
+      this.consultationAutosaveNowTick.set(Date.now());
+    }, 1000);
+
+    this.consultationAutosaveTimer = setInterval(() => {
+      if (!this.activeConsultation()) {
+        return;
+      }
+      void this.saveConsultation({ closeOnSuccess: false, isAutoSave: true });
+    }, intervalMs);
+  }
+
+  private stopConsultationAutosave(): void {
+    if (this.consultationAutosaveTimer !== null) {
+      clearInterval(this.consultationAutosaveTimer);
+      this.consultationAutosaveTimer = null;
+    }
+
+    if (this.consultationAutosaveStatusTimer !== null) {
+      clearInterval(this.consultationAutosaveStatusTimer);
+      this.consultationAutosaveStatusTimer = null;
+    }
+  }
+
+  private getConsultationAutosaveIntervalMs(): number | null {
+    const frequency = this.preferences()?.patientAutoSaveFrequency ?? 'Jamais';
+    if (frequency === 'Toutes les 2 minutes') {
+      return 2 * 60 * 1000;
+    }
+    if (frequency === 'Toutes les 5 minutes') {
+      return 5 * 60 * 1000;
+    }
+    if (frequency === 'Toutes les 10 minutes') {
+      return 10 * 60 * 1000;
+    }
+    return null;
+  }
+
+  private interpolateColor(startHex: string, endHex: string, ratio: number): string {
+    const clampedRatio = Math.max(0, Math.min(1, ratio));
+    const start = this.hexToRgb(startHex);
+    const end = this.hexToRgb(endHex);
+
+    const red = Math.round(start.red + (end.red - start.red) * clampedRatio);
+    const green = Math.round(start.green + (end.green - start.green) * clampedRatio);
+    const blue = Math.round(start.blue + (end.blue - start.blue) * clampedRatio);
+
+    return `rgb(${red}, ${green}, ${blue})`;
+  }
+
+  private hexToRgb(hex: string): { red: number; green: number; blue: number } {
+    const normalized = hex.replace('#', '');
+    const chunkSize = normalized.length === 3 ? 1 : 2;
+    const parts = normalized.length === 3
+      ? normalized.split('').map((part) => part + part)
+      : normalized.match(/.{1,2}/g) ?? ['00', '00', '00'];
+
+    const [redHex, greenHex, blueHex] = parts;
+    return {
+      red: parseInt(redHex.slice(0, chunkSize === 1 ? 2 : redHex.length), 16) || 0,
+      green: parseInt(greenHex.slice(0, chunkSize === 1 ? 2 : greenHex.length), 16) || 0,
+      blue: parseInt(blueHex.slice(0, chunkSize === 1 ? 2 : blueHex.length), 16) || 0
+    };
+  }
+
   private toDateTimeLocalValue(iso: string): string {
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) {
@@ -1089,15 +1880,19 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     return this.consultationRemarksEditorRef()?.nativeElement ?? null;
   }
 
+  private hydrateConsultationEditorsFromState(): void {
+    this.setConsultationEditorContent('motifMainHtml', this.consultationMotifMainHtml());
+    this.setConsultationEditorContent('testsHtml', this.consultationTestsHtml());
+    this.setConsultationEditorContent('schemaHtml', this.consultationSchemaHtml());
+    this.setConsultationEditorContent('treatmentsHtml', this.consultationTreatmentsHtml());
+    this.setConsultationEditorContent('remarksHtml', this.consultationRemarksHtml());
+  }
+
   private setConsultationEditorContent(section: ConsultationEditorSection, html: string): void {
     const element = this.getConsultationEditorElement(section);
     if (element) {
       element.innerHTML = html || '';
     }
-  }
-
-  private getConsultationEditorContent(section: ConsultationEditorSection): string {
-    return this.getConsultationEditorElement(section)?.innerHTML.trim() ?? '';
   }
 
   private canOpenInBrowser(mimeType: string): boolean {

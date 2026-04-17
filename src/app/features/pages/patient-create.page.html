@@ -806,7 +806,7 @@
                   max="10"
                   step="1"
                   [value]="consultationEvaBefore()"
-                  [style.background]="getEvaRangeBackground(consultationEvaBefore())"
+                   [style.--eva-range-background]="getEvaRangeBackground(consultationEvaBefore())"
                   (input)="setConsultationEvaBefore($any($event.target).value)"
                 />
               </div>
@@ -821,7 +821,7 @@
                   max="10"
                   step="1"
                   [value]="consultationEvaAfter()"
-                  [style.background]="getEvaRangeBackground(consultationEvaAfter())"
+                   [style.--eva-range-background]="getEvaRangeBackground(consultationEvaAfter())"
                   (input)="setConsultationEvaAfter($any($event.target).value)"
                 />
               </div>

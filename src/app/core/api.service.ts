@@ -13,11 +13,13 @@ import {
   Appointment,
   AppointmentsPayload,
   AuthUser,
+  CreatePatientDocumentPayload,
   ConsultationRecord,
   ConsultationUpdatePayload,
   ConsultationContextPayload,
   AppointmentConsultationConflict,
   ConsultationMetaSummary,
+  CreatePatientConsultationPayload,
   CreateAppointmentPayload,
   CreatePatientPayload,
   CreateOfficePayload,
@@ -47,6 +49,7 @@ import {
   UserAccountPayload,
   SystemAuditLog,
   UpdateAppointmentConsultationMetaPayload,
+  UpdatePatientDocumentPayload,
   UpdateAccessProfileRightsPayload,
   UpdateOfficePayload,
   UserAgendaPreferences,
@@ -337,6 +340,14 @@ export class ApiService {
     return response.consultation;
   }
 
+  async createPatientConsultation(id: number, payload: CreatePatientConsultationPayload): Promise<ConsultationRecord> {
+    const response = await firstValueFrom(
+      this.http.post<{ consultation: ConsultationRecord }>(`${this.baseUrl}/patients/${id}/consultations`, payload)
+    );
+
+    return response.consultation;
+  }
+
   async getPatientDocuments(id: number): Promise<PatientDocumentSummary[]> {
     const response = await firstValueFrom(
       this.http.get<{ documents: PatientDocumentSummary[] }>(`${this.baseUrl}/patients/${id}/documents`)
@@ -351,6 +362,31 @@ export class ApiService {
     );
 
     return response.document;
+  }
+
+  async createPatientDocument(patientId: number, payload: CreatePatientDocumentPayload): Promise<PatientDocumentSummary> {
+    const response = await firstValueFrom(
+      this.http.post<{ document: PatientDocumentSummary }>(`${this.baseUrl}/patients/${patientId}/documents`, payload)
+    );
+
+    return response.document;
+  }
+
+  async updatePatientDocument(documentRef: string, payload: UpdatePatientDocumentPayload): Promise<PatientDocumentSummary> {
+    const response = await firstValueFrom(
+      this.http.patch<{ document: PatientDocumentSummary }>(
+        `${this.baseUrl}/patient-documents/${encodeURIComponent(documentRef)}`,
+        payload
+      )
+    );
+
+    return response.document;
+  }
+
+  async deletePatientDocument(documentRef: string): Promise<void> {
+    await firstValueFrom(
+      this.http.delete<void>(`${this.baseUrl}/patient-documents/${encodeURIComponent(documentRef)}`)
+    );
   }
 
   async getPatientAuditLogs(id: number): Promise<PatientAuditLog[]> {

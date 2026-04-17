@@ -477,6 +477,7 @@ export type ConsultationRecord = {
   evaBefore: number;
   evaAfter: number;
   profile: string;
+  reasonItems: ConsultationReasonItem[];
   motifMainHtml: string;
   testsHtml: string;
   schemaHtml: string;
@@ -495,11 +496,17 @@ export type ConsultationUpdatePayload = {
   evaBefore: number;
   evaAfter: number;
   profile: string;
+  reasonItems: ConsultationReasonItem[];
   motifMainHtml: string;
   testsHtml: string;
   schemaHtml: string;
   treatmentsHtml: string;
   remarksHtml: string;
+};
+
+export type CreatePatientConsultationPayload = ConsultationUpdatePayload & {
+  officeId?: number | null;
+  consultationDocuments?: ConsultationDocumentUploadPayload[];
 };
 
 export type PatientDocumentSummary = {
@@ -519,6 +526,22 @@ export type PatientDocumentSummary = {
 export type PatientDocumentDetail = PatientDocumentSummary & {
   patientId: number;
   contentBase64: string;
+};
+
+export type CreatePatientDocumentPayload = {
+  consultationId?: number | null;
+  officeId?: number | null;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  title: string;
+  comment: string;
+  contentBase64: string;
+};
+
+export type UpdatePatientDocumentPayload = {
+  title: string;
+  comment: string;
 };
 
 export type PatientAuditFieldChange = {

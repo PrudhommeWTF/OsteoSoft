@@ -3420,8 +3420,19 @@ function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}
   let data;
   try { data = JSON.parse(raw); } catch { return null; }
 
+  const normalizedReasonItems = Array.isArray(data.reasonItems)
+    ? data.reasonItems
+      .map((item) => ({
+        label: String(item?.label ?? '').trim(),
+        value: String(item?.value ?? '').trim(),
+        important: Boolean(item?.important)
+      }))
+      .filter((item, index, all) => item.label && all.findIndex((candidate) => candidate.label === item.label) === index)
+    : [];
+
   const hasContent =
     String(data.title ?? '').trim() ||
+    normalizedReasonItems.length > 0 ||
     String(data.motifMainHtml ?? '').trim() ||
     String(data.testsHtml ?? '').trim() ||
     String(data.schemaHtml ?? '').trim() ||
@@ -3479,16 +3490,6 @@ function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}
   }
 
   try {
-    const normalizedReasonItems = Array.isArray(data.reasonItems)
-      ? data.reasonItems
-        .map((item) => ({
-          label: String(item?.label ?? '').trim(),
-          value: String(item?.value ?? '').trim(),
-          important: Boolean(item?.important)
-        }))
-        .filter((item, index, all) => item.label && all.findIndex((candidate) => candidate.label === item.label) === index)
-      : [];
-
     const createdConsultation = db.prepare(`
       INSERT INTO consultations
         (patient_id, started_at, office_id, practitioner, title, important, height_cm, weight_kg,
@@ -3876,11 +3877,33 @@ const updateConsultationSchema = z.object({
   evaBefore: z.number().int().min(0).max(10).optional().default(0),
   evaAfter: z.number().int().min(0).max(10).optional().default(0),
   profile: z.string().max(120).optional().default('Adulte'),
+  reasonItems: z.array(
+    z.object({
+      label: z.string().max(160),
+      value: z.string().max(1000).optional().default(''),
+      important: z.boolean().optional().default(false)
+    })
+  ).optional().default([]),
   motifMainHtml: z.string().max(50_000).optional().default(''),
   testsHtml: z.string().max(50_000).optional().default(''),
   schemaHtml: z.string().max(50_000).optional().default(''),
   treatmentsHtml: z.string().max(50_000).optional().default(''),
   remarksHtml: z.string().max(50_000).optional().default('')
+});
+
+const createPatientConsultationSchema = updateConsultationSchema.extend({
+  officeId: z.number().int().positive().nullable().optional().default(null),
+  consultationDocuments: z.array(
+    z.object({
+      documentRef: z.string().max(80).optional(),
+      fileName: z.string().min(1).max(260),
+      mimeType: z.string().max(120).optional().default('application/octet-stream'),
+      sizeBytes: z.number().int().nonnegative().optional().default(0),
+      title: z.string().max(200).optional().default(''),
+      comment: z.string().max(2000).optional().default(''),
+      contentBase64: z.string().min(1).max(20_000_000)
+    })
+  ).optional().default([])
 });
 
 const patientDraftSchema = z.object({
@@ -6362,6 +6385,140 @@ app.get('/api/patient-documents/:documentRef', authMiddleware, requirePermission
   });
 });
 
+app.post('/api/patients/:id/documents', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+  const patientId = Number(req.params.id);
+  if (!Number.isInteger(patientId) || patientId <= 0) {
+    return res.status(400).json({ message: 'Identifiant patient invalide' });
+  }
+
+  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
+  if (!patient) {
+    return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  const fileName = String(req.body?.fileName ?? '').trim();
+  const mimeType = String(req.body?.mimeType ?? 'application/octet-stream').trim() || 'application/octet-stream';
+  const sizeBytes = Math.max(0, Number(req.body?.sizeBytes) || 0);
+  const title = String(req.body?.title ?? '').trim();
+  const comment = String(req.body?.comment ?? '').trim();
+  const contentBase64 = String(req.body?.contentBase64 ?? '').trim();
+  const officeIdRaw = Number(req.body?.officeId);
+  const consultationIdRaw = Number(req.body?.consultationId);
+  const officeId = Number.isInteger(officeIdRaw) && officeIdRaw > 0 ? officeIdRaw : null;
+  const consultationId = Number.isInteger(consultationIdRaw) && consultationIdRaw > 0 ? consultationIdRaw : null;
+
+  if (!fileName || !contentBase64) {
+    return res.status(400).json({ message: 'Fichier invalide' });
+  }
+
+  if (consultationId !== null) {
+    const consultation = db
+      .prepare('SELECT id, patient_id FROM consultations WHERE id = ? LIMIT 1')
+      .get(consultationId);
+
+    if (!consultation || Number(consultation.patient_id) !== patientId) {
+      return res.status(400).json({ message: 'Consultation invalide pour ce patient' });
+    }
+  }
+
+  const documentRef = `doc-${crypto.randomUUID()}`;
+  db.prepare(
+    `INSERT INTO patient_documents
+      (document_ref, patient_id, consultation_id, office_id, created_by, file_name, mime_type, size_bytes, title_cipher, comment_cipher, content_cipher)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    documentRef,
+    patientId,
+    consultationId,
+    officeId,
+    req.user.sub,
+    fileName,
+    mimeType,
+    sizeBytes,
+    title ? encryptSensitiveField(title) : null,
+    comment ? encryptSensitiveField(comment) : null,
+    encryptSensitiveField(contentBase64)
+  );
+
+  return res.status(201).json({
+    document: {
+      id: Number(db.prepare('SELECT id FROM patient_documents WHERE document_ref = ? LIMIT 1').get(documentRef)?.id ?? 0),
+      documentRef,
+      consultationId,
+      officeId,
+      fileName,
+      mimeType,
+      sizeBytes,
+      title,
+      comment,
+      createdAt: new Date().toISOString(),
+      link: `/api/patient-documents/${encodeURIComponent(documentRef)}`
+    }
+  });
+});
+
+app.patch('/api/patient-documents/:documentRef', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+  const documentRef = String(req.params.documentRef ?? '').trim();
+  if (!documentRef) {
+    return res.status(400).json({ message: 'Reference document invalide' });
+  }
+
+  const row = db.prepare(
+    `SELECT id, document_ref, consultation_id, office_id, file_name, mime_type, size_bytes, created_at
+     FROM patient_documents
+     WHERE document_ref = ?
+     LIMIT 1`
+  ).get(documentRef);
+
+  if (!row) {
+    return res.status(404).json({ message: 'Document introuvable' });
+  }
+
+  const title = String(req.body?.title ?? '').trim();
+  const comment = String(req.body?.comment ?? '').trim();
+
+  db.prepare(
+    `UPDATE patient_documents
+     SET title_cipher = ?, comment_cipher = ?
+     WHERE document_ref = ?`
+  ).run(
+    title ? encryptSensitiveField(title) : null,
+    comment ? encryptSensitiveField(comment) : null,
+    documentRef
+  );
+
+  return res.json({
+    document: {
+      id: Number(row.id),
+      documentRef: row.document_ref,
+      consultationId: row.consultation_id != null ? Number(row.consultation_id) : null,
+      officeId: row.office_id != null ? Number(row.office_id) : null,
+      fileName: row.file_name,
+      mimeType: row.mime_type,
+      sizeBytes: Number(row.size_bytes) || 0,
+      title,
+      comment,
+      createdAt: row.created_at,
+      link: `/api/patient-documents/${encodeURIComponent(row.document_ref)}`
+    }
+  });
+});
+
+app.delete('/api/patient-documents/:documentRef', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+  const documentRef = String(req.params.documentRef ?? '').trim();
+  if (!documentRef) {
+    return res.status(400).json({ message: 'Reference document invalide' });
+  }
+
+  const existing = db.prepare('SELECT id FROM patient_documents WHERE document_ref = ? LIMIT 1').get(documentRef);
+  if (!existing) {
+    return res.status(404).json({ message: 'Document introuvable' });
+  }
+
+  db.prepare('DELETE FROM patient_documents WHERE document_ref = ?').run(documentRef);
+  return res.status(204).send();
+});
+
 app.get('/api/patients', authMiddleware, requirePermission('read-patient-list'), (req, res) => {
   const query = String(req.query.search ?? '').trim().toLowerCase();
 
@@ -6549,7 +6706,7 @@ app.get('/api/patients/:id/consultations', authMiddleware, requirePermission('re
     consultationRows = db
       .prepare(
         `SELECT id, started_at, practitioner, title, important, height_cm, weight_kg,
-                eva_before, eva_after, profile,
+                eva_before, eva_after, profile, reason_items_cipher,
                 motif_main_cipher, tests_cipher, schema_cipher, treatments_cipher, remarks_cipher
          FROM consultations WHERE patient_id = ? ORDER BY started_at DESC`
       )
@@ -6561,6 +6718,26 @@ app.get('/api/patients/:id/consultations', authMiddleware, requirePermission('re
     .all(id);
 
   const consultations = consultationRows.map((row) => ({
+    reasonItems: (() => {
+      if (!row.reason_items_cipher) {
+        return [];
+      }
+      try {
+        const parsed = JSON.parse(decryptSensitiveField(row.reason_items_cipher));
+        if (!Array.isArray(parsed)) {
+          return [];
+        }
+        return parsed
+          .map((item) => ({
+            label: String(item?.label ?? '').trim(),
+            value: String(item?.value ?? '').trim(),
+            important: Boolean(item?.important)
+          }))
+          .filter((item) => item.label.length > 0);
+      } catch {
+        return [];
+      }
+    })(),
     id: row.id,
     type: 'consultation',
     startedAt: row.started_at,
@@ -6584,6 +6761,7 @@ app.get('/api/patients/:id/consultations', authMiddleware, requirePermission('re
   const appointments = appointmentRows
     .filter((row) => !consultationDates.has(row.starts_at.slice(0, 10)))
     .map((row) => ({
+      reasonItems: [],
       id: row.id,
       type: 'appointment',
       startedAt: row.starts_at,
@@ -6633,6 +6811,15 @@ app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-pa
   }
 
   const payload = parsed.data;
+  const normalizedReasonItems = Array.isArray(payload.reasonItems)
+    ? payload.reasonItems
+      .map((item) => ({
+        label: String(item?.label ?? '').trim(),
+        value: String(item?.value ?? '').trim(),
+        important: Boolean(item?.important)
+      }))
+      .filter((item, index, all) => item.label && all.findIndex((candidate) => candidate.label === item.label) === index)
+    : [];
 
   db.prepare(
     `UPDATE consultations
@@ -6645,6 +6832,7 @@ app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-pa
          eva_before = ?,
          eva_after = ?,
          profile = ?,
+         reason_items_cipher = ?,
          motif_main_cipher = ?,
          tests_cipher = ?,
          schema_cipher = ?,
@@ -6661,6 +6849,7 @@ app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-pa
     payload.evaBefore,
     payload.evaAfter,
     payload.profile.trim() || 'Adulte',
+    normalizedReasonItems.length > 0 ? encryptSensitiveField(JSON.stringify(normalizedReasonItems)) : null,
     payload.motifMainHtml.trim() ? encryptSensitiveField(payload.motifMainHtml) : null,
     payload.testsHtml.trim() ? encryptSensitiveField(payload.testsHtml) : null,
     payload.schemaHtml.trim() ? encryptSensitiveField(payload.schemaHtml) : null,
@@ -6686,6 +6875,103 @@ app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-pa
       evaBefore: payload.evaBefore,
       evaAfter: payload.evaAfter,
       profile: payload.profile.trim() || 'Adulte',
+      reasonItems: normalizedReasonItems,
+      motifMainHtml: payload.motifMainHtml,
+      testsHtml: payload.testsHtml,
+      schemaHtml: payload.schemaHtml,
+      treatmentsHtml: payload.treatmentsHtml,
+      remarksHtml: payload.remarksHtml,
+      status: 'Termine'
+    }
+  });
+});
+
+app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+  const patientId = Number(req.params.id);
+  if (!Number.isInteger(patientId) || patientId <= 0) {
+    return res.status(400).json({ message: 'ID patient invalide' });
+  }
+
+  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
+  if (!patient) {
+    return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  const parsed = createPatientConsultationSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Payload invalide' });
+  }
+
+  const payload = parsed.data;
+  const normalizedReasonItems = Array.isArray(payload.reasonItems)
+    ? payload.reasonItems
+      .map((item) => ({
+        label: String(item?.label ?? '').trim(),
+        value: String(item?.value ?? '').trim(),
+        important: Boolean(item?.important)
+      }))
+      .filter((item, index, all) => item.label && all.findIndex((candidate) => candidate.label === item.label) === index)
+    : [];
+
+  const officeId = Number.isInteger(payload.officeId) && Number(payload.officeId) > 0
+    ? Number(payload.officeId)
+    : null;
+
+  const inserted = db.prepare(
+    `INSERT INTO consultations
+      (patient_id, started_at, office_id, practitioner, title, important,
+       height_cm, weight_kg, eva_before, eva_after, profile, reason_items_cipher,
+       motif_main_cipher, tests_cipher, schema_cipher, treatments_cipher, remarks_cipher)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    patientId,
+    payload.startedAt,
+    officeId,
+    payload.practitioner.trim(),
+    payload.title.trim(),
+    payload.important ? 1 : 0,
+    payload.heightCm,
+    payload.weightKg,
+    payload.evaBefore,
+    payload.evaAfter,
+    payload.profile.trim() || 'Adulte',
+    normalizedReasonItems.length > 0 ? encryptSensitiveField(JSON.stringify(normalizedReasonItems)) : null,
+    payload.motifMainHtml.trim() ? encryptSensitiveField(payload.motifMainHtml) : null,
+    payload.testsHtml.trim() ? encryptSensitiveField(payload.testsHtml) : null,
+    payload.schemaHtml.trim() ? encryptSensitiveField(payload.schemaHtml) : null,
+    payload.treatmentsHtml.trim() ? encryptSensitiveField(payload.treatmentsHtml) : null,
+    payload.remarksHtml.trim() ? encryptSensitiveField(payload.remarksHtml) : null
+  );
+
+  const consultationId = Number(inserted.lastInsertRowid);
+
+  storeConsultationDocuments(
+    patientId,
+    consultationId,
+    officeId,
+    req.user.sub,
+    payload.consultationDocuments
+  );
+
+  writeAuditLog(req.user.sub, 'CREATE', 'consultations', String(consultationId), {
+    patientId,
+    title: payload.title.trim()
+  });
+
+  return res.status(201).json({
+    consultation: {
+      id: consultationId,
+      type: 'consultation',
+      startedAt: payload.startedAt,
+      practitioner: payload.practitioner.trim(),
+      title: payload.title.trim(),
+      important: payload.important,
+      heightCm: payload.heightCm,
+      weightKg: payload.weightKg,
+      evaBefore: payload.evaBefore,
+      evaAfter: payload.evaAfter,
+      profile: payload.profile.trim() || 'Adulte',
+      reasonItems: normalizedReasonItems,
       motifMainHtml: payload.motifMainHtml,
       testsHtml: payload.testsHtml,
       schemaHtml: payload.schemaHtml,

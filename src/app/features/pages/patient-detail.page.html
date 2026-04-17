@@ -10,41 +10,42 @@
     <a routerLink="/patients" class="alert-link ms-2">Retour à la liste</a>
   </div>
 } @else {
-  <section class="detail-header mb-4">
-    <div class="patient-hero">
-      <div class="patient-hero-icon">
-        <i [class]="'fa-2x ' + sexIcon() + ' ' + sexColorClass()"></i>
-      </div>
-      <div class="patient-hero-info">
-        <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
-          <h1 class="h2 mb-0">{{ patient()!.fullName }}</h1>
-          @if (patient()!.isDeceased) {
-            <span class="badge text-bg-dark">Décédé(e)</span>
-          }
-          <button type="button" class="btn btn-outline-secondary btn-sm" (click)="openAuditModal()">
-            <i class="fa-solid fa-clock-rotate-left me-1"></i>Historique
-          </button>
-        </div>
+  <section class="page-head d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+    <div>
+      <h1 class="h3 mb-1 d-flex flex-wrap align-items-center gap-2">
+        <i [class]="sexIcon() + ' ' + sexColorClass()"></i>
+        <span>{{ patient()!.fullName }}</span>
+        @if (patient()!.isDeceased) {
+          <span class="badge text-bg-dark">Décédé(e)</span>
+        }
+      </h1>
+      <p class="text-secondary mb-0 patient-hero-meta">
+        @if (patient()!.age !== null) {
+          <span><i class="fa-regular fa-calendar me-1"></i>{{ patient()!.age }} ans</span>
+          <span class="meta-sep">·</span>
+        }
+        @if (birthDateLabel()) {
+          <span>Né(e) le {{ birthDateLabel() }}</span>
+          <span class="meta-sep">·</span>
+        }
+        <span>
+          <i class="fa-solid fa-stethoscope me-1"></i>
+          {{ totalConsultationCount() }} consultation{{ totalConsultationCount() > 1 ? 's' : '' }}
+        </span>
+        @if (patient()!.lastVisit) {
+          <span class="meta-sep">·</span>
+          <span>Dernière visite : {{ formatShortDate(patient()!.lastVisit) }}</span>
+        }
+      </p>
+    </div>
 
-        <div class="patient-hero-meta text-secondary">
-          @if (patient()!.age !== null) {
-            <span><i class="fa-regular fa-calendar me-1"></i>{{ patient()!.age }} ans</span>
-            <span class="meta-sep">·</span>
-          }
-          @if (birthDateLabel()) {
-            <span>Né(e) le {{ birthDateLabel() }}</span>
-            <span class="meta-sep">·</span>
-          }
-          <span>
-            <i class="fa-solid fa-stethoscope me-1"></i>
-            {{ totalConsultationCount() }} consultation{{ totalConsultationCount() > 1 ? 's' : '' }}
-          </span>
-          @if (patient()!.lastVisit) {
-            <span class="meta-sep">·</span>
-            <span>Dernière visite : {{ formatShortDate(patient()!.lastVisit) }}</span>
-          }
-        </div>
-      </div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <button type="button" class="btn btn-outline-secondary" (click)="openAuditModal()">
+        <i class="fa-solid fa-clock-rotate-left me-2"></i>Historique
+      </button>
+      <button type="button" class="btn btn-primary" (click)="openNewConsultationModal()">
+        <i class="fa-solid fa-plus me-2"></i>Nouvelle consultation
+      </button>
     </div>
   </section>
 
@@ -487,102 +488,452 @@
         <div class="modal-header">
           <div>
             <h5 class="modal-title">{{ consultationModalTitle() }}</h5>
-            @if (activeConsultation(); as consultation) {
+            @if (consultationModalMode() === 'create') {
+              <div class="small text-muted mt-1">Consultation du {{ consultationStartedAtLabel() }}.</div>
+            } @else if (activeConsultation(); as consultation) {
               <div class="small text-muted mt-1">{{ formatConsultationDate(consultation.startedAt) }}</div>
             }
+            <div class="small mt-2">
+              <span class="badge" [class]="consultationAutosaveBadgeClass()">{{ consultationAutosaveStatusText() }}</span>
+            </div>
           </div>
           <button type="button" class="btn-close" aria-label="Fermer" (click)="closeConsultationModal()"></button>
         </div>
 
         <div class="modal-body">
-          <form [formGroup]="consultationEditForm" class="consultation-edit-grid">
-            <div class="row g-3 mb-4">
-              <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold" for="consultation-started-at">Date et heure</label>
-                <input id="consultation-started-at" type="datetime-local" class="form-control" formControlName="startedAtLocal" />
-              </div>
-              <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold" for="consultation-practitioner">Praticien</label>
-                <input id="consultation-practitioner" type="text" class="form-control" formControlName="practitioner" />
-              </div>
-              <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold" for="consultation-title">Titre</label>
-                <input id="consultation-title" type="text" class="form-control" formControlName="title" />
-              </div>
-              <div class="col-12 col-md-3">
-                <label class="form-label fw-semibold" for="consultation-profile">Profil</label>
-                <input id="consultation-profile" type="text" class="form-control" formControlName="profile" />
-              </div>
-              <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold" for="consultation-height">Taille (cm)</label>
-                <input id="consultation-height" type="number" class="form-control" formControlName="heightCm" />
-              </div>
-              <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold" for="consultation-weight">Poids (kg)</label>
-                <input id="consultation-weight" type="number" class="form-control" formControlName="weightKg" />
-              </div>
-              <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold" for="consultation-eva-before">EVA avant</label>
-                <input id="consultation-eva-before" type="number" min="0" max="10" class="form-control" formControlName="evaBefore" />
-              </div>
-              <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold" for="consultation-eva-after">EVA après</label>
-                <input id="consultation-eva-after" type="number" min="0" max="10" class="form-control" formControlName="evaAfter" />
-              </div>
-              <div class="col-12 col-md-4 d-flex align-items-end">
-                <div class="form-check form-switch mb-2">
-                  <input id="consultation-important" class="form-check-input" type="checkbox" formControlName="important" />
-                  <label class="form-check-label" for="consultation-important">Marquer comme importante</label>
-                </div>
-              </div>
-            </div>
-          </form>
+          <nav class="nav nav-tabs nav-justified mb-4" role="tablist" aria-label="Sections de la consultation">
+            <button
+              type="button"
+              class="nav-link"
+              [class.active]="consultationActiveTab() === 'consultation'"
+              role="tab"
+              [attr.aria-selected]="consultationActiveTab() === 'consultation'"
+              (click)="setConsultationTab('consultation')"
+            >
+              Consultation
+            </button>
+            <button
+              type="button"
+              class="nav-link"
+              [class.active]="consultationActiveTab() === 'documents'"
+              role="tab"
+              [attr.aria-selected]="consultationActiveTab() === 'documents'"
+              (click)="setConsultationTab('documents')"
+            >
+              Documents patient
+            </button>
+            <button
+              type="button"
+              class="nav-link"
+              [class.active]="consultationActiveTab() === 'courriers'"
+              role="tab"
+              [attr.aria-selected]="consultationActiveTab() === 'courriers'"
+              (click)="setConsultationTab('courriers')"
+            >
+              Courriers sortants
+            </button>
+            <button
+              type="button"
+              class="nav-link"
+              [class.active]="consultationActiveTab() === 'paiement'"
+              role="tab"
+              [attr.aria-selected]="consultationActiveTab() === 'paiement'"
+              (click)="setConsultationTab('paiement')"
+            >
+              Paiement
+            </button>
+          </nav>
 
-          @if (activeConsultation(); as consultation) {
-            <div class="d-flex flex-wrap gap-2 mb-4">
-              @if (consultation.heightCm) {
-                <div class="physio-kpi">
-                  <span class="physio-kpi-label">Taille</span>
-                  <span class="physio-kpi-value">{{ consultation.heightCm }} cm</span>
+          @if (consultationActiveTab() === 'consultation') {
+            <form [formGroup]="consultationEditForm" class="consultation-edit-grid">
+              <div class="consultation-split mb-4">
+                <div class="consultation-main-panel border rounded-3 p-3 bg-white">
+                  <div class="mb-3">
+                    <label class="form-label" for="consultation-started-at">Debut de consultation</label>
+                    <input id="consultation-started-at" type="datetime-local" class="form-control" formControlName="startedAtLocal" />
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label" for="consultation-practitioner">Praticien</label>
+                    <input
+                      id="consultation-practitioner"
+                      type="text"
+                      class="form-control"
+                      list="consultation-practitioner-options"
+                      formControlName="practitioner"
+                      placeholder="Selectionner un praticien" />
+                    <datalist id="consultation-practitioner-options">
+                      @for (practitioner of practitionerPickerOptions(); track practitioner.username) {
+                        <option [value]="practitioner.displayName">{{ practitioner.label }}</option>
+                      }
+                    </datalist>
+                    <div class="form-text">Utilisateurs rattachés au cabinet actif et autorisés à créer des patients.</div>
+                  </div>
+
+                  <div class="mb-3 form-check">
+                    <input id="consultation-important" class="form-check-input" type="checkbox" formControlName="important" />
+                    <label class="form-check-label" for="consultation-important">Consultation importante</label>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label" for="consultation-title">Titre de la consultation</label>
+                    <input id="consultation-title" type="text" class="form-control" formControlName="title" />
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label" for="consultation-height">Taille (cm)</label>
+                    <input id="consultation-height" type="number" class="form-control" formControlName="heightCm" min="0" step="1" />
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label" for="consultation-weight">Poids (kg)</label>
+                    <input id="consultation-weight" type="number" class="form-control" formControlName="weightKg" min="0" step="0.1" />
+                  </div>
+
+                  @if (activeConsultation(); as consultation) {
+                    <div class="mb-3">
+                      <label class="form-label">IMC</label>
+                      <div class="consultation-kpi">{{ consultationBmi(consultation) || '-' }}</div>
+                    </div>
+                  }
+
+                  <div class="mb-3">
+                    <label class="form-label" for="consultation-profile">Profil</label>
+                    <select
+                      id="consultation-profile"
+                      class="form-select"
+                      formControlName="profile"
+                      [disabled]="consultationProfileOptions().length === 0"
+                      (change)="setConsultationProfile($any($event.target).value)">
+                      @if (consultationProfileOptions().length === 0) {
+                        <option value="">Aucun profil configure pour ce cabinet</option>
+                      } @else {
+                        @for (option of consultationProfileOptions(); track option) {
+                          <option [value]="option">{{ option }}</option>
+                        }
+                      }
+                    </select>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label" for="consultation-eva-before">EVA au debut: {{ consultationEditForm.controls.evaBefore.value }}/10</label>
+                    <input
+                      id="consultation-eva-before"
+                      type="range"
+                      class="form-range eva-range"
+                      min="0"
+                      max="10"
+                      step="1"
+                      formControlName="evaBefore"
+                      [style.--eva-range-background]="getEvaRangeBackground(consultationEditForm.controls.evaBefore.value)"
+                    />
+                  </div>
+
+                  <div class="mb-0">
+                    <label class="form-label" for="consultation-eva-after">EVA en fin de consultation: {{ consultationEditForm.controls.evaAfter.value }}/10</label>
+                    <input
+                      id="consultation-eva-after"
+                      type="range"
+                      class="form-range eva-range"
+                      min="0"
+                      max="10"
+                      step="1"
+                      formControlName="evaAfter"
+                      [style.--eva-range-background]="getEvaRangeBackground(consultationEditForm.controls.evaAfter.value)"
+                    />
+                  </div>
                 </div>
-              }
-              @if (consultation.weightKg) {
-                <div class="physio-kpi">
-                  <span class="physio-kpi-label">Poids</span>
-                  <span class="physio-kpi-value">{{ consultation.weightKg }} kg</span>
-                </div>
-              }
-              @if (consultationBmi(consultation)) {
-                <div class="physio-kpi">
-                  <span class="physio-kpi-label">IMC</span>
-                  <span class="physio-kpi-value">{{ consultationBmi(consultation) }}</span>
-                </div>
-              }
+
+                <aside class="consultation-reasons-panel border rounded-3 p-3 bg-light-subtle">
+                  <div class="mb-2">
+                    <h3 class="mb-1">Motifs du profil</h3>
+                    <p class="mb-0">
+                      @if (consultationOfficeName()) {
+                        Cabinet: {{ consultationOfficeName() }}
+                      } @else {
+                        Cabinet non determine
+                      }
+                    </p>
+                  </div>
+
+                  @if (consultationEditForm.controls.profile.value.trim().length === 0) {
+                    <div class="alert alert-light border mb-0">Selectionnez d'abord un profil pour afficher les motifs.</div>
+                  } @else if (consultationProfileReasons().length === 0) {
+                    <div class="alert alert-light border mb-0">Aucun motif configure pour ce profil.</div>
+                  } @else {
+                    <div class="reason-list d-flex flex-column gap-1" role="list" aria-label="Motifs disponibles pour le profil selectionne">
+                      @for (item of consultationReasonItems(); track item.reason) {
+                        <div class="reason-item" [class.active]="item.checked">
+                          <div class="reason-item-check">
+                            <input
+                              class="form-check-input"
+                              type="checkbox"
+                              [id]="'detail-reason-check-' + $index"
+                              [checked]="item.checked"
+                              (change)="setConsultationReasonChecked(item.reason, $any($event.target).checked)"
+                            />
+                          </div>
+                          <div class="reason-item-body">
+                            <label class="reason-item-label" [attr.for]="'detail-reason-check-' + $index">{{ item.reason }}</label>
+                            <input
+                              type="text"
+                              class="form-control form-control-sm"
+                              [value]="item.value"
+                              placeholder="Saisir une valeur"
+                              (input)="setConsultationReasonValue(item.reason, $any($event.target).value || '')"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            class="btn btn-sm"
+                            [class.btn-outline-warning]="!item.important"
+                            [class.btn-warning]="item.important"
+                            [attr.aria-label]="'Marquer le motif ' + item.reason + ' comme important'"
+                            (click)="setConsultationReasonImportant(item.reason, !item.important)">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                          </button>
+                        </div>
+                      }
+                    </div>
+
+                    <div class="reason-selection mt-3">
+                      <small class="text-muted fw-semibold d-block mb-2">Motifs selectionnes ({{ consultationSelectedReasonItems().length }})</small>
+                      @if (consultationSelectedReasonItems().length === 0) {
+                        <small class="text-muted">Aucun motif selectionne.</small>
+                      } @else {
+                        <div class="d-flex flex-wrap gap-2">
+                          @for (reason of consultationSelectedReasonItems(); track reason.label) {
+                            <span class="badge rounded-pill text-bg-light border">
+                              {{ reason.label }}@if (reason.value) { : {{ reason.value }} }@if (reason.important) { (important) }
+                            </span>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+                </aside>
+              </div>
+            </form>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Motif principal</label>
+              <div class="wysiwyg-toolbar">
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'bold')"><i class="fa-solid fa-bold"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'italic')"><i class="fa-solid fa-italic"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'underline')"><i class="fa-solid fa-underline"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
+              </div>
+              <div #consultationMotifMainEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('motifMainHtml', $event)"></div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Tests</label>
+              <div class="wysiwyg-toolbar">
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'bold')"><i class="fa-solid fa-bold"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'italic')"><i class="fa-solid fa-italic"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'underline')"><i class="fa-solid fa-underline"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
+              </div>
+              <div #consultationTestsEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('testsHtml', $event)"></div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Schema</label>
+              <div class="wysiwyg-toolbar">
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'bold')"><i class="fa-solid fa-bold"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'italic')"><i class="fa-solid fa-italic"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'underline')"><i class="fa-solid fa-underline"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
+              </div>
+              <div #consultationSchemaEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('schemaHtml', $event)"></div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Traitements proposes</label>
+              <div class="wysiwyg-toolbar">
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'bold')"><i class="fa-solid fa-bold"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'italic')"><i class="fa-solid fa-italic"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'underline')"><i class="fa-solid fa-underline"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
+              </div>
+              <div #consultationTreatmentsEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('treatmentsHtml', $event)"></div>
+            </div>
+
+            <div class="mb-0">
+              <label class="form-label fw-semibold">Remarques</label>
+              <div class="wysiwyg-toolbar">
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'bold')"><i class="fa-solid fa-bold"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'italic')"><i class="fa-solid fa-italic"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'underline')"><i class="fa-solid fa-underline"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
+              </div>
+              <div #consultationRemarksEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('remarksHtml', $event)"></div>
             </div>
           }
 
-          <div class="consultation-rich-sections">
-            <section class="rich-editor-section">
-              <h6 class="rich-section-title">Motif principal</h6>
-              <div #consultationMotifMainEditor class="rich-editor" contenteditable="true"></div>
-            </section>
-            <section class="rich-editor-section">
-              <h6 class="rich-section-title">Tests</h6>
-              <div #consultationTestsEditor class="rich-editor" contenteditable="true"></div>
-            </section>
-            <section class="rich-editor-section">
-              <h6 class="rich-section-title">Schéma</h6>
-              <div #consultationSchemaEditor class="rich-editor" contenteditable="true"></div>
-            </section>
-            <section class="rich-editor-section">
-              <h6 class="rich-section-title">Traitements proposés</h6>
-              <div #consultationTreatmentsEditor class="rich-editor" contenteditable="true"></div>
-            </section>
-            <section class="rich-editor-section">
-              <h6 class="rich-section-title">Remarques</h6>
-              <div #consultationRemarksEditor class="rich-editor" contenteditable="true"></div>
-            </section>
-          </div>
+          @if (consultationActiveTab() === 'documents') {
+            @if (consultationModalMode() === 'create') {
+              <div class="mb-3">
+                <label class="form-label fw-semibold d-block">Documents patient</label>
+                <div
+                  class="border rounded-3 p-4 text-center"
+                  [class.bg-light]="!isConsultationDocumentDragOver()"
+                  [class.bg-primary-subtle]="isConsultationDocumentDragOver()"
+                  (dragover)="onConsultationDocumentDragOver($event)"
+                  (dragleave)="onConsultationDocumentDragLeave($event)"
+                  (drop)="onConsultationDocumentDrop($event)">
+                  <i class="fa-regular fa-file-lines fs-2 text-secondary d-block mb-2"></i>
+                  <p class="mb-2">Glissez-deposez vos documents ici</p>
+                  <label class="btn btn-outline-primary btn-sm mb-0" for="consultation-document-upload-input">
+                    Ou cliquez pour choisir un fichier
+                  </label>
+                  <input
+                    id="consultation-document-upload-input"
+                    type="file"
+                    class="d-none"
+                    multiple
+                    (change)="onConsultationDocumentFileSelected($event)" />
+                  <p class="text-muted small mb-0 mt-2">Les documents sont chiffrés et liés au patient/à la consultation.</p>
+                </div>
+              </div>
+
+              @if (consultationPendingDocuments().length === 0) {
+                <div class="empty-tab-state">
+                  <i class="fa-regular fa-folder-open"></i>
+                  <h3>Aucun document ajoute</h3>
+                  <p>Les documents seront sauvegardes a la creation de la consultation.</p>
+                </div>
+              } @else {
+                <div class="d-flex flex-column gap-3">
+                  @for (document of consultationPendingDocuments(); track document.tempKey) {
+                    <article class="border rounded-3 p-3 bg-white">
+                      <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                        <div>
+                          <p class="fw-semibold mb-1">{{ document.fileName }}</p>
+                          <p class="text-muted small mb-0">{{ document.mimeType || 'Type inconnu' }} · {{ formatFileSize(document.sizeBytes) }}</p>
+                        </div>
+                        <button
+                          type="button"
+                          class="btn btn-outline-danger btn-sm"
+                          (click)="removePendingConsultationDocument(document.tempKey)">
+                          <i class="fa-solid fa-trash me-1"></i>Supprimer
+                        </button>
+                      </div>
+
+                      <div class="row g-2 mt-2">
+                        <div class="col-12 col-lg-5">
+                          <label class="form-label mb-1">Titre</label>
+                          <input
+                            type="text"
+                            class="form-control form-control-sm"
+                            [value]="document.title"
+                            (input)="updatePendingConsultationDocumentTitle(document.tempKey, $any($event.target).value || '')" />
+                        </div>
+                        <div class="col-12 col-lg-7">
+                          <label class="form-label mb-1">Commentaire</label>
+                          <input
+                            type="text"
+                            class="form-control form-control-sm"
+                            [value]="document.comment"
+                            placeholder="Commentaire optionnel"
+                            (input)="updatePendingConsultationDocumentComment(document.tempKey, $any($event.target).value || '')" />
+                        </div>
+                      </div>
+                    </article>
+                  }
+                </div>
+              }
+            } @else {
+              <div class="mb-3 d-flex flex-wrap gap-2 align-items-center">
+                <label class="btn btn-outline-primary btn-sm mb-0" for="consultation-document-upload-input">
+                  <i class="fa-solid fa-upload me-1"></i>Ajouter des documents
+                </label>
+                <input
+                  id="consultation-document-upload-input"
+                  type="file"
+                  class="d-none"
+                  multiple
+                  (change)="onConsultationDocumentFileSelected($event)"
+                />
+                @if (isUploadingConsultationDocuments()) {
+                  <span class="small text-muted">Téléversement en cours...</span>
+                }
+              </div>
+
+              @if (activeConsultationDocuments().length === 0) {
+                <div class="empty-tab-state">
+                  <i class="fa-regular fa-folder-open"></i>
+                  <h3>Aucun document lie a cette consultation</h3>
+                  <p>Les documents de cette consultation apparaitront ici.</p>
+                </div>
+              } @else {
+                <div class="d-flex flex-column gap-3">
+                  @for (document of activeConsultationDocuments(); track document.documentRef) {
+                    <article class="border rounded-3 p-3 bg-white">
+                      <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                        <div>
+                          <p class="fw-semibold mb-1">{{ document.fileName }}</p>
+                          <p class="text-muted small mb-0">{{ document.mimeType || 'Type inconnu' }} · {{ formatFileSize(document.sizeBytes) }}</p>
+                        </div>
+                        <div class="btn-group btn-group-sm">
+                          <button type="button" class="btn btn-outline-primary" (click)="openPatientDocument(document)">
+                            <i class="fa-solid fa-eye me-1"></i>Ouvrir
+                          </button>
+                          <button type="button" class="btn btn-outline-secondary" (click)="openPatientDocument(document, true)">
+                            <i class="fa-solid fa-download me-1"></i>Telecharger
+                          </button>
+                          <button type="button" class="btn btn-outline-danger" [disabled]="isDocumentSaving(document.documentRef)" (click)="deleteConsultationDocument(document.documentRef)">
+                            <i class="fa-solid fa-trash me-1"></i>Supprimer
+                          </button>
+                        </div>
+                      </div>
+
+                      <div class="row g-2 mt-2">
+                        <div class="col-12 col-lg-5">
+                          <label class="form-label mb-1">Titre</label>
+                          <input #docTitleInput type="text" class="form-control form-control-sm" [value]="document.title" />
+                        </div>
+                        <div class="col-12 col-lg-6">
+                          <label class="form-label mb-1">Commentaire</label>
+                          <input #docCommentInput type="text" class="form-control form-control-sm" [value]="document.comment" placeholder="Commentaire optionnel" />
+                        </div>
+                        <div class="col-12 col-lg-1 d-flex align-items-end">
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-outline-success w-100"
+                            [disabled]="isDocumentSaving(document.documentRef)"
+                            (click)="saveConsultationDocumentMeta(document.documentRef, docTitleInput.value, docCommentInput.value)">
+                            <i class="fa-solid fa-floppy-disk"></i>
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  }
+                </div>
+              }
+            }
+          }
+
+          @if (consultationActiveTab() === 'courriers') {
+            <div class="empty-tab-state">
+              <i class="fa-regular fa-envelope-open"></i>
+              <h3>Courriers sortants</h3>
+              <p>Préparez et suivez les courriers de sortie et comptes-rendus adressés aux correspondants.</p>
+            </div>
+          }
+
+          @if (consultationActiveTab() === 'paiement') {
+            <div class="empty-tab-state">
+              <i class="fa-solid fa-receipt"></i>
+              <h3>Paiement</h3>
+              <p>Renseignez les règlements, mutuelle et informations de facturation de la consultation.</p>
+            </div>
+          }
 
           @if (consultationSaveError()) {
             <div class="alert alert-danger mt-4 mb-0">{{ consultationSaveError() }}</div>
@@ -595,7 +946,11 @@
             @if (isSavingConsultation()) {
               <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
             }
-            Enregistrer la consultation
+            @if (consultationModalMode() === 'create') {
+              Creer la consultation
+            } @else {
+              Enregistrer la consultation
+            }
           </button>
         </div>
       </div>
