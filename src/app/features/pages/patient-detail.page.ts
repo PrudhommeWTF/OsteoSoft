@@ -11,6 +11,7 @@ import {
   signal,
   viewChild
 } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
@@ -195,6 +196,11 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     evaAfter: [0, [Validators.min(0), Validators.max(10)]],
     profile: ['Adulte', [Validators.maxLength(120)]]
   });
+
+  private readonly consultationProfileValue = toSignal(
+    this.consultationEditForm.controls.profile.valueChanges,
+    { initialValue: this.consultationEditForm.controls.profile.value }
+  );
 
   readonly sexIcon = computed(() => {
     const sex = this.patient()?.sex;
@@ -398,7 +404,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   });
 
   readonly consultationProfileReasons = computed(() => {
-    const selectedProfile = this.consultationEditForm.controls.profile.value.trim();
+    const selectedProfile = String(this.consultationProfileValue() ?? '').trim();
     if (!selectedProfile) {
       return [];
     }
