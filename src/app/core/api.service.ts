@@ -14,6 +14,7 @@ import {
   AppointmentsPayload,
   AuthUser,
   ConsultationRecord,
+  ConsultationContextPayload,
   AppointmentConsultationConflict,
   ConsultationMetaSummary,
   CreateAppointmentPayload,
@@ -278,6 +279,15 @@ export class ApiService {
     );
 
     return response.practitioners;
+  }
+
+  async getConsultationContext(officeId?: number | null): Promise<ConsultationContextPayload> {
+    let params = new HttpParams();
+    if (Number.isInteger(officeId) && Number(officeId) > 0) {
+      params = params.set('officeId', String(officeId));
+    }
+
+    return firstValueFrom(this.http.get<ConsultationContextPayload>(`${this.baseUrl}/consultation-context`, { params }));
   }
 
   async updateAppointmentConsultationMeta(

@@ -6,7 +6,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
-import { LocationPair, Patient, PatientDetail, PeoplePickerContact, Practitioner } from '../../core/api.types';
+import { LocationPair, OfficeConsultationProfile, Patient, PatientDetail, PeoplePickerContact, Practitioner } from '../../core/api.types';
 
 declare const $: any;
 
@@ -27,7 +27,6 @@ const LOCAL_DRAFT_KEY = 'osteosoft:new-patient-draft';
 type DraftSaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 type ConsultationTab = 'consultation' | 'documents' | 'courriers' | 'paiement';
-type PatientProfile = 'Adulte' | 'Femme enceinte' | 'Nourrisson' | 'Enfant';
 
 type ConsultationDraft = {
   startedAt: string;
@@ -38,7 +37,8 @@ type ConsultationDraft = {
   weightKg: number | null;
   evaBefore: number;
   evaAfter: number;
-  profile: PatientProfile;
+  profile: string;
+  selectedReasons: string[];
   motifMainHtml: string;
   testsHtml: string;
   schemaHtml: string;
@@ -175,6 +175,8 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
 
   readonly consultationActiveTab = signal<ConsultationTab>('consultation');
   readonly consultationStartedAtIso = signal(new Date().toISOString());
+  readonly consultationOfficeId = signal<number | null>(null);
+  readonly consultationOfficeName = signal<string | null>(null);
   readonly consultationPractitioner = signal('');
   readonly practitioners = signal<Practitioner[]>([]);
   readonly consultationTitle = signal('');
@@ -183,7 +185,10 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   readonly consultationWeightKg = signal<number | null>(null);
   readonly consultationEvaBefore = signal(0);
   readonly consultationEvaAfter = signal(0);
-  readonly consultationProfile = signal<PatientProfile>('Adulte');
+  readonly consultationProfile = signal('');
+  readonly consultationProfileOptions = signal<string[]>([]);
+  readonly consultationOfficeProfiles = signal<OfficeConsultationProfile[]>([]);
+  readonly consultationSelectedReasons = signal<string[]>([]);
   readonly consultationMotifMainHtml = signal('');
   readonly consultationTestsHtml = signal('');
   readonly consultationSchemaHtml = signal('');
@@ -191,7 +196,23 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   readonly consultationRemarksHtml = signal('');
   readonly isConsultationLinkStrategyModalOpen = signal(false);
 
-  readonly consultationProfileOptions: PatientProfile[] = ['Adulte', 'Femme enceinte', 'Nourrisson', 'Enfant'];
+  readonly consultationProfileReasons = computed(() => {
+    const selectedProfile = this.consultationProfile().trim();
+    if (!selectedProfile) {
+      return [];
+    }
+
+    const profile = this.consultationOfficeProfiles().find((item) => item.name === selectedProfile);
+    if (!profile) {
+      return [];
+    }
+
+    return profile.reasons
+      .map((reason) => String(reason ?? '').trim())
+      .filter((reason, index, all) => Boolean(reason) && all.indexOf(reason) === index);
+  });
+
+  readonly consultationStartedAtInput = computed(() => this.toDateTimeLocalValue(this.consultationStartedAtIso()));
 
   readonly consultationStartedAtLabel = computed(() => {
     const parsed = new Date(this.consultationStartedAtIso());
@@ -591,6 +612,16 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     this.syncConsultationNoteFromState();
   }
 
+  setConsultationStartedAt(value: string): void {
+    const iso = this.fromDateTimeLocalValue(value);
+    if (!iso) {
+      return;
+    }
+
+    this.consultationStartedAtIso.set(iso);
+    this.syncConsultationNoteFromState();
+  }
+
   setConsultationTitle(value: string): void {
     this.consultationTitle.set(value);
     this.syncConsultationNoteFromState();
@@ -622,10 +653,32 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   setConsultationProfile(value: string): void {
-    if (value === 'Adulte' || value === 'Femme enceinte' || value === 'Nourrisson' || value === 'Enfant') {
-      this.consultationProfile.set(value);
-      this.syncConsultationNoteFromState();
+    const selected = value.trim();
+    this.consultationProfile.set(selected);
+    const availableReasons = new Set(this.consultationProfileReasons());
+    this.consultationSelectedReasons.update((items) => items.filter((item) => availableReasons.has(item)));
+    this.syncConsultationNoteFromState();
+  }
+
+  toggleConsultationReason(reason: string): void {
+    const normalized = reason.trim();
+    if (!normalized) {
+      return;
     }
+
+    this.consultationSelectedReasons.update((items) => {
+      if (items.includes(normalized)) {
+        return items.filter((item) => item !== normalized);
+      }
+
+      return [...items, normalized];
+    });
+
+    this.syncConsultationNoteFromState();
+  }
+
+  isConsultationReasonSelected(reason: string): boolean {
+    return this.consultationSelectedReasons().includes(reason);
   }
 
   onConsultationRichTextInput(
@@ -738,7 +791,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit(): void {
     void this.loadAntecedentTypes();
-    void this.loadPractitioners();
+    void this.loadConsultationContext();
     void this.loadLocationPairs();
 
     const sessionPractitioner = this.authService.username().trim();
@@ -1441,6 +1494,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       evaBefore: this.consultationEvaBefore(),
       evaAfter: this.consultationEvaAfter(),
       profile: this.consultationProfile(),
+      selectedReasons: this.consultationSelectedReasons(),
       motifMainHtml: this.consultationMotifMainHtml(),
       testsHtml: this.consultationTestsHtml(),
       schemaHtml: this.consultationSchemaHtml(),
@@ -1491,13 +1545,15 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       this.consultationEvaBefore.set(typeof parsed.evaBefore === 'number' ? parsed.evaBefore : 0);
       this.consultationEvaAfter.set(typeof parsed.evaAfter === 'number' ? parsed.evaAfter : 0);
 
-      if (
-        parsed.profile === 'Adulte' ||
-        parsed.profile === 'Femme enceinte' ||
-        parsed.profile === 'Nourrisson' ||
-        parsed.profile === 'Enfant'
-      ) {
-        this.consultationProfile.set(parsed.profile);
+      if (typeof parsed.profile === 'string') {
+        this.consultationProfile.set(parsed.profile.trim());
+      }
+
+      if (Array.isArray(parsed.selectedReasons)) {
+        const selected = parsed.selectedReasons
+          .map((item) => String(item ?? '').trim())
+          .filter(Boolean);
+        this.consultationSelectedReasons.set([...new Set(selected)]);
       }
 
       this.consultationMotifMainHtml.set(typeof parsed.motifMainHtml === 'string' ? parsed.motifMainHtml : '');
@@ -1522,7 +1578,8 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     this.consultationWeightKg.set(null);
     this.consultationEvaBefore.set(0);
     this.consultationEvaAfter.set(0);
-    this.consultationProfile.set('Adulte');
+    this.consultationProfile.set(this.consultationProfileOptions()[0] ?? '');
+    this.consultationSelectedReasons.set([]);
     this.consultationMotifMainHtml.set('');
     this.consultationTestsHtml.set('');
     this.consultationSchemaHtml.set('');
@@ -1531,10 +1588,37 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     this.syncConsultationNoteFromState();
   }
 
-  private async loadPractitioners(): Promise<void> {
+  private async loadConsultationContext(): Promise<void> {
     try {
-      const practitioners = await this.api.getPractitioners();
+      let officeId = this.authService.activeOfficeId();
+      if (!(Number.isInteger(officeId) && Number(officeId) > 0)) {
+        const profile = await this.api.getMyUserProfile();
+        officeId = Number.isInteger(profile.officeId) && Number(profile.officeId) > 0
+          ? Number(profile.officeId)
+          : null;
+      }
+
+      const context = await this.api.getConsultationContext(officeId);
+      this.consultationOfficeId.set(context.officeId ?? null);
+      this.consultationOfficeName.set(context.officeName ?? null);
+
+      const practitioners = Array.isArray(context.practitioners) ? context.practitioners : [];
       this.practitioners.set(practitioners);
+
+      const officeProfiles = Array.isArray(context.profiles) ? context.profiles : [];
+      this.consultationOfficeProfiles.set(officeProfiles);
+
+      const profileNames = officeProfiles
+        .map((item) => String(item.name ?? '').trim())
+        .filter((name, index, all) => Boolean(name) && all.indexOf(name) === index);
+      this.consultationProfileOptions.set(profileNames);
+
+      if (!profileNames.includes(this.consultationProfile())) {
+        this.consultationProfile.set(profileNames[0] ?? '');
+      }
+
+      const availableReasons = new Set(this.consultationProfileReasons());
+      this.consultationSelectedReasons.update((items) => items.filter((item) => availableReasons.has(item)));
 
       if (!this.consultationPractitioner()) {
         const sessionPractitioner = this.authService.username().trim();
@@ -1547,8 +1631,42 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
         this.syncConsultationNoteFromState();
       }
     } catch {
+      this.consultationOfficeId.set(null);
+      this.consultationOfficeName.set(null);
       this.practitioners.set([]);
+      this.consultationOfficeProfiles.set([]);
+      this.consultationProfileOptions.set([]);
+      this.consultationProfile.set('');
+      this.consultationSelectedReasons.set([]);
     }
+  }
+
+  private toDateTimeLocalValue(iso: string): string {
+    const parsed = new Date(iso);
+    if (Number.isNaN(parsed.getTime())) {
+      return '';
+    }
+
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    const hour = String(parsed.getHours()).padStart(2, '0');
+    const minute = String(parsed.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hour}:${minute}`;
+  }
+
+  private fromDateTimeLocalValue(value: string): string | null {
+    const trimmed = String(value ?? '').trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    return parsed.toISOString();
   }
 
   private async loadAntecedentTypes(): Promise<void> {

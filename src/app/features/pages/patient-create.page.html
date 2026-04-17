@@ -656,86 +656,172 @@
       </div>
       <div class="wizard-card-body">
 
-        <div class="consultation-tabs mb-3" role="tablist" aria-label="Sections de la consultation">
-          <button type="button" class="btn" [class.btn-primary]="consultationActiveTab() === 'consultation'" [class.btn-outline-primary]="consultationActiveTab() !== 'consultation'" (click)="setConsultationTab('consultation')">Consultation</button>
-          <button type="button" class="btn" [class.btn-primary]="consultationActiveTab() === 'documents'" [class.btn-outline-primary]="consultationActiveTab() !== 'documents'" (click)="setConsultationTab('documents')">Documents patient</button>
-          <button type="button" class="btn" [class.btn-primary]="consultationActiveTab() === 'courriers'" [class.btn-outline-primary]="consultationActiveTab() !== 'courriers'" (click)="setConsultationTab('courriers')">Courriers sortants</button>
-          <button type="button" class="btn" [class.btn-primary]="consultationActiveTab() === 'paiement'" [class.btn-outline-primary]="consultationActiveTab() !== 'paiement'" (click)="setConsultationTab('paiement')">Paiement</button>
+        <div class="consultation-tabs mb-4" role="tablist" aria-label="Sections de la consultation">
+          <button type="button" class="consultation-tab" [class.active]="consultationActiveTab() === 'consultation'" (click)="setConsultationTab('consultation')">
+            <span class="tab-index">1</span>
+            <span class="tab-copy">
+              <strong>Consultation</strong>
+              <small>Parametres cliniques</small>
+            </span>
+          </button>
+          <button type="button" class="consultation-tab" [class.active]="consultationActiveTab() === 'documents'" (click)="setConsultationTab('documents')">
+            <span class="tab-index">2</span>
+            <span class="tab-copy">
+              <strong>Documents patient</strong>
+              <small>Pieces jointes</small>
+            </span>
+          </button>
+          <button type="button" class="consultation-tab" [class.active]="consultationActiveTab() === 'courriers'" (click)="setConsultationTab('courriers')">
+            <span class="tab-index">3</span>
+            <span class="tab-copy">
+              <strong>Courriers sortants</strong>
+              <small>Communication externe</small>
+            </span>
+          </button>
+          <button type="button" class="consultation-tab" [class.active]="consultationActiveTab() === 'paiement'" (click)="setConsultationTab('paiement')">
+            <span class="tab-index">4</span>
+            <span class="tab-copy">
+              <strong>Paiement</strong>
+              <small>Facturation seance</small>
+            </span>
+          </button>
         </div>
 
         @if (consultationActiveTab() === 'consultation') {
-          <div class="row g-3 mb-3">
-            <div class="col-12 col-lg-4">
-              <label class="form-label">Debut de consultation</label>
-              <input type="text" class="form-control" [value]="consultationStartedAtLabel()" readonly />
-            </div>
-            <div class="col-12 col-lg-5">
-              <label class="form-label" for="consultationPractitioner">Praticien</label>
-              <input
-                id="consultationPractitioner"
-                type="text"
-                class="form-control"
-                list="consultationPractitioners"
-                [value]="consultationPractitioner()"
-                (input)="setConsultationPractitioner($any($event.target).value)"
-                placeholder="Selectionner un praticien" />
-              <datalist id="consultationPractitioners">
-                @for (practitioner of practitioners(); track practitioner.id) {
-                  <option [value]="practitioner.username"></option>
-                }
-              </datalist>
-            </div>
-            <div class="col-12 col-lg-3 d-flex align-items-end">
-              <div class="form-check mb-2">
+          <div class="consultation-split mb-4">
+            <div class="consultation-main-panel border rounded-3 p-3 bg-white">
+              <div class="mb-3">
+                <label class="form-label" for="consultationStartedAt">Debut de consultation</label>
+                <input
+                  id="consultationStartedAt"
+                  type="datetime-local"
+                  class="form-control"
+                  [value]="consultationStartedAtInput()"
+                  (input)="setConsultationStartedAt($any($event.target).value)"
+                />
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label" for="consultationPractitioner">Praticien</label>
+                <select
+                  id="consultationPractitioner"
+                  class="form-select"
+                  [value]="consultationPractitioner()"
+                  (change)="setConsultationPractitioner($any($event.target).value)">
+                  <option value="">Selectionner un praticien</option>
+                  @for (practitioner of practitioners(); track practitioner.id) {
+                    <option [value]="practitioner.username">{{ practitioner.username }} - {{ practitioner.role }}</option>
+                  }
+                </select>
+                <div class="form-text">Liste des utilisateurs ayant acces au cabinet en cours.</div>
+              </div>
+
+              <div class="mb-3 form-check">
                 <input id="consultationImportant" class="form-check-input" type="checkbox" [checked]="consultationImportant()" (change)="setConsultationImportant($any($event.target).checked)" />
                 <label class="form-check-label" for="consultationImportant">Consultation importante</label>
               </div>
-            </div>
-          </div>
 
-          <div class="mb-3">
-            <label class="form-label" for="consultationTitle">Titre de la consultation</label>
-            <input
-              id="consultationTitle"
-              type="text"
-              class="form-control"
-              [value]="consultationTitle()"
-              (input)="setConsultationTitle($any($event.target).value)"
-              placeholder="Ex: Lombalgie aigue post-effort" />
-          </div>
+              <div class="mb-3">
+                <label class="form-label" for="consultationTitle">Titre de la consultation</label>
+                <input
+                  id="consultationTitle"
+                  type="text"
+                  class="form-control"
+                  [value]="consultationTitle()"
+                  (input)="setConsultationTitle($any($event.target).value)"
+                  placeholder="Ex: Lombalgie aigue post-effort" />
+              </div>
 
-          <div class="row g-3 mb-3">
-            <div class="col-6 col-lg-3">
-              <label class="form-label" for="consultationHeightCm">Taille (cm)</label>
-              <input id="consultationHeightCm" type="number" class="form-control" min="0" step="1" [value]="consultationHeightCm() ?? ''" (input)="setConsultationHeightCm($any($event.target).value)" />
-            </div>
-            <div class="col-6 col-lg-3">
-              <label class="form-label" for="consultationWeightKg">Poids (kg)</label>
-              <input id="consultationWeightKg" type="number" class="form-control" min="0" step="0.1" [value]="consultationWeightKg() ?? ''" (input)="setConsultationWeightKg($any($event.target).value)" />
-            </div>
-            <div class="col-12 col-lg-3">
-              <label class="form-label">IMC</label>
-              <div class="consultation-kpi">{{ bmi() === null ? '-' : bmi() }}</div>
-            </div>
-            <div class="col-12 col-lg-3">
-              <label class="form-label" for="consultationProfile">Profil</label>
-              <select id="consultationProfile" class="form-select" [value]="consultationProfile()" (change)="setConsultationProfile($any($event.target).value)">
-                @for (option of consultationProfileOptions; track option) {
-                  <option [value]="option">{{ option }}</option>
-                }
-              </select>
-            </div>
-          </div>
+              <div class="mb-3">
+                <label class="form-label" for="consultationHeightCm">Taille (cm)</label>
+                <input id="consultationHeightCm" type="number" class="form-control" min="0" step="1" [value]="consultationHeightCm() ?? ''" (input)="setConsultationHeightCm($any($event.target).value)" />
+              </div>
 
-          <div class="row g-3 mb-3">
-            <div class="col-12 col-lg-6">
-              <label class="form-label" for="evaBefore">EVA au debut: {{ consultationEvaBefore() }}/10</label>
-              <input id="evaBefore" type="range" class="form-range" min="0" max="10" step="1" [value]="consultationEvaBefore()" (input)="setConsultationEvaBefore($any($event.target).value)" />
+              <div class="mb-3">
+                <label class="form-label" for="consultationWeightKg">Poids (kg)</label>
+                <input id="consultationWeightKg" type="number" class="form-control" min="0" step="0.1" [value]="consultationWeightKg() ?? ''" (input)="setConsultationWeightKg($any($event.target).value)" />
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label">IMC</label>
+                <div class="consultation-kpi">{{ bmi() === null ? '-' : bmi() }}</div>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label" for="consultationProfile">Profil</label>
+                <select
+                  id="consultationProfile"
+                  class="form-select"
+                  [value]="consultationProfile()"
+                  (change)="setConsultationProfile($any($event.target).value)"
+                  [disabled]="consultationProfileOptions().length === 0">
+                  @if (consultationProfileOptions().length === 0) {
+                    <option value="">Aucun profil configure pour ce cabinet</option>
+                  } @else {
+                    @for (option of consultationProfileOptions(); track option) {
+                      <option [value]="option">{{ option }}</option>
+                    }
+                  }
+                </select>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label" for="evaBefore">EVA au debut: {{ consultationEvaBefore() }}/10</label>
+                <input id="evaBefore" type="range" class="form-range" min="0" max="10" step="1" [value]="consultationEvaBefore()" (input)="setConsultationEvaBefore($any($event.target).value)" />
+              </div>
+
+              <div class="mb-0">
+                <label class="form-label" for="evaAfter">EVA en fin de consultation: {{ consultationEvaAfter() }}/10</label>
+                <input id="evaAfter" type="range" class="form-range" min="0" max="10" step="1" [value]="consultationEvaAfter()" (input)="setConsultationEvaAfter($any($event.target).value)" />
+              </div>
             </div>
-            <div class="col-12 col-lg-6">
-              <label class="form-label" for="evaAfter">EVA en fin de consultation: {{ consultationEvaAfter() }}/10</label>
-              <input id="evaAfter" type="range" class="form-range" min="0" max="10" step="1" [value]="consultationEvaAfter()" (input)="setConsultationEvaAfter($any($event.target).value)" />
-            </div>
+
+            <aside class="consultation-reasons-panel border rounded-3 p-3 bg-light-subtle">
+              <div class="mb-2">
+                <h3 class="mb-1">Motifs du profil</h3>
+                <p class="mb-0">
+                  @if (consultationOfficeName()) {
+                    Cabinet: {{ consultationOfficeName() }}
+                  } @else {
+                    Cabinet non determine
+                  }
+                </p>
+              </div>
+
+              @if (!consultationProfile()) {
+                <div class="alert alert-light border mb-0">Selectionnez d'abord un profil pour afficher les motifs.</div>
+              } @else if (consultationProfileReasons().length === 0) {
+                <div class="alert alert-light border mb-0">Aucun motif configure pour ce profil.</div>
+              } @else {
+                <div class="reason-list d-flex flex-column gap-1" role="list" aria-label="Motifs disponibles pour le profil selectionne">
+                  @for (reason of consultationProfileReasons(); track reason) {
+                    <button
+                      type="button"
+                      class="reason-item"
+                      [class.active]="isConsultationReasonSelected(reason)"
+                      (click)="toggleConsultationReason(reason)">
+                      <span>{{ reason }}</span>
+                      @if (isConsultationReasonSelected(reason)) {
+                        <i class="fa-solid fa-check"></i>
+                      }
+                    </button>
+                  }
+                </div>
+
+                <div class="reason-selection mt-3">
+                  <small class="text-muted fw-semibold d-block mb-2">Motifs selectionnes ({{ consultationSelectedReasons().length }})</small>
+                  @if (consultationSelectedReasons().length === 0) {
+                    <small class="text-muted">Aucun motif selectionne.</small>
+                  } @else {
+                    <div class="d-flex flex-wrap gap-2">
+                      @for (reason of consultationSelectedReasons(); track reason) {
+                        <span class="badge rounded-pill text-bg-light border">{{ reason }}</span>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            </aside>
           </div>
 
           <div class="mb-3">

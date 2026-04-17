@@ -20,6 +20,7 @@ const port = Number(process.env.API_PORT ?? 3000);
 const dataDir = path.resolve(process.cwd(), 'server/data');
 const dbPath = path.resolve(dataDir, 'osteo.db');
 const jwtSecret = process.env.JWT_SECRET ?? 'dev-only-jwt-secret-change-me';
+const SUPER_ADMIN_PROFILE_ID = 'super-admin';
 
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
@@ -1107,7 +1108,8 @@ function getUserOfficeOptions(userId) {
 }
 
 function getScopedOfficeOptions(userAccess, isAdmin) {
-  if (isAdmin) {
+  const canAccessAllOffices = isAdmin || userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+  if (canAccessAllOffices) {
     return db
       .prepare('SELECT id, name FROM offices WHERE is_active = 1 ORDER BY lower(name) ASC, id ASC')
       .all()
@@ -2214,7 +2216,7 @@ async function ensureSeedData() {
   normalizeLegacySeedPatients();
   ensureDefaultLocalCalendars();
 
-  const superAdminProfileId = 'super-admin';
+  const superAdminProfileId = SUPER_ADMIN_PROFILE_ID;
   const superAdminRightsJson = JSON.stringify(buildAccessRights(true));
 
   const existingSuperAdminProfile = db
@@ -3327,6 +3329,16 @@ function authMiddleware(req, res, next) {
 }
 
 function adminOnlyMiddleware(req, res, next) {
+  if (req.user.role === 'admin') {
+    return next();
+  }
+
+  const access = getUserAccessContext(req.user.sub);
+  if (access?.profileId === SUPER_ADMIN_PROFILE_ID) {
+    req.userAccess = access;
+    return next();
+  }
+
   if (req.user.role !== 'admin') {
     return res.status(403).json({ message: 'Acces refuse' });
   }
@@ -3355,7 +3367,13 @@ function getUserAccessContext(userId) {
     parsedRights = {};
   }
 
-  const offices = getUserOfficeOptions(row.id);
+  const hasGlobalOfficeAccess = row.role === 'admin' || row.profile_id === SUPER_ADMIN_PROFILE_ID;
+  const offices = hasGlobalOfficeAccess
+    ? db
+      .prepare('SELECT id, name FROM offices WHERE is_active = 1 ORDER BY lower(name) ASC, id ASC')
+      .all()
+      .map((office) => ({ id: Number(office.id), name: String(office.name ?? '').trim() }))
+    : getUserOfficeOptions(row.id);
   const officeIds = offices.map((office) => office.id);
 
   return {
@@ -3366,7 +3384,7 @@ function getUserAccessContext(userId) {
     profileLabel: row.profile_label ?? null,
     officeIds,
     offices,
-    rights: normalizeAccessRights(parsedRights, false)
+    rights: hasGlobalOfficeAccess ? buildAccessRights(true) : normalizeAccessRights(parsedRights, false)
   };
 }
 
@@ -3387,7 +3405,7 @@ function requirePermission(permissionId) {
       return res.status(401).json({ message: 'Session invalide' });
     }
 
-    if (access.role === 'admin') {
+    if (access.role === 'admin' || access.profileId === SUPER_ADMIN_PROFILE_ID) {
       req.userAccess = access;
       return next();
     }
@@ -4358,6 +4376,68 @@ app.get('/api/antecedent-types', authMiddleware, (_req, res) => {
     .all();
 
   return res.json({ types: rows.map((row) => row.label) });
+});
+
+app.get('/api/consultation-context', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+  const isAdmin = req.user.role === 'admin';
+  const scopedOffices = getScopedOfficeOptions(req.userAccess, isAdmin);
+  const scopedOfficeIds = new Set(
+    scopedOffices
+      .map((office) => Number(office.id))
+      .filter((id) => Number.isInteger(id) && id > 0)
+  );
+
+  const requestedOfficeId = Number(req.query.officeId);
+  const selectedOfficeId = Number.isInteger(requestedOfficeId) && requestedOfficeId > 0 && scopedOfficeIds.has(requestedOfficeId)
+    ? requestedOfficeId
+    : (scopedOffices[0]?.id ?? null);
+
+  if (!selectedOfficeId) {
+    return res.json({
+      officeId: null,
+      officeName: null,
+      practitioners: [],
+      profiles: []
+    });
+  }
+
+  const officeRow = db
+    .prepare('SELECT id, name, consultation_profiles_json AS consultationProfilesJson FROM offices WHERE id = ? LIMIT 1')
+    .get(selectedOfficeId);
+
+  if (!officeRow) {
+    return res.json({
+      officeId: null,
+      officeName: null,
+      practitioners: [],
+      profiles: []
+    });
+  }
+
+  const practitionerRows = db
+    .prepare(
+      `SELECT DISTINCT u.id, u.username, u.role
+       FROM users u
+       LEFT JOIN user_offices uo ON uo.user_id = u.id
+       WHERE u.is_active = 1
+         AND (
+           u.office_id = ?
+           OR uo.office_id = ?
+         )
+       ORDER BY lower(u.username) ASC, u.id ASC`
+    )
+    .all(selectedOfficeId, selectedOfficeId);
+
+  return res.json({
+    officeId: Number(officeRow.id),
+    officeName: String(officeRow.name ?? '').trim() || null,
+    practitioners: practitionerRows.map((row) => ({
+      id: Number(row.id),
+      username: String(row.username ?? '').trim(),
+      role: String(row.role ?? '').trim()
+    })),
+    profiles: parseOfficeConsultationProfiles(officeRow.consultationProfilesJson)
+  });
 });
 
 app.get('/api/practitioners', authMiddleware, requirePermission('read-dashboard'), (_req, res) => {

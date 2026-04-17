@@ -41,6 +41,9 @@ export class ShellPage implements OnInit, OnDestroy {
   readonly isMenuOpen = signal(false);
   readonly username = this.authService.username;
   readonly role = this.authService.role;
+  readonly profileLabel = this.authService.profileLabel;
+  readonly offices = this.authService.offices;
+  readonly activeOfficeId = this.authService.activeOfficeId;
   readonly now = signal(new Date());
   readonly sidebarSearch = signal('');
   readonly sidebarSearchResults = signal<Patient[]>([]);
@@ -73,7 +76,7 @@ export class ShellPage implements OnInit, OnDestroy {
   ]);
 
   readonly visibleNavItems = computed(() => {
-    const isAdmin = this.role() === 'admin';
+    const isAdmin = this.role() === 'admin' || this.authService.isSuperAdmin();
 
     return this.navItems().filter((item) => {
       if (item.adminOnly && !isAdmin) {
@@ -180,6 +183,11 @@ export class ShellPage implements OnInit, OnDestroy {
 
   toggleMenu(): void {
     this.isMenuOpen.update((value) => !value);
+  }
+
+  onActiveOfficeChange(value: string): void {
+    const parsed = Number(value);
+    this.authService.setActiveOfficeId(Number.isInteger(parsed) && parsed > 0 ? parsed : null);
   }
 
   closeMenu(): void {

@@ -100,6 +100,13 @@ export type PractitionersPayload = {
   practitioners: Practitioner[];
 };
 
+export type ConsultationContextPayload = {
+  officeId: number | null;
+  officeName: string | null;
+  practitioners: Practitioner[];
+  profiles: OfficeConsultationProfile[];
+};
+
 export type Appointment = {
   id: number;
   time: string;
