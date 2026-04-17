@@ -333,6 +333,10 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     postalCode: ['', [Validators.maxLength(20)]],
     city: ['', [Validators.maxLength(100)]],
     country: ['France', [Validators.maxLength(80)]],
+    maritalStatus: this.formBuilder.nonNullable.control<
+      'Non renseigne' | 'Celibataire' | 'Marie(e)' | 'Pacse(e)' | 'Divorce(e)' | 'Veuf(ve)'
+    >('Non renseigne'),
+    childrenCount: this.formBuilder.nonNullable.control(0, [Validators.min(0), Validators.max(50)]),
     occupationOrSchool: ['', [Validators.maxLength(200)]],
     hobbies: ['', [Validators.maxLength(500)]],
     primaryDoctor: ['', [Validators.maxLength(160)]],

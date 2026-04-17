@@ -14,6 +14,7 @@ import {
   AppointmentsPayload,
   AuthUser,
   ConsultationRecord,
+  ConsultationUpdatePayload,
   ConsultationContextPayload,
   AppointmentConsultationConflict,
   ConsultationMetaSummary,
@@ -40,6 +41,8 @@ import {
   Practitioner,
   PractitionersPayload,
   Patient,
+  PatientDocumentDetail,
+  PatientDocumentSummary,
   PeoplePickerContact,
   UserAccountPayload,
   SystemAuditLog,
@@ -324,6 +327,30 @@ export class ApiService {
       this.http.get<{ consultations: ConsultationRecord[] }>(`${this.baseUrl}/patients/${id}/consultations`)
     );
     return response.consultations;
+  }
+
+  async updateConsultation(id: number, payload: ConsultationUpdatePayload): Promise<ConsultationRecord> {
+    const response = await firstValueFrom(
+      this.http.patch<{ consultation: ConsultationRecord }>(`${this.baseUrl}/consultations/${id}`, payload)
+    );
+
+    return response.consultation;
+  }
+
+  async getPatientDocuments(id: number): Promise<PatientDocumentSummary[]> {
+    const response = await firstValueFrom(
+      this.http.get<{ documents: PatientDocumentSummary[] }>(`${this.baseUrl}/patients/${id}/documents`)
+    );
+
+    return response.documents;
+  }
+
+  async getPatientDocument(documentRef: string): Promise<PatientDocumentDetail> {
+    const response = await firstValueFrom(
+      this.http.get<{ document: PatientDocumentDetail }>(`${this.baseUrl}/patient-documents/${encodeURIComponent(documentRef)}`)
+    );
+
+    return response.document;
   }
 
   async getPatientAuditLogs(id: number): Promise<PatientAuditLog[]> {

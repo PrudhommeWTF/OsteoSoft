@@ -152,6 +152,14 @@ export type Patient = {
   consultationCount: number;
 };
 
+export type MaritalStatus =
+  | 'Non renseigne'
+  | 'Celibataire'
+  | 'Marie(e)'
+  | 'Pacse(e)'
+  | 'Divorce(e)'
+  | 'Veuf(ve)';
+
 export type LocationPair = {
   postalCode: string;
   city: string;
@@ -219,6 +227,8 @@ export type CreatePatientPayload = {
   postalCode: string;
   city: string;
   country: string;
+  maritalStatus: MaritalStatus;
+  childrenCount: number;
   occupationOrSchool: string;
   hobbies: string;
   primaryDoctor: string;
@@ -441,6 +451,8 @@ export type PatientDetail = {
   postalCode: string;
   city: string;
   country: string;
+  maritalStatus: MaritalStatus;
+  childrenCount: number;
   occupationOrSchool: string;
   hobbies: string;
   primaryDoctor: string;
@@ -471,6 +483,42 @@ export type ConsultationRecord = {
   treatmentsHtml: string;
   remarksHtml: string;
   status: string;
+};
+
+export type ConsultationUpdatePayload = {
+  startedAt: string;
+  practitioner: string;
+  title: string;
+  important: boolean;
+  heightCm: number | null;
+  weightKg: number | null;
+  evaBefore: number;
+  evaAfter: number;
+  profile: string;
+  motifMainHtml: string;
+  testsHtml: string;
+  schemaHtml: string;
+  treatmentsHtml: string;
+  remarksHtml: string;
+};
+
+export type PatientDocumentSummary = {
+  id: number;
+  documentRef: string;
+  consultationId: number | null;
+  officeId: number | null;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  title: string;
+  comment: string;
+  createdAt: string;
+  link: string;
+};
+
+export type PatientDocumentDetail = PatientDocumentSummary & {
+  patientId: number;
+  contentBase64: string;
 };
 
 export type PatientAuditFieldChange = {
@@ -537,6 +585,8 @@ export type UpdatePatientPayload = {
   postalCode?: string;
   city?: string;
   country?: string;
+  maritalStatus?: MaritalStatus;
+  childrenCount?: number;
   occupationOrSchool?: string;
   hobbies?: string;
   primaryDoctor?: string;

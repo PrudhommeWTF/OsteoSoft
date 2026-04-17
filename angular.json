@@ -56,6 +56,7 @@
               "bootstrap-datepicker/dist/css/bootstrap-datepicker.min.css"
             ],
             "scripts": [
+              "bootstrap/dist/js/bootstrap.bundle.min.js",
               "jquery/dist/jquery.min.js",
               "moment/min/moment.min.js",
               "bootstrap-datepicker/dist/js/bootstrap-datepicker.min.js",

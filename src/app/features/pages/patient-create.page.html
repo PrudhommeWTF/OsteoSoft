@@ -336,6 +336,21 @@
       <div class="wizard-card-body">
         <div class="row g-3 mb-3">
           <div class="col-12 col-lg-6">
+            <label class="form-label" for="maritalStatus">Statut marital</label>
+            <select id="maritalStatus" class="form-select" formControlName="maritalStatus">
+              <option value="Non renseigne">Non renseigne</option>
+              <option value="Celibataire">Celibataire</option>
+              <option value="Marie(e)">Marie(e)</option>
+              <option value="Pacse(e)">Pacse(e)</option>
+              <option value="Divorce(e)">Divorce(e)</option>
+              <option value="Veuf(ve)">Veuf(ve)</option>
+            </select>
+          </div>
+          <div class="col-12 col-lg-6">
+            <label class="form-label" for="childrenCount">Nombre d'enfant(s)</label>
+            <input id="childrenCount" class="form-control" type="number" min="0" max="50" formControlName="childrenCount" />
+          </div>
+          <div class="col-12 col-lg-6">
             <label class="form-label" for="occupationOrSchool">Profession / Scolarite</label>
             <input id="occupationOrSchool" class="form-control" type="text" formControlName="occupationOrSchool" />
           </div>

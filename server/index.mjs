@@ -105,6 +105,8 @@ db.exec(`
     cipher_medical_notes TEXT NOT NULL,
     sex TEXT NOT NULL DEFAULT 'Non renseigne',
     birth_date TEXT,
+    marital_status TEXT NOT NULL DEFAULT 'Non renseigne',
+    children_count INTEGER NOT NULL DEFAULT 0,
     last_visit TEXT,
     consent_signed INTEGER NOT NULL DEFAULT 1,
     retention_until TEXT,
@@ -2189,7 +2191,10 @@ function normalizeLegacySeedPatients() {
 
   const updateNotes = db.prepare(
     `UPDATE patients
-     SET cipher_medical_notes = ?, updated_at = CURRENT_TIMESTAMP
+     SET cipher_medical_notes = ?,
+         marital_status = ?,
+         children_count = ?,
+         updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`
   );
 
@@ -2206,6 +2211,8 @@ function normalizeLegacySeedPatients() {
 
     const mobilePhone = String(parsedNotes.mobilePhone ?? '').trim() || (phoneRaw !== 'Non renseigne' ? phoneRaw : '');
     const landlinePhone = String(parsedNotes.landlinePhone ?? '').trim();
+    const maritalStatus = String(parsedNotes.maritalStatus ?? 'Non renseigne').trim() || 'Non renseigne';
+    const childrenCount = Math.max(0, Number.parseInt(String(parsedNotes.childrenCount ?? '0'), 10) || 0);
 
     return {
       generalRemarks: String(parsedNotes.generalRemarks ?? fallbackRemarks).trim(),
@@ -2220,12 +2227,19 @@ function normalizeLegacySeedPatients() {
       postalCode: String(parsedNotes.postalCode ?? '').trim(),
       city: String(parsedNotes.city ?? '').trim(),
       country: String(parsedNotes.country ?? '').trim() || 'France',
+      maritalStatus,
+      childrenCount,
       isDeceased: Boolean(parsedNotes.isDeceased)
     };
   };
 
   const migrate = db.transaction(() => {
-    const rows = db.prepare('SELECT id, cipher_full_name, cipher_phone, cipher_medical_notes, sex FROM patients WHERE is_deleted = 0').all();
+    const rows = db.prepare(
+      `SELECT id, cipher_full_name, cipher_phone, cipher_medical_notes, sex,
+              marital_status, children_count
+       FROM patients
+       WHERE is_deleted = 0`
+    ).all();
 
     for (const row of rows) {
       let currentName;
@@ -2252,9 +2266,22 @@ function normalizeLegacySeedPatients() {
 
       const normalizedNotes = normalizeLegacyNotes(currentNotes, currentPhone);
       const normalizedNotesJson = JSON.stringify(normalizedNotes);
+      const normalizedMaritalStatus = String(normalizedNotes.maritalStatus ?? 'Non renseigne').trim() || 'Non renseigne';
+      const normalizedChildrenCount = Number.isFinite(Number(normalizedNotes.childrenCount))
+        ? Math.max(0, Number(normalizedNotes.childrenCount))
+        : 0;
 
-      if (normalizedNotesJson !== currentNotes) {
-        updateNotes.run(encryptSensitiveField(normalizedNotesJson), row.id);
+      if (
+        normalizedNotesJson !== currentNotes
+        || String(row.marital_status ?? '').trim() !== normalizedMaritalStatus
+        || Number(row.children_count ?? 0) !== normalizedChildrenCount
+      ) {
+        updateNotes.run(
+          encryptSensitiveField(normalizedNotesJson),
+          normalizedMaritalStatus,
+          normalizedChildrenCount,
+          row.id
+        );
       }
     }
   });
@@ -2335,6 +2362,8 @@ async function ensureSeedData() {
   ensureColumn('offices', 'consultation_profiles_json', "consultation_profiles_json TEXT NOT NULL DEFAULT '[]'");
   ensureColumn('consultations', 'office_id', 'office_id INTEGER');
   ensureColumn('consultations', 'reason_items_cipher', 'reason_items_cipher TEXT');
+  ensureColumn('patients', 'marital_status', "marital_status TEXT NOT NULL DEFAULT 'Non renseigne'");
+  ensureColumn('patients', 'children_count', 'children_count INTEGER NOT NULL DEFAULT 0');
   ensureColumn('service_types', 'office_id', 'office_id INTEGER');
   ensureColumn('payment_methods', 'office_id', 'office_id INTEGER');
   ensureColumn('user_preference', 'slot_duration_minutes', 'slot_duration_minutes INTEGER NOT NULL DEFAULT 15');
@@ -3640,6 +3669,8 @@ function buildPatientUpdateChanges(beforeSnapshot, afterSnapshot) {
     postalCode: 'Code postal',
     city: 'Ville',
     country: 'Pays',
+    maritalStatus: 'Statut marital',
+    childrenCount: "Nombre d'enfants",
     occupationOrSchool: 'Profession / Scolarite',
     hobbies: 'Loisirs',
     primaryDoctor: 'Medecin traitant',
@@ -3806,6 +3837,8 @@ const createPatientSchema = z.object({
   postalCode: z.string().max(20).optional().default(''),
   city: z.string().max(100).optional().default(''),
   country: z.string().max(80).optional().default('France'),
+  maritalStatus: z.enum(['Non renseigne', 'Celibataire', 'Marie(e)', 'Pacse(e)', 'Divorce(e)', 'Veuf(ve)']).optional().default('Non renseigne'),
+  childrenCount: z.number().int().min(0).max(50).optional().default(0),
   occupationOrSchool: z.string().max(200).optional().default(''),
   hobbies: z.string().max(500).optional().default(''),
   primaryDoctor: z.string().max(160).optional().default(''),
@@ -3829,6 +3862,23 @@ const createPatientSchema = z.object({
     })
   ).optional().default([]),
   consultationLinkStrategy: z.enum(['attach-existing', 'create-new']).optional()
+});
+
+const updateConsultationSchema = z.object({
+  startedAt: z.string().min(1).max(40),
+  practitioner: z.string().max(160).optional().default(''),
+  title: z.string().max(200).optional().default(''),
+  important: z.boolean().optional().default(false),
+  heightCm: z.number().nonnegative().max(300).nullable().optional().default(null),
+  weightKg: z.number().nonnegative().max(500).nullable().optional().default(null),
+  evaBefore: z.number().int().min(0).max(10).optional().default(0),
+  evaAfter: z.number().int().min(0).max(10).optional().default(0),
+  profile: z.string().max(120).optional().default('Adulte'),
+  motifMainHtml: z.string().max(50_000).optional().default(''),
+  testsHtml: z.string().max(50_000).optional().default(''),
+  schemaHtml: z.string().max(50_000).optional().default(''),
+  treatmentsHtml: z.string().max(50_000).optional().default(''),
+  remarksHtml: z.string().max(50_000).optional().default('')
 });
 
 const patientDraftSchema = z.object({
@@ -3855,6 +3905,8 @@ const updatePatientSchema = z.object({
   postalCode: z.string().max(20).optional(),
   city: z.string().max(100).optional(),
   country: z.string().max(80).optional(),
+  maritalStatus: z.enum(['Non renseigne', 'Celibataire', 'Marie(e)', 'Pacse(e)', 'Divorce(e)', 'Veuf(ve)']).optional(),
+  childrenCount: z.number().int().min(0).max(50).optional(),
   occupationOrSchool: z.string().max(200).optional(),
   hobbies: z.string().max(500).optional(),
   primaryDoctor: z.string().max(160).optional(),
@@ -6146,6 +6198,8 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
     postalCode: payload.postalCode.trim(),
     city: payload.city.trim(),
     country: payload.country.trim() || 'France',
+    maritalStatus: payload.maritalStatus,
+    childrenCount: payload.childrenCount,
     occupationOrSchool: payload.occupationOrSchool.trim(),
     hobbies: payload.hobbies.trim(),
     primaryDoctor: payload.primaryDoctor.trim(),
@@ -6161,8 +6215,8 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
   const inserted = db
     .prepare(
       `INSERT INTO patients
-       (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, last_visit, consent_signed, retention_until)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+       (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count, last_visit, consent_signed, retention_until)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       encryptSensitiveField(fullName),
@@ -6170,6 +6224,8 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
       encryptSensitiveField(JSON.stringify(medicalRecord)),
       payload.sex === 'Femme' ? 'F' : payload.sex === 'Homme' ? 'M' : 'Non renseigne',
       birthDate || null,
+      payload.maritalStatus,
+      payload.childrenCount,
       null,
       1,
       retentionUntil
@@ -6416,7 +6472,7 @@ app.get('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
   const row = db
     .prepare(
       `SELECT p.id, p.cipher_full_name, p.cipher_phone, p.cipher_medical_notes,
-              p.sex, p.birth_date, p.last_visit,
+              p.sex, p.birth_date, p.marital_status, p.children_count, p.last_visit,
               COALESCE(a.consultation_count, 0) AS consultation_count
        FROM patients p
        LEFT JOIN (
@@ -6461,6 +6517,10 @@ app.get('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
       postalCode: notes.postalCode ?? '',
       city: notes.city ?? '',
       country: notes.country ?? 'France',
+      maritalStatus: notes.maritalStatus ?? row.marital_status ?? 'Non renseigne',
+      childrenCount: Number.isFinite(Number(notes.childrenCount))
+        ? Math.max(0, Number(notes.childrenCount))
+        : Math.max(0, Number(row.children_count ?? 0)),
       occupationOrSchool: notes.occupationOrSchool ?? '',
       hobbies: notes.hobbies ?? '',
       primaryDoctor: notes.primaryDoctor ?? '',
@@ -6548,6 +6608,92 @@ app.get('/api/patients/:id/consultations', authMiddleware, requirePermission('re
   return res.json({ consultations: all });
 });
 
+app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+  const consultationId = Number(req.params.id);
+  if (!Number.isInteger(consultationId) || consultationId <= 0) {
+    return res.status(400).json({ message: 'Identifiant consultation invalide' });
+  }
+
+  const parsed = updateConsultationSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Payload invalide' });
+  }
+
+  const consultation = db.prepare(
+    `SELECT id, patient_id
+     FROM consultations
+     WHERE id = ?
+     LIMIT 1`
+  ).get(consultationId);
+
+  if (!consultation) {
+    return res.status(404).json({ message: 'Consultation introuvable' });
+  }
+
+  const payload = parsed.data;
+
+  db.prepare(
+    `UPDATE consultations
+     SET started_at = ?,
+         practitioner = ?,
+         title = ?,
+         important = ?,
+         height_cm = ?,
+         weight_kg = ?,
+         eva_before = ?,
+         eva_after = ?,
+         profile = ?,
+         motif_main_cipher = ?,
+         tests_cipher = ?,
+         schema_cipher = ?,
+         treatments_cipher = ?,
+         remarks_cipher = ?
+     WHERE id = ?`
+  ).run(
+    payload.startedAt,
+    payload.practitioner.trim(),
+    payload.title.trim(),
+    payload.important ? 1 : 0,
+    payload.heightCm,
+    payload.weightKg,
+    payload.evaBefore,
+    payload.evaAfter,
+    payload.profile.trim() || 'Adulte',
+    payload.motifMainHtml.trim() ? encryptSensitiveField(payload.motifMainHtml) : null,
+    payload.testsHtml.trim() ? encryptSensitiveField(payload.testsHtml) : null,
+    payload.schemaHtml.trim() ? encryptSensitiveField(payload.schemaHtml) : null,
+    payload.treatmentsHtml.trim() ? encryptSensitiveField(payload.treatmentsHtml) : null,
+    payload.remarksHtml.trim() ? encryptSensitiveField(payload.remarksHtml) : null,
+    consultationId
+  );
+
+  writeAuditLog(req.user.sub, 'UPDATE', 'consultations', String(consultationId), {
+    patientId: Number(consultation.patient_id)
+  });
+
+  return res.json({
+    consultation: {
+      id: consultationId,
+      type: 'consultation',
+      startedAt: payload.startedAt,
+      practitioner: payload.practitioner.trim(),
+      title: payload.title.trim(),
+      important: payload.important,
+      heightCm: payload.heightCm,
+      weightKg: payload.weightKg,
+      evaBefore: payload.evaBefore,
+      evaAfter: payload.evaAfter,
+      profile: payload.profile.trim() || 'Adulte',
+      motifMainHtml: payload.motifMainHtml,
+      testsHtml: payload.testsHtml,
+      schemaHtml: payload.schemaHtml,
+      treatmentsHtml: payload.treatmentsHtml,
+      remarksHtml: payload.remarksHtml,
+      status: 'Termine'
+    }
+  });
+});
+
 app.get('/api/patients/:id/audit-logs', authMiddleware, requirePermission('read-patient-record'), (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: 'ID invalide' });
@@ -6604,7 +6750,7 @@ app.put('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
   if (!parsed.success) return res.status(400).json({ message: 'Payload invalide' });
 
   const existing = db
-    .prepare('SELECT cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date FROM patients WHERE id = ? AND is_deleted = 0')
+    .prepare('SELECT cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count FROM patients WHERE id = ? AND is_deleted = 0')
     .get(id);
   if (!existing) return res.status(404).json({ message: 'Patient introuvable' });
 
@@ -6637,6 +6783,8 @@ app.put('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
     ...(data.postalCode !== undefined && { postalCode: data.postalCode.trim() }),
     ...(data.city !== undefined && { city: data.city.trim() }),
     ...(data.country !== undefined && { country: data.country.trim() }),
+    ...(data.maritalStatus !== undefined && { maritalStatus: data.maritalStatus }),
+    ...(data.childrenCount !== undefined && { childrenCount: data.childrenCount }),
     ...(data.occupationOrSchool !== undefined && { occupationOrSchool: data.occupationOrSchool.trim() }),
     ...(data.hobbies !== undefined && { hobbies: data.hobbies.trim() }),
     ...(data.primaryDoctor !== undefined && { primaryDoctor: data.primaryDoctor.trim() }),
@@ -6660,6 +6808,10 @@ app.put('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
     postalCode: existingNotes.postalCode ?? '',
     city: existingNotes.city ?? '',
     country: existingNotes.country ?? '',
+    maritalStatus: existingNotes.maritalStatus ?? existing.marital_status ?? 'Non renseigne',
+    childrenCount: Number.isFinite(Number(existingNotes.childrenCount))
+      ? Math.max(0, Number(existingNotes.childrenCount))
+      : Math.max(0, Number(existing.children_count ?? 0)),
     occupationOrSchool: existingNotes.occupationOrSchool ?? '',
     hobbies: existingNotes.hobbies ?? '',
     primaryDoctor: existingNotes.primaryDoctor ?? '',
@@ -6699,6 +6851,8 @@ app.put('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
     postalCode: updatedNotes.postalCode ?? '',
     city: updatedNotes.city ?? '',
     country: updatedNotes.country ?? '',
+    maritalStatus: updatedNotes.maritalStatus ?? 'Non renseigne',
+    childrenCount: Number.isFinite(Number(updatedNotes.childrenCount)) ? Math.max(0, Number(updatedNotes.childrenCount)) : 0,
     occupationOrSchool: updatedNotes.occupationOrSchool ?? '',
     hobbies: updatedNotes.hobbies ?? '',
     primaryDoctor: updatedNotes.primaryDoctor ?? '',
@@ -6719,6 +6873,8 @@ app.put('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
        cipher_medical_notes = ?,
        sex = ?,
        birth_date = ?,
+         marital_status = ?,
+         children_count = ?,
        updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`
   ).run(
@@ -6727,6 +6883,8 @@ app.put('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
     encryptSensitiveField(JSON.stringify(updatedNotes)),
     newSex,
     newBirthDate,
+      String(updatedNotes.maritalStatus ?? 'Non renseigne').trim() || 'Non renseigne',
+      Number.isFinite(Number(updatedNotes.childrenCount)) ? Math.max(0, Number(updatedNotes.childrenCount)) : 0,
     id
   );
 
