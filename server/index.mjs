@@ -3373,6 +3373,11 @@ const patientDraftSchema = z.object({
   payload: createPatientSchema
 });
 
+const officeDraftSchema = z.object({
+  step: z.number().int().min(1).max(7),
+  payload: z.record(z.string(), z.unknown())
+});
+
 const updatePatientSchema = z.object({
   fullName: z.string().min(1).max(200).optional(),
   lastName: z.string().min(1).max(100).optional(),
@@ -4200,6 +4205,66 @@ app.delete('/api/patient-drafts/new-patient', authMiddleware, (req, res) => {
   db.prepare(
     `DELETE FROM patient_drafts
      WHERE user_id = ? AND flow_key = 'new_patient'`
+  ).run(req.user.sub);
+
+  return res.status(204).send();
+});
+
+app.get('/api/office-drafts/new-office', authMiddleware, adminOnlyMiddleware, (req, res) => {
+  const row = db
+    .prepare(
+      `SELECT step, draft_json, updated_at
+       FROM patient_drafts
+       WHERE user_id = ? AND flow_key = 'new_office'`
+    )
+    .get(req.user.sub);
+
+  if (!row) {
+    return res.json({ draft: null });
+  }
+
+  let payload = null;
+  try {
+    payload = JSON.parse(row.draft_json);
+  } catch {
+    payload = null;
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return res.json({ draft: null });
+  }
+
+  return res.json({
+    draft: {
+      step: row.step,
+      payload,
+      updatedAt: row.updated_at
+    }
+  });
+});
+
+app.put('/api/office-drafts/new-office', authMiddleware, adminOnlyMiddleware, (req, res) => {
+  const parsed = officeDraftSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Payload invalide' });
+  }
+
+  db.prepare(
+    `INSERT INTO patient_drafts (user_id, flow_key, draft_json, step, updated_at)
+     VALUES (?, 'new_office', ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(user_id, flow_key)
+     DO UPDATE SET draft_json = excluded.draft_json,
+                   step = excluded.step,
+                   updated_at = CURRENT_TIMESTAMP`
+  ).run(req.user.sub, JSON.stringify(parsed.data.payload), parsed.data.step);
+
+  return res.status(204).send();
+});
+
+app.delete('/api/office-drafts/new-office', authMiddleware, adminOnlyMiddleware, (req, res) => {
+  db.prepare(
+    `DELETE FROM patient_drafts
+     WHERE user_id = ? AND flow_key = 'new_office'`
   ).run(req.user.sub);
 
   return res.status(204).send();

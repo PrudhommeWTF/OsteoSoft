@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { ApiService } from '../../core/api.service';
@@ -9,6 +9,7 @@ import {
   CreateOfficePayload,
   GeneralSettingsPayload,
   LocalAgendaCalendar,
+  NewOfficeDraft,
   Office,
   OfficeOpeningHours,
   OfficeWeekDay,
@@ -80,6 +81,9 @@ type OfficeModalTabId =
   | 'medical-history'
   | 'patient-letters';
 
+type OfficeCreateStep = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+type DraftSaveState = 'idle' | 'saving' | 'saved' | 'error';
+
 @Component({
   selector: 'app-settings-page',
   imports: [ReactiveFormsModule],
@@ -87,7 +91,7 @@ type OfficeModalTabId =
   styleUrl: './settings.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class SettingsPage {
+export class SettingsPage implements OnDestroy {
   private readonly fb = inject(FormBuilder);
   private readonly api = inject(ApiService);
 
@@ -322,6 +326,10 @@ export class SettingsPage {
   readonly isOfficeModalOpen = signal(false);
   readonly editingOfficeId = signal<number | null>(null);
   readonly officeModalTab = signal<OfficeModalTabId>('general');
+  readonly officeCreateStep = signal<OfficeCreateStep>(1);
+  readonly officeDraftSaveState = signal<DraftSaveState>('idle');
+  readonly lastOfficeDraftSavedAt = signal<number | null>(null);
+  readonly officeDraftStatusNowTick = signal(Date.now());
   readonly officeConfigTargetId = signal<number | null>(null);
   readonly officeOpeningHoursDraft = signal<OfficeOpeningHours>(this.createDefaultOfficeOpeningHours());
   readonly serviceTypes = signal<EditableServiceType[]>([]);
@@ -373,11 +381,49 @@ export class SettingsPage {
   readonly officeWeekDays: OfficeWeekDay[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
   readonly serviceTypeLabels = computed(() => this.serviceTypes().map((item) => item.label));
+  readonly isCreatingOfficeMode = computed(() => this.isOfficeModalOpen() && !this.editingOfficeId());
+
+  readonly officeDraftStatusText = computed(() => {
+    this.officeDraftStatusNowTick();
+
+    const state = this.officeDraftSaveState();
+    if (state === 'saving') {
+      return 'Sauvegarde du brouillon en cours...';
+    }
+    if (state === 'error') {
+      return 'Echec de la sauvegarde automatique du brouillon';
+    }
+
+    const savedAt = this.lastOfficeDraftSavedAt();
+    if (!savedAt) {
+      return 'Aucun brouillon enregistre';
+    }
+
+    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - savedAt) / 1000));
+    if (elapsedSeconds < 5) {
+      return 'Brouillon enregistre a l\'instant';
+    }
+    if (elapsedSeconds < 60) {
+      return `Brouillon enregistre il y a ${elapsedSeconds}s`;
+    }
+
+    const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+    if (elapsedMinutes < 60) {
+      return `Brouillon enregistre il y a ${elapsedMinutes} min`;
+    }
+
+    const elapsedHours = Math.floor(elapsedMinutes / 60);
+    return `Brouillon enregistre il y a ${elapsedHours} h`;
+  });
 
   private readonly superAdminId = 'super-admin';
   private rightsPersistTimer: ReturnType<typeof setTimeout> | null = null;
   private rgpdSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
   private rgpdSearchRequestId = 0;
+  private officeDraftAutosaveTimer: ReturnType<typeof setInterval> | null = null;
+  private officeDraftStatusTimer: ReturnType<typeof setInterval> | null = null;
+  private isPersistingOfficeDraft = false;
+  private pendingOfficeDraftSave = false;
 
   readonly profiles = signal<AccessProfile[]>([
     {
@@ -400,6 +446,34 @@ export class SettingsPage {
     void this.loadAccessProfiles();
     void this.loadCurrentUser();
     void this.loadUsers();
+  }
+
+  ngOnDestroy(): void {
+    this.stopOfficeDraftAutosave();
+  }
+
+  previousOfficeCreateStep(): void {
+    const current = this.officeCreateStep();
+    if (current <= 1) {
+      return;
+    }
+
+    this.officeCreateStep.set((current - 1) as OfficeCreateStep);
+  }
+
+  async nextOfficeCreateStep(): Promise<void> {
+    const current = this.officeCreateStep();
+    if (!this.isOfficeCreateStepValid(current)) {
+      this.markOfficeCreateStepTouched(current);
+      return;
+    }
+
+    if (current >= 7) {
+      return;
+    }
+
+    await this.persistOfficeDraft();
+    this.officeCreateStep.set((current + 1) as OfficeCreateStep);
   }
 
   readonly sections: SettingsSection[] = [
@@ -1998,6 +2072,7 @@ export class SettingsPage {
     this.officesSuccess.set('');
     this.editingOfficeId.set(officeId ?? null);
     this.officeModalTab.set('general');
+    this.officeCreateStep.set(1);
 
     if (!this.isAgendaSettingsLoading() && this.localCalendars().length === 0) {
       void this.loadAgendaSettings();
@@ -2008,6 +2083,7 @@ export class SettingsPage {
     }
 
     if (officeId) {
+      this.stopOfficeDraftAutosave();
       const office = this.offices().find((o) => o.id === officeId);
       if (office) {
         const openingHours = this.ensureOfficeOpeningHours(office.openingHours);
@@ -2050,6 +2126,8 @@ export class SettingsPage {
         });
       }
     } else {
+      this.officeDraftSaveState.set('idle');
+      this.lastOfficeDraftSavedAt.set(null);
       const openingHours = this.createDefaultOfficeOpeningHours();
       this.officeOpeningHoursDraft.set(openingHours);
       this.serviceTypes.set([]);
@@ -2076,6 +2154,9 @@ export class SettingsPage {
         logoData: '',
         openingHoursJson: JSON.stringify(openingHours)
       });
+
+      void this.loadOfficeDraft();
+      this.startOfficeDraftAutosave();
     }
 
     this.isOfficeModalOpen.set(true);
@@ -2099,13 +2180,33 @@ export class SettingsPage {
   }
 
   closeOfficeModal(): void {
+    if (!this.editingOfficeId()) {
+      void this.persistOfficeDraft();
+    }
+
+    this.stopOfficeDraftAutosave();
     this.isOfficeModalOpen.set(false);
     this.editingOfficeId.set(null);
     this.officeModalTab.set('general');
+    this.officeCreateStep.set(1);
   }
 
   selectOfficeModalTab(tabId: OfficeModalTabId): void {
     this.officeModalTab.set(tabId);
+  }
+
+  addServiceTypeRow(): void {
+    this.serviceTypes.update((items) => [
+      ...items,
+      {
+        id: 0,
+        label: `Nouvelle prestation ${items.length + 1}`,
+        amountHt: 0,
+        vatRate: 0,
+        displayOrder: items.length + 1,
+        tempKey: this.createTempKey('srv')
+      }
+    ]);
   }
 
   async saveOffice(): Promise<void> {
@@ -2115,14 +2216,21 @@ export class SettingsPage {
     }
 
     const payload = this.buildOfficePayload();
-    const hasInvalidServiceType = payload.serviceTypes.some((item) => !item.label.trim());
-    const hasInvalidPaymentMethod = payload.paymentMethods.some((item) => !item.label.trim());
+    const editId = this.editingOfficeId();
+    const normalizedPayload = editId
+      ? payload
+      : {
+        ...payload,
+        hideVatMention: false,
+        vatNumber: '',
+        serviceTypes: payload.serviceTypes.map((item) => ({ ...item, vatRate: 0 }))
+      };
+    const hasInvalidServiceType = normalizedPayload.serviceTypes.some((item) => !item.label.trim());
+    const hasInvalidPaymentMethod = normalizedPayload.paymentMethods.some((item) => !item.label.trim());
     if (hasInvalidServiceType || hasInvalidPaymentMethod) {
       this.officesError.set('Les libellés des prestations et moyens de paiement sont obligatoires.');
       return;
     }
-
-    const editId = this.editingOfficeId();
 
     if (editId) {
       this.isUpdatingOffice.set(editId);
@@ -2135,12 +2243,19 @@ export class SettingsPage {
 
     try {
       if (editId) {
-        const updated = await this.api.updateOffice(editId, payload);
+        const updated = await this.api.updateOffice(editId, normalizedPayload);
         const offices = this.offices().map((o) => (o.id === editId ? updated : o));
         this.offices.set(offices);
       } else {
-        const created = await this.api.createOffice(payload);
+        const created = await this.api.createOffice(normalizedPayload);
         this.offices.set([...this.offices(), created]);
+        try {
+          await this.api.deleteNewOfficeDraft();
+        } catch {
+          // Non-blocking cleanup.
+        }
+        this.officeDraftSaveState.set('idle');
+        this.lastOfficeDraftSavedAt.set(null);
       }
 
       this.officesSuccess.set(editId ? 'Cabinet mis à jour avec succès' : 'Cabinet créé avec succès');
@@ -2156,6 +2271,182 @@ export class SettingsPage {
     } finally {
       this.isCreatingOffice.set(false);
       this.isUpdatingOffice.set(null);
+    }
+  }
+
+  private isOfficeCreateStepValid(step: OfficeCreateStep): boolean {
+    if (step === 1) {
+      const raw = this.officeForm.getRawValue();
+      return raw.name.trim().length > 0 && Number(raw.defaultSessionDurationMinutes) > 0;
+    }
+
+    if (step === 3) {
+      const raw = this.officeForm.getRawValue();
+      const hasValidNumbering = String(raw.invoiceNumberFormat || '').trim().length > 0
+        && String(raw.numberingConfiguration || '').trim().length > 0;
+      if (!hasValidNumbering) {
+        return false;
+      }
+
+      const hasInvalidServiceType = this.serviceTypes().some((item) => !item.label.trim());
+      const hasInvalidPaymentMethod = this.paymentMethods().some((item) => !item.label.trim());
+      return !hasInvalidServiceType && !hasInvalidPaymentMethod;
+    }
+
+    return true;
+  }
+
+  private markOfficeCreateStepTouched(step: OfficeCreateStep): void {
+    if (step === 1) {
+      this.officeForm.controls.name.markAsTouched();
+      this.officeForm.controls.defaultSessionDurationMinutes.markAsTouched();
+    }
+
+    if (step === 3) {
+      this.officeForm.controls.invoiceNumberFormat.markAsTouched();
+      this.officeForm.controls.numberingConfiguration.markAsTouched();
+    }
+  }
+
+  private startOfficeDraftAutosave(): void {
+    this.stopOfficeDraftAutosave();
+
+    this.officeDraftStatusTimer = setInterval(() => {
+      this.officeDraftStatusNowTick.set(Date.now());
+    }, 5_000);
+
+    this.officeDraftAutosaveTimer = setInterval(() => {
+      if (!this.isOfficeModalOpen() || this.editingOfficeId()) {
+        return;
+      }
+
+      void this.persistOfficeDraft();
+    }, 8_000);
+  }
+
+  private stopOfficeDraftAutosave(): void {
+    if (this.officeDraftAutosaveTimer !== null) {
+      clearInterval(this.officeDraftAutosaveTimer);
+      this.officeDraftAutosaveTimer = null;
+    }
+
+    if (this.officeDraftStatusTimer !== null) {
+      clearInterval(this.officeDraftStatusTimer);
+      this.officeDraftStatusTimer = null;
+    }
+  }
+
+  private async loadOfficeDraft(): Promise<void> {
+    try {
+      const draft = await this.api.getNewOfficeDraft();
+      if (!draft) {
+        return;
+      }
+
+      this.applyOfficeDraft(draft);
+
+      const updatedAtMs = Number(new Date(draft.updatedAt));
+      if (Number.isFinite(updatedAtMs) && updatedAtMs > 0) {
+        this.lastOfficeDraftSavedAt.set(updatedAtMs);
+      }
+      this.officeDraftSaveState.set('saved');
+    } catch {
+      // Non-blocking draft restore.
+    }
+  }
+
+  private applyOfficeDraft(draft: NewOfficeDraft): void {
+    const payload = draft.payload;
+    const safeStep = draft.step >= 1 && draft.step <= 7 ? (draft.step as OfficeCreateStep) : 1;
+
+    const openingHours = this.ensureOfficeOpeningHours(payload.openingHours);
+    this.officeOpeningHoursDraft.set(openingHours);
+    this.officeCreateStep.set(safeStep);
+
+    this.officeForm.patchValue({
+      name: String(payload.name ?? ''),
+      defaultSessionDurationMinutes: Number(payload.defaultSessionDurationMinutes ?? 60) || 60,
+      country: String(payload.country ?? 'France') || 'France',
+      devise: payload.devise ?? 'EUR',
+      invoiceNumberFormat: payload.invoiceNumberFormat ?? 'AAAA-XXXXXX',
+      numberingConfiguration: payload.numberingConfiguration ?? 'Numérotation globale au cabinet',
+      alwaysShowSocialSecurityAndMutuelle: Boolean(payload.alwaysShowSocialSecurityAndMutuelle),
+      hideVatMention: false,
+      addressLine1: String(payload.addressLine1 ?? ''),
+      addressLine2: String(payload.addressLine2 ?? ''),
+      postalCode: String(payload.postalCode ?? ''),
+      city: String(payload.city ?? ''),
+      phoneMobile: String(payload.phoneMobile ?? ''),
+      phoneLandline: String(payload.phoneLandline ?? ''),
+      phoneFax: String(payload.phoneFax ?? ''),
+      email: String(payload.email ?? ''),
+      website: String(payload.website ?? ''),
+      vatNumber: '',
+      logoData: String(payload.logoData ?? ''),
+      openingHoursJson: JSON.stringify(openingHours)
+    });
+
+    this.serviceTypes.set(
+      Array.isArray(payload.serviceTypes)
+        ? payload.serviceTypes.map((item, index) => ({
+          id: Number(item?.id) || 0,
+          label: String(item?.label ?? ''),
+          amountHt: Number(item?.amountHt) || 0,
+          vatRate: 0,
+          displayOrder: index + 1,
+          tempKey: this.createTempKey('srv')
+        }))
+        : []
+    );
+
+    this.paymentMethods.set(
+      Array.isArray(payload.paymentMethods)
+        ? payload.paymentMethods.map((item, index) => ({
+          id: Number(item?.id) || 0,
+          label: String(item?.label ?? ''),
+          isActive: Boolean(item?.isActive),
+          displayOrder: index + 1,
+          tempKey: this.createTempKey('pay')
+        }))
+        : []
+    );
+  }
+
+  private buildOfficeDraftPayload(): CreateOfficePayload {
+    const payload = this.buildOfficePayload();
+    return {
+      ...payload,
+      hideVatMention: false,
+      vatNumber: '',
+      serviceTypes: payload.serviceTypes.map((item) => ({ ...item, vatRate: 0 }))
+    };
+  }
+
+  private async persistOfficeDraft(): Promise<void> {
+    if (this.editingOfficeId() || !this.isOfficeModalOpen()) {
+      return;
+    }
+
+    if (this.isPersistingOfficeDraft) {
+      this.pendingOfficeDraftSave = true;
+      return;
+    }
+
+    this.isPersistingOfficeDraft = true;
+    this.officeDraftSaveState.set('saving');
+
+    try {
+      await this.api.saveNewOfficeDraft(this.officeCreateStep(), this.buildOfficeDraftPayload());
+      this.lastOfficeDraftSavedAt.set(Date.now());
+      this.officeDraftSaveState.set('saved');
+    } catch {
+      this.officeDraftSaveState.set('error');
+    } finally {
+      this.isPersistingOfficeDraft = false;
+      if (this.pendingOfficeDraftSave) {
+        this.pendingOfficeDraftSave = false;
+        void this.persistOfficeDraft();
+      }
     }
   }
 

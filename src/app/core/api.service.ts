@@ -28,6 +28,8 @@ import {
   InvoiceSummaryTile,
   LocationPair,
   MyUserProfile,
+  NewOfficeDraft,
+  NewOfficeDraftPayload,
   NewPatientDraft,
   NewPatientDraftPayload,
   Office,
@@ -250,6 +252,24 @@ export class ApiService {
 
   async deleteNewPatientDraft(): Promise<void> {
     await firstValueFrom(this.http.delete<void>(`${this.baseUrl}/patient-drafts/new-patient`));
+  }
+
+  async getNewOfficeDraft(): Promise<NewOfficeDraft | null> {
+    const response = await firstValueFrom(
+      this.http.get<NewOfficeDraftPayload>(`${this.baseUrl}/office-drafts/new-office`)
+    );
+
+    return response.draft;
+  }
+
+  async saveNewOfficeDraft(step: number, payload: CreateOfficePayload): Promise<void> {
+    await firstValueFrom(
+      this.http.put<void>(`${this.baseUrl}/office-drafts/new-office`, { step, payload })
+    );
+  }
+
+  async deleteNewOfficeDraft(): Promise<void> {
+    await firstValueFrom(this.http.delete<void>(`${this.baseUrl}/office-drafts/new-office`));
   }
 
   async getPractitioners(): Promise<Practitioner[]> {

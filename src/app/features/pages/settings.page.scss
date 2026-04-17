@@ -548,6 +548,85 @@
   color: #4f6575;
 }
 
+.office-wizard-progress {
+  display: flex;
+  align-items: flex-start;
+
+  .progress-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+
+    .step-circle {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 2px solid #dee2e6;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.8rem;
+      color: #adb5bd;
+      transition: all 0.25s ease;
+    }
+
+    .step-label {
+      margin-top: 0.35rem;
+      font-size: 0.7rem;
+      color: #adb5bd;
+      white-space: nowrap;
+      transition: color 0.25s ease;
+      text-align: center;
+    }
+
+    &.active {
+      .step-circle {
+        border-color: #2f7cb8;
+        background: #2f7cb8;
+        color: #fff;
+      }
+
+      .step-label {
+        color: #2f7cb8;
+        font-weight: 600;
+      }
+    }
+
+    &.done {
+      .step-circle {
+        border-color: #198754;
+        background: #198754;
+        color: #fff;
+      }
+
+      .step-label {
+        color: #198754;
+      }
+    }
+  }
+
+  .progress-connector {
+    flex: 1;
+    height: 2px;
+    background: #dee2e6;
+    margin-top: 16px;
+    transition: background 0.25s ease;
+
+    &.done {
+      background: #198754;
+    }
+  }
+}
+
+.office-draft-indicator {
+  font-size: 0.82rem;
+  color: #5b6773;
+  background: #fbfcfd;
+}
+
 @media (max-width: 991px) {
   .settings-access-intro {
     flex-direction: column;
@@ -563,6 +642,19 @@
 
   .settings-rights-col-toggle {
     width: 7.6rem;
+  }
+
+  .office-wizard-progress {
+    overflow-x: auto;
+    padding-bottom: 0.4rem;
+
+    .progress-step {
+      min-width: 5rem;
+    }
+
+    .progress-connector {
+      min-width: 1.3rem;
+    }
   }
 
 }

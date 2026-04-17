@@ -949,6 +949,66 @@
                   </div>
 
                   <div class="modal-body pb-0">
+                    @if (!editingOfficeId()) {
+                      <div class="office-wizard-progress mb-3">
+                        <div class="progress-step" [class.active]="officeCreateStep() >= 1" [class.done]="officeCreateStep() > 1">
+                          <div class="step-circle">
+                            @if (officeCreateStep() > 1) { <i class="fa-solid fa-check"></i> } @else { 1 }
+                          </div>
+                          <span class="step-label">Identite</span>
+                        </div>
+                        <div class="progress-connector" [class.done]="officeCreateStep() > 1"></div>
+
+                        <div class="progress-step" [class.active]="officeCreateStep() >= 2" [class.done]="officeCreateStep() > 2">
+                          <div class="step-circle">
+                            @if (officeCreateStep() > 2) { <i class="fa-solid fa-check"></i> } @else { 2 }
+                          </div>
+                          <span class="step-label">Coordonnees</span>
+                        </div>
+                        <div class="progress-connector" [class.done]="officeCreateStep() > 2"></div>
+
+                        <div class="progress-step" [class.active]="officeCreateStep() >= 3" [class.done]="officeCreateStep() > 3">
+                          <div class="step-circle">
+                            @if (officeCreateStep() > 3) { <i class="fa-solid fa-check"></i> } @else { 3 }
+                          </div>
+                          <span class="step-label">Facturation</span>
+                        </div>
+                        <div class="progress-connector" [class.done]="officeCreateStep() > 3"></div>
+
+                        <div class="progress-step" [class.active]="officeCreateStep() >= 4" [class.done]="officeCreateStep() > 4">
+                          <div class="step-circle">
+                            @if (officeCreateStep() > 4) { <i class="fa-solid fa-check"></i> } @else { 4 }
+                          </div>
+                          <span class="step-label">Agenda</span>
+                        </div>
+                        <div class="progress-connector" [class.done]="officeCreateStep() > 4"></div>
+
+                        <div class="progress-step" [class.active]="officeCreateStep() >= 5" [class.done]="officeCreateStep() > 5">
+                          <div class="step-circle">
+                            @if (officeCreateStep() > 5) { <i class="fa-solid fa-check"></i> } @else { 5 }
+                          </div>
+                          <span class="step-label">Referentiels</span>
+                        </div>
+                        <div class="progress-connector" [class.done]="officeCreateStep() > 5"></div>
+
+                        <div class="progress-step" [class.active]="officeCreateStep() >= 6" [class.done]="officeCreateStep() > 6">
+                          <div class="step-circle">
+                            @if (officeCreateStep() > 6) { <i class="fa-solid fa-check"></i> } @else { 6 }
+                          </div>
+                          <span class="step-label">Communication</span>
+                        </div>
+                        <div class="progress-connector" [class.done]="officeCreateStep() > 6"></div>
+
+                        <div class="progress-step" [class.active]="officeCreateStep() >= 7">
+                          <div class="step-circle">7</div>
+                          <span class="step-label">Validation</span>
+                        </div>
+                      </div>
+
+                      <div class="office-draft-indicator px-1 pb-2">
+                        <i class="fa-solid fa-floppy-disk me-1"></i>{{ officeDraftStatusText() }}
+                      </div>
+                    } @else {
                     <div class="nav nav-tabs" role="tablist" aria-label="Sections de configuration du cabinet">
                       <button
                         type="button"
@@ -1021,11 +1081,251 @@
                         Lettres types patients
                       </button>
                     </div>
+                    }
                   </div>
 
                   <form [formGroup]="officeForm" (ngSubmit)="saveOffice()" novalidate>
                     <div class="modal-body">
-                      @if (officeModalTab() === 'general') {
+                      @if (!editingOfficeId()) {
+                        @if (officeCreateStep() === 1) {
+                          <div>
+                            <div class="mb-3">
+                              <label for="office-name" class="form-label">Nom du cabinet <span class="text-danger">*</span></label>
+                              <input id="office-name" type="text" class="form-control" placeholder="Ex: Cabinet Osteo" formControlName="name" />
+                            </div>
+                            <div class="mb-3">
+                              <label for="office-default-duration" class="form-label">Duree par defaut des seances: {{ officeForm.controls.defaultSessionDurationMinutes.value }} min</label>
+                              <input id="office-default-duration" type="range" class="form-range" formControlName="defaultSessionDurationMinutes" min="15" max="90" step="5" />
+                            </div>
+                            <div class="row g-2">
+                              <div class="col-12 col-md-6">
+                                <label for="office-country" class="form-label">Pays</label>
+                                <select id="office-country" class="form-select" formControlName="country">
+                                  @for (country of countryOptions; track country) {
+                                    <option [value]="country">{{ country }}</option>
+                                  }
+                                </select>
+                              </div>
+                              <div class="col-12 col-md-6">
+                                <label for="office-devise" class="form-label">Devise</label>
+                                <select id="office-devise" class="form-select" formControlName="devise">
+                                  @for (devise of generalDeviseOptions; track devise) {
+                                    <option [value]="devise">{{ devise }}</option>
+                                  }
+                                </select>
+                              </div>
+                            </div>
+                            <div class="mt-3">
+                              <label for="office-logo" class="form-label">Logo</label>
+                              <input id="office-logo" type="file" class="form-control" accept="image/*" (change)="onOfficeLogoSelected($event)" />
+                            </div>
+                          </div>
+                        } @else if (officeCreateStep() === 2) {
+                          <div>
+                            <div class="row g-2">
+                              <div class="col-12 col-md-6">
+                                <label for="office-address-line1" class="form-label">Adresse</label>
+                                <input id="office-address-line1" type="text" class="form-control" formControlName="addressLine1" />
+                              </div>
+                              <div class="col-12 col-md-6">
+                                <label for="office-address-line2" class="form-label">Adresse (suite)</label>
+                                <input id="office-address-line2" type="text" class="form-control" formControlName="addressLine2" />
+                              </div>
+                              <div class="col-12 col-md-4">
+                                <label for="office-postal-code" class="form-label">Code postal</label>
+                                <input id="office-postal-code" type="text" class="form-control" formControlName="postalCode" />
+                              </div>
+                              <div class="col-12 col-md-8">
+                                <label for="office-city" class="form-label">Ville</label>
+                                <input id="office-city" type="text" class="form-control" formControlName="city" />
+                              </div>
+                              <div class="col-12 col-md-4">
+                                <label for="office-phone-mobile" class="form-label">Telephone mobile</label>
+                                <input id="office-phone-mobile" type="tel" class="form-control" formControlName="phoneMobile" />
+                              </div>
+                              <div class="col-12 col-md-4">
+                                <label for="office-phone-landline" class="form-label">Telephone fixe</label>
+                                <input id="office-phone-landline" type="tel" class="form-control" formControlName="phoneLandline" />
+                              </div>
+                              <div class="col-12 col-md-4">
+                                <label for="office-phone-fax" class="form-label">Fax</label>
+                                <input id="office-phone-fax" type="tel" class="form-control" formControlName="phoneFax" />
+                              </div>
+                              <div class="col-12 col-md-6">
+                                <label for="office-email" class="form-label">Email</label>
+                                <input id="office-email" type="email" class="form-control" formControlName="email" />
+                              </div>
+                              <div class="col-12 col-md-6">
+                                <label for="office-website" class="form-label">Site web</label>
+                                <input id="office-website" type="url" class="form-control" formControlName="website" />
+                              </div>
+                            </div>
+                          </div>
+                        } @else if (officeCreateStep() === 3) {
+                          <div>
+                            <div class="row g-2">
+                              <div class="col-12">
+                                <label for="office-invoice-number-format" class="form-label">Format numerotation</label>
+                                <select id="office-invoice-number-format" class="form-select" formControlName="invoiceNumberFormat">
+                                  @for (option of invoiceNumberFormatOptions; track option) {
+                                    <option [value]="option">{{ option }}</option>
+                                  }
+                                </select>
+                              </div>
+                              <div class="col-12">
+                                <label for="office-numbering-configuration" class="form-label">Configuration numerotation</label>
+                                <select id="office-numbering-configuration" class="form-select" formControlName="numberingConfiguration">
+                                  @for (option of numberingConfigurationOptions; track option) {
+                                    <option [value]="option">{{ option }}</option>
+                                  }
+                                </select>
+                              </div>
+                              <div class="col-12">
+                                <div class="form-check form-switch">
+                                  <input id="office-show-insurance-fields" type="checkbox" class="form-check-input" formControlName="alwaysShowSocialSecurityAndMutuelle" />
+                                  <label class="form-check-label" for="office-show-insurance-fields">Toujours afficher Securite Sociale et Mutuelle sur les factures</label>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div class="mt-4">
+                              <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="mb-0">Prestations proposees</h6>
+                                <button type="button" class="btn btn-sm btn-outline-primary" (click)="addServiceTypeRow()">
+                                  <i class="fa-solid fa-plus me-1"></i>Ajouter
+                                </button>
+                              </div>
+                              <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                  <thead>
+                                    <tr>
+                                      <th scope="col">Libelle</th>
+                                      <th scope="col">Montant</th>
+                                      <th scope="col" class="text-end">Actions</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    @for (serviceType of serviceTypes(); track serviceType.tempKey) {
+                                      <tr>
+                                        <td>
+                                          <input type="text" class="form-control form-control-sm" [value]="serviceType.label" (input)="updateServiceTypeLabel(serviceType.tempKey, $any($event.target).value || '')" />
+                                        </td>
+                                        <td>
+                                          <input type="number" class="form-control form-control-sm" step="0.01" min="0" [value]="serviceType.amountHt" (input)="updateServiceTypeAmount(serviceType.tempKey, $any($event.target).value || '0')" />
+                                        </td>
+                                        <td class="text-end">
+                                          <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeServiceType(serviceType.tempKey)">
+                                            <i class="fa-solid fa-trash"></i>
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    }
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+
+                            <div class="mt-4">
+                              <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="mb-0">Moyens de paiement</h6>
+                                <button type="button" class="btn btn-sm btn-outline-primary" (click)="addPaymentMethod()">
+                                  <i class="fa-solid fa-plus me-1"></i>Ajouter
+                                </button>
+                              </div>
+                              <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                  <thead>
+                                    <tr>
+                                      <th scope="col">Libelle</th>
+                                      <th scope="col">Actif</th>
+                                      <th scope="col" class="text-end">Actions</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    @for (paymentMethod of paymentMethods(); track paymentMethod.tempKey) {
+                                      <tr>
+                                        <td>
+                                          <input type="text" class="form-control form-control-sm" [value]="paymentMethod.label" (input)="updatePaymentMethodLabel(paymentMethod.tempKey, $any($event.target).value || '')" />
+                                        </td>
+                                        <td>
+                                          <input type="checkbox" class="form-check-input" [checked]="paymentMethod.isActive" (change)="togglePaymentMethodActive(paymentMethod.tempKey)" />
+                                        </td>
+                                        <td class="text-end">
+                                          <button type="button" class="btn btn-sm btn-outline-danger" (click)="removePaymentMethod(paymentMethod.tempKey)">
+                                            <i class="fa-solid fa-trash"></i>
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    }
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </div>
+                        } @else if (officeCreateStep() === 4) {
+                          <div>
+                            <input type="hidden" formControlName="openingHoursJson" />
+                            <div class="table-responsive mb-3">
+                              <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                  <tr>
+                                    <th scope="col">Jour</th>
+                                    <th scope="col">Plages</th>
+                                    <th scope="col" class="text-end">Action</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  @for (day of officeWeekDays; track day) {
+                                    <tr>
+                                      <td class="fw-semibold">{{ officeDayLabel(day) }}</td>
+                                      <td>
+                                        <div class="d-flex flex-column gap-2">
+                                          @for (range of officeOpeningHoursDraft()[day]; track $index; let rangeIndex = $index) {
+                                            <div class="d-flex align-items-center gap-2">
+                                              <input type="time" class="form-control form-control-sm" [value]="range.start" (input)="updateOfficeOpeningRange(day, rangeIndex, 'start', $any($event.target).value || '')" />
+                                              <span class="text-secondary">a</span>
+                                              <input type="time" class="form-control form-control-sm" [value]="range.end" (input)="updateOfficeOpeningRange(day, rangeIndex, 'end', $any($event.target).value || '')" />
+                                              <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeOfficeOpeningRange(day, rangeIndex)">
+                                                <i class="fa-solid fa-trash"></i>
+                                              </button>
+                                            </div>
+                                          }
+                                          @if (officeOpeningHoursDraft()[day].length === 0) {
+                                            <small class="text-secondary">Ferme</small>
+                                          }
+                                        </div>
+                                      </td>
+                                      <td class="text-end">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" (click)="addOfficeOpeningRange(day)">
+                                          <i class="fa-solid fa-plus me-1"></i>Ajouter
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  }
+                                </tbody>
+                              </table>
+                            </div>
+                            <div class="alert alert-info mb-0">Les agendas detailles seront configurables juste apres creation du cabinet.</div>
+                          </div>
+                        } @else if (officeCreateStep() === 5) {
+                          <article class="settings-card mb-0">
+                            <h6 class="settings-card-title mb-2">Motifs de consultations et profils patients</h6>
+                            <p class="settings-card-copy mb-0">Cette configuration sera rattachee au cabinet apres creation.</p>
+                          </article>
+                        } @else if (officeCreateStep() === 6) {
+                          <article class="settings-card mb-0">
+                            <h6 class="settings-card-title mb-2">Antécédents medicaux et lettres types</h6>
+                            <p class="settings-card-copy mb-0">Ces configurations seront finalisees dans les onglets cabinet dedies.</p>
+                          </article>
+                        } @else {
+                          <div>
+                            <div class="alert alert-light border mb-2"><strong>Cabinet:</strong> {{ officeForm.controls.name.value || '-' }}</div>
+                            <div class="alert alert-light border mb-2"><strong>Ville:</strong> {{ officeForm.controls.city.value || '-' }}</div>
+                            <div class="alert alert-light border mb-2"><strong>Durée seance:</strong> {{ officeForm.controls.defaultSessionDurationMinutes.value }} min</div>
+                            <div class="alert alert-light border mb-0"><strong>Prestations:</strong> {{ serviceTypes().length }} / <strong>Moyens de paiement:</strong> {{ paymentMethods().length }}</div>
+                          </div>
+                        }
+                      } @else if (officeModalTab() === 'general') {
                         <div id="office-tab-general" role="tabpanel">
                           <div class="mb-3">
                             <label for="office-name" class="form-label">Nom du cabinet <span class="text-danger">*</span></label>
@@ -1487,20 +1787,32 @@
 
                     <div class="modal-footer">
                       <button type="button" class="btn btn-outline-secondary" (click)="closeOfficeModal()">Annuler</button>
-                      <button
-                        type="submit"
-                        class="btn btn-primary"
-                        [disabled]="isCreatingOffice() || isUpdatingOffice() !== null || !officeForm.valid"
-                      >
-                        @if (isCreatingOffice() || isUpdatingOffice() !== null) {
-                          <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                        }
-                        @if (editingOfficeId()) {
-                          Mettre à jour
+                      @if (!editingOfficeId()) {
+                        <button type="button" class="btn btn-outline-primary" [disabled]="officeCreateStep() <= 1" (click)="previousOfficeCreateStep()">
+                          Precedent
+                        </button>
+                        @if (officeCreateStep() < 7) {
+                          <button type="button" class="btn btn-primary" (click)="nextOfficeCreateStep()">Suivant</button>
                         } @else {
-                          Créer le cabinet
+                          <button type="submit" class="btn btn-success" [disabled]="isCreatingOffice()">
+                            @if (isCreatingOffice()) {
+                              <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            }
+                            Creer le cabinet
+                          </button>
                         }
-                      </button>
+                      } @else {
+                        <button
+                          type="submit"
+                          class="btn btn-primary"
+                          [disabled]="isCreatingOffice() || isUpdatingOffice() !== null || !officeForm.valid"
+                        >
+                          @if (isCreatingOffice() || isUpdatingOffice() !== null) {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                          }
+                          Mettre a jour
+                        </button>
+                      }
                     </div>
                   </form>
                 </div>

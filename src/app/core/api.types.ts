@@ -387,6 +387,16 @@ export type NewPatientDraftPayload = {
   draft: NewPatientDraft | null;
 };
 
+export type NewOfficeDraft = {
+  step: number;
+  payload: CreateOfficePayload;
+  updatedAt: string;
+};
+
+export type NewOfficeDraftPayload = {
+  draft: NewOfficeDraft | null;
+};
+
 export type PatientDetail = {
   id: number;
   fullName: string;
