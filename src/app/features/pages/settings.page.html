@@ -546,61 +546,164 @@
                 </div>
 
                 <form class="settings-user-modal-form" [formGroup]="userForm" (ngSubmit)="saveUserAccount()" novalidate>
-                  <div class="modal-body settings-user-modal-body">
-                    <div class="row g-2">
-                      <div class="col-12 col-md-3">
-                        <div class="input-group">
-                          <span class="input-group-text" id="user-active-label">Actif</span>
-                          <div class="form-control d-flex align-items-center">
-                            <div class="form-check form-switch mb-0">
-                              <input id="user-active" type="checkbox" class="form-check-input" formControlName="isActive" aria-labelledby="user-active-label" />
-                            </div>
+                  <div class="modal-body settings-user-modal-body pb-0">
+                    <nav class="nav nav-pills flex-wrap gap-2 mb-3" role="tablist" aria-label="Sections de configuration de l'utilisateur">
+                      <button
+                        type="button"
+                        class="nav-link"
+                        [class.active]="userModalTab() === 'identity'"
+                        role="tab"
+                        [attr.aria-selected]="userModalTab() === 'identity'"
+                        [attr.aria-controls]="'user-tab-identity'"
+                        (click)="selectUserModalTab('identity')"
+                      >
+                        Identité
+                      </button>
+                      <button
+                        type="button"
+                        class="nav-link"
+                        [class.active]="userModalTab() === 'professional'"
+                        role="tab"
+                        [attr.aria-selected]="userModalTab() === 'professional'"
+                        [attr.aria-controls]="'user-tab-professional'"
+                        (click)="selectUserModalTab('professional')"
+                      >
+                        Informations pro
+                      </button>
+                      <button
+                        type="button"
+                        class="nav-link"
+                        [class.active]="userModalTab() === 'billing'"
+                        role="tab"
+                        [attr.aria-selected]="userModalTab() === 'billing'"
+                        [attr.aria-controls]="'user-tab-billing'"
+                        (click)="selectUserModalTab('billing')"
+                      >
+                        Facturation
+                      </button>
+                      <button
+                        type="button"
+                        class="nav-link"
+                        [class.active]="userModalTab() === 'cabinet-rights'"
+                        role="tab"
+                        [attr.aria-selected]="userModalTab() === 'cabinet-rights'"
+                        [attr.aria-controls]="'user-tab-cabinet-rights'"
+                        (click)="selectUserModalTab('cabinet-rights')"
+                      >
+                        Droits Cabinets
+                      </button>
+                      <button
+                        type="button"
+                        class="nav-link"
+                        [class.active]="userModalTab() === 'application-rights'"
+                        role="tab"
+                        [attr.aria-selected]="userModalTab() === 'application-rights'"
+                        [attr.aria-controls]="'user-tab-application-rights'"
+                        (click)="selectUserModalTab('application-rights')"
+                      >
+                        Droits Application
+                      </button>
+                    </nav>
+                  </div>
+
+                  <div class="modal-body settings-user-modal-body border-top">
+                    @if (userModalTab() === 'application-rights') {
+                      <div id="user-tab-application-rights" role="tabpanel" class="row g-3">
+                        <div class="col-12">
+                          <div class="alert alert-info mb-0">
+                            Niveau Application: ce profil définit les droits globaux (agenda, patients, facturation, statistiques, répertoire).
                           </div>
                         </div>
-                      </div>
 
-                      <div class="col-12 col-md-4">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-profile">Profil</label>
-                          <select id="user-profile" class="form-select" formControlName="profileId">
+                        <div class="col-12 col-md-4">
+                          <label class="form-label" for="user-active">Compte actif</label>
+                          <div class="form-check form-switch mt-1">
+                            <input
+                              id="user-active"
+                              type="checkbox"
+                              class="form-check-input"
+                              formControlName="isActive"
+                              [disabled]="isEditingAdminUser()"
+                            />
+                          </div>
+                        </div>
+
+                        <div class="col-12 col-md-8">
+                          <label class="form-label" for="user-profile">Profil d'application</label>
+                          <select id="user-profile" class="form-select" formControlName="profileId" [disabled]="isEditingAdminUser()">
                             @for (profile of profiles(); track profile.id) {
                               <option [value]="profile.id">{{ profile.label }}</option>
                             }
                           </select>
+                          @if (isEditingAdminUser()) {
+                            <div class="form-text text-danger">Le compte admin doit rester actif et Super Administrateur applicatif.</div>
+                          }
                         </div>
-                      </div>
 
-                      <div class="col-12 col-md-5">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-cabinet">Cabinets</label>
-                          <select
-                            id="user-cabinet"
-                            class="form-select"
-                            multiple
-                            size="4"
-                            (change)="onUserCabinetSelectionChange($event)"
-                          >
-                            @for (office of userCabinetOptions(); track office.id) {
-                              <option [value]="office.id" [selected]="selectedUserOfficeIds().includes(office.id)">{{ office.name }}</option>
-                            }
-                          </select>
+                      </div>
+                    } @else if (userModalTab() === 'cabinet-rights') {
+                      <div id="user-tab-cabinet-rights" role="tabpanel" class="row g-3">
+                        <div class="col-12">
+                          <div class="alert alert-info mb-0">
+                            Niveau Cabinet: le profil appliqué est défini dans Gestion des cabinets.
+                          </div>
                         </div>
-                        <div class="form-text">Vous pouvez rattacher l'utilisateur à un ou plusieurs cabinets.</div>
-                        @if (!isOfficesLoading() && userCabinetOptions().length === 0) {
-                          <div class="form-text">Aucun cabinet disponible. Ajoutez d'abord un cabinet dans la section "Gestion des cabinets".</div>
+
+                        @if (!isCreatingUserMode()) {
+                          <div class="col-12">
+                            <h6 class="mb-2">Droits par cabinet</h6>
+                            @if (selectedUserCabinetDelegations().length === 0) {
+                              <p class="text-secondary mb-2">Aucun cabinet associé ou aucun profil cabinet défini pour cet utilisateur.</p>
+                            } @else {
+                              <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-2">
+                                  <thead>
+                                    <tr>
+                                      <th>Cabinet</th>
+                                      <th>Droit dans le cabinet</th>
+                                      <th class="text-end">Etat</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    @for (delegation of selectedUserCabinetDelegations(); track delegation.officeId + '-' + delegation.profileId) {
+                                      <tr>
+                                        <td>{{ delegation.officeName }}</td>
+                                        <td>{{ delegation.profileLabel }}</td>
+                                        <td class="text-end">
+                                          @if (delegation.isConfigured) {
+                                            <span class="badge text-bg-success">Configure</span>
+                                          } @else {
+                                            <span class="badge text-bg-warning">A definir</span>
+                                          }
+                                        </td>
+                                      </tr>
+                                    }
+                                  </tbody>
+                                </table>
+                              </div>
+                            }
+
+                            <button type="button" class="btn btn-outline-primary btn-sm" (click)="openCabinetDelegationsSection()">
+                              Gérer les profils cabinet
+                            </button>
+                          </div>
+                        } @else {
+                          <div class="col-12">
+                            <div class="alert alert-warning mb-0">
+                              Vous pourrez définir les profils par cabinet après création du compte, depuis Gestion des cabinets.
+                            </div>
+                          </div>
                         }
                       </div>
-
-                      <div class="col-12 col-md-6">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-username">Login</label>
-                          <input id="user-username" type="text" class="form-control" formControlName="username" />
+                    } @else if (userModalTab() === 'identity') {
+                      <div id="user-tab-identity" role="tabpanel" class="row g-3">
+                        <div class="col-12 col-md-6">
+                          <label class="form-label" for="user-username">Login</label>
+                          <input id="user-username" type="text" class="form-control" formControlName="username" [readonly]="!isCreatingUserMode()" />
                         </div>
-                      </div>
 
-                      <div class="col-12 col-md-6">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-password">Mot de passe</label>
+                        <div class="col-12 col-md-6">
+                          <label class="form-label" for="user-password">Mot de passe</label>
                           <input
                             id="user-password"
                             type="password"
@@ -609,39 +712,40 @@
                             [placeholder]="isCreatingUserMode() ? 'Obligatoire' : 'Laisser vide pour conserver'"
                           />
                         </div>
-                      </div>
 
-                      <div class="col-12 col-md-6">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-last-name">Nom</label>
+                        <div class="col-12 col-md-6">
+                          <label class="form-label" for="user-confirm-password">Confirmation du mot de passe</label>
+                          <input
+                            id="user-confirm-password"
+                            type="password"
+                            class="form-control"
+                            formControlName="confirmPassword"
+                            [placeholder]="isCreatingUserMode() ? 'Obligatoire' : 'Saisir si changement de mot de passe'"
+                          />
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                          <label class="form-label" for="user-last-name">Nom</label>
                           <input id="user-last-name" type="text" class="form-control" formControlName="lastName" />
                         </div>
-                      </div>
 
-                      <div class="col-12 col-md-6">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-first-name">Prénom</label>
+                        <div class="col-12 col-md-6">
+                          <label class="form-label" for="user-first-name">Prénom</label>
                           <input id="user-first-name" type="text" class="form-control" formControlName="firstName" />
                         </div>
-                      </div>
 
-                      <div class="col-12 col-md-6">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-email">Email</label>
+                        <div class="col-12 col-md-6">
+                          <label class="form-label" for="user-email">Email</label>
                           <input id="user-email" type="email" class="form-control" formControlName="email" />
                         </div>
-                      </div>
 
-                      <div class="col-12 col-md-6">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-mobile-phone">Téléphone</label>
+                        <div class="col-12 col-md-6">
+                          <label class="form-label" for="user-mobile-phone">Téléphone</label>
                           <input id="user-mobile-phone" type="text" class="form-control" formControlName="mobilePhone" />
                         </div>
-                      </div>
 
-                      <div class="col-12 col-md-6">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-country">Pays</label>
+                        <div class="col-12 col-md-6">
+                          <label class="form-label" for="user-country">Pays</label>
                           <select id="user-country" class="form-select" formControlName="country">
                             @for (country of countryOptions; track country) {
                               <option [value]="country">{{ country }}</option>
@@ -649,188 +753,136 @@
                           </select>
                         </div>
                       </div>
-
-                      <div class="col-12 col-md-6">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-siret">N° SIRET</label>
+                    } @else if (userModalTab() === 'professional') {
+                      <div id="user-tab-professional" role="tabpanel" class="row g-3">
+                        <div class="col-12 col-md-6">
+                          <label class="form-label" for="user-siret">N° SIRET</label>
                           <input id="user-siret" type="text" class="form-control" formControlName="siret" />
                         </div>
-                      </div>
 
-                      <div class="col-12 col-md-4">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-adeli">Code ADELI</label>
-                          <input id="user-adeli" type="text" class="form-control" formControlName="adeliCode" />
-                        </div>
-                      </div>
-
-                      <div class="col-12 col-md-4">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-rpps">Code RPPS</label>
-                          <input id="user-rpps" type="text" class="form-control" formControlName="rppsCode" />
-                        </div>
-                      </div>
-
-                      <div class="col-12 col-md-4">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-ape-naf">Code APE / NAF</label>
-                          <input id="user-ape-naf" type="text" class="form-control" formControlName="apeNafCode" />
-                        </div>
-                      </div>
-
-                      <div class="col-12">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-name-suffix">Texte à côté du nom</label>
+                        <div class="col-12 col-md-6">
+                          <label class="form-label" for="user-name-suffix">Texte à côté du nom</label>
                           <input id="user-name-suffix" type="text" class="form-control" formControlName="nameSuffixText" />
                         </div>
-                      </div>
 
-                      <div class="col-12">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-letter-header">Entête courriers</label>
+                        <div class="col-12 col-md-4">
+                          <label class="form-label" for="user-adeli">Code ADELI</label>
+                          <input id="user-adeli" type="text" class="form-control" formControlName="adeliCode" />
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                          <label class="form-label" for="user-rpps">Code RPPS</label>
+                          <input id="user-rpps" type="text" class="form-control" formControlName="rppsCode" />
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                          <label class="form-label" for="user-ape-naf">Code APE / NAF</label>
+                          <input id="user-ape-naf" type="text" class="form-control" formControlName="apeNafCode" />
+                        </div>
+
+                        <div class="col-12">
+                          <label class="form-label" for="user-letter-header">Entête courriers</label>
                           <input id="user-letter-header" type="text" class="form-control" formControlName="letterHeader" />
                         </div>
-                      </div>
 
-                      <div class="col-12">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-letter-footer">Pied de page courriers</label>
+                        <div class="col-12">
+                          <label class="form-label" for="user-letter-footer">Pied de page courriers</label>
                           <input id="user-letter-footer" type="text" class="form-control" formControlName="letterFooter" />
                         </div>
-                      </div>
 
-                      <div class="col-12 col-md-6">
-                        <label class="form-label mb-1" for="user-signature-upload">Signature</label>
+                        <div class="col-12 col-md-6">
+                          <label class="form-label mb-1" for="user-signature-upload">Signature</label>
 
-                        @if (!isCreatingUserMode() && userSignatureValue()) {
-                          <div class="border rounded p-2 mb-2 bg-light-subtle">
-                            <div class="small text-secondary mb-1">Valeur actuelle</div>
-                            @if (isUserSignatureImage()) {
-                              <img
-                                [src]="userSignatureValue()"
-                                alt="Signature actuelle"
-                                class="img-fluid rounded border settings-signature-preview"
-                              />
-                            } @else {
-                              <div class="small text-break">{{ getUserSignaturePreviewText() }}</div>
-                            }
-                          </div>
-                        }
+                          @if (!isCreatingUserMode() && userSignatureValue()) {
+                            <div class="border rounded p-2 mb-2 bg-light-subtle">
+                              <div class="small text-secondary mb-1">Valeur actuelle</div>
+                              @if (isUserSignatureImage()) {
+                                <img
+                                  [src]="userSignatureValue()"
+                                  alt="Signature actuelle"
+                                  class="img-fluid rounded border settings-signature-preview"
+                                />
+                              } @else {
+                                <div class="small text-break">{{ getUserSignaturePreviewText() }}</div>
+                              }
+                            </div>
+                          }
 
-                        <input
-                          id="user-signature-upload"
-                          type="file"
-                          class="form-control"
-                          accept="image/*,.pdf"
-                          (change)="onUserSignatureFileSelected($event)"
-                        />
+                          <input
+                            id="user-signature-upload"
+                            type="file"
+                            class="form-control"
+                            accept="image/*,.pdf"
+                            (change)="onUserSignatureFileSelected($event)"
+                          />
 
-                        @if (selectedUserSignatureFileName()) {
-                          <p class="small text-secondary mt-1 mb-0">Nouveau fichier: {{ selectedUserSignatureFileName() }}</p>
-                        }
+                          @if (selectedUserSignatureFileName()) {
+                            <p class="small text-secondary mt-1 mb-0">Nouveau fichier: {{ selectedUserSignatureFileName() }}</p>
+                          }
 
-                        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" (click)="clearUserSignature()">
-                          Effacer la signature
-                        </button>
+                          <button type="button" class="btn btn-sm btn-outline-secondary mt-2" (click)="clearUserSignature()">
+                            Effacer la signature
+                          </button>
 
-                        @if (userSignatureError()) {
-                          <div class="small text-danger mt-1">{{ userSignatureError() }}</div>
-                        }
-                      </div>
+                          @if (userSignatureError()) {
+                            <div class="small text-danger mt-1">{{ userSignatureError() }}</div>
+                          }
+                        </div>
 
-                      <div class="col-12 col-md-6">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-color">Couleur</label>
+                        <div class="col-12 col-md-6">
+                          <label class="form-label" for="user-color">Couleur</label>
                           <input id="user-color" type="color" class="form-control form-control-color" formControlName="colorHex" />
                         </div>
                       </div>
-
-                      <div class="col-12 col-md-6">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-bank-name">Banque</label>
+                    } @else if (userModalTab() === 'billing') {
+                      <div id="user-tab-billing" role="tabpanel" class="row g-3">
+                        <div class="col-12 col-md-6">
+                          <label class="form-label" for="user-bank-name">Banque</label>
                           <input id="user-bank-name" type="text" class="form-control" formControlName="bankName" />
                         </div>
-                      </div>
 
-                      <div class="col-12 col-md-6">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-iban">IBAN</label>
+                        <div class="col-12 col-md-6">
+                          <label class="form-label" for="user-iban">IBAN</label>
                           <input id="user-iban" type="text" class="form-control" formControlName="iban" />
                         </div>
-                      </div>
 
-                      <div class="col-12 col-md-4">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-agenda-view">Vue agenda</label>
+                        <div class="col-12 col-md-6">
+                          <label class="form-label" for="user-agenda-view">Vue agenda</label>
                           <select id="user-agenda-view" class="form-select" formControlName="defaultAgendaView">
                             @for (view of agendaViewOptions; track view) {
                               <option [value]="view">{{ view }}</option>
                             }
                           </select>
                         </div>
-                      </div>
 
-                      <div class="col-12 col-md-4">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-calendars">Calendriers</label>
-                          <select id="user-calendars" class="form-select" formControlName="visibleCalendars">
-                            @for (calendar of calendarOptions; track calendar) {
-                              <option [value]="calendar">{{ calendar }}</option>
-                            }
-                          </select>
-                        </div>
-                      </div>
-
-                      <div class="col-12 col-md-4">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-default-service">Prestations</label>
-                          <select id="user-default-service" class="form-select" formControlName="defaultService">
-                            <option value="Aucune prestation">Aucune prestation</option>
-                            @for (serviceLabel of serviceTypeLabels(); track serviceLabel) {
-                              <option [value]="serviceLabel">{{ serviceLabel }}</option>
-                            }
-                          </select>
-                        </div>
-                      </div>
-
-                      <div class="col-12">
-                        <div class="input-group">
-                          <label class="input-group-text" for="user-invoice-mentions">Mentions factures</label>
+                        <div class="col-12">
+                          <label class="form-label" for="user-invoice-mentions">Mentions factures</label>
                           <textarea id="user-invoice-mentions" class="form-control" formControlName="invoiceMentions" rows="3"></textarea>
                         </div>
-                      </div>
 
-                      <div class="col-12">
-                        <hr />
-                        <h6 class="text-secondary mb-3">
-                          <i class="fa-solid fa-chart-line me-2"></i>Comptabilité et Statistiques
-                        </h6>
-                      </div>
-
-                      <div class="col-12">
-                        <div class="form-check form-switch">
-                          <input id="user-include-free-consultations" type="checkbox" class="form-check-input" formControlName="includeFreeConsultations" />
-                          <label class="form-check-label" for="user-include-free-consultations">
-                            Afficher les consultations gratuites dans la comptabilité et les statistiques
-                          </label>
-                        </div>
-                      </div>
-
-                      <div class="col-12">
-                        <div class="form-check form-switch">
-                          <input id="user-show-consultation-hour" type="checkbox" class="form-check-input" formControlName="showConsultationHour" />
-                          <label class="form-check-label" for="user-show-consultation-hour">
-                            Afficher l'heure des consultations dans la comptabilité
-                          </label>
-                        </div>
-                      </div>
-
-                      @if (userProfileLinkError()) {
                         <div class="col-12">
-                          <div class="alert alert-danger py-2 mb-0" role="alert">{{ userProfileLinkError() }}</div>
+                          <div class="form-check form-switch">
+                            <input id="user-include-free-consultations" type="checkbox" class="form-check-input" formControlName="includeFreeConsultations" />
+                            <label class="form-check-label" for="user-include-free-consultations">
+                              Afficher les consultations gratuites dans la comptabilité et les statistiques
+                            </label>
+                          </div>
                         </div>
-                      }
-                    </div>
+
+                        <div class="col-12">
+                          <div class="form-check form-switch">
+                            <input id="user-show-consultation-hour" type="checkbox" class="form-check-input" formControlName="showConsultationHour" />
+                            <label class="form-check-label" for="user-show-consultation-hour">
+                              Afficher l'heure des consultations dans la comptabilité
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    }
+
+                    @if (userProfileLinkError()) {
+                      <div class="alert alert-danger py-2 mb-0 mt-3" role="alert">{{ userProfileLinkError() }}</div>
+                    }
                   </div>
 
                   <div class="modal-footer settings-user-modal-footer">
@@ -888,31 +940,21 @@
                       <th scope="col">Ville</th>
                       <th scope="col">Téléphone</th>
                       <th scope="col">Email</th>
-                      <th scope="col">Horaires</th>
                       <th scope="col" class="text-end">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     @for (office of offices(); track office.id) {
-                      <tr>
+                      <tr class="settings-clickable-row" (click)="openOfficeModal(office.id)">
                         <td class="fw-semibold">{{ office.name }}</td>
                         <td>{{ office.city || '—' }}</td>
                         <td>{{ office.phoneMobile || office.phoneLandline || '—' }}</td>
                         <td>{{ office.email || '—' }}</td>
-                        <td>{{ officeOpeningHoursSummary(office.openingHours) }}</td>
                         <td class="text-end">
                           <button
                             type="button"
-                            class="btn btn-sm btn-outline-primary me-1"
-                            (click)="openOfficeModal(office.id)"
-                            [disabled]="isUpdatingOffice() === office.id"
-                          >
-                            <i class="fa-solid fa-pencil"></i>
-                          </button>
-                          <button
-                            type="button"
                             class="btn btn-sm btn-outline-danger"
-                            (click)="deleteOffice(office.id)"
+                            (click)="$event.stopPropagation(); deleteOffice(office.id)"
                             [disabled]="isDeletingOffice() === office.id"
                           >
                             @if (isDeletingOffice() === office.id) {
@@ -1054,6 +1096,17 @@
                           (click)="selectOfficeModalTab('agendas')"
                         >
                           Agendas
+                        </button>
+                        <button
+                          type="button"
+                          class="nav-link"
+                          [class.active]="officeModalTab() === 'users-profiles'"
+                          role="tab"
+                          [attr.aria-selected]="officeModalTab() === 'users-profiles'"
+                          [attr.aria-controls]="'office-tab-users-profiles'"
+                          (click)="selectOfficeModalTab('users-profiles')"
+                        >
+                          User & Profils
                         </button>
                         <button
                           type="button"
@@ -1305,10 +1358,97 @@
                             <div class="alert alert-info mb-0">Les agendas detailles seront configurables juste apres creation du cabinet.</div>
                           </div>
                         } @else if (officeCreateStep() === 5) {
-                          <article class="settings-card mb-0">
-                            <h6 class="settings-card-title mb-2">Motifs de consultations et profils patients</h6>
-                            <p class="settings-card-copy mb-0">Cette configuration sera rattachee au cabinet apres creation.</p>
-                          </article>
+                          <div>
+                            <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+                              <div>
+                                <h6 class="settings-card-title mb-1">Profil patient et motifs de consultation</h6>
+                                <p class="settings-card-copy mb-0">
+                                  Définissez les profils types et leurs motifs directement lors de la création du cabinet.
+                                </p>
+                              </div>
+                              <button type="button" class="btn btn-primary" (click)="addConsultationProfile()">
+                                <i class="fa-solid fa-plus me-2"></i>
+                                Ajouter un profil
+                              </button>
+                            </div>
+
+                            @if (consultationProfiles().length === 0) {
+                              <div class="border rounded-3 p-4 text-center bg-light-subtle">
+                                <p class="mb-3 text-muted">Aucun profil configuré pour ce cabinet.</p>
+                                <button type="button" class="btn btn-outline-primary" (click)="addConsultationProfile()">
+                                  <i class="fa-solid fa-plus me-2"></i>
+                                  Créer le premier profil
+                                </button>
+                              </div>
+                            } @else {
+                              <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+                                @for (profile of consultationProfiles(); track profile.tempKey) {
+                                  <div class="col">
+                                    <div class="card h-100">
+                                      <div class="card-header d-flex align-items-center gap-2">
+                                        <input
+                                          type="text"
+                                          class="form-control form-control-sm"
+                                          [value]="profile.name"
+                                          (input)="updateConsultationProfileName(profile.tempKey, $any($event.target).value)"
+                                          placeholder="Ex: Adulte sportif"
+                                        />
+                                        <button type="button" class="btn btn-outline-primary btn-sm flex-shrink-0" (click)="addConsultationReason(profile.tempKey)" title="Ajouter un motif">
+                                          <i class="fa-solid fa-plus"></i>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          class="btn btn-outline-danger btn-sm flex-shrink-0"
+                                          (click)="removeConsultationProfile(profile.tempKey)"
+                                          title="Supprimer le profil"
+                                        >
+                                          <i class="fa-solid fa-trash-can"></i>
+                                        </button>
+                                      </div>
+                                      <div class="card-body p-2">
+                                        @if (profile.reasons.length === 0) {
+                                          <div class="p-3 text-muted small text-center">
+                                            Aucun motif dans ce profil.
+                                          </div>
+                                        } @else {
+                                          <div class="d-flex flex-column gap-2">
+                                            @for (reason of profile.reasons; track reason.tempKey) {
+                                              <div
+                                                class="d-flex align-items-center gap-1 px-1 py-1 bg-body-tertiary"
+                                                draggable="true"
+                                                (dragstart)="onConsultationReasonDragStart($event, profile.tempKey, reason.tempKey)"
+                                                (dragover)="onConsultationReasonDragOver($event)"
+                                                (drop)="onConsultationReasonDrop($event, profile.tempKey, reason.tempKey)"
+                                              >
+                                                <span class="text-muted" title="Glisser pour réordonner">
+                                                  <i class="fa-solid fa-grip-vertical"></i>
+                                                </span>
+                                                <input
+                                                  type="text"
+                                                  class="form-control form-control-sm"
+                                                  [value]="reason.label"
+                                                  (input)="updateConsultationReasonLabel(profile.tempKey, reason.tempKey, $any($event.target).value)"
+                                                  placeholder="Nom du motif"
+                                                />
+                                                <button
+                                                  type="button"
+                                                  class="btn btn-sm btn-outline-danger"
+                                                  (click)="removeConsultationReason(profile.tempKey, reason.tempKey)"
+                                                  title="Supprimer le motif"
+                                                >
+                                                  <i class="fa-solid fa-trash-can"></i>
+                                                </button>
+                                              </div>
+                                            }
+                                          </div>
+                                        }
+                                      </div>
+                                    </div>
+                                  </div>
+                                }
+                              </div>
+                            }
+                          </div>
                         } @else {
                           <div>
                             <div class="alert alert-light border mb-2"><strong>Cabinet:</strong> {{ officeForm.controls.name.value || '-' }}</div>
@@ -1771,6 +1911,86 @@
                             }
                           }
                         </div>
+                      } @else if (officeModalTab() === 'users-profiles') {
+                        <div id="office-tab-users-profiles" role="tabpanel">
+                          <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+                            <div>
+                              <h6 class="settings-card-title mb-1">Delegations utilisateur par cabinet</h6>
+                              <p class="settings-card-copy mb-0">
+                                Associez un compte utilisateur et un profil d'acces pour ce cabinet.
+                              </p>
+                            </div>
+                            <button type="button" class="btn btn-primary" (click)="addOfficeUserDelegation()">
+                              <i class="fa-solid fa-plus me-2"></i>
+                              Ajouter une delegation
+                            </button>
+                          </div>
+
+                          @if (officeDelegationUserOptions().length === 0) {
+                            <div class="alert alert-warning mb-0" role="alert">
+                              Aucun compte n'est rattache a ce cabinet. Associez d'abord un utilisateur au cabinet dans la gestion des utilisateurs.
+                            </div>
+                          } @else if (officeUserDelegations().length === 0) {
+                            <div class="border rounded-3 p-4 text-center bg-light-subtle">
+                              <p class="mb-3 text-muted">Aucune delegation definie pour ce cabinet.</p>
+                              <button type="button" class="btn btn-outline-primary" (click)="addOfficeUserDelegation()">
+                                <i class="fa-solid fa-plus me-2"></i>
+                                Creer la premiere delegation
+                              </button>
+                            </div>
+                          } @else {
+                            <div class="table-responsive">
+                              <table class="table align-middle mb-0">
+                                <thead>
+                                  <tr>
+                                    <th style="min-width: 260px;">Compte utilisateur</th>
+                                    <th style="min-width: 220px;">Profil</th>
+                                    <th class="text-end" style="width: 100px;">Action</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  @for (delegation of officeUserDelegations(); track delegation.tempKey) {
+                                    <tr>
+                                      <td>
+                                        <select
+                                          class="form-select form-select-sm"
+                                          [value]="delegation.userId ?? ''"
+                                          (change)="updateOfficeUserDelegationUser(delegation.tempKey, $any($event.target).value)"
+                                        >
+                                          <option value="">Selectionner un utilisateur</option>
+                                          @for (option of officeDelegationUserOptions(); track option.id) {
+                                            <option [value]="option.id">{{ option.label }}</option>
+                                          }
+                                        </select>
+                                      </td>
+                                      <td>
+                                        <select
+                                          class="form-select form-select-sm"
+                                          [value]="delegation.profileId"
+                                          (change)="updateOfficeUserDelegationProfile(delegation.tempKey, $any($event.target).value)"
+                                        >
+                                          @for (profileOption of officeDelegationProfileOptions(); track profileOption.id) {
+                                            <option [value]="profileOption.id">{{ profileOption.label }}</option>
+                                          }
+                                        </select>
+                                      </td>
+                                      <td class="text-end">
+                                        <button
+                                          type="button"
+                                          class="btn btn-sm btn-outline-danger"
+                                          (click)="removeOfficeUserDelegation(delegation.tempKey)"
+                                          title="Supprimer la delegation"
+                                        >
+                                          <i class="fa-solid fa-trash-can"></i>
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  }
+                                </tbody>
+                              </table>
+                            </div>
+                          }
+                        </div>
                       } @else if (officeModalTab() === 'consultation-reasons') {
                         <div id="office-tab-consultation-reasons" role="tabpanel">
                           <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
@@ -1909,6 +2129,56 @@
                 </div>
               </div>
             </div>
+          }
+
+          @if (isOfficeDelegationModalOpen()) {
+            <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" [attr.aria-labelledby]="'office-delegation-modal-title'">
+              <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                  <div class="modal-header bg-primary text-white">
+                    <h4 id="office-delegation-modal-title" class="modal-title h6 mb-0">Ajouter une délégation</h4>
+                    <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeOfficeDelegationModal()"></button>
+                  </div>
+
+                  <form [formGroup]="officeDelegationForm" (ngSubmit)="saveOfficeDelegationFromModal()" novalidate>
+                    <div class="modal-body">
+                      <div class="row g-3">
+                        <div class="col-12">
+                          <label class="form-label" for="office-delegation-user">Compte utilisateur</label>
+                          <select id="office-delegation-user" class="form-select" formControlName="userId">
+                            <option [value]="0">Sélectionner un utilisateur</option>
+                            @for (option of officeDelegationUserOptions(); track option.id) {
+                              <option [value]="option.id">{{ option.label }}</option>
+                            }
+                          </select>
+                        </div>
+
+                        <div class="col-12">
+                          <label class="form-label" for="office-delegation-profile">Profil</label>
+                          <select id="office-delegation-profile" class="form-select" formControlName="profileId">
+                            @for (profileOption of officeDelegationProfileOptions(); track profileOption.id) {
+                              <option [value]="profileOption.id">{{ profileOption.label }}</option>
+                            }
+                          </select>
+                        </div>
+
+                        @if (officeDelegationModalError()) {
+                          <div class="col-12">
+                            <div class="alert alert-danger py-2 mb-0" role="alert">{{ officeDelegationModalError() }}</div>
+                          </div>
+                        }
+                      </div>
+                    </div>
+
+                    <div class="modal-footer">
+                      <button type="button" class="btn btn-outline-secondary" (click)="closeOfficeDelegationModal()">Annuler</button>
+                      <button type="submit" class="btn btn-primary">Ajouter</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+            <div class="modal-backdrop fade show" (click)="closeOfficeDelegationModal()"></div>
           }
 
           @if (isServiceTypeModalOpen()) {

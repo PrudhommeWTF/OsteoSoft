@@ -656,36 +656,48 @@
       </div>
       <div class="wizard-card-body">
 
-        <div class="consultation-tabs mb-4" role="tablist" aria-label="Sections de la consultation">
-          <button type="button" class="consultation-tab" [class.active]="consultationActiveTab() === 'consultation'" (click)="setConsultationTab('consultation')">
-            <span class="tab-index">1</span>
-            <span class="tab-copy">
-              <strong>Consultation</strong>
-              <small>Parametres cliniques</small>
-            </span>
+        <nav class="nav nav-pills flex-wrap gap-2 mb-4" role="tablist" aria-label="Sections de la consultation">
+          <button
+            type="button"
+            class="nav-link"
+            [class.active]="consultationActiveTab() === 'consultation'"
+            role="tab"
+            [attr.aria-selected]="consultationActiveTab() === 'consultation'"
+            (click)="setConsultationTab('consultation')"
+          >
+            Consultation
           </button>
-          <button type="button" class="consultation-tab" [class.active]="consultationActiveTab() === 'documents'" (click)="setConsultationTab('documents')">
-            <span class="tab-index">2</span>
-            <span class="tab-copy">
-              <strong>Documents patient</strong>
-              <small>Pieces jointes</small>
-            </span>
+          <button
+            type="button"
+            class="nav-link"
+            [class.active]="consultationActiveTab() === 'documents'"
+            role="tab"
+            [attr.aria-selected]="consultationActiveTab() === 'documents'"
+            (click)="setConsultationTab('documents')"
+          >
+            Documents patient
           </button>
-          <button type="button" class="consultation-tab" [class.active]="consultationActiveTab() === 'courriers'" (click)="setConsultationTab('courriers')">
-            <span class="tab-index">3</span>
-            <span class="tab-copy">
-              <strong>Courriers sortants</strong>
-              <small>Communication externe</small>
-            </span>
+          <button
+            type="button"
+            class="nav-link"
+            [class.active]="consultationActiveTab() === 'courriers'"
+            role="tab"
+            [attr.aria-selected]="consultationActiveTab() === 'courriers'"
+            (click)="setConsultationTab('courriers')"
+          >
+            Courriers sortants
           </button>
-          <button type="button" class="consultation-tab" [class.active]="consultationActiveTab() === 'paiement'" (click)="setConsultationTab('paiement')">
-            <span class="tab-index">4</span>
-            <span class="tab-copy">
-              <strong>Paiement</strong>
-              <small>Facturation seance</small>
-            </span>
+          <button
+            type="button"
+            class="nav-link"
+            [class.active]="consultationActiveTab() === 'paiement'"
+            role="tab"
+            [attr.aria-selected]="consultationActiveTab() === 'paiement'"
+            (click)="setConsultationTab('paiement')"
+          >
+            Paiement
           </button>
-        </div>
+        </nav>
 
         @if (consultationActiveTab() === 'consultation') {
           <div class="consultation-split mb-4">

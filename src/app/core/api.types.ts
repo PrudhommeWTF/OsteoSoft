@@ -576,6 +576,19 @@ export type OfficeConsultationProfile = {
   displayOrder: number;
 };
 
+export type OfficeUserDelegation = {
+  userId: number;
+  profileId: string;
+  username: string;
+  displayName: string;
+  profileLabel: string;
+};
+
+export type OfficeUserDelegationPayload = {
+  userId: number;
+  profileId: string;
+};
+
 export type Office = {
   id: number;
   name: string;
@@ -599,6 +612,7 @@ export type Office = {
   logoData?: string;
   openingHours?: OfficeOpeningHours;
   consultationProfiles: OfficeConsultationProfile[];
+  officeUserDelegations: OfficeUserDelegation[];
   serviceTypes: ServiceTypeSetting[];
   paymentMethods: PaymentMethodSetting[];
   isActive: boolean;
@@ -629,6 +643,7 @@ export type CreateOfficePayload = {
   logoData?: string;
   openingHours?: OfficeOpeningHours;
   consultationProfiles: OfficeConsultationProfile[];
+  officeUserDelegations: OfficeUserDelegationPayload[];
   serviceTypes: ServiceTypeSetting[];
   paymentMethods: PaymentMethodSetting[];
 };

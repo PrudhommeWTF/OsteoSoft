@@ -86,17 +86,25 @@ type EditableConsultationProfile = {
   reasons: EditableConsultationReason[];
 };
 
+type EditableOfficeUserDelegation = {
+  tempKey: string;
+  userId: number | null;
+  profileId: string;
+};
+
 type OfficeModalTabId =
   | 'general'
   | 'contact-details'
   | 'billing'
   | 'opening-hours'
   | 'agendas'
+  | 'users-profiles'
   | 'consultation-reasons'
   | 'patient-letters';
 
 type OfficeCreateStep = 1 | 2 | 3 | 4 | 5 | 6;
 type DraftSaveState = 'idle' | 'saving' | 'saved' | 'error';
+type UserModalTabId = 'application-rights' | 'cabinet-rights' | 'identity' | 'professional' | 'billing';
 
 @Component({
   selector: 'app-settings-page',
@@ -210,6 +218,11 @@ export class SettingsPage implements OnDestroy {
     vatRate: [0, [Validators.required, Validators.min(0), Validators.max(100)]]
   });
 
+  readonly officeDelegationForm = this.fb.nonNullable.group({
+    userId: [0, [Validators.required, Validators.min(1)]],
+    profileId: ['super-admin', [Validators.required]]
+  });
+
   readonly userForm = this.fb.nonNullable.group({
     isActive: [true],
     profileId: ['super-admin', [Validators.required]],
@@ -217,6 +230,7 @@ export class SettingsPage implements OnDestroy {
     officeId: [0, [Validators.min(0)]],
     username: ['', [Validators.required, Validators.maxLength(100)]],
     password: ['', [Validators.maxLength(256)]],
+    confirmPassword: ['', [Validators.maxLength(256)]],
     lastName: ['', [Validators.maxLength(100)]],
     firstName: ['', [Validators.maxLength(100)]],
     email: ['', [Validators.maxLength(150), Validators.email]],
@@ -309,6 +323,7 @@ export class SettingsPage implements OnDestroy {
   readonly isSavingUserAccount = signal(false);
   readonly isCreatingUserMode = signal(false);
   readonly isUserModalOpen = signal(false);
+  readonly userModalTab = signal<UserModalTabId>('identity');
   readonly deletingUserId = signal<number | null>(null);
   readonly userProfileLinkError = signal('');
   readonly userProfileLinkSuccess = signal('');
@@ -321,6 +336,8 @@ export class SettingsPage implements OnDestroy {
   readonly selectedBackupFileName = signal('');
   readonly selectedAuditLogLimit = signal(100);
   readonly isServiceTypeModalOpen = signal(false);
+  readonly isOfficeDelegationModalOpen = signal(false);
+  readonly officeDelegationModalError = signal('');
   readonly showRgpdPatientPicker = signal(false);
   readonly rgpdPatientSearch = signal('');
   readonly rgpdSearchResults = signal<Patient[]>([]);
@@ -349,6 +366,7 @@ export class SettingsPage implements OnDestroy {
   readonly serviceTypes = signal<EditableServiceType[]>([]);
   readonly paymentMethods = signal<EditablePaymentMethod[]>([]);
   readonly consultationProfiles = signal<EditableConsultationProfile[]>([]);
+  readonly officeUserDelegations = signal<EditableOfficeUserDelegation[]>([]);
   readonly localCalendars = signal<EditableLocalCalendar[]>([]);
   readonly isAgendaSettingsLoading = signal(false);
   readonly isSavingAgendaSettings = signal(false);
@@ -584,6 +602,106 @@ export class SettingsPage implements OnDestroy {
     return this.localCalendars()
       .filter((calendar) => calendar.officeId === officeId)
       .sort((a, b) => a.displayOrder - b.displayOrder);
+  });
+
+  readonly officeDelegationUserOptions = computed(() => {
+    const officeId = this.editingOfficeId();
+    if (!officeId) {
+      return [] as Array<{ id: number; label: string }>;
+    }
+
+    const linkedUsers = this.users().filter((user) => {
+      const linkedOfficeIds = Array.isArray(user.officeIds)
+        ? user.officeIds
+          .map((id) => Number(id))
+          .filter((id) => Number.isInteger(id) && id > 0)
+        : [];
+      const legacyOfficeId = user.officeId != null ? Number(user.officeId) : null;
+      return linkedOfficeIds.includes(officeId) || legacyOfficeId === officeId;
+    });
+
+    const sourceUsers = linkedUsers.length > 0
+      ? linkedUsers
+      : this.users().filter((user) => user.isActive);
+
+    return sourceUsers
+      .map((user) => ({
+        id: user.id,
+        label: this.getUserDisplayName(user)
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'fr'));
+  });
+
+  readonly officeDelegationProfileOptions = computed(() => {
+    return this.profiles()
+      .map((profile) => ({
+        id: profile.id,
+        label: profile.label
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'fr'));
+  });
+
+  readonly selectedEditableUser = computed(() => {
+    const userId = this.selectedUserId();
+    if (!userId) {
+      return null;
+    }
+
+    return this.users().find((user) => user.id === userId) ?? null;
+  });
+
+  readonly isEditingAdminUser = computed(() => {
+    const selectedUser = this.selectedEditableUser();
+    return Boolean(selectedUser && selectedUser.username === 'admin');
+  });
+
+  readonly selectedUserCabinetDelegations = computed(() => {
+    const userId = this.selectedUserId();
+    if (!userId) {
+      return [] as Array<{
+        officeId: number;
+        officeName: string;
+        profileId: string | null;
+        profileLabel: string;
+        isConfigured: boolean;
+      }>;
+    }
+
+    const selectedOfficeIds = [...new Set(
+      this.selectedUserOfficeIds()
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id) && id > 0)
+    )];
+
+    if (selectedOfficeIds.length === 0) {
+      return [];
+    }
+
+    return selectedOfficeIds
+      .map((officeId) => {
+        const office = this.offices().find((item) => item.id === officeId);
+        const officeName = office?.name?.trim() || `Cabinet #${officeId}`;
+        const delegation = office?.officeUserDelegations.find((item) => Number(item.userId) === userId) ?? null;
+
+        if (!delegation) {
+          return {
+            officeId,
+            officeName,
+            profileId: null,
+            profileLabel: 'Aucun profil cabinet defini',
+            isConfigured: false
+          };
+        }
+
+        return {
+          officeId,
+          officeName,
+          profileId: delegation.profileId,
+          profileLabel: delegation.profileLabel || delegation.profileId,
+          isConfigured: true
+        };
+      })
+      .sort((a, b) => a.officeName.localeCompare(b.officeName, 'fr'));
   });
 
   selectSection(sectionId: SettingsSectionId): void {
@@ -1006,6 +1124,7 @@ export class SettingsPage implements OnDestroy {
       officeId: user.officeId ?? 0,
       username: user.username,
       password: '',
+      confirmPassword: '',
       lastName: user.lastName || '',
       firstName: user.firstName || '',
       email: user.email || '',
@@ -1050,6 +1169,7 @@ export class SettingsPage implements OnDestroy {
       officeId: 0,
       username: '',
       password: '',
+      confirmPassword: '',
       lastName: '',
       firstName: '',
       email: '',
@@ -1090,6 +1210,7 @@ export class SettingsPage implements OnDestroy {
 
   openCreateUserModal(): void {
     this.startCreateUserAccount();
+    this.userModalTab.set('identity');
 
     if (this.offices().length === 0 && !this.isOfficesLoading()) {
       void this.loadOffices();
@@ -1109,13 +1230,24 @@ export class SettingsPage implements OnDestroy {
     }
 
     this.selectUserForProfileLink(targetId);
+    this.userModalTab.set('identity');
     this.isUserModalOpen.set(true);
   }
 
   closeUserModal(): void {
     this.isUserModalOpen.set(false);
+    this.userModalTab.set('identity');
     this.userProfileLinkError.set('');
     this.userSignatureError.set('');
+  }
+
+  selectUserModalTab(tabId: UserModalTabId): void {
+    this.userModalTab.set(tabId);
+  }
+
+  openCabinetDelegationsSection(): void {
+    this.closeUserModal();
+    this.selectSection('offices');
   }
 
   getUserDisplayName(user: AccessManagedUser): string {
@@ -1512,9 +1644,25 @@ export class SettingsPage implements OnDestroy {
       return;
     }
 
-    if (isCreate && !payload.password?.trim()) {
+    const raw = this.userForm.getRawValue();
+    const password = String(raw.password ?? '').trim();
+    const confirmPassword = String(raw.confirmPassword ?? '').trim();
+
+    if (isCreate && !password) {
       this.userProfileLinkError.set('Le mot de passe est obligatoire pour créer un compte.');
       return;
+    }
+
+    if (password || confirmPassword) {
+      if (!password || !confirmPassword) {
+        this.userProfileLinkError.set('Veuillez renseigner le mot de passe et sa confirmation.');
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        this.userProfileLinkError.set('La confirmation du mot de passe ne correspond pas.');
+        return;
+      }
     }
 
     if (isCreate) {
@@ -1554,6 +1702,7 @@ export class SettingsPage implements OnDestroy {
         );
 
         this.userForm.controls.password.setValue('');
+        this.userForm.controls.confirmPassword.setValue('');
         this.userSignatureValue.set(payload.signatureText);
         this.selectedUserSignatureFileName.set('');
         this.userProfileLinkSuccess.set('Compte utilisateur mis à jour.');
@@ -2129,6 +2278,7 @@ export class SettingsPage implements OnDestroy {
           }))
         );
         this.consultationProfiles.set(this.toEditableConsultationProfiles(office.consultationProfiles));
+        this.officeUserDelegations.set(this.toEditableOfficeUserDelegations(office.officeUserDelegations));
         this.officeForm.reset({
           name: office.name,
           defaultSessionDurationMinutes: office.defaultSessionDurationMinutes,
@@ -2160,6 +2310,7 @@ export class SettingsPage implements OnDestroy {
       this.serviceTypes.set([]);
       this.paymentMethods.set([]);
       this.consultationProfiles.set([]);
+      this.officeUserDelegations.set([]);
       this.officeForm.reset({
         name: '',
         defaultSessionDurationMinutes: 60,
@@ -2214,6 +2365,8 @@ export class SettingsPage implements OnDestroy {
 
     this.stopOfficeDraftAutosave();
     this.isOfficeModalOpen.set(false);
+    this.isOfficeDelegationModalOpen.set(false);
+    this.officeDelegationModalError.set('');
     this.editingOfficeId.set(null);
     this.officeModalTab.set('general');
     this.officeCreateStep.set(1);
@@ -2254,6 +2407,82 @@ export class SettingsPage implements OnDestroy {
         }
       ];
     });
+  }
+
+  addOfficeUserDelegation(): void {
+    const profileOptions = this.officeDelegationProfileOptions();
+    const userOptions = this.officeDelegationUserOptions();
+    const usedUserIds = new Set(
+      this.officeUserDelegations()
+        .map((item) => Number(item.userId))
+        .filter((id) => Number.isInteger(id) && id > 0)
+    );
+    const firstAvailableUser = userOptions.find((option) => !usedUserIds.has(option.id))?.id ?? userOptions[0]?.id ?? 0;
+
+    this.officeDelegationForm.reset({
+      userId: firstAvailableUser,
+      profileId: profileOptions[0]?.id ?? this.superAdminId
+    });
+    this.officeDelegationModalError.set('');
+    this.isOfficeDelegationModalOpen.set(true);
+  }
+
+  closeOfficeDelegationModal(): void {
+    this.isOfficeDelegationModalOpen.set(false);
+    this.officeDelegationModalError.set('');
+  }
+
+  saveOfficeDelegationFromModal(): void {
+    if (this.officeDelegationForm.invalid) {
+      this.officeDelegationForm.markAllAsTouched();
+      this.officeDelegationModalError.set('Veuillez sélectionner un utilisateur et un profil.');
+      return;
+    }
+
+    const raw = this.officeDelegationForm.getRawValue();
+    const userId = Number(raw.userId);
+    const profileId = String(raw.profileId ?? '').trim();
+
+    if (!Number.isInteger(userId) || userId <= 0 || !profileId) {
+      this.officeDelegationModalError.set('Veuillez sélectionner un utilisateur et un profil valides.');
+      return;
+    }
+
+    const alreadyExists = this.officeUserDelegations().some((item) => Number(item.userId) === userId);
+    if (alreadyExists) {
+      this.officeDelegationModalError.set('Cet utilisateur possède déjà une délégation dans ce cabinet.');
+      return;
+    }
+
+    this.officeUserDelegations.update((items) => [
+      ...items,
+      {
+        tempKey: this.createTempKey('delegation'),
+        userId,
+        profileId
+      }
+    ]);
+
+    this.closeOfficeDelegationModal();
+  }
+
+  removeOfficeUserDelegation(tempKey: string): void {
+    this.officeUserDelegations.update((items) => items.filter((item) => item.tempKey !== tempKey));
+  }
+
+  updateOfficeUserDelegationUser(tempKey: string, value: string): void {
+    const parsed = Number(value);
+    const userId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+    this.officeUserDelegations.update((items) =>
+      items.map((item) => (item.tempKey === tempKey ? { ...item, userId } : item))
+    );
+  }
+
+  updateOfficeUserDelegationProfile(tempKey: string, value: string): void {
+    const profileId = String(value ?? '').trim();
+    this.officeUserDelegations.update((items) =>
+      items.map((item) => (item.tempKey === tempKey ? { ...item, profileId } : item))
+    );
   }
 
   removeConsultationProfile(profileTempKey: string): void {
@@ -2581,6 +2810,7 @@ export class SettingsPage implements OnDestroy {
     );
 
     this.consultationProfiles.set(this.toEditableConsultationProfiles(payload.consultationProfiles));
+    this.officeUserDelegations.set(this.toEditableOfficeUserDelegations(payload.officeUserDelegations));
   }
 
   private buildOfficeDraftPayload(): CreateOfficePayload {
@@ -2786,6 +3016,7 @@ export class SettingsPage implements OnDestroy {
       logoData: raw.logoData.trim(),
       openingHours: this.officeOpeningHoursDraft(),
       consultationProfiles: this.toOfficeConsultationProfiles(),
+      officeUserDelegations: this.toOfficeUserDelegationsPayload(),
       serviceTypes: this.serviceTypes().map((item, index) => ({
         id: typeof item.id === 'number' && item.id > 0 ? item.id : null,
         label: item.label.trim(),
@@ -2831,6 +3062,52 @@ export class SettingsPage implements OnDestroy {
         displayOrder: profileIndex + 1
       }))
       .filter((profile) => profile.name.length > 0);
+  }
+
+  private toEditableOfficeUserDelegations(
+    delegations: Array<{ userId: number; profileId: string }> | undefined
+  ): EditableOfficeUserDelegation[] {
+    if (!Array.isArray(delegations)) {
+      return [];
+    }
+
+    const editableDelegations: EditableOfficeUserDelegation[] = [];
+    for (const delegation of delegations) {
+      const userId = Number(delegation?.userId);
+      const profileId = String(delegation?.profileId ?? '').trim();
+      if (!Number.isInteger(userId) || userId <= 0 || !profileId) {
+        continue;
+      }
+
+      editableDelegations.push({
+        tempKey: this.createTempKey('delegation'),
+        userId,
+        profileId
+      });
+    }
+
+    return editableDelegations;
+  }
+
+  private toOfficeUserDelegationsPayload(): Array<{ userId: number; profileId: string }> {
+    const seenUsers = new Set<number>();
+
+    return this.officeUserDelegations()
+      .map((item) => {
+        const userId = Number(item.userId);
+        const profileId = String(item.profileId ?? '').trim();
+        if (!Number.isInteger(userId) || userId <= 0 || !profileId) {
+          return null;
+        }
+
+        if (seenUsers.has(userId)) {
+          return null;
+        }
+
+        seenUsers.add(userId);
+        return { userId, profileId };
+      })
+      .filter((item): item is { userId: number; profileId: string } => item !== null);
   }
 
   private createDefaultOfficeOpeningHours(): OfficeOpeningHours {

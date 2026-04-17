@@ -212,6 +212,17 @@ db.exec(`
     FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS office_user_delegations (
+    office_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    profile_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (office_id, user_id),
+    FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE CASCADE,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(profile_id) REFERENCES access_profiles(id)
+  );
+
   CREATE TABLE IF NOT EXISTS user_preference (
     user_id INTEGER PRIMARY KEY,
     slot_duration_minutes INTEGER NOT NULL DEFAULT 15,
@@ -809,6 +820,135 @@ function readOfficePaymentMethods(officeId) {
     }));
 }
 
+function readOfficeUserDelegations(officeId) {
+  return db
+    .prepare(
+      `SELECT oud.user_id,
+              oud.profile_id,
+              u.username,
+              u.first_name,
+              u.last_name,
+              ap.label AS profile_label
+       FROM office_user_delegations oud
+       INNER JOIN users u ON u.id = oud.user_id
+       LEFT JOIN access_profiles ap ON ap.id = oud.profile_id
+       WHERE oud.office_id = ?
+       ORDER BY lower(u.username) ASC, oud.user_id ASC`
+    )
+    .all(officeId)
+    .map((row) => {
+      const firstName = String(row.first_name ?? '').trim();
+      const lastName = String(row.last_name ?? '').trim();
+      const displayName = `${firstName} ${lastName}`.trim() || String(row.username ?? '').trim();
+      return {
+        userId: Number(row.user_id),
+        profileId: String(row.profile_id ?? '').trim(),
+        username: String(row.username ?? '').trim(),
+        displayName,
+        profileLabel: String(row.profile_label ?? '').trim()
+      };
+    });
+}
+
+function normalizeOfficeUserDelegationsPayload(officeId, rawDelegations) {
+  const normalizedOfficeId = Number(officeId);
+  if (!Number.isInteger(normalizedOfficeId) || normalizedOfficeId <= 0 || !Array.isArray(rawDelegations)) {
+    return [];
+  }
+
+  const allowedUserIds = new Set(
+    db
+      .prepare(
+        `SELECT DISTINCT user_id
+         FROM user_offices
+         WHERE office_id = ?
+         UNION
+         SELECT user_id
+         FROM office_user_delegations
+         WHERE office_id = ?
+         UNION
+         SELECT id AS user_id
+         FROM users
+         WHERE office_id = ?`
+      )
+      .all(normalizedOfficeId, normalizedOfficeId, normalizedOfficeId)
+      .map((row) => Number(row.user_id))
+      .filter((value) => Number.isInteger(value) && value > 0)
+  );
+
+  if (allowedUserIds.size === 0) {
+    const activeUserIds = db
+      .prepare('SELECT id FROM users WHERE is_active = 1 ORDER BY id ASC')
+      .all()
+      .map((row) => Number(row.id))
+      .filter((value) => Number.isInteger(value) && value > 0);
+
+    for (const userId of activeUserIds) {
+      allowedUserIds.add(userId);
+    }
+  }
+
+  const existingProfileIds = new Set(
+    db
+      .prepare('SELECT id FROM access_profiles')
+      .all()
+      .map((row) => String(row.id ?? '').trim())
+      .filter(Boolean)
+  );
+
+  const seenUsers = new Set();
+  const result = [];
+
+  for (const item of rawDelegations) {
+    const userId = Number(item?.userId);
+    const profileId = String(item?.profileId ?? '').trim();
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+      continue;
+    }
+
+    if (!profileId || !existingProfileIds.has(profileId)) {
+      continue;
+    }
+
+    if (!allowedUserIds.has(userId) || seenUsers.has(userId)) {
+      continue;
+    }
+
+    seenUsers.add(userId);
+    result.push({ userId, profileId });
+  }
+
+  return result;
+}
+
+function replaceOfficeUserDelegations(officeId, rawDelegations) {
+  const normalizedOfficeId = Number(officeId);
+  if (!Number.isInteger(normalizedOfficeId) || normalizedOfficeId <= 0) {
+    return;
+  }
+
+  const normalized = normalizeOfficeUserDelegationsPayload(normalizedOfficeId, rawDelegations);
+  const transaction = db.transaction(() => {
+    db.prepare('DELETE FROM office_user_delegations WHERE office_id = ?').run(normalizedOfficeId);
+
+    if (normalized.length === 0) {
+      return;
+    }
+
+    const insert = db.prepare(
+      `INSERT INTO office_user_delegations (office_id, user_id, profile_id)
+       VALUES (?, ?, ?)`
+    );
+
+    for (const item of normalized) {
+      insert.run(normalizedOfficeId, item.userId, item.profileId);
+    }
+  });
+
+  transaction();
+}
+
 function normalizeOfficeServiceTypesPayload(rawServiceTypes) {
   if (!Array.isArray(rawServiceTypes)) {
     return [];
@@ -949,6 +1089,7 @@ function mapOfficeRow(row) {
     hideVatMention: Boolean(officeFields.invoiceHideVatMention),
     serviceTypes: Number.isInteger(officeId) && officeId > 0 ? readOfficeServiceTypes(officeId) : [],
     paymentMethods: Number.isInteger(officeId) && officeId > 0 ? readOfficePaymentMethods(officeId) : [],
+    officeUserDelegations: Number.isInteger(officeId) && officeId > 0 ? readOfficeUserDelegations(officeId) : [],
     isActive: Boolean(officeFields.isActive),
     openingHours: parseOfficeOpeningHours(openingHoursJson),
     consultationProfiles: parseOfficeConsultationProfiles(consultationProfilesJson)
@@ -1283,6 +1424,11 @@ function buildDataBackupSnapshot() {
          FROM user_offices
          ORDER BY user_id ASC, office_id ASC`
       ).all(),
+      officeUserDelegations: db.prepare(
+        `SELECT office_id, user_id, profile_id, created_at
+         FROM office_user_delegations
+         ORDER BY office_id ASC, user_id ASC`
+      ).all(),
       patients: db.prepare(
         `SELECT id, cipher_full_name, cipher_phone, cipher_medical_notes, sex,
                 birth_date, last_visit, consent_signed, retention_until,
@@ -1365,6 +1511,7 @@ function restoreDataBackupSnapshot(backupPayload) {
     db.prepare('DELETE FROM appointments').run();
     db.prepare('DELETE FROM invoices').run();
     db.prepare('DELETE FROM patients').run();
+    db.prepare('DELETE FROM office_user_delegations').run();
     db.prepare('DELETE FROM user_offices').run();
     db.prepare('DELETE FROM users').run();
     db.prepare('DELETE FROM access_profiles').run();
@@ -1400,6 +1547,10 @@ function restoreDataBackupSnapshot(backupPayload) {
     const insertUserOffice = db.prepare(
       `INSERT INTO user_offices (user_id, office_id, created_at)
        VALUES (?, ?, ?)`
+    );
+    const insertOfficeUserDelegation = db.prepare(
+      `INSERT INTO office_user_delegations (office_id, user_id, profile_id, created_at)
+       VALUES (?, ?, ?, ?)`
     );
     const insertAppointment = db.prepare(
       `INSERT INTO appointments (id, patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, created_at)
@@ -1466,6 +1617,8 @@ function restoreDataBackupSnapshot(backupPayload) {
     }
 
     for (const row of Array.isArray(backup.users) ? backup.users : []) {
+      const normalizedUsername = String(row.username ?? '').trim();
+      const isAdminAccount = normalizedUsername.toLowerCase() === 'admin';
       let officeId = row.office_id != null ? Number(row.office_id) : null;
 
       if ((!Number.isInteger(officeId) || officeId <= 0) && typeof row.cabinet_name === 'string' && row.cabinet_name.trim()) {
@@ -1479,11 +1632,11 @@ function restoreDataBackupSnapshot(backupPayload) {
 
       insertUser.run(
         Number(row.id),
-        row.username,
+        normalizedUsername,
         row.password_hash,
-        row.role ?? 'practitioner',
-        row.profile_id ?? 'super-admin',
-        Number(row.is_active) ? 1 : 0,
+        isAdminAccount ? 'admin' : (row.role ?? 'practitioner'),
+        isAdminAccount ? 'super-admin' : (row.profile_id ?? 'super-admin'),
+        isAdminAccount ? 1 : (Number(row.is_active) ? 1 : 0),
         officeId,
         row.last_name ?? '',
         row.first_name ?? '',
@@ -1515,6 +1668,15 @@ function restoreDataBackupSnapshot(backupPayload) {
       insertUserOffice.run(
         Number(row.user_id),
         Number(row.office_id),
+        row.created_at ?? new Date().toISOString()
+      );
+    }
+
+    for (const row of Array.isArray(backup.officeUserDelegations) ? backup.officeUserDelegations : []) {
+      insertOfficeUserDelegation.run(
+        Number(row.office_id),
+        Number(row.user_id),
+        String(row.profile_id ?? '').trim() || 'super-admin',
         row.created_at ?? new Date().toISOString()
       );
     }
@@ -2450,7 +2612,13 @@ async function ensureSeedData() {
     );
   }
 
-  db.prepare('UPDATE users SET profile_id = ? WHERE username = ?').run(superAdminProfileId, 'admin');
+  db.prepare(
+    `UPDATE users
+     SET profile_id = ?,
+         role = 'admin',
+         is_active = 1
+     WHERE username = ?`
+  ).run(superAdminProfileId, 'admin');
 
   const testUsers = [
     {
@@ -3368,12 +3536,22 @@ function getUserAccessContext(userId) {
   }
 
   const hasGlobalOfficeAccess = row.role === 'admin' || row.profile_id === SUPER_ADMIN_PROFILE_ID;
-  const offices = hasGlobalOfficeAccess
+  let offices = hasGlobalOfficeAccess
     ? db
-      .prepare('SELECT id, name FROM offices WHERE is_active = 1 ORDER BY lower(name) ASC, id ASC')
+      .prepare('SELECT id, name FROM offices ORDER BY lower(name) ASC, id ASC')
       .all()
       .map((office) => ({ id: Number(office.id), name: String(office.name ?? '').trim() }))
     : getUserOfficeOptions(row.id);
+
+  if (hasGlobalOfficeAccess && offices.length === 0) {
+    // Legacy fallback: old datasets may have offices marked inactive by mistake.
+    offices = db
+      .prepare('SELECT id, name FROM offices ORDER BY lower(name) ASC, id ASC')
+      .all()
+      .map((office) => ({ id: Number(office.id), name: String(office.name ?? '').trim() }));
+  }
+
+  offices = offices.filter((office) => Number.isInteger(office.id) && office.id > 0 && office.name.length > 0);
   const officeIds = offices.map((office) => office.id);
 
   return {
@@ -3977,6 +4155,7 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
     logoData,
     openingHours,
     consultationProfiles,
+    officeUserDelegations,
     serviceTypes,
     paymentMethods
   } = req.body;
@@ -4018,6 +4197,7 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
 
     const createdOfficeId = Number(result.lastInsertRowid);
     replaceOfficeBusinessSettings(createdOfficeId, serviceTypes, paymentMethods);
+    replaceOfficeUserDelegations(createdOfficeId, officeUserDelegations);
 
     createLocalCalendarFromOffice(createdOfficeId, name);
 
@@ -4075,6 +4255,7 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
     logoData,
     openingHours,
     consultationProfiles,
+    officeUserDelegations,
     serviceTypes,
     paymentMethods,
     isActive
@@ -4114,6 +4295,7 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
     );
 
     replaceOfficeBusinessSettings(officeId, serviceTypes, paymentMethods);
+    replaceOfficeUserDelegations(officeId, officeUserDelegations);
 
     writeAuditLog(req.user.id, 'UPDATE', 'office', officeId, { name, city, defaultSessionDurationMinutes: normalizedDefaultSessionDurationMinutes });
 
@@ -4174,7 +4356,8 @@ app.post('/api/offices/reorder', authMiddleware, adminOnlyMiddleware, (req, res)
             address_line1 as addressLine1, address_line2 as addressLine2,
              postal_code as postalCode, city, phone_mobile as phoneMobile,
              phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
-             vat_number as vatNumber, logo_data as logoData, opening_hours_json as openingHoursJson, is_active as isActive,
+             vat_number as vatNumber, logo_data as logoData, opening_hours_json as openingHoursJson,
+             consultation_profiles_json as consultationProfilesJson, is_active as isActive,
              display_order as displayOrder, created_at as createdAt, updated_at as updatedAt
       FROM offices ORDER BY display_order ASC
     `).all() || [];
@@ -4472,6 +4655,20 @@ function mapUserAccountRow(row) {
     officeIds = [fallbackOfficeId];
   }
 
+  try {
+    const delegationOfficeIds = JSON.parse(row.delegation_office_ids_json ?? '[]');
+    if (Array.isArray(delegationOfficeIds)) {
+      officeIds = [...new Set([
+        ...officeIds,
+        ...delegationOfficeIds
+          .map((value) => Number(value))
+          .filter((value) => Number.isInteger(value) && value > 0)
+      ])];
+    }
+  } catch {
+    // Ignore invalid JSON payload and keep officeIds from user_offices/users.office_id only.
+  }
+
   return {
     id: row.id,
     username: row.username,
@@ -4524,6 +4721,11 @@ app.get('/api/users', authMiddleware, adminOnlyMiddleware, (_req, res) => {
                 FROM user_offices uo
                 WHERE uo.user_id = u.id
               ) AS office_ids_json,
+              (
+                SELECT json_group_array(oud.office_id)
+                FROM office_user_delegations oud
+                WHERE oud.user_id = u.id
+              ) AS delegation_office_ids_json,
               (
                 SELECT group_concat(o2.name, ', ')
                 FROM user_offices uo2
@@ -4716,6 +4918,10 @@ app.put('/api/users/:id', authMiddleware, adminOnlyMiddleware, async (req, res) 
 
     if (profileId !== 'super-admin') {
       return res.status(403).json({ message: 'Le compte admin doit rester Super Administrateur' });
+    }
+
+    if ((payload.role ?? targetUser.role).trim() !== 'admin') {
+      return res.status(403).json({ message: 'Le compte admin doit conserver le role admin' });
     }
 
     if (!payload.isActive) {
