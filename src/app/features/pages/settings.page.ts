@@ -215,8 +215,7 @@ export class SettingsPage {
     retrocessionPercent: [0],
     retrocessionRecipient: ['', [Validators.maxLength(120)]],
     defaultAgendaView: ['Semaine', [Validators.maxLength(80)]],
-    visibleCalendars: ['Tous les calendriers', [Validators.maxLength(120)]],
-    defaultService: ['Aucune prestation', [Validators.maxLength(120)]],
+    defaultYearsForStatistics: [5, [Validators.required, Validators.min(2), Validators.max(10)]],
     invoiceMentions: ['', [Validators.maxLength(2000)]],
     includeFreeConsultations: [true],
     showConsultationHour: [true]
@@ -1010,8 +1009,7 @@ export class SettingsPage {
       retrocessionPercent: user.retrocessionPercent ?? 0,
       retrocessionRecipient: user.retrocessionRecipient || '',
       defaultAgendaView: user.defaultAgendaView || 'Semaine',
-      visibleCalendars: user.visibleCalendars || 'Tous les calendriers',
-      defaultService: user.defaultService || 'Aucune prestation',
+      defaultYearsForStatistics: user.defaultYearsForStatistics ?? 5,
       invoiceMentions: user.invoiceMentions || '',
       includeFreeConsultations: user.includeFreeConsultations ?? true,
       showConsultationHour: user.showConsultationHour ?? true
@@ -1059,8 +1057,7 @@ export class SettingsPage {
       retrocessionPercent: 0,
       retrocessionRecipient: '',
       defaultAgendaView: 'Semaine',
-      visibleCalendars: 'Tous les calendriers',
-      defaultService: 'Aucune prestation',
+      defaultYearsForStatistics: 5,
       invoiceMentions: '',
       includeFreeConsultations: true,
       showConsultationHour: true
@@ -1968,8 +1965,7 @@ export class SettingsPage {
       retrocessionPercent: Number(raw.retrocessionPercent) || 0,
       retrocessionRecipient: raw.retrocessionRecipient.trim(),
       defaultAgendaView: raw.defaultAgendaView.trim() || 'Semaine',
-      visibleCalendars: raw.visibleCalendars.trim() || 'Tous les calendriers',
-      defaultService: raw.defaultService.trim() || 'Aucune prestation',
+      defaultYearsForStatistics: Number(raw.defaultYearsForStatistics) || 5,
       invoiceMentions: raw.invoiceMentions.trim(),
       includeFreeConsultations: raw.includeFreeConsultations,
       showConsultationHour: raw.showConsultationHour

@@ -44,8 +44,7 @@ export type AccessManagedUser = {
   retrocessionPercent: number;
   retrocessionRecipient: string;
   defaultAgendaView: string;
-  visibleCalendars: string;
-  defaultService: string;
+  defaultYearsForStatistics: number;
   invoiceMentions: string;
   includeFreeConsultations: boolean;
   showConsultationHour: boolean;
@@ -82,8 +81,7 @@ export type UserAccountPayload = {
   retrocessionPercent: number;
   retrocessionRecipient: string;
   defaultAgendaView: string;
-  visibleCalendars: string;
-  defaultService: string;
+  defaultYearsForStatistics: number;
   invoiceMentions: string;
   includeFreeConsultations: boolean;
   showConsultationHour: boolean;

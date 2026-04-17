@@ -21,11 +21,14 @@ export class ProfilePage {
   readonly isSaving = signal(false);
   readonly error = signal('');
   readonly success = signal('');
+  readonly activeTab = signal<'compte' | 'identite' | 'pro' | 'documents' | 'compta' | 'agenda'>('compte');
   readonly lockedRole = signal('');
   readonly lockedIsActive = signal(true);
   readonly lockedCabinets = signal<string[]>([]);
 
   readonly countryOptions = ['France', 'Belgique', 'Suisse', 'Luxembourg', 'Canada'] as const;
+
+  readonly yearsForStatisticsOptions = [2, 3, 4, 5, 10] as const;
 
   readonly patientRemarksDisplayOptions = [
     { value: 'hidden' as const, label: 'Ne pas afficher' },
@@ -70,8 +73,7 @@ export class ProfilePage {
     retrocessionPercent: [0, [Validators.min(0), Validators.max(100)]],
     retrocessionRecipient: ['', [Validators.maxLength(120)]],
     defaultAgendaView: ['Semaine', [Validators.maxLength(80)]],
-    visibleCalendars: ['Tous les calendriers', [Validators.maxLength(120)]],
-    defaultService: ['Aucune prestation', [Validators.maxLength(120)]],
+    defaultYearsForStatistics: [5, [Validators.required, Validators.min(2), Validators.max(10)]],
     invoiceMentions: ['', [Validators.maxLength(2000)]],
     includeFreeConsultations: [true],
     showConsultationHour: [true]
@@ -183,8 +185,7 @@ export class ProfilePage {
         retrocessionPercent: profile.retrocessionPercent ?? 0,
         retrocessionRecipient: profile.retrocessionRecipient || '',
         defaultAgendaView: profile.defaultAgendaView || 'Semaine',
-        visibleCalendars: profile.visibleCalendars || 'Tous les calendriers',
-        defaultService: profile.defaultService || 'Aucune prestation',
+        defaultYearsForStatistics: profile.defaultYearsForStatistics ?? 5,
         invoiceMentions: profile.invoiceMentions || '',
         includeFreeConsultations: profile.includeFreeConsultations ?? true,
         showConsultationHour: profile.showConsultationHour ?? true
@@ -207,6 +208,14 @@ export class ProfilePage {
     }
 
     return password !== confirmation;
+  }
+
+  toggleTab(tab: 'compte' | 'identite' | 'pro' | 'documents' | 'compta' | 'agenda'): void {
+    this.activeTab.set(tab);
+  }
+
+  isTabActive(tab: 'compte' | 'identite' | 'pro' | 'documents' | 'compta' | 'agenda'): boolean {
+    return this.activeTab() === tab;
   }
 
   private buildProfilePayload(): UpdateMyUserProfilePayload {
@@ -234,8 +243,7 @@ export class ProfilePage {
       retrocessionPercent: Number(raw.retrocessionPercent) || 0,
       retrocessionRecipient: raw.retrocessionRecipient.trim(),
       defaultAgendaView: raw.defaultAgendaView.trim() || 'Semaine',
-      visibleCalendars: raw.visibleCalendars.trim() || 'Tous les calendriers',
-      defaultService: raw.defaultService.trim() || 'Aucune prestation',
+      defaultYearsForStatistics: Number(raw.defaultYearsForStatistics) || 5,
       invoiceMentions: raw.invoiceMentions.trim(),
       includeFreeConsultations: raw.includeFreeConsultations,
       showConsultationHour: raw.showConsultationHour

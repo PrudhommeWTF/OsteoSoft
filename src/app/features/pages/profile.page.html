@@ -1,309 +1,724 @@
-<section class="profile-header">
-  <div>
-    <p class="profile-kicker mb-2">Paramètres utilisateur</p>
-    <h1 class="h3 mb-1">Editer mon profil</h1>
-    <p class="text-secondary mb-0">Mettez à jour vos informations personnelles et vos préférences d'agenda.</p>
+<div class="container-fluid px-0">
+  <!-- Header -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <p class="text-uppercase text-secondary small fw-semibold mb-2">Paramètres utilisateur</p>
+      <h1 class="h3 mb-1">Editer mon profil</h1>
+      <p class="text-secondary mb-0">Mettez à jour vos informations personnelles et vos préférences d'agenda.</p>
+    </div>
   </div>
-</section>
 
-@if (isLoading()) {
-  <section class="profile-panel">
-    <p class="text-secondary mb-0">Chargement de votre profil...</p>
-  </section>
-} @else {
-  <section class="profile-grid" [formGroup]="accountForm">
-    <article class="profile-panel locked-panel">
-      <h2 class="h5 mb-3">Informations verrouillées</h2>
+  @if (isLoading()) {
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-4 d-flex align-items-center gap-3">
+        <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+        <p class="mb-0 text-secondary">Chargement de votre profil...</p>
+      </div>
+    </div>
+  } @else {
+    <div class="row g-4">
+      <!-- Navigation Pills Sidebar -->
+      <div class="col-12 col-sm-3 col-lg-2">
+        <div class="card border-0 shadow-sm position-sticky top-0">
+          <nav class="nav nav-pills flex-column p-3 gap-2" role="tablist">
+            <button
+              type="button"
+              class="nav-link text-start"
+              [class.active]="isTabActive('compte')"
+              (click)="toggleTab('compte')"
+              role="tab"
+            >
+              Compte
+            </button>
+            <button
+              type="button"
+              class="nav-link text-start"
+              [class.active]="isTabActive('identite')"
+              (click)="toggleTab('identite')"
+              role="tab"
+            >
+              Identité
+            </button>
+            <button
+              type="button"
+              class="nav-link text-start"
+              [class.active]="isTabActive('pro')"
+              (click)="toggleTab('pro')"
+              role="tab"
+            >
+              Infos pro & factu
+            </button>
+            <button
+              type="button"
+              class="nav-link text-start"
+              [class.active]="isTabActive('documents')"
+              (click)="toggleTab('documents')"
+              role="tab"
+            >
+              Documents
+            </button>
+            <button
+              type="button"
+              class="nav-link text-start"
+              [class.active]="isTabActive('compta')"
+              (click)="toggleTab('compta')"
+              role="tab"
+            >
+              Compta & Stats
+            </button>
+            <button
+              type="button"
+              class="nav-link text-start"
+              [class.active]="isTabActive('agenda')"
+              (click)="toggleTab('agenda')"
+              role="tab"
+            >
+              Agenda
+            </button>
+          </nav>
+        </div>
+      </div>
 
-      <div class="locked-list">
-        <div class="locked-item">
-          <span class="locked-label">Rôle</span>
-          <strong>{{ lockedRole() }}</strong>
-        </div>
-        <div class="locked-item">
-          <span class="locked-label">Actif</span>
-          <strong>{{ lockedIsActive() ? 'Oui' : 'Non' }}</strong>
-        </div>
-        <div class="locked-item">
-          <span class="locked-label">Cabinets</span>
-          @if (lockedCabinets().length === 0) {
-            <strong>Non rattaché</strong>
-          } @else {
-            <div class="locked-tags">
-              @for (cabinet of lockedCabinets(); track cabinet) {
-                <span class="locked-tag">{{ cabinet }}</span>
-              }
+      <!-- Main Content -->
+      <div class="col-12 col-sm-9 col-lg-10">
+        <form [formGroup]="accountForm">
+          <!-- TAB: COMPTE -->
+          @if (isTabActive('compte')) {
+            <div class="card border-0 shadow-sm mb-4" role="tabpanel">
+              <div class="card-header bg-body-tertiary py-3">
+                <h2 class="h5 mb-0">
+                  <i class="bi bi-person-circle me-2 text-primary"></i>Compte
+                </h2>
+              </div>
+              <div class="card-body">
+                <div class="row g-3">
+                  <!-- Login (locked) -->
+                  <div class="col-6">
+                    <div class="alert alert-light border mb-3">
+                      <span class="text-secondary small fw-semibold mb-2">Identifiant : </span>
+                      <span class="mb-0">{{ accountForm.controls.username.value }}</span>
+                    </div>
+                  </div>
+
+                  <!-- Cabinets (locked) -->
+                  <div class="col-6">
+                    <div class="alert alert-light border mb-3">
+                      <span class="text-secondary small fw-semibold mb-2">Cabinets : </span>
+                      @if (lockedCabinets().length === 0) {
+                        <span class="badge text-bg-secondary">Non rattaché</span>
+                      } @else {
+                        <span class="d-flex flex-wrap gap-2">
+                          @for (cabinet of lockedCabinets(); track cabinet) {
+                            <span class="badge rounded-pill text-bg-light border">{{ cabinet }}</span>
+                          }
+                        </span>
+                      }
+                    </div>
+                  </div>
+
+                  <!-- Password -->
+                  <div class="col-12 col-lg-6">
+                    <div class="form-floating">
+                      <input
+                        id="profile-password"
+                        type="password"
+                        class="form-control"
+                        placeholder="Nouveau mot de passe"
+                        formControlName="password"
+                      />
+                      <label for="profile-password">Nouveau mot de passe</label>
+                    </div>
+                  </div>
+
+                  <!-- Password Confirmation -->
+                  <div class="col-12 col-lg-6">
+                    <div class="form-floating">
+                      <input
+                        id="profile-password-confirmation"
+                        type="password"
+                        class="form-control"
+                        placeholder="Confirmation"
+                        formControlName="passwordConfirmation"
+                      />
+                      <label for="profile-password-confirmation">Confirmation mot de passe</label>
+                    </div>
+                  </div>
+
+                  <!-- Color -->
+                  <div class="col-12">
+                    <label class="form-label" for="profile-color">Couleur praticien</label>
+                    <input
+                      id="profile-color"
+                      type="color"
+                      class="form-control form-control-color w-100"
+                      style="height: 50px"
+                      formControlName="colorHex"
+                    />
+                  </div>
+                </div>
+
+                @if (hasPasswordMismatch() && (accountForm.controls.password.dirty || accountForm.controls.passwordConfirmation.dirty)) {
+                  <div class="alert alert-danger mt-3 mb-0" role="alert">
+                    Les mots de passe ne correspondent pas.
+                  </div>
+                }
+              </div>
             </div>
           }
-        </div>
-      </div>
-    </article>
 
-    <article class="profile-panel profile-panel-wide">
-      <h2 class="h5 mb-3">Compte</h2>
-      <div class="row g-4">
-        <div class="col-12">
-          <label class="form-label" for="profile-username">Login</label>
-          <input id="profile-username" type="text" class="form-control" formControlName="username" />
-        </div>
-        <div class="col-12 col-xl-6">
-          <label class="form-label" for="profile-password">Nouveau mot de passe</label>
-          <input id="profile-password" type="password" class="form-control" formControlName="password" placeholder="Laisser vide pour conserver" />
-        </div>
-        <div class="col-12 col-xl-6">
-          <label class="form-label" for="profile-password-confirmation">Confirmation mot de passe</label>
-          <input id="profile-password-confirmation" type="password" class="form-control" formControlName="passwordConfirmation" />
-        </div>
-      </div>
+          <!-- TAB: IDENTITÉ -->
+          @if (isTabActive('identite')) {
+            <div class="card border-0 shadow-sm mb-4" role="tabpanel">
+              <div class="card-header bg-body-tertiary py-3">
+                <h2 class="h5 mb-0">
+                  <i class="bi bi-file-person me-2 text-primary"></i>Identité
+                </h2>
+              </div>
+              <div class="card-body">
+                <div class="row g-3">
+                  <div class="col-12 col-lg-6">
+                    <div class="form-floating">
+                      <input
+                        id="profile-last-name"
+                        type="text"
+                        class="form-control"
+                        placeholder="Nom"
+                        formControlName="lastName"
+                      />
+                      <label for="profile-last-name">Nom</label>
+                    </div>
+                  </div>
 
-      @if (hasPasswordMismatch() && (accountForm.controls.password.dirty || accountForm.controls.passwordConfirmation.dirty)) {
-        <div class="alert alert-danger py-2 mt-3 mb-0" role="alert">Les mots de passe ne correspondent pas.</div>
-      }
-    </article>
+                  <div class="col-12 col-lg-6">
+                    <div class="form-floating">
+                      <input
+                        id="profile-first-name"
+                        type="text"
+                        class="form-control"
+                        placeholder="Prénom"
+                        formControlName="firstName"
+                      />
+                      <label for="profile-first-name">Prénom</label>
+                    </div>
+                  </div>
 
-    <article class="profile-panel profile-panel-wide">
-      <h2 class="h5 mb-3">Identité et contact</h2>
-      <div class="row g-4">
-        <div class="col-12 col-xl-6">
-          <label class="form-label" for="profile-last-name">Nom</label>
-          <input id="profile-last-name" type="text" class="form-control" formControlName="lastName" />
-        </div>
-        <div class="col-12 col-xl-6">
-          <label class="form-label" for="profile-first-name">Prénom</label>
-          <input id="profile-first-name" type="text" class="form-control" formControlName="firstName" />
-        </div>
-        <div class="col-12 col-xl-6">
-          <label class="form-label" for="profile-email">Email</label>
-          <input id="profile-email" type="email" class="form-control" formControlName="email" />
-        </div>
-        <div class="col-12 col-xl-6">
-          <label class="form-label" for="profile-mobile">Téléphone</label>
-          <input id="profile-mobile" type="text" class="form-control" formControlName="mobilePhone" />
-        </div>
-        <div class="col-12 col-xl-6">
-          <label class="form-label" for="profile-country">Pays</label>
-          <select id="profile-country" class="form-select" formControlName="country">
-            @for (country of countryOptions; track country) {
-              <option [value]="country">{{ country }}</option>
+                  <div class="col-12 col-lg-6">
+                    <div class="form-floating">
+                      <input id="profile-email" type="email" class="form-control" placeholder="Email" formControlName="email" />
+                      <label for="profile-email">Email</label>
+                    </div>
+                  </div>
+
+                  <div class="col-12 col-lg-6">
+                    <div class="form-floating">
+                      <input
+                        id="profile-mobile"
+                        type="text"
+                        class="form-control"
+                        placeholder="Téléphone"
+                        formControlName="mobilePhone"
+                      />
+                      <label for="profile-mobile">Téléphone mobile</label>
+                    </div>
+                  </div>
+
+                  <div class="col-12 col-lg-6">
+                    <div class="form-floating">
+                      <select id="profile-country" class="form-select" formControlName="country" aria-label="Pays">
+                        @for (country of countryOptions; track country) {
+                          <option [value]="country">{{ country }}</option>
+                        }
+                      </select>
+                      <label for="profile-country">Pays</label>
+                    </div>
+                  </div>
+
+                  <div class="col-12 col-lg-6">
+                    <div class="form-floating">
+                      <input
+                        id="profile-name-suffix"
+                        type="text"
+                        class="form-control"
+                        placeholder="Texte à côté du nom"
+                        formControlName="nameSuffixText"
+                      />
+                      <label for="profile-name-suffix">Texte à côté du nom</label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          }
+
+          <!-- TAB: INFOS PRO & FACTU -->
+          @if (isTabActive('pro')) {
+            <div class="card border-0 shadow-sm mb-4" role="tabpanel">
+              <div class="card-header bg-body-tertiary py-3">
+                <h2 class="h5 mb-0">
+                  <i class="bi bi-briefcase me-2 text-primary"></i>Infos pro & factu
+                </h2>
+              </div>
+              <div class="card-body">
+                <div class="row g-3">
+                  <div class="col-12 col-lg-4">
+                    <div class="form-floating">
+                      <input
+                        id="profile-siret"
+                        type="text"
+                        class="form-control"
+                        placeholder="SIRET"
+                        formControlName="siret"
+                      />
+                      <label for="profile-siret">N° SIRET</label>
+                    </div>
+                  </div>
+
+                  <div class="col-12 col-lg-4">
+                    <div class="form-floating">
+                      <input
+                        id="profile-adeli"
+                        type="text"
+                        class="form-control"
+                        placeholder="ADELI"
+                        formControlName="adeliCode"
+                      />
+                      <label for="profile-adeli">Code ADELI</label>
+                    </div>
+                  </div>
+
+                  <div class="col-12 col-lg-4">
+                    <div class="form-floating">
+                      <input
+                        id="profile-rpps"
+                        type="text"
+                        class="form-control"
+                        placeholder="RPPS"
+                        formControlName="rppsCode"
+                      />
+                      <label for="profile-rpps">Code RPPS</label>
+                    </div>
+                  </div>
+
+                  <div class="col-12 col-lg-6">
+                    <div class="form-floating">
+                      <input
+                        id="profile-ape"
+                        type="text"
+                        class="form-control"
+                        placeholder="APE / NAF"
+                        formControlName="apeNafCode"
+                      />
+                      <label for="profile-ape">Code APE / NAF</label>
+                    </div>
+                  </div>
+
+                  <div class="col-12 col-lg-6">
+                    <div class="form-floating">
+                      <input
+                        id="profile-retrocession"
+                        type="number"
+                        class="form-control"
+                        placeholder="Rétrocession"
+                        formControlName="retrocessionPercent"
+                        min="0"
+                        max="100"
+                      />
+                      <label for="profile-retrocession">Rétrocession (%)</label>
+                    </div>
+                  </div>
+
+                  <div class="col-12">
+                    <div class="form-floating">
+                      <input
+                        id="profile-retrocession-recipient"
+                        type="text"
+                        class="form-control"
+                        placeholder="Destinataire"
+                        formControlName="retrocessionRecipient"
+                      />
+                      <label for="profile-retrocession-recipient">Destinataire rétrocession</label>
+                    </div>
+                  </div>
+
+                  <div class="col-12 col-lg-6">
+                    <div class="form-floating">
+                      <input id="profile-bank" type="text" class="form-control" placeholder="Banque" formControlName="bankName" />
+                      <label for="profile-bank">Banque</label>
+                    </div>
+                  </div>
+
+                  <div class="col-12 col-lg-6">
+                    <div class="form-floating">
+                      <input id="profile-iban" type="text" class="form-control" placeholder="IBAN" formControlName="iban" />
+                      <label for="profile-iban">IBAN</label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          }
+
+          <!-- TAB: DOCUMENTS -->
+          @if (isTabActive('documents')) {
+            <div class="card border-0 shadow-sm mb-4" role="tabpanel">
+              <div class="card-header bg-body-tertiary py-3">
+                <h2 class="h5 mb-0">
+                  <i class="bi bi-file-text me-2 text-primary"></i>Documents
+                </h2>
+              </div>
+              <div class="card-body">
+                <div class="row g-3">
+                  <div class="col-12">
+                    <div class="form-floating">
+                      <input
+                        id="profile-letter-header"
+                        type="text"
+                        class="form-control"
+                        placeholder="Entête"
+                        formControlName="letterHeader"
+                      />
+                      <label for="profile-letter-header">Entête courriers</label>
+                    </div>
+                  </div>
+
+                  <div class="col-12">
+                    <div class="form-floating">
+                      <input
+                        id="profile-letter-footer"
+                        type="text"
+                        class="form-control"
+                        placeholder="Pied de page"
+                        formControlName="letterFooter"
+                      />
+                      <label for="profile-letter-footer">Pied de page courriers</label>
+                    </div>
+                  </div>
+
+                  <div class="col-12">
+                    <div class="form-floating">
+                      <textarea
+                        id="profile-signature"
+                        class="form-control"
+                        placeholder="Signature"
+                        style="height: 120px"
+                        formControlName="signatureText"
+                      ></textarea>
+                      <label for="profile-signature">Signature (texte / data)</label>
+                    </div>
+                  </div>
+
+                  <div class="col-12">
+                    <div class="form-floating">
+                      <textarea
+                        id="profile-invoice-mentions"
+                        class="form-control"
+                        placeholder="Mentions"
+                        style="height: 120px"
+                        formControlName="invoiceMentions"
+                      ></textarea>
+                      <label for="profile-invoice-mentions">Mentions factures</label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          }
+        </form>
+
+        <!-- TAB: COMPTA & STATS -->
+        @if (isTabActive('compta')) {
+          <div class="card border-0 shadow-sm mb-4" role="tabpanel" [formGroup]="accountForm">
+            <div class="card-header bg-body-tertiary py-3">
+              <h2 class="h5 mb-0">Compta & Stats</h2>
+            </div>
+            <div class="card-body">
+              <div class="row g-3">
+                <div class="col-12 col-lg-6">
+                  <div class="form-floating">
+                    <select
+                      id="profile-default-years-statistics"
+                      class="form-select"
+                      formControlName="defaultYearsForStatistics"
+                      aria-label="Années pour statistiques"
+                    >
+                      @for (year of yearsForStatisticsOptions; track year) {
+                        <option [value]="year">{{ year }}</option>
+                      }
+                    </select>
+                    <label for="profile-default-years-statistics">Années à afficher par défaut</label>
+                  </div>
+                </div>
+
+                <div class="col-12 col-lg-6">
+                  <div class="form-check form-switch pt-2">
+                    <input
+                      id="profile-include-free-consultations"
+                      type="checkbox"
+                      class="form-check-input"
+                      formControlName="includeFreeConsultations"
+                    />
+                    <label class="form-check-label" for="profile-include-free-consultations">
+                      Inclure les consultations gratuites
+                    </label>
+                  </div>
+                </div>
+
+                <div class="col-12 col-lg-6">
+                  <div class="form-check form-switch pt-2">
+                    <input
+                      id="profile-show-consultation-hour"
+                      type="checkbox"
+                      class="form-check-input"
+                      formControlName="showConsultationHour"
+                    />
+                    <label class="form-check-label" for="profile-show-consultation-hour">
+                      Afficher l'heure des consultations
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        }
+
+        <!-- TAB: AGENDA -->
+        @if (isTabActive('agenda')) {
+          <div class="card border-0 shadow-sm mb-4" role="tabpanel">
+            <div class="card-header bg-body-tertiary py-3">
+              <h2 class="h5 mb-0">Agenda</h2>
+            </div>
+            <div class="card-body">
+              <form [formGroup]="accountForm" class="mb-4">
+                <div class="row g-3">
+                  <div class="col-12 col-lg-6">
+                    <div class="form-floating">
+                      <input
+                        id="profile-default-agenda-view"
+                        type="text"
+                        class="form-control"
+                        placeholder="Vue agenda"
+                        formControlName="defaultAgendaView"
+                      />
+                      <label for="profile-default-agenda-view">Vue par défaut de l'agenda</label>
+                    </div>
+                  </div>
+                </div>
+              </form>
+
+              <form [formGroup]="preferencesForm">
+                <div class="row g-3">
+                  <div class="col-12 col-lg-6">
+                    <label class="form-label" for="profile-slot-duration">
+                      Durée des créneaux: <strong>{{ preferencesForm.controls.slotDurationMinutes.value }} min</strong>
+                    </label>
+                    <input
+                      id="profile-slot-duration"
+                      type="range"
+                      class="form-range"
+                      formControlName="slotDurationMinutes"
+                      min="5"
+                      max="50"
+                      step="5"
+                    />
+                  </div>
+
+                  <div class="col-12 col-lg-6">
+                    <label class="form-label" for="profile-display-height">
+                      Hauteur d'affichage: <strong>{{ preferencesForm.controls.displayHeight.value }}</strong>
+                    </label>
+                    <input
+                      id="profile-display-height"
+                      type="range"
+                      class="form-range"
+                      formControlName="displayHeight"
+                      min="14"
+                      max="35"
+                      step="1"
+                    />
+                  </div>
+
+                <div class="col-12 col-lg-4">
+                  <div class="form-floating">
+                    <select
+                      id="profile-pdf-display-mode"
+                      class="form-select"
+                      formControlName="pdfDisplayMode"
+                      aria-label="Affichage PDF"
+                    >
+                      @for (option of pdfDisplayModeOptions; track option.value) {
+                        <option [value]="option.value">{{ option.label }}</option>
+                      }
+                    </select>
+                    <label for="profile-pdf-display-mode">Affichage PDF</label>
+                  </div>
+                </div>
+
+                <div class="col-12 col-lg-4">
+                  <div class="form-floating">
+                    <select
+                      id="profile-consultation-order"
+                      class="form-select"
+                      formControlName="consultationOrder"
+                      aria-label="Ordre consultations"
+                    >
+                      @for (option of consultationOrderOptions; track option) {
+                        <option [value]="option">{{ option }}</option>
+                      }
+                    </select>
+                    <label for="profile-consultation-order">Ordre consultations</label>
+                  </div>
+                </div>
+
+                <div class="col-12 col-lg-4">
+                  <div class="form-floating">
+                    <input
+                      id="profile-group-by-year"
+                      type="number"
+                      class="form-control"
+                      placeholder="Regrouper"
+                      formControlName="groupConsultationsByYearFrom"
+                      min="0"
+                      max="200"
+                    />
+                    <label for="profile-group-by-year">Regrouper par année à partir de</label>
+                  </div>
+                </div>
+
+                <div class="col-12 col-lg-6">
+                  <div class="form-floating">
+                    <select
+                      id="profile-patient-auto-save"
+                      class="form-select"
+                      formControlName="patientAutoSaveFrequency"
+                      aria-label="Enregistrement auto"
+                    >
+                      @for (option of patientAutoSaveOptions; track option) {
+                        <option [value]="option">{{ option }}</option>
+                      }
+                    </select>
+                    <label for="profile-patient-auto-save">Enregistrement auto fiche patient</label>
+                  </div>
+                </div>
+
+                <div class="col-12 col-lg-6">
+                  <div class="form-floating">
+                    <select
+                      id="profile-patient-remarks-display"
+                      class="form-select"
+                      formControlName="patientRemarksDisplay"
+                      aria-label="Remarques patient"
+                    >
+                      @for (option of patientRemarksDisplayOptions; track option.value) {
+                        <option [value]="option.value">{{ option.label }}</option>
+                      }
+                    </select>
+                    <label for="profile-patient-remarks-display">Remarques patient</label>
+                  </div>
+                </div>
+
+                <div class="col-12 col-lg-6">
+                  <div class="form-floating">
+                    <select
+                      id="profile-appointment-color-mode"
+                      class="form-select"
+                      formControlName="appointmentColorMode"
+                      aria-label="Couleur RDV"
+                    >
+                      @for (option of appointmentColorModeOptions; track option.value) {
+                        <option [value]="option.value">{{ option.label }}</option>
+                      }
+                    </select>
+                    <label for="profile-appointment-color-mode">Couleur des RDV</label>
+                  </div>
+                </div>
+
+                <div class="col-12 col-lg-6">
+                  <div class="form-check form-switch pt-2">
+                    <input
+                      id="profile-show-weekend"
+                      type="checkbox"
+                      class="form-check-input"
+                      formControlName="showWeekend"
+                    />
+                    <label class="form-check-label" for="profile-show-weekend">Afficher le weekend</label>
+                  </div>
+                </div>
+
+                <div class="col-12 col-lg-4">
+                  <div class="form-check form-switch pt-2">
+                    <input
+                      id="profile-show-sex"
+                      type="checkbox"
+                      class="form-check-input"
+                      formControlName="showPatientSex"
+                    />
+                    <label class="form-check-label" for="profile-show-sex">Afficher le sexe du patient</label>
+                  </div>
+                </div>
+
+                <div class="col-12 col-lg-4">
+                  <div class="form-check form-switch pt-2">
+                    <input
+                      id="profile-show-mobile"
+                      type="checkbox"
+                      class="form-check-input"
+                      formControlName="showPatientMobilePhone"
+                    />
+                    <label class="form-check-label" for="profile-show-mobile">Afficher le mobile</label>
+                  </div>
+                </div>
+
+                <div class="col-12 col-lg-4">
+                  <div class="form-check form-switch pt-2">
+                    <input
+                      id="profile-show-landline"
+                      type="checkbox"
+                      class="form-check-input"
+                      formControlName="showPatientLandlinePhone"
+                    />
+                    <label class="form-check-label" for="profile-show-landline">Afficher le téléphone fixe</label>
+                  </div>
+                </div>
+
+                  <div class="col-12 col-lg-4">
+                    <div class="form-check form-switch pt-2">
+                      <input
+                        id="profile-show-comment"
+                        type="checkbox"
+                        class="form-check-input"
+                        formControlName="showAppointmentComment"
+                      />
+                      <label class="form-check-label" for="profile-show-comment">Afficher le commentaire du RDV</label>
+                    </div>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+        }
+
+        <!-- Alerts & Save Button -->
+        @if (error()) {
+          <div class="alert alert-danger mb-3" role="alert">
+            {{ error() }}
+          </div>
+        }
+
+        @if (success()) {
+          <div class="alert alert-success mb-3" role="status">
+            {{ success() }}
+          </div>
+        }
+
+        <div class="d-flex justify-content-end gap-2 mb-4">
+          <button type="button" class="btn btn-primary btn-lg px-4" (click)="save()" [disabled]="isSaving()">
+            @if (isSaving()) {
+              <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
             }
-          </select>
-        </div>
-        <div class="col-12 col-xl-6">
-          <label class="form-label" for="profile-name-suffix">Texte à côté du nom</label>
-          <input id="profile-name-suffix" type="text" class="form-control" formControlName="nameSuffixText" />
-        </div>
-      </div>
-    </article>
-
-    <article class="profile-panel profile-panel-wide">
-      <h2 class="h5 mb-3">Informations professionnelles</h2>
-      <div class="row g-4">
-        <div class="col-12 col-xl-4">
-          <label class="form-label" for="profile-siret">N° SIRET</label>
-          <input id="profile-siret" type="text" class="form-control" formControlName="siret" />
-        </div>
-        <div class="col-12 col-xl-4">
-          <label class="form-label" for="profile-adeli">Code ADELI</label>
-          <input id="profile-adeli" type="text" class="form-control" formControlName="adeliCode" />
-        </div>
-        <div class="col-12 col-xl-4">
-          <label class="form-label" for="profile-rpps">Code RPPS</label>
-          <input id="profile-rpps" type="text" class="form-control" formControlName="rppsCode" />
-        </div>
-        <div class="col-12 col-xl-6">
-          <label class="form-label" for="profile-ape">Code APE / NAF</label>
-          <input id="profile-ape" type="text" class="form-control" formControlName="apeNafCode" />
-        </div>
-        <div class="col-12 col-xl-6">
-          <label class="form-label" for="profile-color">Couleur praticien</label>
-          <input id="profile-color" type="color" class="form-control form-control-color" formControlName="colorHex" />
-        </div>
-        <div class="col-12 col-xl-6">
-          <label class="form-label" for="profile-retrocession">Rétrocession (%)</label>
-          <input id="profile-retrocession" type="number" class="form-control" formControlName="retrocessionPercent" min="0" max="100" />
-        </div>
-        <div class="col-12 col-xl-6">
-          <label class="form-label" for="profile-retrocession-recipient">Destinataire rétrocession</label>
-          <input id="profile-retrocession-recipient" type="text" class="form-control" formControlName="retrocessionRecipient" />
-        </div>
-        <div class="col-12 col-xl-6">
-          <label class="form-label" for="profile-bank">Banque</label>
-          <input id="profile-bank" type="text" class="form-control" formControlName="bankName" />
-        </div>
-        <div class="col-12 col-xl-6">
-          <label class="form-label" for="profile-iban">IBAN</label>
-          <input id="profile-iban" type="text" class="form-control" formControlName="iban" />
-        </div>
-      </div>
-    </article>
-
-    <article class="profile-panel profile-panel-wide">
-      <h2 class="h5 mb-3">Documents et mentions</h2>
-      <div class="row g-4">
-        <div class="col-12">
-          <label class="form-label" for="profile-letter-header">Entête courriers</label>
-          <input id="profile-letter-header" type="text" class="form-control" formControlName="letterHeader" />
-        </div>
-        <div class="col-12">
-          <label class="form-label" for="profile-letter-footer">Pied de page courriers</label>
-          <input id="profile-letter-footer" type="text" class="form-control" formControlName="letterFooter" />
-        </div>
-        <div class="col-12">
-          <label class="form-label" for="profile-signature">Signature (texte / data)</label>
-          <textarea id="profile-signature" class="form-control" formControlName="signatureText" rows="3"></textarea>
-        </div>
-        <div class="col-12">
-          <label class="form-label" for="profile-invoice-mentions">Mentions factures</label>
-          <textarea id="profile-invoice-mentions" class="form-control" formControlName="invoiceMentions" rows="3"></textarea>
-        </div>
-      </div>
-    </article>
-
-    <article class="profile-panel profile-panel-wide">
-      <h2 class="h5 mb-3">Préférences métier</h2>
-      <div class="row g-4">
-        <div class="col-12 col-xl-6">
-          <label class="form-label" for="profile-default-agenda-view">Vue agenda</label>
-          <input id="profile-default-agenda-view" type="text" class="form-control" formControlName="defaultAgendaView" />
-        </div>
-        <div class="col-12 col-xl-6">
-          <label class="form-label" for="profile-visible-calendars">Calendriers visibles</label>
-          <input id="profile-visible-calendars" type="text" class="form-control" formControlName="visibleCalendars" />
-        </div>
-        <div class="col-12">
-          <label class="form-label" for="profile-default-service">Prestation par défaut</label>
-          <input id="profile-default-service" type="text" class="form-control" formControlName="defaultService" />
-        </div>
-        <div class="col-12 col-xl-6">
-          <div class="form-check form-switch mt-2">
-            <input id="profile-include-free-consultations" type="checkbox" class="form-check-input" formControlName="includeFreeConsultations" />
-            <label class="form-check-label" for="profile-include-free-consultations">Inclure les consultations gratuites dans la comptabilité</label>
-          </div>
-        </div>
-        <div class="col-12 col-xl-6">
-          <div class="form-check form-switch mt-2">
-            <input id="profile-show-consultation-hour" type="checkbox" class="form-check-input" formControlName="showConsultationHour" />
-            <label class="form-check-label" for="profile-show-consultation-hour">Afficher l'heure des consultations</label>
-          </div>
-        </div>
-      </div>
-    </article>
-  </section>
-
-  <section class="profile-panel profile-panel-wide mt-3" [formGroup]="preferencesForm">
-    <h2 class="h5 mb-3">Préférences d'affichage agenda</h2>
-    <div class="row g-4">
-      <div class="col-12 col-xl-6">
-        <label class="form-label" for="profile-slot-duration">
-          Durée des créneaux: {{ preferencesForm.controls.slotDurationMinutes.value }} min
-        </label>
-        <input id="profile-slot-duration" type="range" class="form-range" formControlName="slotDurationMinutes" min="5" max="50" step="5" />
-      </div>
-
-      <div class="col-12 col-xl-6">
-        <label class="form-label" for="profile-display-height">
-          Hauteur d'affichage: {{ preferencesForm.controls.displayHeight.value }}
-        </label>
-        <input id="profile-display-height" type="range" class="form-range" formControlName="displayHeight" min="14" max="35" step="1" />
-      </div>
-
-      <div class="col-12 col-xl-4">
-        <label class="form-label" for="profile-pdf-display-mode">Affichage PDF</label>
-        <select id="profile-pdf-display-mode" class="form-select" formControlName="pdfDisplayMode">
-          @for (option of pdfDisplayModeOptions; track option.value) {
-            <option [value]="option.value">{{ option.label }}</option>
-          }
-        </select>
-      </div>
-
-      <div class="col-12 col-xl-4">
-        <label class="form-label" for="profile-consultation-order">Ordre consultations</label>
-        <select id="profile-consultation-order" class="form-select" formControlName="consultationOrder">
-          @for (option of consultationOrderOptions; track option) {
-            <option [value]="option">{{ option }}</option>
-          }
-        </select>
-      </div>
-
-      <div class="col-12 col-xl-4">
-        <label class="form-label" for="profile-group-by-year">Regrouper par année à partir de</label>
-        <input id="profile-group-by-year" type="number" class="form-control" formControlName="groupConsultationsByYearFrom" min="0" max="200" />
-      </div>
-
-      <div class="col-12 col-xl-4">
-        <label class="form-label" for="profile-patient-auto-save">Enregistrement auto fiche patient</label>
-        <select id="profile-patient-auto-save" class="form-select" formControlName="patientAutoSaveFrequency">
-          @for (option of patientAutoSaveOptions; track option) {
-            <option [value]="option">{{ option }}</option>
-          }
-        </select>
-      </div>
-
-      <div class="col-12 col-xl-4">
-        <label class="form-label" for="profile-patient-remarks-display">Remarques patient</label>
-        <select id="profile-patient-remarks-display" class="form-select" formControlName="patientRemarksDisplay">
-          @for (option of patientRemarksDisplayOptions; track option.value) {
-            <option [value]="option.value">{{ option.label }}</option>
-          }
-        </select>
-      </div>
-
-      <div class="col-12 col-xl-4">
-        <label class="form-label" for="profile-appointment-color-mode">Couleur des RDV</label>
-        <select id="profile-appointment-color-mode" class="form-select" formControlName="appointmentColorMode">
-          @for (option of appointmentColorModeOptions; track option.value) {
-            <option [value]="option.value">{{ option.label }}</option>
-          }
-        </select>
-      </div>
-
-      <div class="col-12 col-xl-4">
-        <div class="form-check form-switch mt-2">
-          <input id="profile-show-weekend" type="checkbox" class="form-check-input" formControlName="showWeekend" />
-          <label class="form-check-label" for="profile-show-weekend">Afficher le weekend</label>
-        </div>
-      </div>
-      <div class="col-12 col-xl-4">
-        <div class="form-check form-switch mt-2">
-          <input id="profile-show-sex" type="checkbox" class="form-check-input" formControlName="showPatientSex" />
-          <label class="form-check-label" for="profile-show-sex">Afficher le sexe du patient</label>
-        </div>
-      </div>
-      <div class="col-12 col-lg-4">
-        <div class="form-check form-switch mt-2">
-          <input id="profile-show-mobile" type="checkbox" class="form-check-input" formControlName="showPatientMobilePhone" />
-          <label class="form-check-label" for="profile-show-mobile">Afficher le téléphone portable</label>
-        </div>
-      </div>
-      <div class="col-12 col-xl-6">
-        <div class="form-check form-switch mt-2">
-          <input id="profile-show-landline" type="checkbox" class="form-check-input" formControlName="showPatientLandlinePhone" />
-          <label class="form-check-label" for="profile-show-landline">Afficher le téléphone fixe</label>
-        </div>
-      </div>
-      <div class="col-12 col-xl-6">
-        <div class="form-check form-switch mt-2">
-          <input id="profile-show-comment" type="checkbox" class="form-check-input" formControlName="showAppointmentComment" />
-          <label class="form-check-label" for="profile-show-comment">Afficher le commentaire du RDV</label>
+            Enregistrer mes paramètres
+          </button>
         </div>
       </div>
     </div>
-  </section>
-
-  @if (error()) {
-    <div class="alert alert-danger py-2 mt-3 mb-0" role="alert">{{ error() }}</div>
   }
-
-  @if (success()) {
-    <div class="alert alert-success py-2 mt-3 mb-0" role="status">{{ success() }}</div>
-  }
-
-  <div class="d-flex justify-content-end mt-3 mb-4">
-    <button type="button" class="btn btn-primary px-4" (click)="save()" [disabled]="isSaving()">
-      @if (isSaving()) {
-        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-      }
-      Enregistrer mes paramètres
-    </button>
-  </div>
-}
+</div>
