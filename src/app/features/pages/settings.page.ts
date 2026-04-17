@@ -212,8 +212,6 @@ export class SettingsPage {
     colorHex: ['#4d92d1', [Validators.maxLength(20)]],
     bankName: ['', [Validators.maxLength(150)]],
     iban: ['', [Validators.maxLength(60)]],
-    retrocessionPercent: [0],
-    retrocessionRecipient: ['', [Validators.maxLength(120)]],
     defaultAgendaView: ['Semaine', [Validators.maxLength(80)]],
     defaultYearsForStatistics: [5, [Validators.required, Validators.min(2), Validators.max(10)]],
     invoiceMentions: ['', [Validators.maxLength(2000)]],
@@ -309,8 +307,6 @@ export class SettingsPage {
   readonly selectedUserSignatureFileName = signal('');
   readonly expandedAccordionId = signal<string | null>('general-root');
   readonly userSignatureValue = signal('');
-  readonly retrocessionRecipientSearch = signal('');
-  readonly selectedRetrocessionRecipientUsername = signal('');
   readonly selectedUserOfficeIds = signal<number[]>([]);
   readonly auditLogs = signal<SystemAuditLog[]>([]);
   readonly offices = signal<Office[]>([]);
@@ -504,31 +500,6 @@ export class SettingsPage {
   );
 
   readonly isUserSignatureImage = computed(() => this.userSignatureValue().startsWith('data:image/'));
-  readonly retrocessionRecipientOptions = computed(() => {
-    const term = this.retrocessionRecipientSearch().trim().toLowerCase();
-    const currentUserId = this.selectedUserId();
-
-    return this.users()
-      .filter((user) => user.id !== currentUserId)
-      .filter((user) => {
-        if (!term) {
-          return true;
-        }
-
-        const fullName = `${user.lastName || ''} ${user.firstName || ''}`.trim().toLowerCase();
-        return user.username.toLowerCase().includes(term) || fullName.includes(term);
-      })
-      .slice(0, 40);
-  });
-
-  readonly selectedRetrocessionRecipient = computed(() => {
-    const username = this.selectedRetrocessionRecipientUsername().trim();
-    if (!username) {
-      return null;
-    }
-
-    return this.users().find((user) => user.username === username) ?? null;
-  });
 
   readonly userCabinetOptions = computed(() => {
     return this.offices()
@@ -1006,8 +977,6 @@ export class SettingsPage {
       colorHex: user.colorHex || '#4d92d1',
       bankName: user.bankName || '',
       iban: user.iban || '',
-      retrocessionPercent: user.retrocessionPercent ?? 0,
-      retrocessionRecipient: user.retrocessionRecipient || '',
       defaultAgendaView: user.defaultAgendaView || 'Semaine',
       defaultYearsForStatistics: user.defaultYearsForStatistics ?? 5,
       invoiceMentions: user.invoiceMentions || '',
@@ -1019,8 +988,6 @@ export class SettingsPage {
     this.userSignatureError.set('');
     this.selectedUserSignatureFileName.set('');
     this.userSignatureValue.set(user.signatureText || '');
-    this.retrocessionRecipientSearch.set('');
-    this.selectedRetrocessionRecipientUsername.set(user.retrocessionRecipient || '');
     const officeIds = Array.isArray(user.officeIds) && user.officeIds.length > 0
       ? [...new Set(user.officeIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))]
       : (user.officeId != null ? [user.officeId] : []);
@@ -1054,8 +1021,6 @@ export class SettingsPage {
       colorHex: '#4d92d1',
       bankName: '',
       iban: '',
-      retrocessionPercent: 0,
-      retrocessionRecipient: '',
       defaultAgendaView: 'Semaine',
       defaultYearsForStatistics: 5,
       invoiceMentions: '',
@@ -1067,8 +1032,6 @@ export class SettingsPage {
     this.userSignatureError.set('');
     this.selectedUserSignatureFileName.set('');
     this.userSignatureValue.set('');
-    this.retrocessionRecipientSearch.set('');
-    this.selectedRetrocessionRecipientUsername.set('');
     this.selectedUserOfficeIds.set([]);
   }
 
@@ -1108,23 +1071,6 @@ export class SettingsPage {
     this.isUserModalOpen.set(false);
     this.userProfileLinkError.set('');
     this.userSignatureError.set('');
-    this.retrocessionRecipientSearch.set('');
-  }
-
-  onRetrocessionRecipientSearchChange(value: string): void {
-    this.retrocessionRecipientSearch.set(value);
-  }
-
-  selectRetrocessionRecipient(user: AccessManagedUser): void {
-    this.userForm.controls.retrocessionRecipient.setValue(user.username);
-    this.selectedRetrocessionRecipientUsername.set(user.username);
-    this.userProfileLinkError.set('');
-  }
-
-  clearRetrocessionRecipient(): void {
-    this.userForm.controls.retrocessionRecipient.setValue('');
-    this.selectedRetrocessionRecipientUsername.set('');
-    this.userProfileLinkError.set('');
   }
 
   getUserDisplayName(user: AccessManagedUser): string {
@@ -1144,10 +1090,6 @@ export class SettingsPage {
     }
 
     return user.username.slice(0, 2).toUpperCase();
-  }
-
-  isRetrocessionRecipientSelected(user: AccessManagedUser): boolean {
-    return this.selectedRetrocessionRecipientUsername() === user.username;
   }
 
   async onUserSignatureFileSelected(event: Event): Promise<void> {
@@ -1510,12 +1452,6 @@ export class SettingsPage {
 
     if (this.userSignatureError()) {
       this.userProfileLinkError.set('Veuillez corriger le champ signature avant d\'enregistrer.');
-      return;
-    }
-
-    const selectedRecipientUsername = this.selectedRetrocessionRecipientUsername().trim();
-    if (selectedRecipientUsername && !this.users().some((user) => user.username === selectedRecipientUsername)) {
-      this.userProfileLinkError.set('Le destinataire de rétrocession doit être un compte utilisateur valide.');
       return;
     }
 
@@ -1962,8 +1898,6 @@ export class SettingsPage {
       colorHex: raw.colorHex.trim() || '#4d92d1',
       bankName: raw.bankName.trim(),
       iban: raw.iban.trim(),
-      retrocessionPercent: Number(raw.retrocessionPercent) || 0,
-      retrocessionRecipient: raw.retrocessionRecipient.trim(),
       defaultAgendaView: raw.defaultAgendaView.trim() || 'Semaine',
       defaultYearsForStatistics: Number(raw.defaultYearsForStatistics) || 5,
       invoiceMentions: raw.invoiceMentions.trim(),

@@ -41,8 +41,6 @@ export type AccessManagedUser = {
   colorHex: string;
   bankName: string;
   iban: string;
-  retrocessionPercent: number;
-  retrocessionRecipient: string;
   defaultAgendaView: string;
   defaultYearsForStatistics: number;
   invoiceMentions: string;
@@ -78,8 +76,6 @@ export type UserAccountPayload = {
   colorHex: string;
   bankName: string;
   iban: string;
-  retrocessionPercent: number;
-  retrocessionRecipient: string;
   defaultAgendaView: string;
   defaultYearsForStatistics: number;
   invoiceMentions: string;

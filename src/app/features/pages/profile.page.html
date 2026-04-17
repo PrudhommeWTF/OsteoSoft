@@ -314,34 +314,6 @@
 
                   <div class="col-12 col-lg-6">
                     <div class="form-floating">
-                      <input
-                        id="profile-retrocession"
-                        type="number"
-                        class="form-control"
-                        placeholder="Rétrocession"
-                        formControlName="retrocessionPercent"
-                        min="0"
-                        max="100"
-                      />
-                      <label for="profile-retrocession">Rétrocession (%)</label>
-                    </div>
-                  </div>
-
-                  <div class="col-12">
-                    <div class="form-floating">
-                      <input
-                        id="profile-retrocession-recipient"
-                        type="text"
-                        class="form-control"
-                        placeholder="Destinataire"
-                        formControlName="retrocessionRecipient"
-                      />
-                      <label for="profile-retrocession-recipient">Destinataire rétrocession</label>
-                    </div>
-                  </div>
-
-                  <div class="col-12 col-lg-6">
-                    <div class="form-floating">
                       <input id="profile-bank" type="text" class="form-control" placeholder="Banque" formControlName="bankName" />
                       <label for="profile-bank">Banque</label>
                     </div>
@@ -711,7 +683,7 @@
         }
 
         <div class="d-flex justify-content-end gap-2 mb-4">
-          <button type="button" class="btn btn-primary btn-lg px-4" (click)="save()" [disabled]="isSaving()">
+          <button type="button" class="btn btn-primary px-4" (click)="save()" [disabled]="isSaving()">
             @if (isSaving()) {
               <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
             }
