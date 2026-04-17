@@ -30,6 +30,28 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 db.pragma('secure_delete = ON');
 
+// Migration: Rename patient_drafts table to draft
+try {
+  const tableExists = db.prepare(
+    `SELECT name FROM sqlite_master WHERE type='table' AND name='patient_drafts'`
+  ).get();
+  
+  if (tableExists) {
+    // Check if draft table already exists
+    const draftExists = db.prepare(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='draft'`
+    ).get();
+    
+    if (!draftExists) {
+      // Rename the table
+      db.exec('ALTER TABLE patient_drafts RENAME TO draft');
+      console.log('✓ Migrated patient_drafts table to draft');
+    }
+  }
+} catch (err) {
+  console.warn('Migration check failed (may be normal if tables don\'t exist yet):', err.message);
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -173,6 +195,7 @@ db.exec(`
     vat_number TEXT,
     logo_data TEXT,
     opening_hours_json TEXT NOT NULL DEFAULT '{"monday":[],"tuesday":[],"wednesday":[],"thursday":[],"friday":[],"saturday":[],"sunday":[]}',
+    consultation_profiles_json TEXT NOT NULL DEFAULT '[]',
     is_active INTEGER NOT NULL DEFAULT 1,
     display_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -227,7 +250,7 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
-  CREATE TABLE IF NOT EXISTS patient_drafts (
+  CREATE TABLE IF NOT EXISTS draft (
     user_id INTEGER NOT NULL,
     flow_key TEXT NOT NULL,
     draft_json TEXT NOT NULL,
@@ -677,6 +700,47 @@ function parseOfficeOpeningHours(rawJson) {
   }
 }
 
+function normalizeOfficeConsultationProfiles(rawProfiles) {
+  if (!Array.isArray(rawProfiles)) {
+    return [];
+  }
+
+  return rawProfiles
+    .map((profile, index) => {
+      if (!profile || typeof profile !== 'object') {
+        return null;
+      }
+
+      const id = String(profile.id ?? '').trim() || `profile-${index + 1}`;
+      const name = String(profile.name ?? '').trim() || `Profil ${index + 1}`;
+      const reasons = Array.isArray(profile.reasons)
+        ? profile.reasons
+          .map((reason) => String(reason ?? '').trim())
+          .filter((reason) => reason.length > 0)
+        : [];
+
+      return {
+        id,
+        name,
+        reasons,
+        displayOrder: index + 1
+      };
+    })
+    .filter(Boolean);
+}
+
+function parseOfficeConsultationProfiles(rawJson) {
+  if (typeof rawJson !== 'string' || rawJson.trim().length === 0) {
+    return [];
+  }
+
+  try {
+    return normalizeOfficeConsultationProfiles(JSON.parse(rawJson));
+  } catch {
+    return [];
+  }
+}
+
 function normalizeOfficeDefaultSessionDurationMinutes(rawValue) {
   const parsed = Number(rawValue);
   if (!Number.isInteger(parsed)) {
@@ -871,7 +935,7 @@ function replaceOfficeBusinessSettings(officeId, serviceTypes, paymentMethods) {
 }
 
 function mapOfficeRow(row) {
-  const { openingHoursJson, ...officeFields } = row;
+  const { openingHoursJson, consultationProfilesJson, ...officeFields } = row;
   const officeId = Number(officeFields.id);
   return {
     ...officeFields,
@@ -885,7 +949,8 @@ function mapOfficeRow(row) {
     serviceTypes: Number.isInteger(officeId) && officeId > 0 ? readOfficeServiceTypes(officeId) : [],
     paymentMethods: Number.isInteger(officeId) && officeId > 0 ? readOfficePaymentMethods(officeId) : [],
     isActive: Boolean(officeFields.isActive),
-    openingHours: parseOfficeOpeningHours(openingHoursJson)
+    openingHours: parseOfficeOpeningHours(openingHoursJson),
+    consultationProfiles: parseOfficeConsultationProfiles(consultationProfilesJson)
   };
 }
 
@@ -1273,7 +1338,7 @@ function buildDataBackupSnapshot() {
       config: db.prepare('SELECT key, value FROM config ORDER BY key ASC').all(),
       patientDrafts: db.prepare(
         `SELECT user_id, flow_key, draft_json, step, updated_at
-         FROM patient_drafts
+         FROM draft
          ORDER BY user_id ASC, flow_key ASC`
       ).all(),
       auditLogs: db.prepare(
@@ -1293,7 +1358,7 @@ function restoreDataBackupSnapshot(backupPayload) {
 
   const transaction = db.transaction(() => {
     db.prepare('DELETE FROM audit_logs').run();
-    db.prepare('DELETE FROM patient_drafts').run();
+    db.prepare('DELETE FROM draft').run();
     db.prepare('DELETE FROM consultations').run();
     db.prepare('DELETE FROM appointments').run();
     db.prepare('DELETE FROM invoices').run();
@@ -1378,7 +1443,7 @@ function restoreDataBackupSnapshot(backupPayload) {
       'INSERT INTO config (key, value) VALUES (?, ?)'
     );
     const insertPatientDraft = db.prepare(
-      `INSERT INTO patient_drafts (user_id, flow_key, draft_json, step, updated_at)
+      `INSERT INTO draft (user_id, flow_key, draft_json, step, updated_at)
        VALUES (?, ?, ?, ?, ?)`
     );
     const insertAuditLog = db.prepare(
@@ -2018,6 +2083,7 @@ async function ensureSeedData() {
   ensureColumn('offices', 'invoice_show_insurance_fields', 'invoice_show_insurance_fields INTEGER NOT NULL DEFAULT 0');
   ensureColumn('offices', 'invoice_hide_vat_mention', 'invoice_hide_vat_mention INTEGER NOT NULL DEFAULT 0');
   ensureColumn('offices', 'opening_hours_json', `opening_hours_json TEXT NOT NULL DEFAULT '{"monday":[],"tuesday":[],"wednesday":[],"thursday":[],"friday":[],"saturday":[],"sunday":[]}'`);
+  ensureColumn('offices', 'consultation_profiles_json', "consultation_profiles_json TEXT NOT NULL DEFAULT '[]'");
   ensureColumn('service_types', 'office_id', 'office_id INTEGER');
   ensureColumn('payment_methods', 'office_id', 'office_id INTEGER');
   ensureColumn('user_preference', 'slot_duration_minutes', 'slot_duration_minutes INTEGER NOT NULL DEFAULT 15');
@@ -3858,7 +3924,8 @@ app.get('/api/offices', authMiddleware, adminOnlyMiddleware, (_req, res) => {
            address_line1 as addressLine1, address_line2 as addressLine2,
            postal_code as postalCode, city, phone_mobile as phoneMobile,
            phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
-           vat_number as vatNumber, logo_data as logoData, opening_hours_json as openingHoursJson, is_active as isActive,
+           vat_number as vatNumber, logo_data as logoData, opening_hours_json as openingHoursJson,
+           consultation_profiles_json as consultationProfilesJson, is_active as isActive,
            display_order as displayOrder, created_at as createdAt, updated_at as updatedAt
     FROM offices
     ORDER BY display_order ASC, created_at DESC
@@ -3891,6 +3958,7 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
     vatNumber,
     logoData,
     openingHours,
+    consultationProfiles,
     serviceTypes,
     paymentMethods
   } = req.body;
@@ -3907,6 +3975,7 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
   const normalizedInvoiceNumberingConfiguration = normalizeOfficeInvoiceNumberingConfiguration(numberingConfiguration);
   const normalizedInvoiceShowInsuranceFields = alwaysShowSocialSecurityAndMutuelle ? 1 : 0;
   const normalizedInvoiceHideVatMention = hideVatMention ? 1 : 0;
+  const normalizedConsultationProfiles = normalizeOfficeConsultationProfiles(consultationProfiles);
 
   try {
     const maxOrder = db.prepare(`SELECT MAX(display_order) as maxOrder FROM offices`).get() || {};
@@ -3915,8 +3984,9 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
     const insert = db.prepare(`
       INSERT INTO offices (name, default_session_duration_minutes, country, devise, invoice_number_format, invoice_numbering_configuration,
                            invoice_show_insurance_fields, invoice_hide_vat_mention, address_line1, address_line2, postal_code, city, phone_mobile,
-                           phone_landline, phone_fax, email, website, vat_number, logo_data, opening_hours_json, display_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                           phone_landline, phone_fax, email, website, vat_number, logo_data, opening_hours_json,
+                           consultation_profiles_json, display_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = insert.run(
@@ -3924,13 +3994,20 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
       normalizedInvoiceNumberFormat, normalizedInvoiceNumberingConfiguration, normalizedInvoiceShowInsuranceFields, normalizedInvoiceHideVatMention,
       addressLine1 || null, addressLine2 || null, postalCode || null, city || null,
       phoneMobile || null, phoneLandline || null, phoneFax || null, email || null,
-      website || null, vatNumber || null, logoData || null, JSON.stringify(normalizedOpeningHours), displayOrder
+      website || null, vatNumber || null, logoData || null, JSON.stringify(normalizedOpeningHours),
+      JSON.stringify(normalizedConsultationProfiles), displayOrder
     );
 
     const createdOfficeId = Number(result.lastInsertRowid);
     replaceOfficeBusinessSettings(createdOfficeId, serviceTypes, paymentMethods);
 
     createLocalCalendarFromOffice(createdOfficeId, name);
+
+    // Clean up the draft after successful creation
+    db.prepare(
+      `DELETE FROM draft
+       WHERE user_id = ? AND flow_key = 'new_office'`
+    ).run(req.user.sub);
 
     writeAuditLog(req.user.id, 'CREATE', 'office', result.lastInsertRowid, {
       name, city, defaultSessionDurationMinutes: normalizedDefaultSessionDurationMinutes
@@ -3943,7 +4020,8 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
             address_line1 as addressLine1, address_line2 as addressLine2,
              postal_code as postalCode, city, phone_mobile as phoneMobile,
              phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
-             vat_number as vatNumber, logo_data as logoData, opening_hours_json as openingHoursJson, is_active as isActive,
+             vat_number as vatNumber, logo_data as logoData, opening_hours_json as openingHoursJson,
+             consultation_profiles_json as consultationProfilesJson, is_active as isActive,
              display_order as displayOrder, created_at as createdAt, updated_at as updatedAt
       FROM offices WHERE id = ?
     `).get(result.lastInsertRowid);
@@ -3978,6 +4056,7 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
     vatNumber,
     logoData,
     openingHours,
+    consultationProfiles,
     serviceTypes,
     paymentMethods,
     isActive
@@ -3995,6 +4074,7 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
   const normalizedInvoiceNumberingConfiguration = normalizeOfficeInvoiceNumberingConfiguration(numberingConfiguration);
   const normalizedInvoiceShowInsuranceFields = alwaysShowSocialSecurityAndMutuelle ? 1 : 0;
   const normalizedInvoiceHideVatMention = hideVatMention ? 1 : 0;
+  const normalizedConsultationProfiles = normalizeOfficeConsultationProfiles(consultationProfiles);
 
   try {
     const update = db.prepare(`
@@ -4002,7 +4082,7 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
         SET name = ?, default_session_duration_minutes = ?, country = ?, devise = ?, invoice_number_format = ?,
           invoice_numbering_configuration = ?, invoice_show_insurance_fields = ?, invoice_hide_vat_mention = ?, address_line1 = ?, address_line2 = ?, postal_code = ?, city = ?,
           phone_mobile = ?, phone_landline = ?, phone_fax = ?, email = ?, website = ?,
-          vat_number = ?, logo_data = ?, opening_hours_json = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+          vat_number = ?, logo_data = ?, opening_hours_json = ?, consultation_profiles_json = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `);
 
@@ -4011,7 +4091,8 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
       normalizedInvoiceNumberFormat, normalizedInvoiceNumberingConfiguration, normalizedInvoiceShowInsuranceFields, normalizedInvoiceHideVatMention,
       addressLine1 || null, addressLine2 || null, postalCode || null, city || null,
       phoneMobile || null, phoneLandline || null, phoneFax || null, email || null,
-      website || null, vatNumber || null, logoData || null, JSON.stringify(normalizedOpeningHours), isActive ? 1 : 0, officeId
+      website || null, vatNumber || null, logoData || null, JSON.stringify(normalizedOpeningHours),
+      JSON.stringify(normalizedConsultationProfiles), isActive ? 1 : 0, officeId
     );
 
     replaceOfficeBusinessSettings(officeId, serviceTypes, paymentMethods);
@@ -4025,7 +4106,8 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
             address_line1 as addressLine1, address_line2 as addressLine2,
              postal_code as postalCode, city, phone_mobile as phoneMobile,
              phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
-             vat_number as vatNumber, logo_data as logoData, opening_hours_json as openingHoursJson, is_active as isActive,
+             vat_number as vatNumber, logo_data as logoData, opening_hours_json as openingHoursJson,
+             consultation_profiles_json as consultationProfilesJson, is_active as isActive,
              display_order as displayOrder, created_at as createdAt, updated_at as updatedAt
       FROM offices WHERE id = ?
     `).get(officeId);
@@ -4154,7 +4236,7 @@ app.get('/api/patient-drafts/new-patient', authMiddleware, (req, res) => {
   const row = db
     .prepare(
       `SELECT step, draft_json, updated_at
-       FROM patient_drafts
+       FROM draft
        WHERE user_id = ? AND flow_key = 'new_patient'`
     )
     .get(req.user.sub);
@@ -4190,7 +4272,7 @@ app.put('/api/patient-drafts/new-patient', authMiddleware, (req, res) => {
   }
 
   db.prepare(
-    `INSERT INTO patient_drafts (user_id, flow_key, draft_json, step, updated_at)
+    `INSERT INTO draft (user_id, flow_key, draft_json, step, updated_at)
      VALUES (?, 'new_patient', ?, ?, CURRENT_TIMESTAMP)
      ON CONFLICT(user_id, flow_key)
      DO UPDATE SET draft_json = excluded.draft_json,
@@ -4203,7 +4285,7 @@ app.put('/api/patient-drafts/new-patient', authMiddleware, (req, res) => {
 
 app.delete('/api/patient-drafts/new-patient', authMiddleware, (req, res) => {
   db.prepare(
-    `DELETE FROM patient_drafts
+    `DELETE FROM draft
      WHERE user_id = ? AND flow_key = 'new_patient'`
   ).run(req.user.sub);
 
@@ -4214,7 +4296,7 @@ app.get('/api/office-drafts/new-office', authMiddleware, adminOnlyMiddleware, (r
   const row = db
     .prepare(
       `SELECT step, draft_json, updated_at
-       FROM patient_drafts
+       FROM draft
        WHERE user_id = ? AND flow_key = 'new_office'`
     )
     .get(req.user.sub);
@@ -4250,7 +4332,7 @@ app.put('/api/office-drafts/new-office', authMiddleware, adminOnlyMiddleware, (r
   }
 
   db.prepare(
-    `INSERT INTO patient_drafts (user_id, flow_key, draft_json, step, updated_at)
+    `INSERT INTO draft (user_id, flow_key, draft_json, step, updated_at)
      VALUES (?, 'new_office', ?, ?, CURRENT_TIMESTAMP)
      ON CONFLICT(user_id, flow_key)
      DO UPDATE SET draft_json = excluded.draft_json,
@@ -4263,7 +4345,7 @@ app.put('/api/office-drafts/new-office', authMiddleware, adminOnlyMiddleware, (r
 
 app.delete('/api/office-drafts/new-office', authMiddleware, adminOnlyMiddleware, (req, res) => {
   db.prepare(
-    `DELETE FROM patient_drafts
+    `DELETE FROM draft
      WHERE user_id = ? AND flow_key = 'new_office'`
   ).run(req.user.sub);
 
@@ -4673,7 +4755,7 @@ app.delete('/api/users/:id', authMiddleware, adminOnlyMiddleware, (req, res) => 
 
   const removeUser = db.transaction(() => {
     db.prepare('UPDATE audit_logs SET user_id = NULL WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM patient_drafts WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM draft WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM users WHERE id = ?').run(userId);
   });
 
@@ -5595,7 +5677,7 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
   });
 
   db.prepare(
-    `DELETE FROM patient_drafts
+    `DELETE FROM draft
      WHERE user_id = ? AND flow_key = 'new_patient'`
   ).run(req.user.sub);
 

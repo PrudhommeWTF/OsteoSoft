@@ -562,6 +562,13 @@ export type OfficeOpeningRange = {
 
 export type OfficeOpeningHours = Record<OfficeWeekDay, OfficeOpeningRange[]>;
 
+export type OfficeConsultationProfile = {
+  id: string;
+  name: string;
+  reasons: string[];
+  displayOrder: number;
+};
+
 export type Office = {
   id: number;
   name: string;
@@ -584,6 +591,7 @@ export type Office = {
   vatNumber?: string;
   logoData?: string;
   openingHours?: OfficeOpeningHours;
+  consultationProfiles: OfficeConsultationProfile[];
   serviceTypes: ServiceTypeSetting[];
   paymentMethods: PaymentMethodSetting[];
   isActive: boolean;
@@ -613,6 +621,7 @@ export type CreateOfficePayload = {
   vatNumber?: string;
   logoData?: string;
   openingHours?: OfficeOpeningHours;
+  consultationProfiles: OfficeConsultationProfile[];
   serviceTypes: ServiceTypeSetting[];
   paymentMethods: PaymentMethodSetting[];
 };

@@ -1,52 +1,50 @@
-<section class="page-head d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
-  <div>
-    <h1 class="h3 mb-1"><i class="fa-solid fa-gear text-primary me-2"></i>Paramètres</h1>
-    <p class="text-secondary mb-0">Configuration fonctionnelle et technique de l'application.</p>
-  </div>
-</section>
-
-<section class="settings-layout" aria-label="Configuration de l'application">
-  <nav class="panel card border-0 shadow-sm settings-tabs" aria-label="Onglets des paramètres">
-    <div class="card-body p-2">
-      <div class="nav settings-tab-list" role="tablist" aria-orientation="vertical">
-        @for (section of sections; track section.id) {
-          <button
-            type="button"
-            class="settings-tab"
-            role="tab"
-            [class.active]="activeSectionId() === section.id"
-            [attr.aria-selected]="activeSectionId() === section.id"
-            [attr.aria-controls]="section.id + '-panel'"
-            [id]="section.id + '-tab'"
-            (click)="selectSection(section.id)"
-          >
-            <span class="settings-tab-icon"><i [class]="section.icon"></i></span>
-            <span class="settings-tab-copy">
-              <span class="settings-tab-label">{{ section.label }}</span>
-              <span class="settings-tab-summary">{{ section.summary }}</span>
-            </span>
-          </button>
-        }
-      </div>
-    </div>
-  </nav>
-
-  <article
-    class="panel card border-0 shadow-sm settings-panel"
-    role="tabpanel"
-    [attr.aria-labelledby]="activeSection().id + '-tab'"
-    [id]="activeSection().id + '-panel'"
-  >
+<div class="container-fluid px-0">
+  <div class="card border-0 shadow-sm mb-4">
     <div class="card-body p-4">
-      <div class="settings-panel-hero mb-4">
-        <span class="settings-panel-icon"><i [class]="activeSection().icon"></i></span>
-        <div>
-          <p class="settings-panel-kicker mb-1">Espace de configuration</p>
-          <h2 class="h4 mb-2">{{ activeSection().label }}</h2>
-          <p class="text-secondary mb-0">{{ activeSection().description }}</p>
+      <p class="text-uppercase text-secondary small fw-semibold mb-2">Administration</p>
+      <h1 class="h3 mb-1">Paramètres</h1>
+      <p class="text-secondary mb-0">Configuration fonctionnelle et technique de l'application.</p>
+    </div>
+  </div>
+
+  <section class="row g-4" aria-label="Configuration de l'application">
+    <nav class="col-12 col-sm-3 col-lg-2" aria-label="Onglets des paramètres">
+      <div class="card border-0 shadow-sm position-sticky top-0">
+        <div class="nav nav-pills flex-column p-3 gap-2" role="tablist" aria-orientation="vertical">
+          @for (section of sections; track section.id) {
+            <button
+              type="button"
+              class="nav-link text-start"
+              role="tab"
+              [class.active]="activeSectionId() === section.id"
+              [attr.aria-selected]="activeSectionId() === section.id"
+              [attr.aria-controls]="section.id + '-panel'"
+              [id]="section.id + '-tab'"
+              (click)="selectSection(section.id)"
+            >
+              {{ section.label }}
+            </button>
+          }
         </div>
       </div>
+    </nav>
 
+    <article
+      class="col-12 col-sm-9 col-lg-10"
+      role="tabpanel"
+      [attr.aria-labelledby]="activeSection().id + '-tab'"
+      [id]="activeSection().id + '-panel'"
+    >
+      <div class="card border-0 shadow-sm">
+        <div class="card-body p-4">
+          <div class="settings-panel-hero mb-4">
+            <span class="settings-panel-icon"><i [class]="activeSection().icon"></i></span>
+            <div>
+              <p class="settings-panel-kicker mb-1">Espace de configuration</p>
+              <h2 class="h4 mb-2">{{ activeSection().label }}</h2>
+              <p class="text-secondary mb-0">{{ activeSection().description }}</p>
+            </div>
+          </div>
       @if (activeSection().id === 'data-management') {
         <section class="row g-3 mb-4" aria-label="Sauvegarde et restauration des données">
           <div class="col-12 col-xl-6">
@@ -991,16 +989,8 @@
                         </div>
                         <div class="progress-connector" [class.done]="officeCreateStep() > 5"></div>
 
-                        <div class="progress-step" [class.active]="officeCreateStep() >= 6" [class.done]="officeCreateStep() > 6">
-                          <div class="step-circle">
-                            @if (officeCreateStep() > 6) { <i class="fa-solid fa-check"></i> } @else { 6 }
-                          </div>
-                          <span class="step-label">Communication</span>
-                        </div>
-                        <div class="progress-connector" [class.done]="officeCreateStep() > 6"></div>
-
-                        <div class="progress-step" [class.active]="officeCreateStep() >= 7">
-                          <div class="step-circle">7</div>
+                        <div class="progress-step" [class.active]="officeCreateStep() >= 6">
+                          <div class="step-circle">6</div>
                           <span class="step-label">Validation</span>
                         </div>
                       </div>
@@ -1009,82 +999,89 @@
                         <i class="fa-solid fa-floppy-disk me-1"></i>{{ officeDraftStatusText() }}
                       </div>
                     } @else {
-                    <div class="nav nav-tabs" role="tablist" aria-label="Sections de configuration du cabinet">
-                      <button
-                        type="button"
-                        class="nav-link"
-                        [class.active]="officeModalTab() === 'general'"
-                        role="tab"
-                        [attr.aria-selected]="officeModalTab() === 'general'"
-                        [attr.aria-controls]="'office-tab-general'"
-                        (click)="selectOfficeModalTab('general')"
-                      >
-                        Générale
-                      </button>
-                      <button
-                        type="button"
-                        class="nav-link"
-                        [class.active]="officeModalTab() === 'opening-hours'"
-                        role="tab"
-                        [attr.aria-selected]="officeModalTab() === 'opening-hours'"
-                        [attr.aria-controls]="'office-tab-opening-hours'"
-                        (click)="selectOfficeModalTab('opening-hours')"
-                      >
-                        Heures d'ouvertures
-                      </button>
-                      <button
-                        type="button"
-                        class="nav-link"
-                        [class.active]="officeModalTab() === 'agendas'"
-                        role="tab"
-                        [attr.aria-selected]="officeModalTab() === 'agendas'"
-                        [attr.aria-controls]="'office-tab-agendas'"
-                        [disabled]="!editingOfficeId()"
-                        (click)="selectOfficeModalTab('agendas')"
-                      >
-                        Agendas
-                      </button>
-                      <button
-                        type="button"
-                        class="nav-link"
-                        [class.active]="officeModalTab() === 'consultation-reasons'"
-                        role="tab"
-                        [attr.aria-selected]="officeModalTab() === 'consultation-reasons'"
-                        [attr.aria-controls]="'office-tab-consultation-reasons'"
-                        [disabled]="!editingOfficeId()"
-                        (click)="selectOfficeModalTab('consultation-reasons')"
-                      >
-                        Motifs & profils patients
-                      </button>
-                      <button
-                        type="button"
-                        class="nav-link"
-                        [class.active]="officeModalTab() === 'medical-history'"
-                        role="tab"
-                        [attr.aria-selected]="officeModalTab() === 'medical-history'"
-                        [attr.aria-controls]="'office-tab-medical-history'"
-                        [disabled]="!editingOfficeId()"
-                        (click)="selectOfficeModalTab('medical-history')"
-                      >
-                        Antécédents médicaux
-                      </button>
-                      <button
-                        type="button"
-                        class="nav-link"
-                        [class.active]="officeModalTab() === 'patient-letters'"
-                        role="tab"
-                        [attr.aria-selected]="officeModalTab() === 'patient-letters'"
-                        [attr.aria-controls]="'office-tab-patient-letters'"
-                        [disabled]="!editingOfficeId()"
-                        (click)="selectOfficeModalTab('patient-letters')"
-                      >
-                        Lettres types patients
-                      </button>
-                    </div>
+                      <nav class="nav nav-pills flex-wrap gap-2 mb-3" role="tablist" aria-label="Sections de configuration du cabinet">
+                        <button
+                          type="button"
+                          class="nav-link"
+                          [class.active]="officeModalTab() === 'general'"
+                          role="tab"
+                          [attr.aria-selected]="officeModalTab() === 'general'"
+                          [attr.aria-controls]="'office-tab-general'"
+                          (click)="selectOfficeModalTab('general')"
+                        >
+                          Identité
+                        </button>
+                        <button
+                          type="button"
+                          class="nav-link"
+                          [class.active]="officeModalTab() === 'contact-details'"
+                          role="tab"
+                          [attr.aria-selected]="officeModalTab() === 'contact-details'"
+                          [attr.aria-controls]="'office-tab-contact-details'"
+                          (click)="selectOfficeModalTab('contact-details')"
+                        >
+                          Coordonnées
+                        </button>
+                        <button
+                          type="button"
+                          class="nav-link"
+                          [class.active]="officeModalTab() === 'billing'"
+                          role="tab"
+                          [attr.aria-selected]="officeModalTab() === 'billing'"
+                          [attr.aria-controls]="'office-tab-billing'"
+                          (click)="selectOfficeModalTab('billing')"
+                        >
+                          Facturation
+                        </button>
+                        <button
+                          type="button"
+                          class="nav-link"
+                          [class.active]="officeModalTab() === 'opening-hours'"
+                          role="tab"
+                          [attr.aria-selected]="officeModalTab() === 'opening-hours'"
+                          [attr.aria-controls]="'office-tab-opening-hours'"
+                          (click)="selectOfficeModalTab('opening-hours')"
+                        >
+                          Horaires
+                        </button>
+                        <button
+                          type="button"
+                          class="nav-link"
+                          [class.active]="officeModalTab() === 'agendas'"
+                          role="tab"
+                          [attr.aria-selected]="officeModalTab() === 'agendas'"
+                          [attr.aria-controls]="'office-tab-agendas'"
+                          (click)="selectOfficeModalTab('agendas')"
+                        >
+                          Agendas
+                        </button>
+                        <button
+                          type="button"
+                          class="nav-link"
+                          [class.active]="officeModalTab() === 'consultation-reasons'"
+                          role="tab"
+                          [attr.aria-selected]="officeModalTab() === 'consultation-reasons'"
+                          [attr.aria-controls]="'office-tab-consultation-reasons'"
+                          (click)="selectOfficeModalTab('consultation-reasons')"
+                        >
+                          Profils & motifs
+                        </button>
+                        <button
+                          type="button"
+                          class="nav-link"
+                          [class.active]="officeModalTab() === 'patient-letters'"
+                          role="tab"
+                          [attr.aria-selected]="officeModalTab() === 'patient-letters'"
+                          [attr.aria-controls]="'office-tab-patient-letters'"
+                          (click)="selectOfficeModalTab('patient-letters')"
+                        >
+                          Lettres types
+                        </button>
+                      </nav>
                     }
                   </div>
 
-                  <form [formGroup]="officeForm" (ngSubmit)="saveOffice()" novalidate>
+                  <form [formGroup]="officeForm" (ngSubmit)="saveOffice()" novalidate class="border-top">
                     <div class="modal-body">
                       @if (!editingOfficeId()) {
                         @if (officeCreateStep() === 1) {
@@ -1312,11 +1309,6 @@
                             <h6 class="settings-card-title mb-2">Motifs de consultations et profils patients</h6>
                             <p class="settings-card-copy mb-0">Cette configuration sera rattachee au cabinet apres creation.</p>
                           </article>
-                        } @else if (officeCreateStep() === 6) {
-                          <article class="settings-card mb-0">
-                            <h6 class="settings-card-title mb-2">Antécédents medicaux et lettres types</h6>
-                            <p class="settings-card-copy mb-0">Ces configurations seront finalisees dans les onglets cabinet dedies.</p>
-                          </article>
                         } @else {
                           <div>
                             <div class="alert alert-light border mb-2"><strong>Cabinet:</strong> {{ officeForm.controls.name.value || '-' }}</div>
@@ -1329,9 +1321,9 @@
                         <div id="office-tab-general" role="tabpanel">
                           <div class="mb-3">
                             <label for="office-name" class="form-label">Nom du cabinet <span class="text-danger">*</span></label>
-                            <input 
-                              id="office-name" 
-                              type="text" 
+                            <input
+                              id="office-name"
+                              type="text"
                               class="form-control"
                               placeholder="Eg. Cabinet Ostéo"
                               formControlName="name"
@@ -1353,98 +1345,6 @@
                             />
                           </div>
 
-                          <div class="row g-2">
-                            <div class="col-12 col-md-6">
-                              <label for="office-address-line1" class="form-label">Adresse</label>
-                              <input 
-                                id="office-address-line1" 
-                                type="text" 
-                                class="form-control"
-                                placeholder="Rue"
-                                formControlName="addressLine1"
-                              />
-                            </div>
-                            <div class="col-12 col-md-6">
-                              <label for="office-address-line2" class="form-label">Adresse (suite)</label>
-                              <input 
-                                id="office-address-line2" 
-                                type="text" 
-                                class="form-control"
-                                placeholder="Bâtiment"
-                                formControlName="addressLine2"
-                              />
-                            </div>
-                          </div>
-
-                          <div class="row g-2 mt-2">
-                            <div class="col-12 col-md-4">
-                              <label for="office-postal-code" class="form-label">Code Postal</label>
-                              <input 
-                                id="office-postal-code" 
-                                type="text" 
-                                class="form-control"
-                                placeholder="75000"
-                                formControlName="postalCode"
-                              />
-                            </div>
-                            <div class="col-12 col-md-8">
-                              <label for="office-city" class="form-label">Ville</label>
-                              <input 
-                                id="office-city" 
-                                type="text" 
-                                class="form-control"
-                                placeholder="Paris"
-                                formControlName="city"
-                              />
-                            </div>
-                          </div>
-
-                          <div class="row g-2 mt-2">
-                            <div class="col-12 col-md-4">
-                              <label for="office-phone-mobile" class="form-label">Téléphone Mobile</label>
-                              <input 
-                                id="office-phone-mobile" 
-                                type="tel" 
-                                class="form-control"
-                                placeholder="06 12 34 56 78"
-                                formControlName="phoneMobile"
-                              />
-                            </div>
-                            <div class="col-12 col-md-4">
-                              <label for="office-phone-landline" class="form-label">Téléphone Fixe</label>
-                              <input 
-                                id="office-phone-landline" 
-                                type="tel" 
-                                class="form-control"
-                                placeholder="01 23 45 67 89"
-                                formControlName="phoneLandline"
-                              />
-                            </div>
-                            <div class="col-12 col-md-4">
-                              <label for="office-phone-fax" class="form-label">Fax</label>
-                              <input 
-                                id="office-phone-fax" 
-                                type="tel" 
-                                class="form-control"
-                                placeholder="01 23 45 67 80"
-                                formControlName="phoneFax"
-                              />
-                            </div>
-                          </div>
-
-                          <div class="row g-2 mt-2">
-                            <div class="col-12">
-                              <label for="office-email" class="form-label">Email</label>
-                              <input 
-                                id="office-email" 
-                                type="email" 
-                                class="form-control"
-                                placeholder="contact@cabinet.fr"
-                                formControlName="email"
-                              />
-                            </div>
-                          </div>
-
                           <div class="row g-2 mt-2">
                             <div class="col-12 col-md-6">
                               <label for="office-country" class="form-label">Pays</label>
@@ -1464,7 +1364,125 @@
                             </div>
                           </div>
 
-                          <div class="mt-4">
+                          <div class="mt-3">
+                            <label for="office-logo" class="form-label">Logo</label>
+                            <input
+                              id="office-logo"
+                              type="file"
+                              class="form-control"
+                              accept="image/*"
+                              (change)="onOfficeLogoSelected($event)"
+                            />
+                            <small class="text-secondary">Format: PNG, JPG, GIF (max 2MB)</small>
+                          </div>
+                        </div>
+                      } @else if (officeModalTab() === 'contact-details') {
+                        <div id="office-tab-contact-details" role="tabpanel">
+                          <div class="row g-2">
+                            <div class="col-12 col-md-6">
+                              <label for="office-address-line1" class="form-label">Adresse</label>
+                              <input
+                                id="office-address-line1"
+                                type="text"
+                                class="form-control"
+                                placeholder="Rue"
+                                formControlName="addressLine1"
+                              />
+                            </div>
+                            <div class="col-12 col-md-6">
+                              <label for="office-address-line2" class="form-label">Adresse (suite)</label>
+                              <input
+                                id="office-address-line2"
+                                type="text"
+                                class="form-control"
+                                placeholder="Bâtiment"
+                                formControlName="addressLine2"
+                              />
+                            </div>
+                          </div>
+
+                          <div class="row g-2 mt-2">
+                            <div class="col-12 col-md-4">
+                              <label for="office-postal-code" class="form-label">Code Postal</label>
+                              <input
+                                id="office-postal-code"
+                                type="text"
+                                class="form-control"
+                                placeholder="75000"
+                                formControlName="postalCode"
+                              />
+                            </div>
+                            <div class="col-12 col-md-8">
+                              <label for="office-city" class="form-label">Ville</label>
+                              <input
+                                id="office-city"
+                                type="text"
+                                class="form-control"
+                                placeholder="Paris"
+                                formControlName="city"
+                              />
+                            </div>
+                          </div>
+
+                          <div class="row g-2 mt-2">
+                            <div class="col-12 col-md-4">
+                              <label for="office-phone-mobile" class="form-label">Téléphone Mobile</label>
+                              <input
+                                id="office-phone-mobile"
+                                type="tel"
+                                class="form-control"
+                                placeholder="06 12 34 56 78"
+                                formControlName="phoneMobile"
+                              />
+                            </div>
+                            <div class="col-12 col-md-4">
+                              <label for="office-phone-landline" class="form-label">Téléphone Fixe</label>
+                              <input
+                                id="office-phone-landline"
+                                type="tel"
+                                class="form-control"
+                                placeholder="01 23 45 67 89"
+                                formControlName="phoneLandline"
+                              />
+                            </div>
+                            <div class="col-12 col-md-4">
+                              <label for="office-phone-fax" class="form-label">Fax</label>
+                              <input
+                                id="office-phone-fax"
+                                type="tel"
+                                class="form-control"
+                                placeholder="01 23 45 67 80"
+                                formControlName="phoneFax"
+                              />
+                            </div>
+                          </div>
+
+                          <div class="row g-2 mt-2">
+                            <div class="col-12 col-md-6">
+                              <label for="office-email" class="form-label">Email</label>
+                              <input
+                                id="office-email"
+                                type="email"
+                                class="form-control"
+                                placeholder="contact@cabinet.fr"
+                                formControlName="email"
+                              />
+                            </div>
+                            <div class="col-12 col-md-6">
+                              <label for="office-website" class="form-label">Site Internet</label>
+                              <input
+                                id="office-website"
+                                type="url"
+                                class="form-control"
+                                placeholder="https://cabinet.fr"
+                                formControlName="website"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      } @else if (officeModalTab() === 'billing') {
+                        <div id="office-tab-billing" role="tabpanel">
+                          <div class="mt-1">
                             <h6 class="mb-3">Paramètres de facturation</h6>
 
                             <div class="row g-2">
@@ -1484,6 +1502,17 @@
                                     <option [value]="option">{{ option }}</option>
                                   }
                                 </select>
+                              </div>
+
+                              <div class="col-12 col-md-4">
+                                <label for="office-vat-number" class="form-label">N° de TVA</label>
+                                <input
+                                  id="office-vat-number"
+                                  type="text"
+                                  class="form-control"
+                                  placeholder="FR12345678901"
+                                  formControlName="vatNumber"
+                                />
                               </div>
 
                               <div class="col-12">
@@ -1597,110 +1626,76 @@
                               </table>
                             </div>
                           </div>
-
-                          <div class="row g-2 mt-2">
-                            <div class="col-12 col-md-6">
-                              <label for="office-website" class="form-label">Site Internet</label>
-                              <input 
-                                id="office-website" 
-                                type="url" 
-                                class="form-control"
-                                placeholder="https://cabinet.fr"
-                                formControlName="website"
-                              />
-                            </div>
-                            <div class="col-12 col-md-6">
-                              <label for="office-vat-number" class="form-label">N° de TVA</label>
-                              <input 
-                                id="office-vat-number" 
-                                type="text" 
-                                class="form-control"
-                                placeholder="FR12345678901"
-                                formControlName="vatNumber"
-                              />
-                            </div>
-                          </div>
                         </div>
                       } @else if (officeModalTab() === 'opening-hours') {
                         <div id="office-tab-opening-hours" role="tabpanel">
+                          <div class="mt-3">
+                            <input type="hidden" formControlName="openingHoursJson" />
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                              <h6 class="mb-0">Horaires d'ouverture hebdomadaires</h6>
+                              <small class="text-secondary">Plusieurs plages par jour possibles</small>
+                            </div>
 
-                      <div class="mt-3">
-                        <input type="hidden" formControlName="openingHoursJson" />
-                        <div class="d-flex align-items-center justify-content-between mb-2">
-                          <h6 class="mb-0">Horaires d'ouverture hebdomadaires</h6>
-                          <small class="text-secondary">Plusieurs plages par jour possibles</small>
-                        </div>
-
-                        <div class="table-responsive mb-3">
-                          <table class="table table-sm align-middle mb-0">
-                            <thead>
-                              <tr>
-                                <th scope="col">Jour</th>
-                                <th scope="col">Plages</th>
-                                <th scope="col" class="text-end">Action</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              @for (day of officeWeekDays; track day) {
-                                <tr>
-                                  <td class="fw-semibold">{{ officeDayLabel(day) }}</td>
-                                  <td>
-                                    <div class="d-flex flex-column gap-2">
-                                      @for (range of officeOpeningHoursDraft()[day]; track $index; let rangeIndex = $index) {
-                                        <div class="d-flex align-items-center gap-2">
-                                          <input
-                                            type="time"
-                                            class="form-control form-control-sm"
-                                            [value]="range.start"
-                                            (input)="updateOfficeOpeningRange(day, rangeIndex, 'start', $any($event.target).value || '')"
-                                          />
-                                          <span class="text-secondary">à</span>
-                                          <input
-                                            type="time"
-                                            class="form-control form-control-sm"
-                                            [value]="range.end"
-                                            (input)="updateOfficeOpeningRange(day, rangeIndex, 'end', $any($event.target).value || '')"
-                                          />
-                                          <button
-                                            type="button"
-                                            class="btn btn-sm btn-outline-danger"
-                                            (click)="removeOfficeOpeningRange(day, rangeIndex)"
-                                            aria-label="Supprimer cette plage"
-                                          >
-                                            <i class="fa-solid fa-trash"></i>
-                                          </button>
+                            <div class="table-responsive mb-3">
+                              <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                  <tr>
+                                    <th scope="col">Jour</th>
+                                    <th scope="col">Plages</th>
+                                    <th scope="col" class="text-end">Action</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  @for (day of officeWeekDays; track day) {
+                                    <tr>
+                                      <td class="fw-semibold">{{ officeDayLabel(day) }}</td>
+                                      <td>
+                                        <div class="d-flex flex-column gap-2">
+                                          @for (range of officeOpeningHoursDraft()[day]; track $index; let rangeIndex = $index) {
+                                            <div class="d-flex align-items-center gap-2">
+                                              <input
+                                                type="time"
+                                                class="form-control form-control-sm"
+                                                [value]="range.start"
+                                                (input)="updateOfficeOpeningRange(day, rangeIndex, 'start', $any($event.target).value || '')"
+                                              />
+                                              <span class="text-secondary">à</span>
+                                              <input
+                                                type="time"
+                                                class="form-control form-control-sm"
+                                                [value]="range.end"
+                                                (input)="updateOfficeOpeningRange(day, rangeIndex, 'end', $any($event.target).value || '')"
+                                              />
+                                              <button
+                                                type="button"
+                                                class="btn btn-sm btn-outline-danger"
+                                                (click)="removeOfficeOpeningRange(day, rangeIndex)"
+                                                aria-label="Supprimer cette plage"
+                                              >
+                                                <i class="fa-solid fa-trash"></i>
+                                              </button>
+                                            </div>
+                                          }
+                                          @if (officeOpeningHoursDraft()[day].length === 0) {
+                                            <small class="text-secondary">Fermé</small>
+                                          }
                                         </div>
-                                      }
-                                      @if (officeOpeningHoursDraft()[day].length === 0) {
-                                        <small class="text-secondary">Fermé</small>
-                                      }
-                                    </div>
-                                  </td>
-                                  <td class="text-end">
-                                    <button
-                                      type="button"
-                                      class="btn btn-sm btn-outline-primary"
-                                      (click)="addOfficeOpeningRange(day)"
-                                    >
-                                      <i class="fa-solid fa-plus me-1"></i>Ajouter
-                                    </button>
-                                  </td>
-                                </tr>
-                              }
-                            </tbody>
-                          </table>
-                        </div>
-
-                        <label for="office-logo" class="form-label">Logo</label>
-                        <input 
-                          id="office-logo" 
-                          type="file" 
-                          class="form-control"
-                          accept="image/*"
-                          (change)="onOfficeLogoSelected($event)"
-                        />
-                        <small class="text-secondary">Format: PNG, JPG, GIF (max 2MB)</small>
-                        </div>
+                                      </td>
+                                      <td class="text-end">
+                                        <button
+                                          type="button"
+                                          class="btn btn-sm btn-outline-primary"
+                                          (click)="addOfficeOpeningRange(day)"
+                                        >
+                                          <i class="fa-solid fa-plus me-1"></i>Ajouter
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  }
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
                         </div>
                       } @else if (officeModalTab() === 'agendas') {
                         <div id="office-tab-agendas" role="tabpanel">
@@ -1709,68 +1704,164 @@
                               Enregistrez d'abord le cabinet pour configurer ses agendas.
                             </div>
                           } @else {
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                              <h6 class="mb-0">Agendas du cabinet</h6>
-                              <button type="button" class="btn btn-sm btn-outline-primary" (click)="openCreateLocalCalendarModal(editingOfficeId()!)">
-                                <i class="fa-solid fa-plus me-1"></i>Ajouter un agenda
-                              </button>
+                            <div class="alert alert-info py-2 mb-3" role="status">
+                              Un seul agenda est autorisé par cabinet. Configurez-le directement ci-dessous.
                             </div>
 
-                            @if (officeCalendars().length === 0) {
-                              <p class="text-secondary mb-3">Aucun agenda pour ce cabinet.</p>
-                            } @else {
-                              <div class="table-responsive mb-3">
-                                <table class="table table-sm align-middle mb-0">
-                                  <thead>
-                                    <tr>
-                                      <th scope="col">Nom</th>
-                                      <th scope="col">Description</th>
-                                      <th scope="col">Couleur</th>
-                                      <th scope="col">Visibilité</th>
-                                      <th scope="col" class="text-end">Action</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    @for (calendar of officeCalendars(); track calendar.tempKey) {
-                                      <tr class="settings-clickable-row" (click)="openEditLocalCalendarModal(calendar.tempKey)">
-                                        <td class="fw-semibold">{{ calendar.name }}</td>
-                                        <td>{{ calendar.description || '—' }}</td>
-                                        <td>
-                                          <span class="rounded-circle border settings-color-dot" [style.background-color]="calendar.colorHex" aria-label="Pastille couleur"></span>
-                                        </td>
-                                        <td>{{ getLocalCalendarVisibilityText(calendar) }}</td>
-                                        <td class="text-end">
-                                          <button type="button" class="btn btn-sm btn-outline-danger" [disabled]="isSavingAgendaSettings()" (click)="$event.stopPropagation(); removeLocalCalendar(calendar.tempKey)">
-                                            <i class="fa-solid fa-trash"></i>
-                                          </button>
-                                        </td>
-                                      </tr>
-                                    }
-                                  </tbody>
-                                </table>
+                            <div class="row g-3">
+                              <div class="col-12 col-md-6">
+                                <label class="form-label" for="office-agenda-name">Nom</label>
+                                <input id="office-agenda-name" type="text" class="form-control" [formControl]="localCalendarForm.controls.name" />
                               </div>
+
+                              <div class="col-12 col-md-6">
+                                <label class="form-label" for="office-agenda-color">Couleur</label>
+                                <input id="office-agenda-color" type="color" class="form-control form-control-color" [formControl]="localCalendarForm.controls.colorHex" />
+                              </div>
+
+                              <div class="col-12">
+                                <label class="form-label" for="office-agenda-description">Description</label>
+                                <input id="office-agenda-description" type="text" class="form-control" [formControl]="localCalendarForm.controls.description" />
+                              </div>
+
+                              <div class="col-12 col-md-6">
+                                <label class="form-label" for="office-agenda-visibility">Visibilité</label>
+                                <select id="office-agenda-visibility" class="form-select" [formControl]="localCalendarForm.controls.visibility">
+                                  @for (option of calendarVisibilityOptions; track option.value) {
+                                    <option [value]="option.value">{{ option.label }}</option>
+                                  }
+                                </select>
+                              </div>
+
+                              @if (localCalendarForm.controls.visibility.value === 'selected') {
+                                <div class="col-12">
+                                  <label class="form-label" for="office-agenda-users">Comptes visibles</label>
+                                  <select
+                                    id="office-agenda-users"
+                                    class="form-select"
+                                    multiple
+                                    (change)="onLocalCalendarModalVisibleUsersChange($event)"
+                                  >
+                                    @for (userOption of agendaUserVisibilityOptions(); track userOption.id) {
+                                      <option [value]="userOption.id" [selected]="localCalendarModalSelectedUserIds().includes(userOption.id)">
+                                        {{ userOption.label }}
+                                      </option>
+                                    }
+                                  </select>
+                                  <div class="form-text">Maintenez Ctrl/Cmd pour sélectionner plusieurs comptes.</div>
+                                </div>
+                              }
+
+                              <div class="col-12 d-flex justify-content-end">
+                                <button type="button" class="btn btn-primary" [disabled]="isSavingAgendaSettings() || localCalendarForm.invalid" (click)="saveInlineOfficeAgenda()">
+                                  @if (isSavingAgendaSettings()) {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                  }
+                                  Enregistrer l'agenda
+                                </button>
+                              </div>
+                            </div>
+
+                            @if (agendaSettingsError()) {
+                              <div class="alert alert-danger mt-3 mb-0" role="alert">{{ agendaSettingsError() }}</div>
+                            }
+
+                            @if (agendaSettingsSuccess()) {
+                              <div class="alert alert-success mt-3 mb-0" role="status">{{ agendaSettingsSuccess() }}</div>
                             }
                           }
                         </div>
                       } @else if (officeModalTab() === 'consultation-reasons') {
                         <div id="office-tab-consultation-reasons" role="tabpanel">
-                          <article class="settings-card mb-0">
-                            <p class="settings-card-status mb-2">Cabinet</p>
-                            <h6 class="settings-card-title mb-2">Motifs de consultation et profils patients</h6>
-                            <p class="settings-card-copy mb-0">
-                              Cette configuration est désormais rattachée au cabinet. Les règles métier de cette section s'appliqueront aux praticiens de ce cabinet.
-                            </p>
-                          </article>
-                        </div>
-                      } @else if (officeModalTab() === 'medical-history') {
-                        <div id="office-tab-medical-history" role="tabpanel">
-                          <article class="settings-card mb-0">
-                            <p class="settings-card-status mb-2">Cabinet</p>
-                            <h6 class="settings-card-title mb-2">Antécédents médicaux</h6>
-                            <p class="settings-card-copy mb-0">
-                              Cette configuration est désormais rattachée au cabinet. Les catégories d'antécédents seront gérées au niveau du cabinet.
-                            </p>
-                          </article>
+                          <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+                            <div>
+                              <h6 class="settings-card-title mb-1">Profil patient et motifs de consultation</h6>
+                              <p class="settings-card-copy mb-0">
+                                Définissez les profils types et leurs motifs directement dans ce cabinet.
+                              </p>
+                            </div>
+                            <button type="button" class="btn btn-primary" (click)="addConsultationProfile()">
+                              <i class="fa-solid fa-plus me-2"></i>
+                              Ajouter un profil
+                            </button>
+                          </div>
+
+                          @if (consultationProfiles().length === 0) {
+                            <div class="border rounded-3 p-4 text-center bg-light-subtle">
+                              <p class="mb-3 text-muted">Aucun profil configuré pour ce cabinet.</p>
+                              <button type="button" class="btn btn-outline-primary" (click)="addConsultationProfile()">
+                                <i class="fa-solid fa-plus me-2"></i>
+                                Créer le premier profil
+                              </button>
+                            </div>
+                          } @else {
+                            <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+                              @for (profile of consultationProfiles(); track profile.tempKey) {
+                                <div class="col">
+                                  <div class="card h-100">
+                                    <div class="card-header d-flex align-items-center gap-2">
+                                      <input
+                                        type="text"
+                                        class="form-control form-control-sm"
+                                        [value]="profile.name"
+                                        (input)="updateConsultationProfileName(profile.tempKey, $any($event.target).value)"
+                                        placeholder="Ex: Adulte sportif"
+                                      />
+                                      <button type="button" class="btn btn-outline-primary btn-sm flex-shrink-0" (click)="addConsultationReason(profile.tempKey)" title="Ajouter un motif">
+                                        <i class="fa-solid fa-plus"></i>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        class="btn btn-outline-danger btn-sm flex-shrink-0"
+                                        (click)="removeConsultationProfile(profile.tempKey)"
+                                        title="Supprimer le profil"
+                                      >
+                                        <i class="fa-solid fa-trash-can"></i>
+                                      </button>
+                                    </div>
+                                    <div class="card-body p-2">
+                                      @if (profile.reasons.length === 0) {
+                                        <div class="p-3 text-muted small text-center">
+                                          Aucun motif dans ce profil.
+                                        </div>
+                                      } @else {
+                                        <div class="d-flex flex-column gap-2">
+                                          @for (reason of profile.reasons; track reason.tempKey) {
+                                            <div
+                                              class="d-flex align-items-center gap-1 px-1 py-1 bg-body-tertiary"
+                                              draggable="true"
+                                              (dragstart)="onConsultationReasonDragStart($event, profile.tempKey, reason.tempKey)"
+                                              (dragover)="onConsultationReasonDragOver($event)"
+                                              (drop)="onConsultationReasonDrop($event, profile.tempKey, reason.tempKey)"
+                                            >
+                                              <span class="text-muted" title="Glisser pour réordonner">
+                                                <i class="fa-solid fa-grip-vertical"></i>
+                                              </span>
+                                              <input
+                                                type="text"
+                                                class="form-control form-control-sm"
+                                                [value]="reason.label"
+                                                (input)="updateConsultationReasonLabel(profile.tempKey, reason.tempKey, $any($event.target).value)"
+                                                placeholder="Nom du motif"
+                                              />
+                                              <button
+                                                type="button"
+                                                class="btn btn-sm btn-outline-danger"
+                                                (click)="removeConsultationReason(profile.tempKey, reason.tempKey)"
+                                                title="Supprimer le motif"
+                                              >
+                                                <i class="fa-solid fa-trash-can"></i>
+                                              </button>
+                                            </div>
+                                          }
+                                        </div>
+                                      }
+                                    </div>
+                                  </div>
+                                </div>
+                              }
+                            </div>
+                          }
                         </div>
                       } @else if (officeModalTab() === 'patient-letters') {
                         <div id="office-tab-patient-letters" role="tabpanel">
@@ -1791,7 +1882,7 @@
                         <button type="button" class="btn btn-outline-primary" [disabled]="officeCreateStep() <= 1" (click)="previousOfficeCreateStep()">
                           Precedent
                         </button>
-                        @if (officeCreateStep() < 7) {
+                        @if (officeCreateStep() < 6) {
                           <button type="button" class="btn btn-primary" (click)="nextOfficeCreateStep()">Suivant</button>
                         } @else {
                           <button type="submit" class="btn btn-success" [disabled]="isCreatingOffice()">
@@ -1864,78 +1955,6 @@
             <div class="modal-backdrop fade show" (click)="closeServiceTypeModal()"></div>
           }
 
-          @if (isLocalCalendarModalOpen()) {
-            <div class="modal d-block settings-modal-overlay" role="dialog">
-              <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                  <div class="modal-header">
-                    <h5 class="modal-title">
-                      @if (editingLocalCalendarTempKey()) {
-                        Modifier l'agenda
-                      } @else {
-                        Ajouter un agenda
-                      }
-                    </h5>
-                    <button type="button" class="btn-close" [disabled]="isSavingAgendaSettings()" (click)="closeLocalCalendarModal()"></button>
-                  </div>
-
-                  <form [formGroup]="localCalendarForm" (ngSubmit)="saveLocalCalendarModal()" novalidate>
-                    <div class="modal-body">
-                      <div class="row g-3">
-                        <div class="col-12 col-md-6">
-                          <label class="form-label" for="calendar-modal-name">Nom</label>
-                          <input id="calendar-modal-name" type="text" class="form-control" formControlName="name" [class.is-invalid]="localCalendarForm.controls.name.invalid && localCalendarForm.controls.name.touched" />
-                        </div>
-
-                        <div class="col-12 col-md-6">
-                          <label class="form-label" for="calendar-modal-color">Couleur</label>
-                          <input id="calendar-modal-color" type="color" class="form-control form-control-color" formControlName="colorHex" [class.is-invalid]="localCalendarForm.controls.colorHex.invalid && localCalendarForm.controls.colorHex.touched" />
-                        </div>
-
-                        <div class="col-12">
-                          <label class="form-label" for="calendar-modal-description">Description</label>
-                          <input id="calendar-modal-description" type="text" class="form-control" formControlName="description" [class.is-invalid]="localCalendarForm.controls.description.invalid && localCalendarForm.controls.description.touched" />
-                        </div>
-
-                        <div class="col-12">
-                          <label class="form-label" for="calendar-modal-visibility">Visibilité</label>
-                          <select id="calendar-modal-visibility" class="form-select" formControlName="visibility">
-                            @for (option of calendarVisibilityOptions; track option.value) {
-                              <option [value]="option.value">{{ option.label }}</option>
-                            }
-                          </select>
-                        </div>
-
-                        @if (localCalendarForm.controls.visibility.value === 'selected') {
-                          <div class="col-12">
-                            <label class="form-label" for="calendar-modal-users">Comptes visibles</label>
-                            <select
-                              id="calendar-modal-users"
-                              class="form-select"
-                              multiple
-                              (change)="onLocalCalendarModalVisibleUsersChange($event)"
-                            >
-                              @for (userOption of agendaUserVisibilityOptions(); track userOption.id) {
-                                <option [value]="userOption.id" [selected]="localCalendarModalSelectedUserIds().includes(userOption.id)">
-                                  {{ userOption.label }}
-                                </option>
-                              }
-                            </select>
-                            <div class="form-text">Maintenez Ctrl/Cmd pour sélectionner plusieurs comptes.</div>
-                          </div>
-                        }
-                      </div>
-                    </div>
-
-                    <div class="modal-footer">
-                      <button type="button" class="btn btn-outline-secondary" [disabled]="isSavingAgendaSettings()" (click)="closeLocalCalendarModal()">Annuler</button>
-                      <button type="submit" class="btn btn-primary" [disabled]="localCalendarForm.invalid || isSavingAgendaSettings()">Enregistrer</button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            </div>
-          }
         </section>
       }
 
@@ -1956,5 +1975,8 @@
         </section>
       }
     </div>
+      </div>
   </article>
 </section>
+
+</div>

@@ -11,6 +11,7 @@ import {
   LocalAgendaCalendar,
   NewOfficeDraft,
   Office,
+  OfficeConsultationProfile,
   OfficeOpeningHours,
   OfficeWeekDay,
   Patient,
@@ -73,15 +74,28 @@ type EditableLocalCalendar = LocalAgendaCalendar & {
   tempKey: string;
 };
 
+type EditableConsultationReason = {
+  tempKey: string;
+  label: string;
+};
+
+type EditableConsultationProfile = {
+  tempKey: string;
+  id: string;
+  name: string;
+  reasons: EditableConsultationReason[];
+};
+
 type OfficeModalTabId =
   | 'general'
+  | 'contact-details'
+  | 'billing'
   | 'opening-hours'
   | 'agendas'
   | 'consultation-reasons'
-  | 'medical-history'
   | 'patient-letters';
 
-type OfficeCreateStep = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+type OfficeCreateStep = 1 | 2 | 3 | 4 | 5 | 6;
 type DraftSaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 @Component({
@@ -334,6 +348,7 @@ export class SettingsPage implements OnDestroy {
   readonly officeOpeningHoursDraft = signal<OfficeOpeningHours>(this.createDefaultOfficeOpeningHours());
   readonly serviceTypes = signal<EditableServiceType[]>([]);
   readonly paymentMethods = signal<EditablePaymentMethod[]>([]);
+  readonly consultationProfiles = signal<EditableConsultationProfile[]>([]);
   readonly localCalendars = signal<EditableLocalCalendar[]>([]);
   readonly isAgendaSettingsLoading = signal(false);
   readonly isSavingAgendaSettings = signal(false);
@@ -468,7 +483,7 @@ export class SettingsPage implements OnDestroy {
       return;
     }
 
-    if (current >= 7) {
+    if (current >= 6) {
       return;
     }
 
@@ -867,37 +882,25 @@ export class SettingsPage implements OnDestroy {
       return;
     }
 
-    const nextCalendars = tempKey
-      ? previousCalendars.map((item) => {
-          if (item.tempKey !== tempKey) {
-            return item;
-          }
+    const editedCalendar = tempKey ? previousCalendars.find((item) => item.tempKey === tempKey) ?? null : null;
+    const preservedCalendars = previousCalendars.filter((item) => item.officeId !== modalOfficeId);
+    const nextOfficeCalendar: EditableLocalCalendar = {
+      id: editedCalendar?.id ?? null,
+      tempKey: editedCalendar?.tempKey ?? this.createTempKey('cal'),
+      name: nameValue,
+      description: (raw.description || '').trim(),
+      colorHex: raw.colorHex && /^#[0-9a-fA-F]{6}$/.test(raw.colorHex) ? raw.colorHex : '#4d92d1',
+      visibility: raw.visibility,
+      visibleUserIds,
+      visibleUsernames: editedCalendar?.visibleUsernames ?? [],
+      officeId: modalOfficeId,
+      displayOrder: 0
+    };
 
-          return {
-            ...item,
-            name: nameValue,
-            description: (raw.description || '').trim(),
-            colorHex: raw.colorHex && /^#[0-9a-fA-F]{6}$/.test(raw.colorHex) ? raw.colorHex : '#4d92d1',
-            visibility: raw.visibility,
-            visibleUserIds,
-            officeId: modalOfficeId
-          };
-        })
-      : [
-          ...previousCalendars,
-          {
-            id: null,
-            tempKey: this.createTempKey('cal'),
-            name: nameValue,
-            description: (raw.description || '').trim(),
-            colorHex: raw.colorHex && /^#[0-9a-fA-F]{6}$/.test(raw.colorHex) ? raw.colorHex : '#4d92d1',
-            visibility: raw.visibility,
-            visibleUserIds,
-            visibleUsernames: [],
-            officeId: modalOfficeId,
-            displayOrder: previousCalendars.length + 1
-          }
-        ];
+    const nextCalendars = [...preservedCalendars, nextOfficeCalendar].map((item, index) => ({
+      ...item,
+      displayOrder: index + 1
+    }));
 
     this.localCalendars.set(nextCalendars);
     this.agendaSettingsError.set('');
@@ -1858,6 +1861,29 @@ export class SettingsPage implements OnDestroy {
     }
   }
 
+  private initializeInlineOfficeAgendaForm(): void {
+    const officeId = this.editingOfficeId();
+    if (!officeId) {
+      return;
+    }
+
+    const office = this.offices().find((item) => item.id === officeId);
+    const currentOfficeCalendar = this.officeCalendars()[0] ?? null;
+    const visibility: 'all' | 'selected' = currentOfficeCalendar?.visibility === 'selected' ? 'selected' : 'all';
+
+    this.editingLocalCalendarTempKey.set(currentOfficeCalendar?.tempKey ?? null);
+    this.localCalendarModalOfficeId.set(officeId);
+    this.localCalendarForm.reset({
+      name: currentOfficeCalendar?.name?.trim() || `Agenda principal - ${office?.name ?? 'Cabinet'}`,
+      description: currentOfficeCalendar?.description?.trim() || '',
+      colorHex: currentOfficeCalendar?.colorHex || '#4d92d1',
+      visibility
+    });
+    this.localCalendarModalSelectedUserIds.set(currentOfficeCalendar ? [...currentOfficeCalendar.visibleUserIds] : []);
+    this.agendaSettingsError.set('');
+    this.agendaSettingsSuccess.set('');
+  }
+
   private applyAgendaSettings(payload: AgendaSettingsPayload): void {
     this.agendaSettingsForm.reset({
       lunchStartHour: payload.settings.lunchStartHour,
@@ -2102,6 +2128,7 @@ export class SettingsPage implements OnDestroy {
             tempKey: this.createTempKey('pay')
           }))
         );
+        this.consultationProfiles.set(this.toEditableConsultationProfiles(office.consultationProfiles));
         this.officeForm.reset({
           name: office.name,
           defaultSessionDurationMinutes: office.defaultSessionDurationMinutes,
@@ -2132,6 +2159,7 @@ export class SettingsPage implements OnDestroy {
       this.officeOpeningHoursDraft.set(openingHours);
       this.serviceTypes.set([]);
       this.paymentMethods.set([]);
+      this.consultationProfiles.set([]);
       this.officeForm.reset({
         name: '',
         defaultSessionDurationMinutes: 60,
@@ -2167,7 +2195,7 @@ export class SettingsPage implements OnDestroy {
     this.officeConfigTargetId.set(Number.isInteger(parsed) && parsed > 0 ? parsed : null);
   }
 
-  openMovedOfficeConfiguration(tabId: 'consultation-reasons' | 'medical-history' | 'patient-letters'): void {
+  openMovedOfficeConfiguration(tabId: 'consultation-reasons' | 'patient-letters'): void {
     const targetOfficeId = this.officeConfigTargetId() ?? this.offices()[0]?.id ?? null;
 
     if (!targetOfficeId) {
@@ -2193,6 +2221,147 @@ export class SettingsPage implements OnDestroy {
 
   selectOfficeModalTab(tabId: OfficeModalTabId): void {
     this.officeModalTab.set(tabId);
+
+    if (tabId === 'agendas' && this.editingOfficeId()) {
+      this.initializeInlineOfficeAgendaForm();
+    }
+  }
+
+  async saveInlineOfficeAgenda(): Promise<void> {
+    const officeId = this.editingOfficeId();
+    if (!officeId) {
+      this.agendaSettingsError.set('Enregistrez d\'abord le cabinet avant de configurer son agenda.');
+      return;
+    }
+
+    this.localCalendarModalOfficeId.set(officeId);
+    const currentOfficeCalendar = this.officeCalendars()[0] ?? null;
+    this.editingLocalCalendarTempKey.set(currentOfficeCalendar?.tempKey ?? null);
+
+    await this.saveLocalCalendarModal();
+  }
+
+  addConsultationProfile(): void {
+    this.consultationProfiles.update((profiles) => {
+      const nextIndex = profiles.length + 1;
+      return [
+        ...profiles,
+        {
+          tempKey: this.createTempKey('profile'),
+          id: this.createTempKey('profile-id'),
+          name: `Profil ${nextIndex}`,
+          reasons: []
+        }
+      ];
+    });
+  }
+
+  removeConsultationProfile(profileTempKey: string): void {
+    this.consultationProfiles.update((profiles) => profiles.filter((profile) => profile.tempKey !== profileTempKey));
+  }
+
+  updateConsultationProfileName(profileTempKey: string, value: string): void {
+    this.consultationProfiles.update((profiles) =>
+      profiles.map((profile) =>
+        profile.tempKey === profileTempKey
+          ? { ...profile, name: value }
+          : profile
+      )
+    );
+  }
+
+  addConsultationReason(profileTempKey: string): void {
+    this.consultationProfiles.update((profiles) =>
+      profiles.map((profile) => {
+        if (profile.tempKey !== profileTempKey) {
+          return profile;
+        }
+
+        return {
+          ...profile,
+          reasons: [
+            ...profile.reasons,
+            {
+              tempKey: this.createTempKey('reason'),
+              label: `Motif ${profile.reasons.length + 1}`
+            }
+          ]
+        };
+      })
+    );
+  }
+
+  removeConsultationReason(profileTempKey: string, reasonTempKey: string): void {
+    this.consultationProfiles.update((profiles) =>
+      profiles.map((profile) => {
+        if (profile.tempKey !== profileTempKey) {
+          return profile;
+        }
+
+        return {
+          ...profile,
+          reasons: profile.reasons.filter((reason) => reason.tempKey !== reasonTempKey)
+        };
+      })
+    );
+  }
+
+  updateConsultationReasonLabel(profileTempKey: string, reasonTempKey: string, value: string): void {
+    this.consultationProfiles.update((profiles) =>
+      profiles.map((profile) => {
+        if (profile.tempKey !== profileTempKey) {
+          return profile;
+        }
+
+        return {
+          ...profile,
+          reasons: profile.reasons.map((reason) =>
+            reason.tempKey === reasonTempKey
+              ? { ...reason, label: value }
+              : reason
+          )
+        };
+      })
+    );
+  }
+
+  onConsultationReasonDragStart(event: DragEvent, profileTempKey: string, reasonTempKey: string): void {
+    if (!event.dataTransfer) {
+      return;
+    }
+
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', `${profileTempKey}|${reasonTempKey}`);
+  }
+
+  onConsultationReasonDragOver(event: DragEvent): void {
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+  }
+
+  onConsultationReasonDrop(event: DragEvent, profileTempKey: string, targetReasonTempKey: string): void {
+    event.preventDefault();
+
+    const payload = event.dataTransfer?.getData('text/plain') ?? '';
+    const [sourceProfileTempKey, sourceReasonTempKey] = payload.split('|');
+    if (!sourceProfileTempKey || !sourceReasonTempKey || sourceProfileTempKey !== profileTempKey) {
+      return;
+    }
+
+    this.consultationProfiles.update((profiles) =>
+      profiles.map((profile) => {
+        if (profile.tempKey !== profileTempKey) {
+          return profile;
+        }
+
+        return {
+          ...profile,
+          reasons: this.moveByTempKey(profile.reasons, sourceReasonTempKey, targetReasonTempKey)
+        };
+      })
+    );
   }
 
   addServiceTypeRow(): void {
@@ -2357,7 +2526,7 @@ export class SettingsPage implements OnDestroy {
 
   private applyOfficeDraft(draft: NewOfficeDraft): void {
     const payload = draft.payload;
-    const safeStep = draft.step >= 1 && draft.step <= 7 ? (draft.step as OfficeCreateStep) : 1;
+    const safeStep = draft.step >= 1 && draft.step <= 6 ? (draft.step as OfficeCreateStep) : 1;
 
     const openingHours = this.ensureOfficeOpeningHours(payload.openingHours);
     this.officeOpeningHoursDraft.set(openingHours);
@@ -2410,6 +2579,8 @@ export class SettingsPage implements OnDestroy {
         }))
         : []
     );
+
+    this.consultationProfiles.set(this.toEditableConsultationProfiles(payload.consultationProfiles));
   }
 
   private buildOfficeDraftPayload(): CreateOfficePayload {
@@ -2614,6 +2785,7 @@ export class SettingsPage implements OnDestroy {
       vatNumber: raw.vatNumber.trim(),
       logoData: raw.logoData.trim(),
       openingHours: this.officeOpeningHoursDraft(),
+      consultationProfiles: this.toOfficeConsultationProfiles(),
       serviceTypes: this.serviceTypes().map((item, index) => ({
         id: typeof item.id === 'number' && item.id > 0 ? item.id : null,
         label: item.label.trim(),
@@ -2628,6 +2800,37 @@ export class SettingsPage implements OnDestroy {
         displayOrder: index + 1
       }))
     };
+  }
+
+  private toEditableConsultationProfiles(profiles: OfficeConsultationProfile[] | undefined): EditableConsultationProfile[] {
+    if (!Array.isArray(profiles)) {
+      return [];
+    }
+
+    return profiles.map((profile, profileIndex) => ({
+      tempKey: this.createTempKey('profile'),
+      id: String(profile?.id ?? '').trim() || this.createTempKey('profile-id'),
+      name: String(profile?.name ?? '').trim() || `Profil ${profileIndex + 1}`,
+      reasons: Array.isArray(profile?.reasons)
+        ? profile.reasons.map((reason, reasonIndex) => ({
+          tempKey: this.createTempKey('reason'),
+          label: String(reason ?? '').trim() || `Motif ${reasonIndex + 1}`
+        }))
+        : []
+    }));
+  }
+
+  private toOfficeConsultationProfiles(): OfficeConsultationProfile[] {
+    return this.consultationProfiles()
+      .map((profile, profileIndex) => ({
+        id: profile.id,
+        name: profile.name.trim() || `Profil ${profileIndex + 1}`,
+        reasons: profile.reasons
+          .map((reason) => reason.label.trim())
+          .filter((reason) => reason.length > 0),
+        displayOrder: profileIndex + 1
+      }))
+      .filter((profile) => profile.name.length > 0);
   }
 
   private createDefaultOfficeOpeningHours(): OfficeOpeningHours {
