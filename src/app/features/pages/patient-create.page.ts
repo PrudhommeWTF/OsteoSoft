@@ -317,6 +317,36 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     void this.loadConsultationContext(officeId);
   });
 
+  private readonly motifMainEditorEffect = effect(() => {
+    const html = this.consultationMotifMainHtml();
+    const el = this.motifMainEditorRef()?.nativeElement;
+    if (el && document.activeElement !== el) { el.innerHTML = html; }
+  });
+
+  private readonly testsEditorEffect = effect(() => {
+    const html = this.consultationTestsHtml();
+    const el = this.testsEditorRef()?.nativeElement;
+    if (el && document.activeElement !== el) { el.innerHTML = html; }
+  });
+
+  private readonly schemaEditorEffect = effect(() => {
+    const html = this.consultationSchemaHtml();
+    const el = this.schemaEditorRef()?.nativeElement;
+    if (el && document.activeElement !== el) { el.innerHTML = html; }
+  });
+
+  private readonly treatmentsEditorEffect = effect(() => {
+    const html = this.consultationTreatmentsHtml();
+    const el = this.treatmentsEditorRef()?.nativeElement;
+    if (el && document.activeElement !== el) { el.innerHTML = html; }
+  });
+
+  private readonly remarksEditorEffect = effect(() => {
+    const html = this.consultationRemarksHtml();
+    const el = this.remarksEditorRef()?.nativeElement;
+    if (el && document.activeElement !== el) { el.innerHTML = html; }
+  });
+
   /** ISO date (yyyy-mm-dd) kept in sync by the datepicker */
   private readonly birthDateIso = signal('');
 

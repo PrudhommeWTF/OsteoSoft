@@ -122,10 +122,12 @@ db.exec(`
     reason_cipher TEXT NOT NULL,
     status TEXT NOT NULL,
     office_id INTEGER,
+    local_calendar_id INTEGER,
     consultation_id INTEGER,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(patient_id) REFERENCES patients(id),
     FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE SET NULL,
+    FOREIGN KEY(local_calendar_id) REFERENCES local_calendars(id) ON DELETE SET NULL,
     FOREIGN KEY(consultation_id) REFERENCES consultations(id) ON DELETE SET NULL
   );
 

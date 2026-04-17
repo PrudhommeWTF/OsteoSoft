@@ -187,11 +187,16 @@ export class AgendaPage {
 
     try {
       const raw = this.createAppointmentForm.getRawValue();
+      const activeOfficeId = this.selectedOfficeId();
+      const calendarForOffice = this.localCalendars().find(
+        (c) => c.officeId !== null && c.officeId === activeOfficeId
+      ) ?? null;
       await this.api.createAppointment({
         patientId: Number(raw.patientId),
         startsAt: raw.startsAt,
         reason: raw.reason,
-        status: raw.status
+        status: raw.status,
+        localCalendarId: calendarForOffice?.id ?? null
       });
 
       this.createAppointmentSuccess.set('Rendez-vous créé avec succès.');

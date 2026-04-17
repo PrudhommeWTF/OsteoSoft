@@ -907,7 +907,7 @@
               <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('motifMain', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
               <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('motifMain', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
             </div>
-            <div #motifMainEditor class="wysiwyg-editor" contenteditable="true" [innerHTML]="consultationMotifMainHtml()" (input)="onConsultationRichTextInput('motifMain', $event)"></div>
+            <div #motifMainEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('motifMain', $event)"></div>
           </div>
 
           <div class="mb-3">
@@ -919,7 +919,7 @@
               <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('tests', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
               <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('tests', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
             </div>
-            <div #testsEditor class="wysiwyg-editor" contenteditable="true" [innerHTML]="consultationTestsHtml()" (input)="onConsultationRichTextInput('tests', $event)"></div>
+            <div #testsEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('tests', $event)"></div>
           </div>
 
           <div class="mb-3">
@@ -931,7 +931,7 @@
               <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('schema', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
               <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('schema', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
             </div>
-            <div #schemaEditor class="wysiwyg-editor" contenteditable="true" [innerHTML]="consultationSchemaHtml()" (input)="onConsultationRichTextInput('schema', $event)"></div>
+            <div #schemaEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('schema', $event)"></div>
           </div>
 
           <div class="mb-3">
@@ -943,7 +943,7 @@
               <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('treatments', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
               <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('treatments', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
             </div>
-            <div #treatmentsEditor class="wysiwyg-editor" contenteditable="true" [innerHTML]="consultationTreatmentsHtml()" (input)="onConsultationRichTextInput('treatments', $event)"></div>
+            <div #treatmentsEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('treatments', $event)"></div>
           </div>
 
           <div class="mb-0">
@@ -955,7 +955,7 @@
               <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('remarks', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
               <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('remarks', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
             </div>
-            <div #remarksEditor class="wysiwyg-editor" contenteditable="true" [innerHTML]="consultationRemarksHtml()" (input)="onConsultationRichTextInput('remarks', $event)"></div>
+            <div #remarksEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('remarks', $event)"></div>
           </div>
         }
 
