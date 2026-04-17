@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, computed, inject, signal, viewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
@@ -6,7 +6,8 @@ import { toSignal } from '@angular/core/rxjs-interop';
 
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
-import { LocationPair, OfficeConsultationProfile, Patient, PatientDetail, PeoplePickerContact, Practitioner } from '../../core/api.types';
+import { ConsultationReasonItem, LocationPair, OfficeConsultationProfile, Patient, PatientDetail, PeoplePickerContact, Practitioner } from '../../core/api.types';
+import { ConsultationDocumentUploadPayload, CreatePatientPayload } from '../../core/api.types';
 
 declare const $: any;
 
@@ -30,7 +31,10 @@ type ConsultationTab = 'consultation' | 'documents' | 'courriers' | 'paiement';
 
 type ConsultationDraft = {
   startedAt: string;
+  officeId: number | null;
+  officeName: string | null;
   practitioner: string;
+  practitionerUsername?: string;
   title: string;
   important: boolean;
   heightCm: number | null;
@@ -39,11 +43,24 @@ type ConsultationDraft = {
   evaAfter: number;
   profile: string;
   selectedReasons: string[];
+  reasonItems: ConsultationReasonItem[];
+  documentRefs?: string[];
   motifMainHtml: string;
   testsHtml: string;
   schemaHtml: string;
   treatmentsHtml: string;
   remarksHtml: string;
+};
+
+type ConsultationUploadDocument = Omit<ConsultationDocumentUploadPayload, 'documentRef'> & {
+  documentRef: string;
+  tempKey: string;
+};
+
+type ConsultationReasonSelection = {
+  checked: boolean;
+  value: string;
+  important: boolean;
 };
 
 type ParentContactField =
@@ -178,6 +195,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   readonly consultationOfficeId = signal<number | null>(null);
   readonly consultationOfficeName = signal<string | null>(null);
   readonly consultationPractitioner = signal('');
+  readonly consultationPractitionerUsername = signal('');
   readonly practitioners = signal<Practitioner[]>([]);
   readonly consultationTitle = signal('');
   readonly consultationImportant = signal(false);
@@ -188,7 +206,9 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   readonly consultationProfile = signal('');
   readonly consultationProfileOptions = signal<string[]>([]);
   readonly consultationOfficeProfiles = signal<OfficeConsultationProfile[]>([]);
-  readonly consultationSelectedReasons = signal<string[]>([]);
+  readonly consultationReasonSelections = signal<Record<string, ConsultationReasonSelection>>({});
+  readonly consultationDocuments = signal<ConsultationUploadDocument[]>([]);
+  readonly isConsultationDocumentDragOver = signal(false);
   readonly consultationMotifMainHtml = signal('');
   readonly consultationTestsHtml = signal('');
   readonly consultationSchemaHtml = signal('');
@@ -210,6 +230,33 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     return profile.reasons
       .map((reason) => String(reason ?? '').trim())
       .filter((reason, index, all) => Boolean(reason) && all.indexOf(reason) === index);
+  });
+
+  readonly consultationReasonItems = computed(() => {
+    return this.consultationProfileReasons().map((reason) => {
+      const selection = this.consultationReasonSelections()[reason] ?? {
+        checked: false,
+        value: '',
+        important: false
+      };
+
+      return {
+        reason,
+        checked: selection.checked,
+        value: selection.value,
+        important: selection.important
+      };
+    });
+  });
+
+  readonly consultationSelectedReasonItems = computed(() => {
+    return this.consultationReasonItems()
+      .filter((item) => item.checked)
+      .map((item) => ({
+        label: item.reason,
+        value: item.value.trim(),
+        important: item.important
+      }));
   });
 
   readonly consultationStartedAtInput = computed(() => this.toDateTimeLocalValue(this.consultationStartedAtIso()));
@@ -238,6 +285,18 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     return Number((weightKg / (heightM * heightM)).toFixed(1));
   });
 
+  readonly practitionerPickerOptions = computed(() => {
+    return this.practitioners().map((practitioner) => {
+      const displayName = String(practitioner.displayName ?? '').trim() || practitioner.username;
+      const label = `${displayName} - ${practitioner.role}`;
+      return {
+        username: practitioner.username,
+        displayName,
+        label
+      };
+    });
+  });
+
   private relatedSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
   private relatedSearchRequestId = 0;
   private primaryDoctorSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
@@ -253,6 +312,10 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   private pendingBirthDateIso = '';
   private isSynchronizingLocationFields = false;
   private pendingConsultationLinkStrategy: 'attach-existing' | 'create-new' | null = null;
+  private readonly consultationOfficeContextEffect = effect(() => {
+    const officeId = this.authService.activeOfficeId();
+    void this.loadConsultationContext(officeId);
+  });
 
   /** ISO date (yyyy-mm-dd) kept in sync by the datepicker */
   private readonly birthDateIso = signal('');
@@ -608,7 +671,27 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   setConsultationPractitioner(value: string): void {
-    this.consultationPractitioner.set(value.trim());
+    const raw = value.trim();
+    if (!raw) {
+      this.consultationPractitioner.set('');
+      this.consultationPractitionerUsername.set('');
+      this.syncConsultationNoteFromState();
+      return;
+    }
+
+    const lowerRaw = raw.toLowerCase();
+    const picked = this.practitionerPickerOptions().find((option) =>
+      option.displayName.toLowerCase() === lowerRaw || option.username.toLowerCase() === lowerRaw
+    );
+
+    if (picked) {
+      this.consultationPractitioner.set(picked.displayName);
+      this.consultationPractitionerUsername.set(picked.username);
+    } else {
+      this.consultationPractitioner.set(raw);
+      this.consultationPractitionerUsername.set('');
+    }
+
     this.syncConsultationNoteFromState();
   }
 
@@ -656,29 +739,149 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     const selected = value.trim();
     this.consultationProfile.set(selected);
     const availableReasons = new Set(this.consultationProfileReasons());
-    this.consultationSelectedReasons.update((items) => items.filter((item) => availableReasons.has(item)));
+    this.consultationReasonSelections.update((items) => {
+      const next: Record<string, ConsultationReasonSelection> = {};
+      for (const reason of availableReasons) {
+        const current = items[reason];
+        next[reason] = current
+          ? { ...current }
+          : { checked: false, value: '', important: false };
+      }
+      return next;
+    });
     this.syncConsultationNoteFromState();
   }
 
-  toggleConsultationReason(reason: string): void {
+  setConsultationReasonChecked(reason: string, checked: boolean): void {
     const normalized = reason.trim();
     if (!normalized) {
       return;
     }
 
-    this.consultationSelectedReasons.update((items) => {
-      if (items.includes(normalized)) {
-        return items.filter((item) => item !== normalized);
-      }
-
-      return [...items, normalized];
+    this.consultationReasonSelections.update((items) => {
+      const current = items[normalized] ?? { checked: false, value: '', important: false };
+      return {
+        ...items,
+        [normalized]: {
+          ...current,
+          checked,
+          value: checked ? current.value : ''
+        }
+      };
     });
 
     this.syncConsultationNoteFromState();
   }
 
-  isConsultationReasonSelected(reason: string): boolean {
-    return this.consultationSelectedReasons().includes(reason);
+  setConsultationReasonValue(reason: string, value: string): void {
+    const normalized = reason.trim();
+    if (!normalized) {
+      return;
+    }
+
+    const nextValue = value;
+    this.consultationReasonSelections.update((items) => {
+      const current = items[normalized] ?? { checked: false, value: '', important: false };
+      return {
+        ...items,
+        [normalized]: {
+          ...current,
+          checked: nextValue.trim().length > 0 || current.checked,
+          value: nextValue
+        }
+      };
+    });
+
+    this.syncConsultationNoteFromState();
+  }
+
+  setConsultationReasonImportant(reason: string, important: boolean): void {
+    const normalized = reason.trim();
+    if (!normalized) {
+      return;
+    }
+
+    this.consultationReasonSelections.update((items) => {
+      const current = items[normalized] ?? { checked: false, value: '', important: false };
+      return {
+        ...items,
+        [normalized]: {
+          ...current,
+          checked: current.checked || important,
+          important
+        }
+      };
+    });
+
+    this.syncConsultationNoteFromState();
+  }
+
+  getEvaRangeBackground(value: number): string {
+    const normalized = Math.max(0, Math.min(10, Number(value) || 0));
+    const progress = normalized * 10;
+    let color = '#28a745';
+
+    if (normalized <= 5) {
+      const ratio = normalized / 5;
+      color = this.interpolateColor('#28a745', '#fd7e14', ratio);
+    } else {
+      const ratio = (normalized - 5) / 5;
+      color = this.interpolateColor('#fd7e14', '#dc3545', ratio);
+    }
+
+    return `linear-gradient(90deg, ${color} 0%, ${color} ${progress}%, #d9e2ec ${progress}%, #d9e2ec 100%)`;
+  }
+
+  onConsultationDocumentDragOver(event: DragEvent): void {
+    event.preventDefault();
+    this.isConsultationDocumentDragOver.set(true);
+  }
+
+  onConsultationDocumentDragLeave(event: DragEvent): void {
+    event.preventDefault();
+    this.isConsultationDocumentDragOver.set(false);
+  }
+
+  async onConsultationDocumentDrop(event: DragEvent): Promise<void> {
+    event.preventDefault();
+    this.isConsultationDocumentDragOver.set(false);
+
+    const files = event.dataTransfer?.files;
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    await this.addConsultationDocuments(Array.from(files));
+  }
+
+  async onConsultationDocumentFileSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement | null;
+    const files = input?.files;
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    await this.addConsultationDocuments(Array.from(files));
+    input.value = '';
+  }
+
+  removeConsultationDocument(tempKey: string): void {
+    this.consultationDocuments.update((items) => items.filter((item) => item.tempKey !== tempKey));
+    this.syncConsultationNoteFromState();
+  }
+
+  updateConsultationDocumentTitle(tempKey: string, title: string): void {
+    this.consultationDocuments.update((items) =>
+      items.map((item) => (item.tempKey === tempKey ? { ...item, title } : item))
+    );
+    this.syncConsultationNoteFromState();
+  }
+
+  updateConsultationDocumentComment(tempKey: string, comment: string): void {
+    this.consultationDocuments.update((items) =>
+      items.map((item) => (item.tempKey === tempKey ? { ...item, comment } : item))
+    );
+    this.syncConsultationNoteFromState();
   }
 
   onConsultationRichTextInput(
@@ -791,13 +994,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit(): void {
     void this.loadAntecedentTypes();
-    void this.loadConsultationContext();
     void this.loadLocationPairs();
-
-    const sessionPractitioner = this.authService.username().trim();
-    if (sessionPractitioner) {
-      this.consultationPractitioner.set(sessionPractitioner);
-    }
 
     this.syncConsultationNoteFromState();
     void this.loadDraft();
@@ -841,6 +1038,8 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.consultationOfficeContextEffect.destroy();
+
     if (this.relatedSearchDebounceId !== null) {
       clearTimeout(this.relatedSearchDebounceId);
     }
@@ -892,13 +1091,11 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     this.errorMessage.set('');
 
     try {
-      const payload = {
-        ...this.form.getRawValue(),
-        isDeceased: false,
-        ...(this.hasConsultationContent() && this.pendingConsultationLinkStrategy
-          ? { consultationLinkStrategy: this.pendingConsultationLinkStrategy }
-          : {})
-      };
+      const payload = this.buildPatientPayload(
+        this.hasConsultationContent() && this.pendingConsultationLinkStrategy
+          ? this.pendingConsultationLinkStrategy
+          : undefined
+      );
       await this.api.createPatient(payload);
       this.pendingConsultationLinkStrategy = null;
       this.isConsultationLinkStrategyModalOpen.set(false);
@@ -1264,6 +1461,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
 
       this.restoreAntecedentsFromMedicalHistory(draft.payload.medicalHistory);
       this.restoreConsultationFromNote(draft.payload.consultationNote);
+      this.restoreConsultationDocumentsFromPayload(draft.payload.consultationDocuments);
 
       const updatedAtMs = Number(new Date(draft.updatedAt));
       if (!Number.isNaN(updatedAtMs)) {
@@ -1361,13 +1559,13 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     this.draftSaveState.set('saving');
     try {
       this.syncConsultationNoteFromState();
-      const payload = { ...this.form.getRawValue(), isDeceased: false };
+      const payload = this.buildPatientPayload();
       await this.api.saveNewPatientDraft(this.currentStep(), payload);
       this.saveLocalDraft(this.currentStep(), payload);
       this.lastDraftSavedAt.set(Date.now());
       this.draftSaveState.set('saved');
     } catch {
-      const payload = { ...this.form.getRawValue(), isDeceased: false };
+      const payload = this.buildPatientPayload();
       const localSaved = this.saveLocalDraft(this.currentStep(), payload);
       if (localSaved) {
         this.lastDraftSavedAt.set(Date.now());
@@ -1425,6 +1623,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
 
       this.restoreAntecedentsFromMedicalHistory(String(payload.medicalHistory ?? ''));
       this.restoreConsultationFromNote(String(payload.consultationNote ?? ''));
+      this.restoreConsultationDocumentsFromPayload((payload as { consultationDocuments?: unknown }).consultationDocuments);
 
       if (typeof parsed.updatedAt === 'number') {
         this.lastDraftSavedAt.set(parsed.updatedAt);
@@ -1467,6 +1666,133 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  private buildPatientPayload(linkStrategy?: 'attach-existing' | 'create-new'): CreatePatientPayload {
+    const raw = this.form.getRawValue();
+    const documents = this.serializeConsultationDocumentsForPayload();
+
+    return {
+      ...raw,
+      isDeceased: false,
+      consultationDocuments: documents.length > 0 ? documents : undefined,
+      ...(linkStrategy ? { consultationLinkStrategy: linkStrategy } : {})
+    };
+  }
+
+  private serializeConsultationDocumentsForPayload(): ConsultationDocumentUploadPayload[] {
+    return this.consultationDocuments()
+      .map((item) => ({
+        documentRef: item.documentRef,
+        fileName: item.fileName.trim(),
+        mimeType: item.mimeType.trim() || 'application/octet-stream',
+        sizeBytes: Math.max(0, Number(item.sizeBytes) || 0),
+        title: item.title.trim() || item.fileName.trim(),
+        comment: item.comment.trim(),
+        contentBase64: item.contentBase64.trim()
+      }))
+      .filter((item) => item.fileName && item.contentBase64);
+  }
+
+  private restoreConsultationDocumentsFromPayload(raw: unknown): void {
+    if (!Array.isArray(raw) || raw.length === 0) {
+      return;
+    }
+
+    const restored: ConsultationUploadDocument[] = raw
+      .map((item) => {
+        const fileName = String((item as { fileName?: unknown }).fileName ?? '').trim();
+        const contentBase64 = String((item as { contentBase64?: unknown }).contentBase64 ?? '').trim();
+        if (!fileName || !contentBase64) {
+          return null;
+        }
+
+        return {
+          tempKey: this.createTempKey('doc'),
+          documentRef: String((item as { documentRef?: unknown }).documentRef ?? '').trim() || this.createDocumentRef(),
+          fileName,
+          mimeType: String((item as { mimeType?: unknown }).mimeType ?? '').trim() || 'application/octet-stream',
+          sizeBytes: Math.max(0, Number((item as { sizeBytes?: unknown }).sizeBytes) || 0),
+          title: String((item as { title?: unknown }).title ?? '').trim() || fileName,
+          comment: String((item as { comment?: unknown }).comment ?? '').trim(),
+          contentBase64
+        } satisfies ConsultationUploadDocument;
+      })
+      .filter((item): item is ConsultationUploadDocument => item !== null);
+
+    if (restored.length > 0) {
+      this.consultationDocuments.set(restored);
+    }
+  }
+
+  private async addConsultationDocuments(files: File[]): Promise<void> {
+    const documentsToAdd: ConsultationUploadDocument[] = [];
+
+    for (const file of files) {
+      const normalizedName = file.name.trim();
+      if (!normalizedName) {
+        continue;
+      }
+
+      const dataUrl = await this.readFileAsDataUrl(file);
+      const base64Payload = this.extractBase64Payload(dataUrl);
+      if (!base64Payload) {
+        continue;
+      }
+
+      documentsToAdd.push({
+        tempKey: this.createTempKey('doc'),
+        documentRef: this.createDocumentRef(),
+        fileName: normalizedName,
+        mimeType: file.type || 'application/octet-stream',
+        sizeBytes: Number(file.size) || 0,
+        title: normalizedName,
+        comment: '',
+        contentBase64: base64Payload
+      });
+    }
+
+    if (documentsToAdd.length > 0) {
+      this.consultationDocuments.update((items) => [...items, ...documentsToAdd]);
+      this.syncConsultationNoteFromState();
+    }
+  }
+
+  private readFileAsDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          resolve(reader.result);
+          return;
+        }
+
+        reject(new Error('INVALID_FILE_RESULT'));
+      };
+
+      reader.onerror = () => reject(reader.error ?? new Error('FILE_READ_ERROR'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  private extractBase64Payload(dataUrl: string): string {
+    const raw = String(dataUrl ?? '').trim();
+    const commaIndex = raw.indexOf(',');
+    if (commaIndex < 0) {
+      return '';
+    }
+
+    return raw.slice(commaIndex + 1).trim();
+  }
+
+  private createDocumentRef(): string {
+    const random = Math.random().toString(36).slice(2, 10);
+    return `doc_${Date.now().toString(36)}_${random}`;
+  }
+
+  private createTempKey(prefix: string): string {
+    return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+
   private parseNullableNumber(value: string): number | null {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) {
@@ -1486,7 +1812,10 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   private buildConsultationDraft(): ConsultationDraft {
     return {
       startedAt: this.consultationStartedAtIso(),
+      officeId: this.consultationOfficeId(),
+      officeName: this.consultationOfficeName(),
       practitioner: this.consultationPractitioner(),
+      practitionerUsername: this.consultationPractitionerUsername() || undefined,
       title: this.consultationTitle(),
       important: this.consultationImportant(),
       heightCm: this.consultationHeightCm(),
@@ -1494,7 +1823,9 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       evaBefore: this.consultationEvaBefore(),
       evaAfter: this.consultationEvaAfter(),
       profile: this.consultationProfile(),
-      selectedReasons: this.consultationSelectedReasons(),
+      selectedReasons: this.consultationSelectedReasonItems().map((item) => item.label),
+      reasonItems: this.consultationSelectedReasonItems(),
+      documentRefs: this.consultationDocuments().map((item) => item.documentRef),
       motifMainHtml: this.consultationMotifMainHtml(),
       testsHtml: this.consultationTestsHtml(),
       schemaHtml: this.consultationSchemaHtml(),
@@ -1510,6 +1841,8 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   private hasConsultationContent(): boolean {
     return Boolean(
       this.consultationTitle().trim() ||
+      this.consultationSelectedReasonItems().length > 0 ||
+      this.consultationDocuments().length > 0 ||
       this.consultationMotifMainHtml().trim() ||
       this.consultationTestsHtml().trim() ||
       this.consultationSchemaHtml().trim() ||
@@ -1531,8 +1864,20 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
         this.consultationStartedAtIso.set(parsed.startedAt);
       }
 
+      if (typeof parsed.officeName === 'string') {
+        this.consultationOfficeName.set(parsed.officeName.trim() || null);
+      }
+
+      if (Number.isInteger(parsed.officeId) && Number(parsed.officeId) > 0) {
+        this.consultationOfficeId.set(Number(parsed.officeId));
+      }
+
       if (typeof parsed.practitioner === 'string') {
         this.consultationPractitioner.set(parsed.practitioner.trim());
+      }
+
+      if (typeof parsed.practitionerUsername === 'string') {
+        this.consultationPractitionerUsername.set(parsed.practitionerUsername.trim());
       }
 
       if (typeof parsed.title === 'string') {
@@ -1549,11 +1894,31 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
         this.consultationProfile.set(parsed.profile.trim());
       }
 
-      if (Array.isArray(parsed.selectedReasons)) {
-        const selected = parsed.selectedReasons
-          .map((item) => String(item ?? '').trim())
-          .filter(Boolean);
-        this.consultationSelectedReasons.set([...new Set(selected)]);
+      if (Array.isArray(parsed.reasonItems)) {
+        const fromItems: Record<string, ConsultationReasonSelection> = {};
+        for (const item of parsed.reasonItems) {
+          const label = String(item?.label ?? '').trim();
+          if (!label) {
+            continue;
+          }
+
+          fromItems[label] = {
+            checked: true,
+            value: String(item?.value ?? ''),
+            important: Boolean(item?.important)
+          };
+        }
+        this.consultationReasonSelections.set(fromItems);
+      } else if (Array.isArray(parsed.selectedReasons)) {
+        const fromLegacy: Record<string, ConsultationReasonSelection> = {};
+        for (const item of parsed.selectedReasons) {
+          const label = String(item ?? '').trim();
+          if (!label) {
+            continue;
+          }
+          fromLegacy[label] = { checked: true, value: '', important: false };
+        }
+        this.consultationReasonSelections.set(fromLegacy);
       }
 
       this.consultationMotifMainHtml.set(typeof parsed.motifMainHtml === 'string' ? parsed.motifMainHtml : '');
@@ -1572,6 +1937,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   private clearConsultationData(): void {
     this.consultationStartedAtIso.set(new Date().toISOString());
     this.consultationPractitioner.set('');
+    this.consultationPractitionerUsername.set('');
     this.consultationTitle.set('');
     this.consultationImportant.set(false);
     this.consultationHeightCm.set(null);
@@ -1579,7 +1945,8 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     this.consultationEvaBefore.set(0);
     this.consultationEvaAfter.set(0);
     this.consultationProfile.set(this.consultationProfileOptions()[0] ?? '');
-    this.consultationSelectedReasons.set([]);
+    this.consultationReasonSelections.set({});
+    this.consultationDocuments.set([]);
     this.consultationMotifMainHtml.set('');
     this.consultationTestsHtml.set('');
     this.consultationSchemaHtml.set('');
@@ -1588,15 +1955,11 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     this.syncConsultationNoteFromState();
   }
 
-  private async loadConsultationContext(): Promise<void> {
+  private async loadConsultationContext(activeOfficeId: number | null | undefined): Promise<void> {
     try {
-      let officeId = this.authService.activeOfficeId();
-      if (!(Number.isInteger(officeId) && Number(officeId) > 0)) {
-        const profile = await this.api.getMyUserProfile();
-        officeId = Number.isInteger(profile.officeId) && Number(profile.officeId) > 0
-          ? Number(profile.officeId)
-          : null;
-      }
+      const officeId = Number.isInteger(activeOfficeId) && Number(activeOfficeId) > 0
+        ? Number(activeOfficeId)
+        : null;
 
       const context = await this.api.getConsultationContext(officeId);
       this.consultationOfficeId.set(context.officeId ?? null);
@@ -1618,15 +1981,25 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       }
 
       const availableReasons = new Set(this.consultationProfileReasons());
-      this.consultationSelectedReasons.update((items) => items.filter((item) => availableReasons.has(item)));
+      this.consultationReasonSelections.update((items) => {
+        const next: Record<string, ConsultationReasonSelection> = {};
+        for (const reason of availableReasons) {
+          next[reason] = items[reason] ?? { checked: false, value: '', important: false };
+        }
+        return next;
+      });
 
       if (!this.consultationPractitioner()) {
         const sessionPractitioner = this.authService.username().trim();
         const match = practitioners.find((item) => item.username === sessionPractitioner);
         if (match) {
-          this.consultationPractitioner.set(match.username);
+          const displayName = String(match.displayName ?? '').trim() || match.username;
+          this.consultationPractitioner.set(displayName);
+          this.consultationPractitionerUsername.set(match.username);
         } else if (practitioners[0]) {
-          this.consultationPractitioner.set(practitioners[0].username);
+          const displayName = String(practitioners[0].displayName ?? '').trim() || practitioners[0].username;
+          this.consultationPractitioner.set(displayName);
+          this.consultationPractitionerUsername.set(practitioners[0].username);
         }
         this.syncConsultationNoteFromState();
       }
@@ -1637,8 +2010,38 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       this.consultationOfficeProfiles.set([]);
       this.consultationProfileOptions.set([]);
       this.consultationProfile.set('');
-      this.consultationSelectedReasons.set([]);
+      this.consultationReasonSelections.set({});
     }
+  }
+
+  private interpolateColor(startHex: string, endHex: string, ratio: number): string {
+    const clamp = Math.max(0, Math.min(1, ratio));
+    const start = this.hexToRgb(startHex);
+    const end = this.hexToRgb(endHex);
+
+    const r = Math.round(start.r + ((end.r - start.r) * clamp));
+    const g = Math.round(start.g + ((end.g - start.g) * clamp));
+    const b = Math.round(start.b + ((end.b - start.b) * clamp));
+
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  private hexToRgb(hex: string): { r: number; g: number; b: number } {
+    const normalized = hex.replace('#', '').trim();
+    if (normalized.length !== 6) {
+      return { r: 0, g: 0, b: 0 };
+    }
+
+    const value = Number.parseInt(normalized, 16);
+    if (!Number.isFinite(value)) {
+      return { r: 0, g: 0, b: 0 };
+    }
+
+    return {
+      r: (value >> 16) & 255,
+      g: (value >> 8) & 255,
+      b: value & 255
+    };
   }
 
   private toDateTimeLocalValue(iso: string): string {

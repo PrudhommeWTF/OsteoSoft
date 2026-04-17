@@ -21,6 +21,7 @@ const dataDir = path.resolve(process.cwd(), 'server/data');
 const dbPath = path.resolve(dataDir, 'osteo.db');
 const jwtSecret = process.env.JWT_SECRET ?? 'dev-only-jwt-secret-change-me';
 const SUPER_ADMIN_PROFILE_ID = 'super-admin';
+const requestBodyLimit = process.env.API_BODY_LIMIT ?? '60mb';
 
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
@@ -118,9 +119,11 @@ db.exec(`
     starts_at TEXT NOT NULL,
     reason_cipher TEXT NOT NULL,
     status TEXT NOT NULL,
+    office_id INTEGER,
     consultation_id INTEGER,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(patient_id) REFERENCES patients(id),
+    FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE SET NULL,
     FOREIGN KEY(consultation_id) REFERENCES consultations(id) ON DELETE SET NULL
   );
 
@@ -276,6 +279,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id INTEGER NOT NULL,
     started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    office_id INTEGER,
     practitioner TEXT NOT NULL DEFAULT '',
     title TEXT NOT NULL DEFAULT '',
     important INTEGER NOT NULL DEFAULT 0,
@@ -284,13 +288,35 @@ db.exec(`
     eva_before INTEGER NOT NULL DEFAULT 0,
     eva_after INTEGER NOT NULL DEFAULT 0,
     profile TEXT NOT NULL DEFAULT 'Adulte',
+    reason_items_cipher TEXT,
     motif_main_cipher TEXT,
     tests_cipher TEXT,
     schema_cipher TEXT,
     treatments_cipher TEXT,
     remarks_cipher TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(patient_id) REFERENCES patients(id)
+    FOREIGN KEY(patient_id) REFERENCES patients(id),
+    FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS patient_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_ref TEXT NOT NULL UNIQUE,
+    patient_id INTEGER NOT NULL,
+    consultation_id INTEGER,
+    office_id INTEGER,
+    created_by INTEGER,
+    file_name TEXT NOT NULL,
+    mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    title_cipher TEXT,
+    comment_cipher TEXT,
+    content_cipher TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+    FOREIGN KEY(consultation_id) REFERENCES consultations(id) ON DELETE SET NULL,
+    FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE SET NULL,
+    FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL
   );
 
   CREATE TABLE IF NOT EXISTS directory_contacts (
@@ -586,7 +612,7 @@ function saveUserAgendaPreferences(userId, payload) {
       appointment_color_mode,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(user_id)
     DO UPDATE SET
       slot_duration_minutes = excluded.slot_duration_minutes,
@@ -1252,7 +1278,7 @@ function getScopedOfficeOptions(userAccess, isAdmin) {
   const canAccessAllOffices = isAdmin || userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
   if (canAccessAllOffices) {
     return db
-      .prepare('SELECT id, name FROM offices WHERE is_active = 1 ORDER BY lower(name) ASC, id ASC')
+      .prepare('SELECT id, name FROM offices ORDER BY lower(name) ASC, id ASC')
       .all()
       .map((row) => ({ id: Number(row.id), name: String(row.name ?? '').trim() }));
   }
@@ -1437,7 +1463,7 @@ function buildDataBackupSnapshot() {
          ORDER BY id ASC`
       ).all(),
       appointments: db.prepare(
-        `SELECT id, patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, created_at
+        `SELECT id, patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id, created_at
          FROM appointments
          ORDER BY id ASC`
       ).all(),
@@ -1448,11 +1474,18 @@ function buildDataBackupSnapshot() {
          ORDER BY id ASC`
       ).all(),
       consultations: db.prepare(
-        `SELECT id, patient_id, started_at, practitioner, title, important,
-                height_cm, weight_kg, eva_before, eva_after, profile,
+        `SELECT id, patient_id, started_at, office_id, practitioner, title, important,
+          height_cm, weight_kg, eva_before, eva_after, profile, reason_items_cipher,
                 motif_main_cipher, tests_cipher, schema_cipher, treatments_cipher,
                 remarks_cipher, created_at
          FROM consultations
+         ORDER BY id ASC`
+      ).all(),
+      patientDocuments: db.prepare(
+        `SELECT id, document_ref, patient_id, consultation_id, office_id, created_by,
+                file_name, mime_type, size_bytes, title_cipher, comment_cipher,
+                content_cipher, created_at
+         FROM patient_documents
          ORDER BY id ASC`
       ).all(),
       antecedentTypes: db.prepare(
@@ -1507,6 +1540,7 @@ function restoreDataBackupSnapshot(backupPayload) {
   const transaction = db.transaction(() => {
     db.prepare('DELETE FROM audit_logs').run();
     db.prepare('DELETE FROM draft').run();
+    db.prepare('DELETE FROM patient_documents').run();
     db.prepare('DELETE FROM consultations').run();
     db.prepare('DELETE FROM appointments').run();
     db.prepare('DELETE FROM invoices').run();
@@ -1553,8 +1587,8 @@ function restoreDataBackupSnapshot(backupPayload) {
        VALUES (?, ?, ?, ?)`
     );
     const insertAppointment = db.prepare(
-      `INSERT INTO appointments (id, patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO appointments (id, patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const insertInvoice = db.prepare(
       `INSERT INTO invoices (id, patient_id, invoice_number, amount_cents, status, issued_at, due_at, notes_cipher, created_at)
@@ -1562,11 +1596,18 @@ function restoreDataBackupSnapshot(backupPayload) {
     );
     const insertConsultation = db.prepare(
       `INSERT INTO consultations (
-         id, patient_id, started_at, practitioner, title, important,
-         height_cm, weight_kg, eva_before, eva_after, profile,
+         id, patient_id, started_at, office_id, practitioner, title, important,
+         height_cm, weight_kg, eva_before, eva_after, profile, reason_items_cipher,
          motif_main_cipher, tests_cipher, schema_cipher, treatments_cipher,
          remarks_cipher, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    const insertPatientDocument = db.prepare(
+      `INSERT INTO patient_documents (
+         id, document_ref, patient_id, consultation_id, office_id, created_by,
+         file_name, mime_type, size_bytes, title_cipher, comment_cipher,
+         content_cipher, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const insertAntecedentType = db.prepare(
       `INSERT INTO antecedent_types (id, label, created_at)
@@ -1779,6 +1820,7 @@ function restoreDataBackupSnapshot(backupPayload) {
         row.status,
         row.local_calendar_id != null ? Number(row.local_calendar_id) : null,
         row.consultation_id != null ? Number(row.consultation_id) : null,
+        row.office_id != null ? Number(row.office_id) : null,
         row.created_at ?? new Date().toISOString()
       );
     }
@@ -1802,6 +1844,7 @@ function restoreDataBackupSnapshot(backupPayload) {
         Number(row.id),
         Number(row.patient_id),
         row.started_at ?? new Date().toISOString(),
+        row.office_id != null ? Number(row.office_id) : null,
         row.practitioner ?? '',
         row.title ?? '',
         Number(row.important) ? 1 : 0,
@@ -1810,11 +1853,30 @@ function restoreDataBackupSnapshot(backupPayload) {
         Number(row.eva_before) || 0,
         Number(row.eva_after) || 0,
         row.profile ?? 'Adulte',
+        row.reason_items_cipher ?? null,
         row.motif_main_cipher ?? null,
         row.tests_cipher ?? null,
         row.schema_cipher ?? null,
         row.treatments_cipher ?? null,
         row.remarks_cipher ?? null,
+        row.created_at ?? new Date().toISOString()
+      );
+    }
+
+    for (const row of Array.isArray(backup.patientDocuments) ? backup.patientDocuments : []) {
+      insertPatientDocument.run(
+        Number(row.id),
+        String(row.document_ref ?? ''),
+        Number(row.patient_id),
+        row.consultation_id != null ? Number(row.consultation_id) : null,
+        row.office_id != null ? Number(row.office_id) : null,
+        row.created_by != null ? Number(row.created_by) : null,
+        String(row.file_name ?? ''),
+        String(row.mime_type ?? 'application/octet-stream'),
+        Number(row.size_bytes) || 0,
+        row.title_cipher ?? null,
+        row.comment_cipher ?? null,
+        String(row.content_cipher ?? ''),
         row.created_at ?? new Date().toISOString()
       );
     }
@@ -2203,6 +2265,28 @@ function normalizeLegacySeedPatients() {
 async function ensureSeedData() {
   migrateUserPreferenceTable();
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS patient_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_ref TEXT NOT NULL UNIQUE,
+      patient_id INTEGER NOT NULL,
+      consultation_id INTEGER,
+      office_id INTEGER,
+      created_by INTEGER,
+      file_name TEXT NOT NULL,
+      mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+      size_bytes INTEGER NOT NULL DEFAULT 0,
+      title_cipher TEXT,
+      comment_cipher TEXT,
+      content_cipher TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+      FOREIGN KEY(consultation_id) REFERENCES consultations(id) ON DELETE SET NULL,
+      FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE SET NULL,
+      FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+  `);
+
   ensureColumn('users', 'profile_id', "profile_id TEXT NOT NULL DEFAULT 'super-admin'");
   ensureColumn('users', 'is_active', 'is_active INTEGER NOT NULL DEFAULT 1');
   ensureColumn('users', 'office_id', 'office_id INTEGER');
@@ -2231,6 +2315,7 @@ async function ensureSeedData() {
   ensureColumn('users', 'include_free_consultations', 'include_free_consultations INTEGER NOT NULL DEFAULT 1');
   ensureColumn('users', 'show_consultation_hour', 'show_consultation_hour INTEGER NOT NULL DEFAULT 1');
   ensureColumn('appointments', 'local_calendar_id', 'local_calendar_id INTEGER');
+  ensureColumn('appointments', 'office_id', 'office_id INTEGER');
   ensureColumn('appointments', 'consultation_id', 'consultation_id INTEGER');
   ensureColumn('local_calendars', 'description', "description TEXT NOT NULL DEFAULT ''");
   ensureColumn('local_calendars', 'color_hex', "color_hex TEXT NOT NULL DEFAULT '#4d92d1'");
@@ -2248,6 +2333,8 @@ async function ensureSeedData() {
   ensureColumn('offices', 'invoice_hide_vat_mention', 'invoice_hide_vat_mention INTEGER NOT NULL DEFAULT 0');
   ensureColumn('offices', 'opening_hours_json', `opening_hours_json TEXT NOT NULL DEFAULT '{"monday":[],"tuesday":[],"wednesday":[],"thursday":[],"friday":[],"saturday":[],"sunday":[]}'`);
   ensureColumn('offices', 'consultation_profiles_json', "consultation_profiles_json TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn('consultations', 'office_id', 'office_id INTEGER');
+  ensureColumn('consultations', 'reason_items_cipher', 'reason_items_cipher TEXT');
   ensureColumn('service_types', 'office_id', 'office_id INTEGER');
   ensureColumn('payment_methods', 'office_id', 'office_id INTEGER');
   ensureColumn('user_preference', 'slot_duration_minutes', 'slot_duration_minutes INTEGER NOT NULL DEFAULT 15');
@@ -3314,16 +3401,31 @@ function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}
 
   const userId = Number(options.userId);
   const linkStrategy = options.linkStrategy === 'create-new' ? 'create-new' : 'attach-existing';
+  const requestedOfficeId = Number(options.officeId);
+  const draftOfficeId = Number(data.officeId);
 
   let localCalendarId = null;
   let slotDurationMinutes = 60;
   let alignedStartIso = String(data.startedAt ?? new Date().toISOString());
+  let consultationOfficeId = Number.isInteger(requestedOfficeId) && requestedOfficeId > 0
+    ? requestedOfficeId
+    : (Number.isInteger(draftOfficeId) && draftOfficeId > 0 ? draftOfficeId : null);
+
+  if (consultationOfficeId != null) {
+    const exists = db.prepare('SELECT id FROM offices WHERE id = ?').get(consultationOfficeId);
+    if (!exists) {
+      consultationOfficeId = null;
+    }
+  }
 
   if (Number.isInteger(userId) && userId > 0) {
     const defaultCalendar = getDefaultCalendarForUser(userId);
     if (defaultCalendar) {
       localCalendarId = defaultCalendar.id;
       if (defaultCalendar.officeId != null) {
+        if (consultationOfficeId == null) {
+          consultationOfficeId = Number(defaultCalendar.officeId);
+        }
         const office = db
           .prepare(
             `SELECT default_session_duration_minutes AS durationMinutes, opening_hours_json AS openingHoursJson
@@ -3346,15 +3448,26 @@ function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}
   }
 
   try {
+    const normalizedReasonItems = Array.isArray(data.reasonItems)
+      ? data.reasonItems
+        .map((item) => ({
+          label: String(item?.label ?? '').trim(),
+          value: String(item?.value ?? '').trim(),
+          important: Boolean(item?.important)
+        }))
+        .filter((item, index, all) => item.label && all.findIndex((candidate) => candidate.label === item.label) === index)
+      : [];
+
     const createdConsultation = db.prepare(`
       INSERT INTO consultations
-        (patient_id, started_at, practitioner, title, important, height_cm, weight_kg,
-         eva_before, eva_after, profile,
+        (patient_id, started_at, office_id, practitioner, title, important, height_cm, weight_kg,
+         eva_before, eva_after, profile, reason_items_cipher,
          motif_main_cipher, tests_cipher, schema_cipher, treatments_cipher, remarks_cipher)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       patientId,
       alignedStartIso,
+      consultationOfficeId,
       String(data.practitioner ?? '').trim(),
       String(data.title ?? '').trim(),
       data.important ? 1 : 0,
@@ -3363,6 +3476,7 @@ function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}
       typeof data.evaBefore === 'number' ? data.evaBefore : 0,
       typeof data.evaAfter === 'number' ? data.evaAfter : 0,
       String(data.profile ?? 'Adulte').trim() || 'Adulte',
+      normalizedReasonItems.length > 0 ? encryptSensitiveField(JSON.stringify(normalizedReasonItems)) : null,
       data.motifMainHtml ? encryptSensitiveField(data.motifMainHtml) : null,
       data.testsHtml ? encryptSensitiveField(data.testsHtml) : null,
       data.schemaHtml ? encryptSensitiveField(data.schemaHtml) : null,
@@ -3382,18 +3496,21 @@ function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}
     );
 
     if (overlappingAppointmentId && linkStrategy === 'attach-existing') {
-      db.prepare('UPDATE appointments SET consultation_id = ? WHERE id = ?').run(consultationId, overlappingAppointmentId);
+      db
+        .prepare('UPDATE appointments SET consultation_id = ?, office_id = coalesce(office_id, ?) WHERE id = ?')
+        .run(consultationId, consultationOfficeId, overlappingAppointmentId);
       return {
         consultationId,
         appointmentId: overlappingAppointmentId,
-        linkedToExisting: true
+        linkedToExisting: true,
+        officeId: consultationOfficeId
       };
     }
 
     const createdAppointment = db
       .prepare(
-        `INSERT INTO appointments (patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id)
-         VALUES (?, ?, ?, ?, ?, ?)`
+        `INSERT INTO appointments (patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         patientId,
@@ -3401,17 +3518,90 @@ function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}
         encryptSensitiveField(reason),
         'A confirmer',
         localCalendarId,
-        consultationId
+        consultationId,
+        consultationOfficeId
       );
 
     return {
       consultationId,
       appointmentId: Number(createdAppointment.lastInsertRowid),
-      linkedToExisting: false
+      linkedToExisting: false,
+      officeId: consultationOfficeId
     };
   } catch { /* table might not exist on first run – will be created on restart */ }
 
   return null;
+}
+
+function normalizeConsultationDocumentsPayload(rawDocuments) {
+  const input = Array.isArray(rawDocuments) ? rawDocuments : [];
+  const seenRefs = new Set();
+  const normalized = [];
+
+  for (const item of input) {
+    const fileName = String(item?.fileName ?? '').trim();
+    const contentBase64 = String(item?.contentBase64 ?? '').trim();
+    if (!fileName || !contentBase64) {
+      continue;
+    }
+
+    const documentRef = String(item?.documentRef ?? '').trim() || `doc-${crypto.randomUUID()}`;
+    if (seenRefs.has(documentRef)) {
+      continue;
+    }
+    seenRefs.add(documentRef);
+
+    normalized.push({
+      documentRef,
+      fileName,
+      mimeType: String(item?.mimeType ?? 'application/octet-stream').trim() || 'application/octet-stream',
+      sizeBytes: Math.max(0, Number(item?.sizeBytes) || 0),
+      title: String(item?.title ?? '').trim(),
+      comment: String(item?.comment ?? '').trim(),
+      contentBase64
+    });
+  }
+
+  return normalized;
+}
+
+function storeConsultationDocuments(patientId, consultationId, officeId, createdByUserId, rawDocuments) {
+  const documents = normalizeConsultationDocumentsPayload(rawDocuments);
+  if (!documents.length) {
+    return [];
+  }
+
+  const insertDocument = db.prepare(
+    `INSERT INTO patient_documents
+      (document_ref, patient_id, consultation_id, office_id, created_by, file_name, mime_type, size_bytes, title_cipher, comment_cipher, content_cipher)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+
+  const insertMany = db.transaction((items) => {
+    for (const doc of items) {
+      insertDocument.run(
+        doc.documentRef,
+        patientId,
+        consultationId,
+        officeId,
+        createdByUserId,
+        doc.fileName,
+        doc.mimeType,
+        doc.sizeBytes,
+        doc.title ? encryptSensitiveField(doc.title) : null,
+        doc.comment ? encryptSensitiveField(doc.comment) : null,
+        encryptSensitiveField(doc.contentBase64)
+      );
+    }
+  });
+
+  insertMany(documents);
+  return documents.map((doc) => ({
+    documentRef: doc.documentRef,
+    fileName: doc.fileName,
+    mimeType: doc.mimeType,
+    sizeBytes: doc.sizeBytes
+  }));
 }
 
 function storeAntecedentTypes(labels) {
@@ -3627,6 +3817,17 @@ const createPatientSchema = z.object({
   isDeceased: z.boolean().optional().default(false),
   medicalHistory: z.string().max(5000).optional().default(''),
   consultationNote: z.string().max(30000).optional().default(''),
+  consultationDocuments: z.array(
+    z.object({
+      documentRef: z.string().max(120).optional(),
+      fileName: z.string().min(1).max(255),
+      mimeType: z.string().max(120).optional().default('application/octet-stream'),
+      sizeBytes: z.number().int().nonnegative().optional().default(0),
+      title: z.string().max(200).optional().default(''),
+      comment: z.string().max(2000).optional().default(''),
+      contentBase64: z.string().min(1).max(20_000_000)
+    })
+  ).optional().default([]),
   consultationLinkStrategy: z.enum(['attach-existing', 'create-new']).optional()
 });
 
@@ -3813,7 +4014,8 @@ app.use(
     credentials: true
   })
 );
-app.use(express.json({ limit: '20mb' }));
+app.use(express.json({ limit: requestBodyLimit }));
+app.use(express.urlencoded({ limit: requestBodyLimit, extended: true }));
 app.use(cookieParser());
 
 const loginLimiter = rateLimit({
@@ -4599,26 +4801,55 @@ app.get('/api/consultation-context', authMiddleware, requirePermission('create-p
 
   const practitionerRows = db
     .prepare(
-      `SELECT DISTINCT u.id, u.username, u.role
+      `SELECT DISTINCT u.id, u.username, u.role, u.last_name, u.first_name,
+              p.rights_json AS rights_json, u.profile_id
        FROM users u
        LEFT JOIN user_offices uo ON uo.user_id = u.id
+       LEFT JOIN office_user_delegations oud ON oud.user_id = u.id AND oud.office_id = ?
+       LEFT JOIN access_profiles p ON p.id = coalesce(oud.profile_id, u.profile_id)
        WHERE u.is_active = 1
          AND (
            u.office_id = ?
            OR uo.office_id = ?
+           OR oud.office_id = ?
          )
        ORDER BY lower(u.username) ASC, u.id ASC`
     )
-    .all(selectedOfficeId, selectedOfficeId);
+    .all(selectedOfficeId, selectedOfficeId, selectedOfficeId, selectedOfficeId);
+
+  const practitioners = practitionerRows
+    .filter((row) => {
+      if (String(row.role ?? '').trim() === 'admin') {
+        return true;
+      }
+
+      let parsedRights;
+      try {
+        parsedRights = row.rights_json ? JSON.parse(row.rights_json) : {};
+      } catch {
+        parsedRights = {};
+      }
+
+      const normalized = normalizeAccessRights(parsedRights, false);
+      return hasPermission(normalized, 'create-patient-record');
+    })
+    .map((row) => {
+      const firstName = String(row.first_name ?? '').trim();
+      const lastName = String(row.last_name ?? '').trim();
+      const displayName = `${firstName} ${lastName}`.trim() || String(row.username ?? '').trim();
+
+      return {
+        id: Number(row.id),
+        username: String(row.username ?? '').trim(),
+        displayName,
+        role: String(row.role ?? '').trim()
+      };
+    });
 
   return res.json({
     officeId: Number(officeRow.id),
     officeName: String(officeRow.name ?? '').trim() || null,
-    practitioners: practitionerRows.map((row) => ({
-      id: Number(row.id),
-      username: String(row.username ?? '').trim(),
-      role: String(row.role ?? '').trim()
-    })),
+    practitioners,
     profiles: parseOfficeConsultationProfiles(officeRow.consultationProfilesJson)
   });
 });
@@ -5950,10 +6181,20 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
   });
 
   storeAntecedentTypes(antecedentCategories);
-  insertConsultationFromNote(Number(inserted.lastInsertRowid), payload.consultationNote, {
+  const consultationCreation = insertConsultationFromNote(Number(inserted.lastInsertRowid), payload.consultationNote, {
     userId: req.user.sub,
+    officeId: req.userAccess?.officeIds?.[0] ?? null,
     linkStrategy: payload.consultationLinkStrategy === 'create-new' ? 'create-new' : 'attach-existing'
   });
+
+  const createdDocuments = storeConsultationDocuments(
+    Number(inserted.lastInsertRowid),
+    consultationCreation?.consultationId ?? null,
+    consultationCreation?.officeId ?? (req.userAccess?.officeIds?.[0] ?? null),
+    req.user.sub,
+    payload.consultationDocuments
+  );
+
   synchronizeBidirectionalRelatedPeople({
     targetPatientId: Number(inserted.lastInsertRowid),
     targetCurrentFullName: fullName,
@@ -5971,6 +6212,94 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
     patient: {
       id: inserted.lastInsertRowid,
       fullName
+    },
+    consultation: consultationCreation
+      ? {
+        id: consultationCreation.consultationId,
+        officeId: consultationCreation.officeId,
+        appointmentId: consultationCreation.appointmentId,
+        linkedToExisting: consultationCreation.linkedToExisting
+      }
+      : null,
+    documents: createdDocuments.map((doc) => ({
+      ...doc,
+      link: `/api/patient-documents/${encodeURIComponent(doc.documentRef)}`
+    }))
+  });
+});
+
+app.get('/api/patients/:id/documents', authMiddleware, requirePermission('read-patient-record'), (req, res) => {
+  const patientId = Number(req.params.id);
+  if (!Number.isInteger(patientId) || patientId <= 0) {
+    return res.status(400).json({ message: 'Identifiant patient invalide' });
+  }
+
+  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
+  if (!patient) {
+    return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  const rows = db.prepare(
+    `SELECT id, document_ref, consultation_id, office_id, file_name, mime_type, size_bytes, title_cipher, comment_cipher, created_at
+     FROM patient_documents
+     WHERE patient_id = ?
+     ORDER BY datetime(created_at) DESC, id DESC`
+  ).all(patientId);
+
+  const documents = rows.map((row) => ({
+    id: Number(row.id),
+    documentRef: row.document_ref,
+    consultationId: row.consultation_id != null ? Number(row.consultation_id) : null,
+    officeId: row.office_id != null ? Number(row.office_id) : null,
+    fileName: row.file_name,
+    mimeType: row.mime_type,
+    sizeBytes: Number(row.size_bytes) || 0,
+    title: row.title_cipher ? decryptSensitiveField(row.title_cipher) : '',
+    comment: row.comment_cipher ? decryptSensitiveField(row.comment_cipher) : '',
+    createdAt: row.created_at,
+    link: `/api/patient-documents/${encodeURIComponent(row.document_ref)}`
+  }));
+
+  return res.json({ documents });
+});
+
+app.get('/api/patient-documents/:documentRef', authMiddleware, requirePermission('read-patient-record'), (req, res) => {
+  const documentRef = String(req.params.documentRef ?? '').trim();
+  if (!documentRef) {
+    return res.status(400).json({ message: 'Reference document invalide' });
+  }
+
+  const row = db.prepare(
+    `SELECT id, document_ref, patient_id, consultation_id, office_id, file_name, mime_type, size_bytes,
+            title_cipher, comment_cipher, content_cipher, created_at
+     FROM patient_documents
+     WHERE document_ref = ?
+     LIMIT 1`
+  ).get(documentRef);
+
+  if (!row) {
+    return res.status(404).json({ message: 'Document introuvable' });
+  }
+
+  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(Number(row.patient_id));
+  if (!patient) {
+    return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  return res.json({
+    document: {
+      id: Number(row.id),
+      documentRef: row.document_ref,
+      patientId: Number(row.patient_id),
+      consultationId: row.consultation_id != null ? Number(row.consultation_id) : null,
+      officeId: row.office_id != null ? Number(row.office_id) : null,
+      fileName: row.file_name,
+      mimeType: row.mime_type,
+      sizeBytes: Number(row.size_bytes) || 0,
+      title: row.title_cipher ? decryptSensitiveField(row.title_cipher) : '',
+      comment: row.comment_cipher ? decryptSensitiveField(row.comment_cipher) : '',
+      contentBase64: decryptSensitiveField(row.content_cipher),
+      createdAt: row.created_at
     }
   });
 });
@@ -7114,6 +7443,22 @@ app.get('/api/invoices/summary', authMiddleware, requirePermission('read-billing
 });
 
 await ensureSeedData();
+
+app.use((err, _req, res, _next) => {
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({
+      message: `Payload trop volumineux. Reduisez la taille des pieces jointes (limite API: ${requestBodyLimit}).`
+    });
+  }
+
+  if (err) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    return res.status(500).json({ message: 'Erreur interne du serveur.' });
+  }
+
+  return res.status(500).json({ message: 'Erreur interne du serveur.' });
+});
 
 app.listen(port, () => {
   // eslint-disable-next-line no-console

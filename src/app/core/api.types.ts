@@ -93,7 +93,14 @@ export type UpdateMyUserProfilePayload = Omit<
 export type Practitioner = {
   id: number;
   username: string;
+  displayName?: string;
   role: string;
+};
+
+export type ConsultationReasonItem = {
+  label: string;
+  value: string;
+  important: boolean;
 };
 
 export type PractitionersPayload = {
@@ -223,7 +230,18 @@ export type CreatePatientPayload = {
   isDeceased: boolean;
   medicalHistory: string;
   consultationNote: string;
+  consultationDocuments?: ConsultationDocumentUploadPayload[];
   consultationLinkStrategy?: 'attach-existing' | 'create-new';
+};
+
+export type ConsultationDocumentUploadPayload = {
+  documentRef?: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  title: string;
+  comment: string;
+  contentBase64: string;
 };
 
 export type PeoplePickerContact = {

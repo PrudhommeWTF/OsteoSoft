@@ -656,7 +656,7 @@
       </div>
       <div class="wizard-card-body">
 
-        <nav class="nav nav-pills flex-wrap gap-2 mb-4" role="tablist" aria-label="Sections de la consultation">
+        <nav class="nav nav-tabs nav-justified mb-4" role="tablist" aria-label="Sections de la consultation">
           <button
             type="button"
             class="nav-link"
@@ -715,17 +715,21 @@
 
               <div class="mb-3">
                 <label class="form-label" for="consultationPractitioner">Praticien</label>
-                <select
+                <input
                   id="consultationPractitioner"
-                  class="form-select"
+                  type="text"
+                  class="form-control"
+                  list="consultation-practitioner-options"
                   [value]="consultationPractitioner()"
-                  (change)="setConsultationPractitioner($any($event.target).value)">
-                  <option value="">Selectionner un praticien</option>
-                  @for (practitioner of practitioners(); track practitioner.id) {
-                    <option [value]="practitioner.username">{{ practitioner.username }} - {{ practitioner.role }}</option>
+                  placeholder="Selectionner un praticien"
+                  (input)="setConsultationPractitioner($any($event.target).value || '')"
+                />
+                <datalist id="consultation-practitioner-options">
+                  @for (practitioner of practitionerPickerOptions(); track practitioner.username) {
+                    <option [value]="practitioner.displayName">{{ practitioner.label }}</option>
                   }
-                </select>
-                <div class="form-text">Liste des utilisateurs ayant acces au cabinet en cours.</div>
+                </datalist>
+                <div class="form-text">Utilisateurs rattachés au cabinet actif et autorisés à créer des patients.</div>
               </div>
 
               <div class="mb-3 form-check">
@@ -779,12 +783,32 @@
 
               <div class="mb-3">
                 <label class="form-label" for="evaBefore">EVA au debut: {{ consultationEvaBefore() }}/10</label>
-                <input id="evaBefore" type="range" class="form-range" min="0" max="10" step="1" [value]="consultationEvaBefore()" (input)="setConsultationEvaBefore($any($event.target).value)" />
+                <input
+                  id="evaBefore"
+                  type="range"
+                  class="form-range eva-range"
+                  min="0"
+                  max="10"
+                  step="1"
+                  [value]="consultationEvaBefore()"
+                  [style.background]="getEvaRangeBackground(consultationEvaBefore())"
+                  (input)="setConsultationEvaBefore($any($event.target).value)"
+                />
               </div>
 
               <div class="mb-0">
                 <label class="form-label" for="evaAfter">EVA en fin de consultation: {{ consultationEvaAfter() }}/10</label>
-                <input id="evaAfter" type="range" class="form-range" min="0" max="10" step="1" [value]="consultationEvaAfter()" (input)="setConsultationEvaAfter($any($event.target).value)" />
+                <input
+                  id="evaAfter"
+                  type="range"
+                  class="form-range eva-range"
+                  min="0"
+                  max="10"
+                  step="1"
+                  [value]="consultationEvaAfter()"
+                  [style.background]="getEvaRangeBackground(consultationEvaAfter())"
+                  (input)="setConsultationEvaAfter($any($event.target).value)"
+                />
               </div>
             </div>
 
@@ -806,28 +830,51 @@
                 <div class="alert alert-light border mb-0">Aucun motif configure pour ce profil.</div>
               } @else {
                 <div class="reason-list d-flex flex-column gap-1" role="list" aria-label="Motifs disponibles pour le profil selectionne">
-                  @for (reason of consultationProfileReasons(); track reason) {
-                    <button
-                      type="button"
-                      class="reason-item"
-                      [class.active]="isConsultationReasonSelected(reason)"
-                      (click)="toggleConsultationReason(reason)">
-                      <span>{{ reason }}</span>
-                      @if (isConsultationReasonSelected(reason)) {
-                        <i class="fa-solid fa-check"></i>
-                      }
-                    </button>
+                  @for (item of consultationReasonItems(); track item.reason) {
+                    <div class="reason-item" [class.active]="item.checked">
+                      <div class="reason-item-check">
+                        <input
+                          class="form-check-input"
+                          type="checkbox"
+                          [id]="'reason-check-' + $index"
+                          [checked]="item.checked"
+                          (change)="setConsultationReasonChecked(item.reason, $any($event.target).checked)"
+                        />
+                      </div>
+                      <div class="reason-item-body">
+                        <label class="reason-item-label" [attr.for]="'reason-check-' + $index">{{ item.reason }}</label>
+                        <input
+                          type="text"
+                          class="form-control form-control-sm"
+                          [value]="item.value"
+                          placeholder="Saisir une valeur"
+                          (input)="setConsultationReasonValue(item.reason, $any($event.target).value || '')"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        class="btn btn-sm"
+                        [class.btn-outline-warning]="!item.important"
+                        [class.btn-warning]="item.important"
+                        [attr.aria-label]="'Marquer le motif ' + item.reason + ' comme important'"
+                        (click)="setConsultationReasonImportant(item.reason, !item.important)"
+                      >
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                      </button>
+                    </div>
                   }
                 </div>
 
                 <div class="reason-selection mt-3">
-                  <small class="text-muted fw-semibold d-block mb-2">Motifs selectionnes ({{ consultationSelectedReasons().length }})</small>
-                  @if (consultationSelectedReasons().length === 0) {
+                  <small class="text-muted fw-semibold d-block mb-2">Motifs selectionnes ({{ consultationSelectedReasonItems().length }})</small>
+                  @if (consultationSelectedReasonItems().length === 0) {
                     <small class="text-muted">Aucun motif selectionne.</small>
                   } @else {
                     <div class="d-flex flex-wrap gap-2">
-                      @for (reason of consultationSelectedReasons(); track reason) {
-                        <span class="badge rounded-pill text-bg-light border">{{ reason }}</span>
+                      @for (reason of consultationSelectedReasonItems(); track reason.label) {
+                        <span class="badge rounded-pill text-bg-light border">
+                          {{ reason.label }}@if (reason.value) { : {{ reason.value }} }@if (reason.important) { (important) }
+                        </span>
                       }
                     </div>
                   }
@@ -898,11 +945,77 @@
         }
 
         @if (consultationActiveTab() === 'documents') {
-          <div class="empty-tab-state">
-            <i class="fa-regular fa-folder-open"></i>
-            <h3>Documents patient</h3>
-            <p>Ajoutez ici les documents importes ou scannes pendant la consultation.</p>
+          <div class="mb-3">
+            <label class="form-label fw-semibold d-block">Documents patient</label>
+            <div
+              class="border rounded-3 p-4 text-center"
+              [class.bg-light]="!isConsultationDocumentDragOver()"
+              [class.bg-primary-subtle]="isConsultationDocumentDragOver()"
+              (dragover)="onConsultationDocumentDragOver($event)"
+              (dragleave)="onConsultationDocumentDragLeave($event)"
+              (drop)="onConsultationDocumentDrop($event)"
+            >
+              <i class="fa-regular fa-file-lines fs-2 text-secondary d-block mb-2"></i>
+              <p class="mb-2">Glissez-deposez vos documents ici</p>
+              <label class="btn btn-outline-primary btn-sm mb-0" for="consultation-document-input">
+                Ou cliquez pour choisir un fichier
+              </label>
+              <input
+                id="consultation-document-input"
+                type="file"
+                class="d-none"
+                multiple
+                (change)="onConsultationDocumentFileSelected($event)"
+              />
+              <p class="text-muted small mb-0 mt-2">Les documents sont chiffrés et liés au patient/à la consultation.</p>
+            </div>
           </div>
+
+          @if (consultationDocuments().length === 0) {
+            <div class="empty-tab-state">
+              <i class="fa-regular fa-folder-open"></i>
+              <h3>Aucun document chargé</h3>
+              <p>Ajoutez ici les documents importés ou scannés pendant la consultation.</p>
+            </div>
+          } @else {
+            <div class="d-flex flex-column gap-3">
+              @for (doc of consultationDocuments(); track doc.tempKey) {
+                <article class="border rounded-3 p-3 bg-white">
+                  <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+                    <div>
+                      <p class="fw-semibold mb-1">{{ doc.fileName }}</p>
+                      <p class="text-muted small mb-0">{{ doc.mimeType }} - {{ doc.sizeBytes }} octets</p>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeConsultationDocument(doc.tempKey)">
+                      <i class="fa-solid fa-trash"></i>
+                    </button>
+                  </div>
+
+                  <div class="row g-2">
+                    <div class="col-12 col-lg-5">
+                      <label class="form-label mb-1">Titre</label>
+                      <input
+                        type="text"
+                        class="form-control form-control-sm"
+                        [value]="doc.title"
+                        (input)="updateConsultationDocumentTitle(doc.tempKey, $any($event.target).value || '')"
+                      />
+                    </div>
+                    <div class="col-12 col-lg-7">
+                      <label class="form-label mb-1">Commentaire</label>
+                      <input
+                        type="text"
+                        class="form-control form-control-sm"
+                        [value]="doc.comment"
+                        (input)="updateConsultationDocumentComment(doc.tempKey, $any($event.target).value || '')"
+                        placeholder="Commentaire optionnel"
+                      />
+                    </div>
+                  </div>
+                </article>
+              }
+            </div>
+          }
         }
 
         @if (consultationActiveTab() === 'courriers') {
