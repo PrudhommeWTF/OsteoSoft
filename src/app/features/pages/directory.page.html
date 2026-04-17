@@ -6,7 +6,7 @@
 
   <div class="d-flex align-items-center gap-2 flex-wrap">
     @if (canExport()) {
-      <button type="button" class="btn btn-outline-primary" (click)="exportContacts()" [disabled]="isExporting()">
+      <button type="button" class="btn btn-outline-primary" (click)="openExportModal()">
         <i class="fa-solid fa-file-export me-2"></i>Exporter
       </button>
     }
@@ -18,6 +18,43 @@
     }
   </div>
 </section>
+
+@if (isExportModalOpen()) {
+  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="export-directory-modal-title">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="export-directory-modal-title" class="modal-title h5 mb-0">Exporter le répertoire</h3>
+          <button type="button" class="btn-close" aria-label="Fermer" (click)="closeExportModal()" [disabled]="isExporting()"></button>
+        </div>
+
+        <div class="modal-body">
+          <p class="mb-3 text-secondary">
+            Choisissez le format d'export pour les contacts actuellement affichés.
+          </p>
+
+          @if (exportError()) {
+            <div class="alert alert-danger mb-0">{{ exportError() }}</div>
+          }
+        </div>
+
+        <div class="modal-footer gap-2">
+          <button type="button" class="btn btn-secondary" (click)="closeExportModal()" [disabled]="isExporting()">
+            Annuler
+          </button>
+          <button type="button" class="btn btn-outline-primary" (click)="exportContacts('json')" [disabled]="isExporting()">
+            <i class="fa-solid fa-file-code me-2"></i>JSON
+          </button>
+          <button type="button" class="btn btn-primary" (click)="exportContacts('excel')" [disabled]="isExporting()">
+            <i class="fa-solid fa-file-excel me-2"></i>Excel
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop fade show"></div>
+}
 
 @if (errorMessage()) {
   <div class="alert alert-danger">{{ errorMessage() }}</div>

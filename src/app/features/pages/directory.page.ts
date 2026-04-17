@@ -30,6 +30,9 @@ export class DirectoryPage {
   readonly errorMessage = signal('');
   readonly successMessage = signal('');
   readonly modalError = signal('');
+  readonly exportError = signal('');
+
+  readonly isExportModalOpen = signal(false);
 
   readonly contacts = signal<DirectoryContact[]>([]);
   readonly offices = signal<OfficeOption[]>([]);
@@ -307,31 +310,114 @@ export class DirectoryPage {
     }
   }
 
-  async exportContacts(): Promise<void> {
+  openExportModal(): void {
+    this.exportError.set('');
+    this.isExportModalOpen.set(true);
+  }
+
+  closeExportModal(): void {
+    this.isExportModalOpen.set(false);
+    this.isExporting.set(false);
+    this.exportError.set('');
+  }
+
+  async exportContacts(format: 'json' | 'excel'): Promise<void> {
     if (this.isExporting()) {
       return;
     }
 
     this.isExporting.set(true);
-    this.errorMessage.set('');
+    this.exportError.set('');
 
     try {
-      const blob = await this.api.exportDirectoryContacts(this.selectedOfficeId());
-      const fileName = `repertoire-${new Date().toISOString().slice(0, 10)}.csv`;
-      const url = window.URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = fileName;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.URL.revokeObjectURL(url);
+      const rows = [...this.filteredContacts()].sort((a, b) =>
+        this.contactName(a).localeCompare(this.contactName(b), 'fr', { sensitivity: 'base' })
+      );
+      const exportedAt = new Date().toISOString();
+      const fileDate = exportedAt.slice(0, 10);
+
+      if (format === 'json') {
+        const payload = {
+          meta: {
+            kind: 'directory-export',
+            exportedAt,
+            count: rows.length,
+            officeId: this.selectedOfficeId(),
+            search: this.search().trim(),
+            kindFilter: this.kindFilter(),
+            activeFilter: this.activeFilter()
+          },
+          contacts: rows.map((contact) => ({
+            id: contact.id,
+            displayName: contact.displayName,
+            kind: contact.kind,
+            officeName: contact.officeName,
+            role: contact.role,
+            email: contact.email,
+            mobilePhone: contact.mobilePhone,
+            landlinePhone: contact.landlinePhone,
+            address1: contact.address1,
+            address2: contact.address2,
+            postalCode: contact.postalCode,
+            city: contact.city,
+            country: contact.country,
+            notes: contact.notes,
+            isActive: contact.isActive
+          }))
+        };
+
+        this.downloadBlob(
+          new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' }),
+          `repertoire-export-${fileDate}.json`
+        );
+      } else {
+        const xlsx = await import('xlsx');
+        const sheetRows = rows.map((contact) => ({
+          nom: this.contactName(contact),
+          type: this.kindLabel(contact.kind),
+          cabinet: contact.officeName,
+          fonction: contact.role,
+          email: contact.email,
+          telephoneMobile: contact.mobilePhone,
+          telephoneFixe: contact.landlinePhone,
+          adresse: contact.address1,
+          complementAdresse: contact.address2,
+          codePostal: contact.postalCode,
+          ville: contact.city,
+          pays: contact.country,
+          statut: contact.isActive ? 'Actif' : 'Inactif',
+          notes: contact.notes
+        }));
+
+        const worksheet = xlsx.utils.json_to_sheet(sheetRows);
+        const workbook = xlsx.utils.book_new();
+        xlsx.utils.book_append_sheet(workbook, worksheet, 'Repertoire');
+        const arrayBuffer = xlsx.write(workbook, { bookType: 'xlsx', type: 'array' });
+
+        this.downloadBlob(
+          new Blob([arrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+          `repertoire-export-${fileDate}.xlsx`
+        );
+      }
+
       this.successMessage.set('Export du repertoire termine.');
+      this.closeExportModal();
     } catch {
-      this.errorMessage.set('Impossible d\'exporter le repertoire.');
+      this.exportError.set('Impossible d\'exporter le repertoire.');
     } finally {
       this.isExporting.set(false);
     }
+  }
+
+  private downloadBlob(blob: Blob, fileName: string): void {
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.URL.revokeObjectURL(url);
   }
 
   kindLabel(kind: 'person' | 'company'): string {
