@@ -234,6 +234,7 @@ db.exec(`
     user_id INTEGER PRIMARY KEY,
     slot_duration_minutes INTEGER NOT NULL DEFAULT 15,
     display_height INTEGER NOT NULL DEFAULT 14,
+    theme_mode TEXT NOT NULL DEFAULT 'system',
     pdf_display_mode TEXT NOT NULL DEFAULT 'browser',
     consultation_order TEXT NOT NULL DEFAULT 'Antichronologique',
     group_consultations_by_year_from INTEGER NOT NULL DEFAULT 10,
@@ -506,6 +507,10 @@ function normalizeUserAgendaPreferences(rawValue) {
     ? Math.min(Math.max(source.displayHeight, 14), 35)
     : 14;
 
+  const themeMode = ['system', 'light', 'dark'].includes(source.themeMode)
+    ? source.themeMode
+    : 'system';
+
   const pdfDisplayMode = ['browser', 'download'].includes(source.pdfDisplayMode)
     ? source.pdfDisplayMode
     : 'browser';
@@ -533,6 +538,7 @@ function normalizeUserAgendaPreferences(rawValue) {
   return {
     slotDurationMinutes,
     displayHeight,
+    themeMode,
     pdfDisplayMode,
     consultationOrder,
     groupConsultationsByYearFrom,
@@ -550,7 +556,7 @@ function normalizeUserAgendaPreferences(rawValue) {
 function readUserAgendaPreferences(userId) {
   const row = db
     .prepare(
-          `SELECT slot_duration_minutes, display_height, pdf_display_mode,
+          `SELECT slot_duration_minutes, display_height, theme_mode, pdf_display_mode,
             consultation_order, group_consultations_by_year_from, patient_auto_save_frequency,
               show_weekend, show_patient_sex, show_patient_mobile_phone,
               show_patient_landline_phone, show_appointment_comment,
@@ -564,6 +570,7 @@ function readUserAgendaPreferences(userId) {
     return {
       slotDurationMinutes: getConfigInteger('agenda_slot_duration_minutes', 15),
       displayHeight: getConfigInteger('agenda_display_height', 14),
+      themeMode: getConfigValue('settings_theme_mode', 'system'),
       pdfDisplayMode: getConfigValue('settings_pdf_display_mode', 'browser'),
       consultationOrder: getConfigValue('settings_consultation_order', 'Antichronologique'),
       groupConsultationsByYearFrom: getConfigInteger('settings_group_consultations_by_year_from', 10),
@@ -581,6 +588,7 @@ function readUserAgendaPreferences(userId) {
   return normalizeUserAgendaPreferences({
     slotDurationMinutes: Number(row.slot_duration_minutes),
     displayHeight: Number(row.display_height),
+    themeMode: row.theme_mode,
     pdfDisplayMode: row.pdf_display_mode,
     consultationOrder: row.consultation_order,
     groupConsultationsByYearFrom: Number(row.group_consultations_by_year_from),
@@ -603,6 +611,7 @@ function saveUserAgendaPreferences(userId, payload) {
       user_id,
       slot_duration_minutes,
       display_height,
+      theme_mode,
       pdf_display_mode,
       consultation_order,
       group_consultations_by_year_from,
@@ -616,11 +625,12 @@ function saveUserAgendaPreferences(userId, payload) {
       appointment_color_mode,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(user_id)
     DO UPDATE SET
       slot_duration_minutes = excluded.slot_duration_minutes,
       display_height = excluded.display_height,
+      theme_mode = excluded.theme_mode,
       pdf_display_mode = excluded.pdf_display_mode,
       consultation_order = excluded.consultation_order,
       group_consultations_by_year_from = excluded.group_consultations_by_year_from,
@@ -637,6 +647,7 @@ function saveUserAgendaPreferences(userId, payload) {
     userId,
     preferences.slotDurationMinutes,
     preferences.displayHeight,
+    preferences.themeMode,
     preferences.pdfDisplayMode,
     preferences.consultationOrder,
     preferences.groupConsultationsByYearFrom,
@@ -1959,6 +1970,7 @@ function migrateUserPreferenceTable() {
       user_id,
       slot_duration_minutes,
       display_height,
+      theme_mode,
       pdf_display_mode,
       consultation_order,
       group_consultations_by_year_from,
@@ -1975,6 +1987,7 @@ function migrateUserPreferenceTable() {
       ${columnExpr('user_id', 'NULL')},
       ${columnExpr('slot_duration_minutes', '15')},
       ${columnExpr('display_height', '14')},
+      ${columnExpr('theme_mode', "'system'")},
       ${columnExpr('pdf_display_mode', "'browser'")},
       ${columnExpr('consultation_order', "'Antichronologique'")},
       ${columnExpr('group_consultations_by_year_from', '10')},
@@ -2370,6 +2383,7 @@ async function ensureSeedData() {
   ensureColumn('payment_methods', 'office_id', 'office_id INTEGER');
   ensureColumn('user_preference', 'slot_duration_minutes', 'slot_duration_minutes INTEGER NOT NULL DEFAULT 15');
   ensureColumn('user_preference', 'display_height', 'display_height INTEGER NOT NULL DEFAULT 14');
+  ensureColumn('user_preference', 'theme_mode', "theme_mode TEXT NOT NULL DEFAULT 'system'");
 
   const fallbackOffice = db.prepare('SELECT id FROM offices ORDER BY display_order ASC, id ASC LIMIT 1').get();
   const defaultOfficeCountry = getConfigValue('settings_general_country', 'France');
@@ -2419,6 +2433,7 @@ async function ensureSeedData() {
       user_id,
       slot_duration_minutes,
       display_height,
+      theme_mode,
       pdf_display_mode,
       consultation_order,
       group_consultations_by_year_from,
@@ -2434,6 +2449,7 @@ async function ensureSeedData() {
     SELECT id,
            15,
            14,
+          'system',
           'browser',
           ?,
           ?,
@@ -2462,6 +2478,10 @@ async function ensureSeedData() {
       pdf_display_mode = CASE
         WHEN pdf_display_mode IN ('browser', 'download') THEN pdf_display_mode
         ELSE 'browser'
+      END,
+      theme_mode = CASE
+        WHEN theme_mode IN ('system', 'light', 'dark') THEN theme_mode
+        ELSE 'system'
       END,
       consultation_order = CASE
         WHEN consultation_order IN ('Chronologique', 'Antichronologique') THEN consultation_order
@@ -4067,6 +4087,7 @@ const agendaSettingsPayloadSchema = z.object({
 const userAgendaPreferencesSchema = z.object({
   slotDurationMinutes: z.number().int().min(5).max(50),
   displayHeight: z.number().int().min(14).max(35),
+  themeMode: z.enum(['system', 'light', 'dark']),
   pdfDisplayMode: z.enum(['browser', 'download']),
   consultationOrder: z.enum(['Chronologique', 'Antichronologique']),
   groupConsultationsByYearFrom: z.number().int().min(0).max(200),

@@ -354,6 +354,7 @@ export type AgendaSettingsPayload = {
 export type UserAgendaPreferences = {
   slotDurationMinutes: number;
   displayHeight: number;
+  themeMode: 'system' | 'light' | 'dark';
   pdfDisplayMode: 'browser' | 'download';
   consultationOrder: 'Chronologique' | 'Antichronologique';
   groupConsultationsByYearFrom: number;

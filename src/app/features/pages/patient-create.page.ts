@@ -1100,7 +1100,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
 
     const preferDownload = this.consultationPdfDisplayMode() === 'download';
     const previewWindow = !preferDownload
-      ? window.open('', '_blank', 'noopener,noreferrer')
+      ? window.open('about:blank', '_blank')
       : null;
 
     this.consultationPdfError.set('');
@@ -1218,7 +1218,10 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
         if (previewWindow) {
           previewWindow.location.href = url;
         } else {
-          pdf.save(filename);
+          const fallbackWindow = window.open(url, '_blank');
+          if (!fallbackWindow) {
+            window.location.assign(url);
+          }
         }
 
         setTimeout(() => URL.revokeObjectURL(url), 60_000);

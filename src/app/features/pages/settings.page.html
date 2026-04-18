@@ -109,7 +109,7 @@
 
                 @if (selectedRgpdPatient()) {
                   <div class="d-flex flex-wrap gap-2 mb-2">
-                    <span class="badge text-bg-light border related-pill d-flex align-items-center gap-1 p-2">
+                    <span class="badge bg-body-tertiary text-body border related-pill d-flex align-items-center gap-1 p-2">
                       <i [class]="getRelatedPatientIcon(selectedRgpdPatient()!.sex) + ' me-1'"></i>
                       {{ selectedRgpdPatient()!.fullName }}
                       <button
@@ -245,7 +245,7 @@
                     <tr>
                       <td>{{ formatAuditLogDateTime(log.createdAt) }}</td>
                       <td>{{ log.username }}</td>
-                      <td><span class="badge text-bg-light border">{{ log.action }}</span></td>
+                      <td><span class="badge bg-body-tertiary text-body border">{{ log.action }}</span></td>
                       <td>
                         <span class="fw-semibold">{{ log.entity }}</span>
                         @if (log.entityId) {

@@ -105,13 +105,36 @@
       </section>
 
       <nav class="utility-nav" aria-label="Actions secondaires">
+        <div class="utility-profile-row">
+          <a class="utility-button" routerLink="/mon-profil" (click)="closeMenu()">
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-user-pen fa-fw"></i></span>
+            <span>Editer mon profil</span>
+          </a>
+
+          <button
+            type="button"
+            class="theme-toggle"
+            role="switch"
+            [class.is-on]="quickThemeToggleChecked()"
+            [attr.aria-checked]="quickThemeToggleChecked()"
+            [attr.aria-label]="quickThemeAriaLabel()"
+            (click)="toggleQuickTheme()"
+          >
+            <span class="theme-toggle-track">
+              <span class="theme-toggle-thumb">
+                <i [class]="quickThemeToggleChecked() ? 'fa-solid fa-moon' : 'fa-solid fa-sun'"></i>
+              </span>
+            </span>
+          </button>
+        </div>
+
         @for (item of utilityItems(); track item.label) {
-          @if (item.path) {
+          @if (item.label !== 'Editer mon profil' && item.path) {
             <a class="utility-button" [routerLink]="item.path" (click)="closeMenu()">
               <span class="nav-icon" aria-hidden="true"><i [class]="item.icon + ' fa-fw'"></i></span>
               <span>{{ item.label }}</span>
             </a>
-          } @else {
+          } @else if (item.label !== 'Editer mon profil') {
             <button type="button" class="utility-button" disabled>
               <span class="nav-icon" aria-hidden="true"><i [class]="item.icon + ' fa-fw'"></i></span>
               <span>{{ item.label }}</span>
@@ -129,7 +152,7 @@
   </aside>
 
   <div class="content-zone">
-    <header class="topbar border-bottom bg-white shadow-sm">
+    <header class="topbar border-bottom bg-body shadow-sm">
       <button
         type="button"
         class="menu-btn btn btn-outline-secondary btn-sm"

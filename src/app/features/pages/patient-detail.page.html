@@ -50,14 +50,14 @@
   </section>
 
   <div class="accordion patient-accordion" id="patientDetailAccordion">
-    <div class="accordion-item shadow-sm border-0 mb-3">
+    <div class="accordion-item shadow-sm mb-3 bg-body border">
       <h2 class="accordion-header" id="headingIdentity">
         <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-identity" aria-expanded="true" aria-controls="patient-accordion-identity">
           <i class="fa-solid fa-id-card text-primary me-2"></i>État civil
         </button>
       </h2>
       <div id="patient-accordion-identity" class="accordion-collapse collapse show" aria-labelledby="headingIdentity" data-bs-parent="#patientDetailAccordion">
-        <div class="accordion-body">
+        <div class="accordion-body bg-body">
           <form [formGroup]="editForm">
             <div class="row g-4">
               <div class="col-12 col-xl-8">
@@ -161,7 +161,7 @@
                     @if (selectedRelatedPatients().length > 0) {
                       <div class="d-flex flex-wrap gap-2 mb-2">
                         @for (person of selectedRelatedPatients(); track person.id) {
-                          <span class="badge text-bg-light border d-flex align-items-center gap-1 related-pill p-2">
+                          <span class="badge bg-body-tertiary text-body border d-flex align-items-center gap-1 related-pill p-2">
                             <i [class]="getRelatedPatientIcon(person.sex) + ' me-1'"></i>
                             @if (person.id > 0) {
                               <button
@@ -221,14 +221,14 @@
       </div>
     </div>
 
-    <div class="accordion-item shadow-sm border-0 mb-3">
+    <div class="accordion-item shadow-sm mb-3 bg-body border">
       <h2 class="accordion-header" id="headingPatientInfo">
         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-patient-info" aria-expanded="false" aria-controls="patient-accordion-patient-info">
           <i class="fa-solid fa-user-pen text-primary me-2"></i>Informations sur le patient
         </button>
       </h2>
       <div id="patient-accordion-patient-info" class="accordion-collapse collapse" aria-labelledby="headingPatientInfo" data-bs-parent="#patientDetailAccordion">
-        <div class="accordion-body">
+        <div class="accordion-body bg-body">
           <form [formGroup]="editForm">
             <div class="row g-3 mb-3">
               <div class="col-12 col-md-6">
@@ -284,7 +284,7 @@
       </div>
     </div>
 
-    <div class="accordion-item shadow-sm border-0 mb-3">
+    <div class="accordion-item shadow-sm mb-3 bg-body border">
       <h2 class="accordion-header" id="headingAntecedents">
         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-antecedents" aria-expanded="false" aria-controls="patient-accordion-antecedents">
           <i class="fa-solid fa-heart-pulse text-primary me-2"></i>Antécédents
@@ -294,7 +294,7 @@
         </button>
       </h2>
       <div id="patient-accordion-antecedents" class="accordion-collapse collapse" aria-labelledby="headingAntecedents" data-bs-parent="#patientDetailAccordion">
-        <div class="accordion-body">
+        <div class="accordion-body bg-body">
           @if (antecedents().length === 0) {
             <div class="empty-state">
               <i class="fa-solid fa-heart-pulse fa-2x text-secondary mb-3"></i>
@@ -327,7 +327,7 @@
       </div>
     </div>
 
-    <div class="accordion-item shadow-sm border-0 mb-3">
+    <div class="accordion-item shadow-sm mb-3 bg-body border">
       <h2 class="accordion-header" id="headingDocuments">
         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-documents" aria-expanded="false" aria-controls="patient-accordion-documents">
           <i class="fa-regular fa-folder-open text-primary me-2"></i>Documents du patient
@@ -337,7 +337,7 @@
         </button>
       </h2>
       <div id="patient-accordion-documents" class="accordion-collapse collapse" aria-labelledby="headingDocuments" data-bs-parent="#patientDetailAccordion">
-        <div class="accordion-body">
+        <div class="accordion-body bg-body">
           @if (documentActionError()) {
             <div class="alert alert-danger">{{ documentActionError() }}</div>
           }
@@ -381,7 +381,7 @@
       </div>
     </div>
 
-    <div class="accordion-item shadow-sm border-0 mb-3">
+    <div class="accordion-item shadow-sm mb-3 bg-body border">
       <h2 class="accordion-header" id="headingConsultations">
         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-consultations" aria-expanded="false" aria-controls="patient-accordion-consultations">
           <i class="fa-solid fa-stethoscope text-primary me-2"></i>Consultations
@@ -391,7 +391,7 @@
         </button>
       </h2>
       <div id="patient-accordion-consultations" class="accordion-collapse collapse" aria-labelledby="headingConsultations" data-bs-parent="#patientDetailAccordion">
-        <div class="accordion-body">
+        <div class="accordion-body bg-body">
           @if (consultationTimelineGroups().length === 0) {
             <div class="empty-state">
               <i class="fa-solid fa-stethoscope fa-2x text-secondary mb-3"></i>
@@ -547,7 +547,7 @@
           @if (consultationActiveTab() === 'consultation') {
             <form [formGroup]="consultationEditForm" class="consultation-edit-grid">
               <div class="consultation-split mb-4">
-                <div class="consultation-main-panel border rounded-3 p-3 bg-white">
+                <div class="consultation-main-panel border rounded-3 p-3 bg-body">
                   <div class="mb-3">
                     <label class="form-label" for="consultation-started-at">Debut de consultation</label>
                     <input id="consultation-started-at" type="datetime-local" class="form-control" formControlName="startedAtLocal" />
@@ -701,7 +701,7 @@
                       } @else {
                         <div class="d-flex flex-wrap gap-2">
                           @for (reason of consultationSelectedReasonItems(); track reason.label) {
-                            <span class="badge rounded-pill text-bg-light border">
+                            <span class="badge rounded-pill bg-body-tertiary text-body border">
                               {{ reason.label }}@if (reason.value) { : {{ reason.value }} }@if (reason.important) { (important) }
                             </span>
                           }
@@ -780,7 +780,7 @@
                 <label class="form-label fw-semibold d-block">Documents patient</label>
                 <div
                   class="border rounded-3 p-4 text-center"
-                  [class.bg-light]="!isConsultationDocumentDragOver()"
+                  [class.bg-body-tertiary]="!isConsultationDocumentDragOver()"
                   [class.bg-primary-subtle]="isConsultationDocumentDragOver()"
                   (dragover)="onConsultationDocumentDragOver($event)"
                   (dragleave)="onConsultationDocumentDragLeave($event)"
@@ -812,7 +812,7 @@
               } @else {
                 <div class="d-flex flex-column gap-3">
                   @for (document of consultationPendingDocuments(); track document.tempKey) {
-                    <article class="border rounded-3 p-3 bg-white">
+                    <article class="border rounded-3 p-3 bg-body">
                       <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
                         <div>
                           <p class="fw-semibold mb-1">{{ document.fileName }}</p>
@@ -854,7 +854,7 @@
                 <label class="form-label fw-semibold d-block">Documents patient</label>
                 <div
                   class="border rounded-3 p-4 text-center"
-                  [class.bg-light]="!isConsultationDocumentDragOver()"
+                  [class.bg-body-tertiary]="!isConsultationDocumentDragOver()"
                   [class.bg-primary-subtle]="isConsultationDocumentDragOver()"
                   (dragover)="onConsultationDocumentDragOver($event)"
                   (dragleave)="onConsultationDocumentDragLeave($event)"
@@ -886,7 +886,7 @@
               } @else {
                 <div class="d-flex flex-column gap-3">
                   @for (document of activeConsultationDocuments(); track document.documentRef) {
-                    <article class="border rounded-3 p-3 bg-white">
+                    <article class="border rounded-3 p-3 bg-body">
                       <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
                         <div>
                           <p class="fw-semibold mb-1">{{ document.fileName }}</p>

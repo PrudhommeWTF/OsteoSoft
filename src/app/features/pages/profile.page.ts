@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { UpdateMyUserProfilePayload } from '../../core/api.types';
+import { ThemeMode, ThemeService } from '../../core/theme.service';
 
 @Component({
   selector: 'app-profile-page',
@@ -16,6 +17,7 @@ export class ProfilePage {
   private readonly api = inject(ApiService);
   private readonly authService = inject(AuthService);
   private readonly fb = inject(FormBuilder);
+  private readonly themeService = inject(ThemeService);
 
   readonly isLoading = signal(false);
   readonly isSaving = signal(false);
@@ -44,6 +46,12 @@ export class ProfilePage {
   readonly pdfDisplayModeOptions = [
     { value: 'browser' as const, label: 'Afficher dans le navigateur' },
     { value: 'download' as const, label: 'Télécharger directement' }
+  ];
+
+  readonly themeModeOptions = [
+    { value: 'system' as const, label: 'Suivre le thème du système' },
+    { value: 'light' as const, label: 'Forcer le thème clair' },
+    { value: 'dark' as const, label: 'Forcer le thème sombre' }
   ];
 
   readonly consultationOrderOptions = ['Chronologique', 'Antichronologique'] as const;
@@ -80,6 +88,7 @@ export class ProfilePage {
   readonly preferencesForm = this.fb.nonNullable.group({
     slotDurationMinutes: [15, [Validators.required, Validators.min(5), Validators.max(50)]],
     displayHeight: [14, [Validators.required, Validators.min(14), Validators.max(35)]],
+    themeMode: ['system' as ThemeMode, [Validators.required]],
     pdfDisplayMode: ['browser' as 'browser' | 'download', [Validators.required]],
     consultationOrder: ['Antichronologique' as 'Chronologique' | 'Antichronologique', [Validators.required]],
     groupConsultationsByYearFrom: [10, [Validators.required, Validators.min(0), Validators.max(200)]],
@@ -127,6 +136,7 @@ export class ProfilePage {
       const savedPreferences = await this.api.updateMyAgendaPreferences(this.preferencesForm.getRawValue());
 
       this.preferencesForm.reset(savedPreferences);
+      this.themeService.setThemeMode(savedPreferences.themeMode, { persist: true });
       this.accountForm.patchValue({
         password: '',
         passwordConfirmation: ''
@@ -188,6 +198,7 @@ export class ProfilePage {
       });
 
       this.preferencesForm.reset(preferences);
+      this.themeService.setThemeMode(preferences.themeMode, { persist: true });
     } catch {
       this.error.set('Impossible de charger votre profil.');
     } finally {
@@ -212,6 +223,14 @@ export class ProfilePage {
 
   isTabActive(tab: 'compte' | 'identite' | 'pro' | 'documents' | 'compta' | 'agenda'): boolean {
     return this.activeTab() === tab;
+  }
+
+  onThemeModePreviewChange(value: string): void {
+    if (value !== 'system' && value !== 'light' && value !== 'dark') {
+      return;
+    }
+
+    this.themeService.setThemeMode(value, { persist: false });
   }
 
   private buildProfilePayload(): UpdateMyUserProfilePayload {

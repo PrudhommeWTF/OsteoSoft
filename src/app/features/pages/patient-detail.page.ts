@@ -39,7 +39,6 @@ import { TopbarService } from '../../core/topbar.service';
 declare const $: any;
 declare const bootstrap: any;
 
-type AccordionSection = 'identity' | 'patient-info' | 'antecedents' | 'documents' | 'consultations';
 type AntecedentPrecision = 'date' | 'month' | 'year';
 type ConsultationEditorSection = 'motifMainHtml' | 'testsHtml' | 'schemaHtml' | 'treatmentsHtml' | 'remarksHtml';
 type ConsultationModalTab = 'consultation' | 'documents' | 'courriers' | 'paiement';
@@ -1176,7 +1175,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
     const preferDownload = this.preferences()?.pdfDisplayMode === 'download';
     const previewWindow = !preferDownload
-      ? window.open('', '_blank', 'noopener,noreferrer')
+      ? window.open('about:blank', '_blank')
       : null;
 
     this.consultationPdfError.set('');
@@ -1293,7 +1292,10 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
         if (previewWindow) {
           previewWindow.location.href = url;
         } else {
-          pdf.save(filename);
+          const fallbackWindow = window.open(url, '_blank');
+          if (!fallbackWindow) {
+            window.location.assign(url);
+          }
         }
 
         setTimeout(() => URL.revokeObjectURL(url), 60_000);
@@ -1461,7 +1463,6 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       this.startEdit();
 
       queueMicrotask(() => {
-        this.openAccordion('identity');
         if (this.pendingFocusedConsultationId != null) {
           this.focusConsultationById(this.pendingFocusedConsultationId);
         }
@@ -1544,15 +1545,6 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
         consultationCount: 0
       }))
     );
-  }
-
-  private openAccordion(section: AccordionSection): void {
-    const element = document.getElementById(`patient-accordion-${section}`);
-    if (!element) {
-      return;
-    }
-
-    bootstrap.Collapse.getOrCreateInstance(element, { toggle: false }).show();
   }
 
   private async loadLocationPairs(): Promise<void> {
@@ -1770,7 +1762,6 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    this.openAccordion('consultations');
     queueMicrotask(() => this.openConsultationModal(consultation));
   }
 

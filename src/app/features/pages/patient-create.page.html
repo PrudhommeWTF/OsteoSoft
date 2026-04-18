@@ -117,7 +117,7 @@
           @if (selectedRelatedPatients().length > 0) {
             <div class="d-flex flex-wrap gap-2 mb-2">
               @for (person of selectedRelatedPatients(); track person.id) {
-                <span class="badge text-bg-light border related-pill">
+                <span class="badge bg-body-tertiary text-body border related-pill">
                   {{ person.fullName }}
                   <button
                     type="button"
@@ -716,7 +716,7 @@
 
         @if (consultationActiveTab() === 'consultation') {
           <div class="consultation-split mb-4">
-            <div class="consultation-main-panel border rounded-3 p-3 bg-white">
+            <div class="consultation-main-panel border rounded-3 p-3 bg-body">
               <div class="mb-3">
                 <label class="form-label" for="consultationStartedAt">Debut de consultation</label>
                 <input
@@ -887,7 +887,7 @@
                   } @else {
                     <div class="d-flex flex-wrap gap-2">
                       @for (reason of consultationSelectedReasonItems(); track reason.label) {
-                        <span class="badge rounded-pill text-bg-light border">
+                        <span class="badge rounded-pill bg-body-tertiary text-body border">
                           {{ reason.label }}@if (reason.value) { : {{ reason.value }} }@if (reason.important) { (important) }
                         </span>
                       }
@@ -964,7 +964,7 @@
             <label class="form-label fw-semibold d-block">Documents patient</label>
             <div
               class="border rounded-3 p-4 text-center"
-              [class.bg-light]="!isConsultationDocumentDragOver()"
+              [class.bg-body-tertiary]="!isConsultationDocumentDragOver()"
               [class.bg-primary-subtle]="isConsultationDocumentDragOver()"
               (dragover)="onConsultationDocumentDragOver($event)"
               (dragleave)="onConsultationDocumentDragLeave($event)"
@@ -995,7 +995,7 @@
           } @else {
             <div class="d-flex flex-column gap-3">
               @for (doc of consultationDocuments(); track doc.tempKey) {
-                <article class="border rounded-3 p-3 bg-white">
+                <article class="border rounded-3 p-3 bg-body">
                   <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
                     <div>
                       <p class="fw-semibold mb-1">{{ doc.fileName }}</p>

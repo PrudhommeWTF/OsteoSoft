@@ -3,7 +3,7 @@
 }
 
 .page-head h1 {
-  color: #17384d;
+  color: var(--bs-heading-color);
 }
 
 .page-head-link {
@@ -28,11 +28,11 @@
 .stat-panel .kpi {
   font-size: clamp(1.3rem, 2vw, 1.8rem);
   font-weight: 800;
-  color: #0f576f;
+  color: var(--bs-emphasis-color);
 }
 
 .muted {
-  color: #5c7a8b;
+  color: var(--bs-secondary-color);
 }
 
 .trend {
@@ -64,4 +64,10 @@
 
 .table > :not(caption) > * > * {
   white-space: nowrap;
+}
+
+.table thead th {
+  background-color: var(--bs-tertiary-bg);
+  color: var(--bs-heading-color);
+  border-color: var(--bs-border-color);
 }

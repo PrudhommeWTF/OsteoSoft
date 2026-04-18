@@ -38,21 +38,11 @@
   display: block;
 }
 
-.patient-accordion .accordion-button {
-  font-weight: 600;
-}
-
-.patient-accordion .accordion-button:not(.collapsed) {
-  background: #f5f9fc;
-  color: inherit;
-  box-shadow: none;
-}
-
 .age-badge {
   display: inline-flex;
   align-items: center;
-  background: #e8f1f8;
-  color: #2f7cb8;
+  background: var(--bs-primary-bg-subtle);
+  color: var(--bs-primary-text-emphasis);
   border-radius: 20px;
   padding: 0.35rem 0.85rem;
   font-size: 0.9rem;
@@ -77,19 +67,19 @@
   z-index: 1200;
   max-height: 220px;
   overflow-y: auto;
-  background: #fff;
-  border: 1px solid #ced4da;
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
   border-radius: 0.5rem;
 }
 
 .autocomplete-list .list-group-item {
-  background: #fff;
-  color: #1e2d3d;
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
   cursor: pointer;
 }
 
 .autocomplete-list .list-group-item:hover {
-  background: #f1f5f9;
+  background: var(--bs-tertiary-bg);
 }
 
 .empty-state {
@@ -115,7 +105,7 @@
   top: 0.25rem;
   bottom: 0.25rem;
   width: 2px;
-  background: #d8dee5;
+  background: var(--bs-border-color);
 }
 
 .timeline-item,
@@ -140,15 +130,15 @@
   height: 0.7rem;
   border-radius: 50%;
   background: #2f7cb8;
-  box-shadow: 0 0 0 3px #fff;
+  box-shadow: 0 0 0 3px var(--bs-body-bg);
 }
 
 .timeline-content,
 .consultation-timeline-item {
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--bs-border-color);
   border-radius: 10px;
   padding: 0.75rem 0.85rem;
-  background: #fff;
+  background: var(--bs-body-bg);
 }
 
 .timeline-item.important .timeline-marker {
@@ -156,8 +146,8 @@
 }
 
 .timeline-item.important .timeline-content {
-  border-color: #f1b0b7;
-  background: #fff8f8;
+  border-color: var(--bs-danger-border-subtle);
+  background: var(--bs-danger-bg-subtle);
 }
 
 .document-meta {
@@ -183,7 +173,7 @@
   height: 0.7rem;
   border-radius: 50%;
   background: #2f7cb8;
-  box-shadow: 0 0 0 3px #fff;
+  box-shadow: 0 0 0 3px var(--bs-body-bg);
 }
 
 .consultation-timeline-item:hover,
@@ -197,14 +187,14 @@
 .consultation-timeline-date {
   display: block;
   font-size: 0.82rem;
-  color: #617486;
+  color: var(--bs-secondary-color);
   margin-bottom: 0.2rem;
 }
 
 .consultation-timeline-title {
   display: block;
   font-weight: 600;
-  color: #22313e;
+  color: var(--bs-heading-color);
 }
 
 .consultation-rich-sections {
@@ -223,11 +213,11 @@
 
 .wysiwyg-editor,
 .rich-editor {
-  border: 1px solid #ced4da;
+  border: 1px solid var(--bs-border-color);
   border-radius: 0.5rem;
   min-height: 110px;
   padding: 0.65rem 0.75rem;
-  background: #fff;
+  background: var(--bs-body-bg);
   overflow-wrap: anywhere;
 }
 
@@ -345,13 +335,13 @@
   z-index: 1200;
   max-height: 220px;
   overflow-y: auto;
-  background: #fff;
-  border: 1px solid #ced4da;
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
   border-radius: 0.5rem;
 
   .list-group-item {
-    background: #fff;
-    color: #1e2d3d;
+    background: var(--bs-body-bg);
+    color: var(--bs-body-color);
     cursor: pointer;
   }
 
@@ -390,7 +380,7 @@
 
 .reason-item {
   width: 100%;
-  border: 1px solid #d7dfe8;
+  border: 1px solid var(--bs-border-color);
   border-radius: 0.5rem;
   padding: 0.45rem 0.55rem;
   display: flex;
@@ -422,17 +412,17 @@
 .reason-item-label {
   font-size: 0.83rem;
   font-weight: 600;
-  color: #2f3e4d;
+  color: var(--bs-body-color);
 }
 
 .consultation-kpi {
-  border: 1px solid #d7e1e8;
+  border: 1px solid var(--bs-border-color);
   border-radius: 0.75rem;
   padding: 0.65rem 0.85rem;
   font-size: 1rem;
   font-weight: 700;
-  color: #22313e;
-  background: #f8fbfe;
+  color: var(--bs-heading-color);
+  background: var(--bs-tertiary-bg);
 }
 
 .wysiwyg-toolbar {
@@ -448,16 +438,16 @@
   align-items: center;
   justify-content: center;
   min-height: 200px;
-  border: 1px dashed #ced8e3;
+  border: 1px dashed var(--bs-border-color);
   border-radius: 0.75rem;
-  background: #f9fbfd;
+  background: var(--bs-tertiary-bg);
   text-align: center;
   padding: 1.5rem;
 }
 
 .empty-tab-state i {
   font-size: 1.8rem;
-  color: #7b8c9b;
+  color: var(--bs-secondary-color);
   margin-bottom: 0.5rem;
 }
 
@@ -468,7 +458,7 @@
 }
 
 .empty-tab-state p {
-  color: #5f7080;
+  color: var(--bs-secondary-color);
   margin-bottom: 0;
 }
 

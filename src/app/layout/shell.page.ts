@@ -5,6 +5,7 @@ import { ApiService } from '../core/api.service';
 import { Patient } from '../core/api.types';
 import { AuthService } from '../core/auth.service';
 import { ConfigService } from '../core/config.service';
+import { ThemeService } from '../core/theme.service';
 import { TopbarService } from '../core/topbar.service';
 
 type NavItem = {
@@ -37,6 +38,7 @@ export class ShellPage implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   readonly configService = inject(ConfigService);
   readonly topbar = inject(TopbarService);
+  readonly themeService = inject(ThemeService);
 
   readonly isMenuOpen = signal(false);
   readonly username = this.authService.username;
@@ -48,6 +50,7 @@ export class ShellPage implements OnInit, OnDestroy {
   readonly sidebarSearch = signal('');
   readonly sidebarSearchResults = signal<Patient[]>([]);
   readonly isSearchingSidebarPatients = signal(false);
+  readonly quickThemeToggleChecked = computed(() => this.themeService.effectiveTheme() === 'dark');
 
   private clockTimer: ReturnType<typeof setInterval> | null = null;
   private sidebarSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
@@ -181,6 +184,16 @@ export class ShellPage implements OnInit, OnDestroy {
     { label: 'Editer mon profil', icon: 'fa-solid fa-user-pen', path: '/mon-profil' }
   ]);
 
+  readonly quickThemeAriaLabel = computed(() => {
+    const effective = this.themeService.effectiveTheme();
+    const mode = this.themeService.themeMode();
+    if (mode === 'system') {
+      return `Thème système actif (${effective}). Basculer vers ${effective === 'dark' ? 'clair' : 'sombre'}.`;
+    }
+
+    return `Thème ${effective}. Basculer vers ${effective === 'dark' ? 'clair' : 'sombre'}.`;
+  });
+
   toggleMenu(): void {
     this.isMenuOpen.update((value) => !value);
   }
@@ -192,6 +205,10 @@ export class ShellPage implements OnInit, OnDestroy {
 
   closeMenu(): void {
     this.isMenuOpen.set(false);
+  }
+
+  toggleQuickTheme(): void {
+    this.themeService.toggleQuickTheme();
   }
 
   onSidebarSearchChange(value: string): void {

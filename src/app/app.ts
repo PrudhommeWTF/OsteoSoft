@@ -4,6 +4,7 @@ import { Title } from '@angular/platform-browser';
 import { filter } from 'rxjs';
 
 import { ConfigService } from './core/config.service';
+import { ThemeService } from './core/theme.service';
 
 @Component({
   selector: 'app-root',
@@ -16,8 +17,11 @@ export class App {
   private readonly titleService = inject(Title);
   private readonly configService = inject(ConfigService);
   private readonly router = inject(Router);
+  private readonly themeService = inject(ThemeService);
 
   constructor() {
+    this.themeService.init();
+
     // Update title when config is loaded
     effect(() => {
       const config = this.configService.config();

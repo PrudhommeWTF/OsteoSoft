@@ -9,6 +9,10 @@
   --bs-primary: #4d92d1;
   --bs-primary-rgb: 77, 146, 209;
   --bs-border-color: #dbe4ea;
+  --app-bg: #edf3f7;
+  --app-text: #23333f;
+  --app-card-bg: #ffffff;
+  --app-card-border: #dbe4ea;
 }
 
 * {
@@ -19,11 +23,41 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  background: #edf3f7;
+  background: var(--app-bg);
 }
 
 body {
-  color: #23333f;
+  color: var(--app-text);
+}
+
+html[data-bs-theme='dark'] {
+  color-scheme: dark;
+  --app-bg: #0f1923;
+  --app-text: #d7e2ea;
+  --app-card-bg: #142231;
+  --app-card-border: #2a3c4f;
+  --bs-body-bg: #0f1923;
+  --bs-body-color: #d7e2ea;
+  --bs-secondary-bg: #1a2b3a;
+  --bs-tertiary-bg: #1f3143;
+  --bs-border-color: #2a3c4f;
+}
+
+html[data-bs-theme='dark'] .card,
+html[data-bs-theme='dark'] .modal-content,
+html[data-bs-theme='dark'] .table,
+html[data-bs-theme='dark'] .form-control,
+html[data-bs-theme='dark'] .form-select,
+html[data-bs-theme='dark'] .input-group-text {
+  background-color: var(--app-card-bg);
+  color: var(--app-text);
+  border-color: var(--app-card-border);
+}
+
+html[data-bs-theme='dark'] .text-secondary,
+html[data-bs-theme='dark'] .form-text,
+html[data-bs-theme='dark'] .text-muted {
+  color: #9db0c0 !important;
 }
 
 button,

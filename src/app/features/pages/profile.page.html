@@ -109,7 +109,7 @@
                       } @else {
                         <span class="d-flex flex-wrap gap-2">
                           @for (cabinet of lockedCabinets(); track cabinet) {
-                            <span class="badge rounded-pill text-bg-light border">{{ cabinet }}</span>
+                            <span class="badge rounded-pill bg-body-tertiary text-body border">{{ cabinet }}</span>
                           }
                         </span>
                       }
@@ -508,6 +508,23 @@
                       step="1"
                     />
                   </div>
+
+                <div class="col-12 col-lg-4">
+                  <div class="form-floating">
+                    <select
+                      id="profile-theme-mode"
+                      class="form-select"
+                      formControlName="themeMode"
+                      aria-label="Mode de thème"
+                      (change)="onThemeModePreviewChange($any($event.target).value)"
+                    >
+                      @for (option of themeModeOptions; track option.value) {
+                        <option [value]="option.value">{{ option.label }}</option>
+                      }
+                    </select>
+                    <label for="profile-theme-mode">Thème de l'application</label>
+                  </div>
+                </div>
 
                 <div class="col-12 col-lg-4">
                   <div class="form-floating">

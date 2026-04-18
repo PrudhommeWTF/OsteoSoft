@@ -16,7 +16,7 @@
 .wc-title {
   font-size: 0.95rem;
   font-weight: 600;
-  color: #17384d;
+  color: var(--bs-heading-color);
 }
 
 // ── Conteneur principal ───────────────────────────────────────────────────────
@@ -36,7 +36,7 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background: #f8f9fa;
+  background: var(--bs-tertiary-bg);
   border-bottom: 2px solid var(--wc-border);
   min-width: max-content;
 }
@@ -80,7 +80,7 @@
   font-size: 1.05rem;
   font-weight: 400;
   line-height: 1.6;
-  color: #17384d;
+  color: var(--bs-heading-color);
 
   &--today {
     display: inline-flex;
@@ -180,14 +180,14 @@
 .wc-event-time {
   font-size: 0.66rem;
   font-weight: 700;
-  color: #17384d;
+  color: var(--bs-heading-color);
   flex-shrink: 0;
   line-height: 1.4;
 }
 
 .wc-event-label {
   font-size: 0.72rem;
-  color: #17384d;
+  color: var(--bs-heading-color);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -227,7 +227,7 @@
 .wc-month-head {
   display: grid;
   grid-template-columns: repeat(var(--wc-month-cols, 7), minmax(0, 1fr));
-  background: #f8f9fa;
+  background: var(--bs-tertiary-bg);
   border-bottom: 2px solid var(--wc-border);
 }
 
@@ -261,7 +261,7 @@
   border-right: 1px solid var(--wc-border);
   border-bottom: 1px solid var(--wc-border);
   padding: 6px;
-  background: #fff;
+  background: var(--bs-body-bg);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -271,7 +271,7 @@
   }
 
   &--outside {
-    background: #f8fafb;
+    background: var(--bs-tertiary-bg);
   }
 
   &--today {
@@ -283,7 +283,7 @@
   align-self: flex-start;
   font-size: 0.8rem;
   font-weight: 600;
-  color: #17384d;
+  color: var(--bs-heading-color);
   min-width: 1.75rem;
   text-align: center;
   border-radius: 999px;
@@ -315,13 +315,13 @@
 .wc-month-event-time {
   font-size: 0.64rem;
   font-weight: 700;
-  color: #17384d;
+  color: var(--bs-heading-color);
   flex-shrink: 0;
 }
 
 .wc-month-event-label {
   font-size: 0.68rem;
-  color: #17384d;
+  color: var(--bs-heading-color);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -338,7 +338,7 @@
 .wc-modal-patient {
   border-left: 4px solid #4d92d1;
   border-radius: 0.5rem;
-  background: #f8fafb;
+  background: var(--bs-tertiary-bg);
   padding: 0.75rem;
 }
 
@@ -347,7 +347,7 @@
   align-items: center;
   gap: 0.4rem;
   font-weight: 700;
-  color: #17384d;
+  color: var(--bs-heading-color);
 }
 
 .wc-save-btn {
