@@ -19,7 +19,7 @@
   color: var(--bs-body-color);
   padding: 1rem 0.7rem 0.9rem;
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-rows: auto auto auto 1fr auto;
   gap: 0.9rem;
   border-right: 1px solid var(--bs-border-color);
   min-height: 100dvh;
@@ -50,15 +50,20 @@
 }
 
 .brand-mark {
-  width: 3rem;
-  height: 3rem;
+  width: 3.25rem;
+  height: 3.25rem;
   border-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bs-danger) 82%, #fff) 0%, var(--bs-danger) 100%);
-  color: var(--bs-light);
-  font-weight: 800;
+  overflow: hidden;
+}
+
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 .title,
@@ -76,6 +81,24 @@
   margin-top: 0.15rem;
   color: var(--bs-secondary-color);
   font-size: 0.88rem;
+}
+
+.sidebar-office-picker {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.sidebar-office-label {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--bs-secondary-color);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.sidebar-office-picker .form-select {
+  min-height: 2rem;
+  font-size: 0.84rem;
 }
 
 .sidebar-search-label {
@@ -337,14 +360,6 @@
   color: var(--bs-body-color);
 }
 
-.office-picker-label {
-  margin-top: 0.45rem;
-  margin-bottom: 0.3rem;
-  font-size: 0.76rem;
-  color: var(--bs-secondary-color);
-  font-weight: 600;
-}
-
 .utility-nav {
   margin-top: 0;
   gap: 0.3rem;
@@ -439,6 +454,7 @@
   display: flex;
   align-items: center;
   gap: 1rem;
+  flex-wrap: wrap;
   padding: 1rem 1.3rem;
   border-bottom: 1px solid var(--bs-border-color);
   background: color-mix(in srgb, var(--bs-body-bg) 88%, transparent);
@@ -502,5 +518,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .topbar-datetime {
+    margin-left: 0;
+    margin-right: 0;
+    text-align: left;
   }
 }

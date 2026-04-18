@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Logo OsteoSoft">
+  <defs>
+    <linearGradient id="logo-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4d92d1" />
+      <stop offset="100%" stop-color="#2f6c9f" />
+    </linearGradient>
+    <linearGradient id="logo-accent" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f46d6d" />
+      <stop offset="100%" stop-color="#d83a3a" />
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="224" height="224" rx="64" fill="url(#logo-bg)" />
+  <path d="M156 60c-30.4 0-56 20-56 48 0 22.4 16.4 34 34.4 40.8 15.2 5.6 25.6 11.2 25.6 23.2 0 12.8-11.2 21.6-28.4 21.6-14.4 0-27.2-4.8-37.6-14L75.6 202c14.4 13.6 33.2 21.6 56.4 21.6 37.6 0 64.4-19.6 64.4-52 0-26.4-16.8-39.2-38.4-47.2-14.8-5.6-22.8-9.6-22.8-19.6 0-10 8.4-16.8 21.6-16.8 11.2 0 21.2 3.6 30.8 11.2l16.8-22C191.6 66.4 175.6 60 156 60Z" fill="#ffffff" opacity="0.96" />
+  <path d="M88 60c-14 9.6-23.2 26-23.2 44.4 0 20 10.4 34.4 31.2 44.8-19.2 11.6-29.2 26-29.2 44.4 0 8.4 2 16.4 5.6 23.6" fill="none" stroke="url(#logo-accent)" stroke-width="18" stroke-linecap="round" />
+  <circle cx="96" cy="76" r="10.8" fill="#ffffff" />
+  <circle cx="82" cy="112" r="10.8" fill="#ffffff" />
+  <circle cx="96" cy="148" r="10.8" fill="#ffffff" />
+  <circle cx="82" cy="184" r="10.8" fill="#ffffff" />
+</svg>

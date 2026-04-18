@@ -1213,102 +1213,214 @@
                           </div>
                         } @else if (officeCreateStep() === 3) {
                           <div>
-                            <div class="row g-2">
-                              <div class="col-12">
-                                <label for="office-invoice-number-format" class="form-label">Format numerotation</label>
-                                <select id="office-invoice-number-format" class="form-select" formControlName="invoiceNumberFormat">
-                                  @for (option of invoiceNumberFormatOptions; track option) {
-                                    <option [value]="option">{{ option }}</option>
-                                  }
-                                </select>
-                              </div>
-                              <div class="col-12">
-                                <label for="office-numbering-configuration" class="form-label">Configuration numerotation</label>
-                                <select id="office-numbering-configuration" class="form-select" formControlName="numberingConfiguration">
-                                  @for (option of numberingConfigurationOptions; track option) {
-                                    <option [value]="option">{{ option }}</option>
-                                  }
-                                </select>
-                              </div>
-                              <div class="col-12">
-                                <div class="form-check form-switch">
-                                  <input id="office-show-insurance-fields" type="checkbox" class="form-check-input" formControlName="alwaysShowSocialSecurityAndMutuelle" />
-                                  <label class="form-check-label" for="office-show-insurance-fields">Toujours afficher Securite Sociale et Mutuelle sur les factures</label>
+                            <div class="accordion settings-accordion" id="office-billing-create-accordion">
+                              <div class="accordion-item">
+                                <h2 class="accordion-header" id="office-create-billing-services-head">
+                                  <button
+                                    class="accordion-button"
+                                    type="button"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#office-create-billing-services"
+                                    aria-expanded="true"
+                                    aria-controls="office-create-billing-services"
+                                  >
+                                    Prestations proposées
+                                  </button>
+                                </h2>
+                                <div id="office-create-billing-services" class="accordion-collapse collapse show" aria-labelledby="office-create-billing-services-head" data-bs-parent="#office-billing-create-accordion">
+                                  <div class="accordion-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                      <h6 class="mb-0">Catalogue des prestations</h6>
+                                      <button type="button" class="btn btn-sm btn-outline-primary" (click)="addServiceTypeRow()">
+                                        <i class="fa-solid fa-plus me-1"></i>Ajouter
+                                      </button>
+                                    </div>
+                                    <div class="table-responsive">
+                                      <table class="table table-sm align-middle mb-0 settings-general-table">
+                                        <thead>
+                                          <tr>
+                                            <th scope="col">Libellé</th>
+                                            <th scope="col">Montant HT</th>
+                                            <th scope="col" class="text-end">Actions</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          @for (serviceType of serviceTypes(); track serviceType.tempKey) {
+                                            <tr>
+                                              <td>
+                                                <input type="text" class="form-control form-control-sm" [value]="serviceType.label" (input)="updateServiceTypeLabel(serviceType.tempKey, $any($event.target).value || '')" />
+                                              </td>
+                                              <td>
+                                                <input type="number" class="form-control form-control-sm" step="0.01" min="0" [value]="serviceType.amountHt" (input)="updateServiceTypeAmount(serviceType.tempKey, $any($event.target).value || '0')" />
+                                              </td>
+                                              <td class="text-end">
+                                                <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeServiceType(serviceType.tempKey)">
+                                                  <i class="fa-solid fa-trash"></i>
+                                                </button>
+                                              </td>
+                                            </tr>
+                                          }
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
 
-                            <div class="mt-4">
-                              <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h6 class="mb-0">Prestations proposees</h6>
-                                <button type="button" class="btn btn-sm btn-outline-primary" (click)="addServiceTypeRow()">
-                                  <i class="fa-solid fa-plus me-1"></i>Ajouter
-                                </button>
+                              <div class="accordion-item">
+                                <h2 class="accordion-header" id="office-create-billing-payments-head">
+                                  <button
+                                    class="accordion-button collapsed"
+                                    type="button"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#office-create-billing-payments"
+                                    aria-expanded="false"
+                                    aria-controls="office-create-billing-payments"
+                                  >
+                                    Moyens de paiement
+                                  </button>
+                                </h2>
+                                <div id="office-create-billing-payments" class="accordion-collapse collapse" aria-labelledby="office-create-billing-payments-head" data-bs-parent="#office-billing-create-accordion">
+                                  <div class="accordion-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                      <h6 class="mb-0">Modes acceptés</h6>
+                                      <button type="button" class="btn btn-sm btn-outline-primary" (click)="addPaymentMethod()">
+                                        <i class="fa-solid fa-plus me-1"></i>Ajouter
+                                      </button>
+                                    </div>
+                                    <div class="table-responsive">
+                                      <table class="table table-sm align-middle mb-0 settings-general-table">
+                                        <thead>
+                                          <tr>
+                                            <th scope="col">Libellé</th>
+                                            <th scope="col">Actif</th>
+                                            <th scope="col" class="text-end">Actions</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          @for (paymentMethod of paymentMethods(); track paymentMethod.tempKey) {
+                                            <tr>
+                                              <td>
+                                                <input type="text" class="form-control form-control-sm" [value]="paymentMethod.label" (input)="updatePaymentMethodLabel(paymentMethod.tempKey, $any($event.target).value || '')" />
+                                              </td>
+                                              <td>
+                                                <input type="checkbox" class="form-check-input" [checked]="paymentMethod.isActive" (change)="togglePaymentMethodActive(paymentMethod.tempKey)" />
+                                              </td>
+                                              <td class="text-end">
+                                                <button type="button" class="btn btn-sm btn-outline-danger" (click)="removePaymentMethod(paymentMethod.tempKey)">
+                                                  <i class="fa-solid fa-trash"></i>
+                                                </button>
+                                              </td>
+                                            </tr>
+                                          }
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
-                              <div class="table-responsive">
-                                <table class="table table-sm align-middle mb-0">
-                                  <thead>
-                                    <tr>
-                                      <th scope="col">Libelle</th>
-                                      <th scope="col">Montant</th>
-                                      <th scope="col" class="text-end">Actions</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    @for (serviceType of serviceTypes(); track serviceType.tempKey) {
-                                      <tr>
-                                        <td>
-                                          <input type="text" class="form-control form-control-sm" [value]="serviceType.label" (input)="updateServiceTypeLabel(serviceType.tempKey, $any($event.target).value || '')" />
-                                        </td>
-                                        <td>
-                                          <input type="number" class="form-control form-control-sm" step="0.01" min="0" [value]="serviceType.amountHt" (input)="updateServiceTypeAmount(serviceType.tempKey, $any($event.target).value || '0')" />
-                                        </td>
-                                        <td class="text-end">
-                                          <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeServiceType(serviceType.tempKey)">
-                                            <i class="fa-solid fa-trash"></i>
-                                          </button>
-                                        </td>
-                                      </tr>
-                                    }
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
 
-                            <div class="mt-4">
-                              <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h6 class="mb-0">Moyens de paiement</h6>
-                                <button type="button" class="btn btn-sm btn-outline-primary" (click)="addPaymentMethod()">
-                                  <i class="fa-solid fa-plus me-1"></i>Ajouter
-                                </button>
-                              </div>
-                              <div class="table-responsive">
-                                <table class="table table-sm align-middle mb-0">
-                                  <thead>
-                                    <tr>
-                                      <th scope="col">Libelle</th>
-                                      <th scope="col">Actif</th>
-                                      <th scope="col" class="text-end">Actions</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    @for (paymentMethod of paymentMethods(); track paymentMethod.tempKey) {
-                                      <tr>
-                                        <td>
-                                          <input type="text" class="form-control form-control-sm" [value]="paymentMethod.label" (input)="updatePaymentMethodLabel(paymentMethod.tempKey, $any($event.target).value || '')" />
-                                        </td>
-                                        <td>
-                                          <input type="checkbox" class="form-check-input" [checked]="paymentMethod.isActive" (change)="togglePaymentMethodActive(paymentMethod.tempKey)" />
-                                        </td>
-                                        <td class="text-end">
-                                          <button type="button" class="btn btn-sm btn-outline-danger" (click)="removePaymentMethod(paymentMethod.tempKey)">
-                                            <i class="fa-solid fa-trash"></i>
-                                          </button>
-                                        </td>
-                                      </tr>
-                                    }
-                                  </tbody>
-                                </table>
+                              <div class="accordion-item">
+                                <h2 class="accordion-header" id="office-create-billing-settings-head">
+                                  <button
+                                    class="accordion-button collapsed"
+                                    type="button"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#office-create-billing-settings"
+                                    aria-expanded="false"
+                                    aria-controls="office-create-billing-settings"
+                                  >
+                                    Paramètres de facture
+                                  </button>
+                                </h2>
+                                <div id="office-create-billing-settings" class="accordion-collapse collapse" aria-labelledby="office-create-billing-settings-head" data-bs-parent="#office-billing-create-accordion">
+                                  <div class="accordion-body">
+                                    <div class="row g-2">
+                                      <div class="col-12">
+                                        <label for="office-invoice-number-format" class="form-label">Format numérotation</label>
+                                        <select id="office-invoice-number-format" class="form-select" formControlName="invoiceNumberFormat">
+                                          @for (option of invoiceNumberFormatOptions; track option) {
+                                            <option [value]="option">{{ option }}</option>
+                                          }
+                                        </select>
+                                      </div>
+                                      <div class="col-12">
+                                        <label for="office-numbering-configuration" class="form-label">Configuration numérotation</label>
+                                        <select id="office-numbering-configuration" class="form-select" formControlName="numberingConfiguration">
+                                          @for (option of numberingConfigurationOptions; track option) {
+                                            <option [value]="option">{{ option }}</option>
+                                          }
+                                        </select>
+                                      </div>
+                                      <div class="col-12">
+                                        <div class="form-check form-switch">
+                                          <input id="office-show-insurance-fields" type="checkbox" class="form-check-input" formControlName="alwaysShowSocialSecurityAndMutuelle" />
+                                          <label class="form-check-label" for="office-show-insurance-fields">Toujours afficher Sécurité Sociale et Mutuelle sur les factures</label>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div class="settings-invoice-template-builder mt-4">
+                                      <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <h6 class="mb-0">Template builder facture PDF</h6>
+                                        <small class="text-secondary">Position en pourcentage de page</small>
+                                      </div>
+
+                                      <div class="row g-3">
+                                        <div class="col-12 col-xl-7">
+                                          <div class="settings-invoice-template-controls">
+                                            @for (block of invoiceTemplateBlockOptions; track block.key) {
+                                              <div class="settings-invoice-template-control-item">
+                                                <div class="d-flex align-items-center justify-content-between gap-2">
+                                                  <p class="fw-semibold mb-0">{{ block.label }}</p>
+                                                  <small class="text-secondary">
+                                                    X: {{ invoiceTemplateBlockValue(block.key, 'x') }}% ·
+                                                    Y: {{ invoiceTemplateBlockValue(block.key, 'y') }}%
+                                                  </small>
+                                                </div>
+                                                <div class="mt-2">
+                                                  <label class="form-label small mb-1" [for]="'invoice-create-' + block.key + '-w'">Largeur</label>
+                                                  <input
+                                                    [id]="'invoice-create-' + block.key + '-w'"
+                                                    type="range"
+                                                    class="form-range"
+                                                    min="20"
+                                                    max="96"
+                                                    [value]="invoiceTemplateBlockValue(block.key, 'w')"
+                                                    (input)="updateInvoiceTemplateBlock(block.key, 'w', $any($event.target).value || '20')"
+                                                  />
+                                                </div>
+                                              </div>
+                                            }
+                                          </div>
+                                        </div>
+
+                                        <div class="col-12 col-xl-5">
+                                          <div
+                                            class="settings-invoice-template-preview"
+                                            (dragover)="onInvoiceTemplatePreviewDragOver($event)"
+                                            (drop)="onInvoiceTemplatePreviewDrop($event)"
+                                          >
+                                            @for (block of invoiceTemplateBlockOptions; track block.key) {
+                                              <div
+                                                class="settings-invoice-template-preview-block"
+                                                [class.is-dragging]="draggedInvoiceTemplateBlockId() === block.key"
+                                                draggable="true"
+                                                (dragstart)="onInvoiceTemplateDragStart($event, block.key)"
+                                                (dragend)="onInvoiceTemplateDragEnd()"
+                                                [style.left.%]="invoiceTemplateBlockValue(block.key, 'x')"
+                                                [style.top.%]="invoiceTemplateBlockValue(block.key, 'y')"
+                                                [style.width.%]="invoiceTemplateBlockValue(block.key, 'w')"
+                                              >
+                                                {{ block.label }}
+                                              </div>
+                                            }
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -1622,148 +1734,256 @@
                         </div>
                       } @else if (officeModalTab() === 'billing') {
                         <div id="office-tab-billing" role="tabpanel">
-                          <div class="mt-1">
-                            <h6 class="mb-3">Paramètres de facturation</h6>
+                          <div class="accordion settings-accordion" id="office-billing-edit-accordion">
+                            <div class="accordion-item">
+                              <h2 class="accordion-header" id="office-edit-billing-services-head">
+                                <button
+                                  class="accordion-button"
+                                  type="button"
+                                  data-bs-toggle="collapse"
+                                  data-bs-target="#office-edit-billing-services"
+                                  aria-expanded="true"
+                                  aria-controls="office-edit-billing-services"
+                                >
+                                  Prestations proposées
+                                </button>
+                              </h2>
+                              <div id="office-edit-billing-services" class="accordion-collapse collapse show" aria-labelledby="office-edit-billing-services-head" data-bs-parent="#office-billing-edit-accordion">
+                                <div class="accordion-body">
+                                  <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h6 class="mb-0">Catalogue des prestations</h6>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" (click)="openServiceTypeModal()">
+                                      <i class="fa-solid fa-plus me-1"></i>Ajouter une prestation
+                                    </button>
+                                  </div>
 
-                            <div class="row g-2">
-                              <div class="col-12">
-                                <label for="office-invoice-number-format" class="form-label">Format numérotation</label>
-                                <select id="office-invoice-number-format" class="form-select" formControlName="invoiceNumberFormat">
-                                  @for (option of invoiceNumberFormatOptions; track option) {
-                                    <option [value]="option">{{ option }}</option>
-                                  }
-                                </select>
-                              </div>
-
-                              <div class="col-12 col-md-8">
-                                <label for="office-numbering-configuration" class="form-label">Configuration numérotation</label>
-                                <select id="office-numbering-configuration" class="form-select" formControlName="numberingConfiguration">
-                                  @for (option of numberingConfigurationOptions; track option) {
-                                    <option [value]="option">{{ option }}</option>
-                                  }
-                                </select>
-                              </div>
-
-                              <div class="col-12 col-md-4">
-                                <label for="office-vat-number" class="form-label">N° de TVA</label>
-                                <input
-                                  id="office-vat-number"
-                                  type="text"
-                                  class="form-control"
-                                  placeholder="FR12345678901"
-                                  formControlName="vatNumber"
-                                />
-                              </div>
-
-                              <div class="col-12">
-                                <div class="form-check form-switch">
-                                  <input id="office-show-insurance-fields" type="checkbox" class="form-check-input" formControlName="alwaysShowSocialSecurityAndMutuelle" />
-                                  <label class="form-check-label" for="office-show-insurance-fields">Toujours afficher Sécurité Sociale et Mutuelle sur les factures</label>
-                                </div>
-                              </div>
-
-                              <div class="col-12">
-                                <div class="form-check form-switch">
-                                  <input id="office-hide-vat-mention" type="checkbox" class="form-check-input" formControlName="hideVatMention" />
-                                  <label class="form-check-label" for="office-hide-vat-mention">Ne pas mentionner la TVA sur les factures</label>
+                                  <div class="table-responsive">
+                                    <table class="table table-sm align-middle settings-general-table mb-0">
+                                      <thead>
+                                        <tr>
+                                          <th scope="col">Libellé</th>
+                                          <th scope="col">Montant HT</th>
+                                          <th scope="col">TVA</th>
+                                          <th scope="col" class="text-end">Actions</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        @for (serviceType of serviceTypes(); track serviceType.tempKey) {
+                                          <tr draggable="true" (dragstart)="onServiceTypeDragStart($event, serviceType.tempKey)" (dragover)="allowDrop($event)" (drop)="onServiceTypeDrop($event, serviceType.tempKey)">
+                                            <td>
+                                              <input type="text" class="form-control form-control-sm" [value]="serviceType.label" (input)="updateServiceTypeLabel(serviceType.tempKey, $any($event.target).value || '')" />
+                                            </td>
+                                            <td>
+                                              <input type="number" class="form-control form-control-sm" step="0.01" min="0" [value]="serviceType.amountHt" (input)="updateServiceTypeAmount(serviceType.tempKey, $any($event.target).value || '0')" />
+                                            </td>
+                                            <td>
+                                              <select class="form-select form-select-sm" [value]="serviceType.vatRate" (change)="updateServiceTypeVat(serviceType.tempKey, $any($event.target).value || '0')">
+                                                @for (rate of vatRateOptions; track rate) {
+                                                  <option [value]="rate">{{ rate }}%</option>
+                                                }
+                                              </select>
+                                            </td>
+                                            <td class="text-end">
+                                              <div class="d-inline-flex gap-1">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" aria-label="Réorganiser la ligne">
+                                                  <i class="fa-solid fa-grip-vertical"></i>
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeServiceType(serviceType.tempKey)" aria-label="Supprimer la prestation">
+                                                  <i class="fa-solid fa-trash"></i>
+                                                </button>
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        }
+                                      </tbody>
+                                    </table>
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
 
-                          <div class="mt-4">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                              <h6 class="mb-0">Prestations proposées</h6>
-                              <button type="button" class="btn btn-sm btn-outline-primary" (click)="openServiceTypeModal()">
-                                <i class="fa-solid fa-plus me-1"></i>Ajouter une prestation
-                              </button>
+                            <div class="accordion-item">
+                              <h2 class="accordion-header" id="office-edit-billing-payments-head">
+                                <button
+                                  class="accordion-button collapsed"
+                                  type="button"
+                                  data-bs-toggle="collapse"
+                                  data-bs-target="#office-edit-billing-payments"
+                                  aria-expanded="false"
+                                  aria-controls="office-edit-billing-payments"
+                                >
+                                  Moyens de paiement
+                                </button>
+                              </h2>
+                              <div id="office-edit-billing-payments" class="accordion-collapse collapse" aria-labelledby="office-edit-billing-payments-head" data-bs-parent="#office-billing-edit-accordion">
+                                <div class="accordion-body">
+                                  <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h6 class="mb-0">Modes acceptés</h6>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" (click)="addPaymentMethod()">
+                                      <i class="fa-solid fa-plus me-1"></i>Ajouter un moyen
+                                    </button>
+                                  </div>
+
+                                  <div class="table-responsive">
+                                    <table class="table table-sm align-middle settings-general-table mb-0">
+                                      <thead>
+                                        <tr>
+                                          <th scope="col">Libellé</th>
+                                          <th scope="col">Actif</th>
+                                          <th scope="col" class="text-end">Actions</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        @for (paymentMethod of paymentMethods(); track paymentMethod.tempKey) {
+                                          <tr draggable="true" (dragstart)="onPaymentMethodDragStart($event, paymentMethod.tempKey)" (dragover)="allowDrop($event)" (drop)="onPaymentMethodDrop($event, paymentMethod.tempKey)">
+                                            <td>
+                                              <input type="text" class="form-control form-control-sm" [value]="paymentMethod.label" (input)="updatePaymentMethodLabel(paymentMethod.tempKey, $any($event.target).value || '')" />
+                                            </td>
+                                            <td>
+                                              <div class="form-check form-switch mb-0">
+                                                <input type="checkbox" class="form-check-input" [checked]="paymentMethod.isActive" (change)="togglePaymentMethodActive(paymentMethod.tempKey)" />
+                                              </div>
+                                            </td>
+                                            <td class="text-end">
+                                              <div class="d-inline-flex gap-1">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" aria-label="Réorganiser la ligne">
+                                                  <i class="fa-solid fa-grip-vertical"></i>
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-outline-danger" (click)="removePaymentMethod(paymentMethod.tempKey)" aria-label="Supprimer le moyen de paiement">
+                                                  <i class="fa-solid fa-trash"></i>
+                                                </button>
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        }
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
 
-                            <div class="table-responsive">
-                              <table class="table table-sm align-middle settings-general-table mb-0">
-                                <thead>
-                                  <tr>
-                                    <th scope="col">Libellé</th>
-                                    <th scope="col">Montant HT</th>
-                                    <th scope="col">TVA</th>
-                                    <th scope="col" class="text-end">Actions</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  @for (serviceType of serviceTypes(); track serviceType.tempKey) {
-                                    <tr draggable="true" (dragstart)="onServiceTypeDragStart($event, serviceType.tempKey)" (dragover)="allowDrop($event)" (drop)="onServiceTypeDrop($event, serviceType.tempKey)">
-                                      <td>
-                                        <input type="text" class="form-control form-control-sm" [value]="serviceType.label" (input)="updateServiceTypeLabel(serviceType.tempKey, $any($event.target).value || '')" />
-                                      </td>
-                                      <td>
-                                        <input type="number" class="form-control form-control-sm" step="0.01" min="0" [value]="serviceType.amountHt" (input)="updateServiceTypeAmount(serviceType.tempKey, $any($event.target).value || '0')" />
-                                      </td>
-                                      <td>
-                                        <select class="form-select form-select-sm" [value]="serviceType.vatRate" (change)="updateServiceTypeVat(serviceType.tempKey, $any($event.target).value || '0')">
-                                          @for (rate of vatRateOptions; track rate) {
-                                            <option [value]="rate">{{ rate }}%</option>
+                            <div class="accordion-item">
+                              <h2 class="accordion-header" id="office-edit-billing-settings-head">
+                                <button
+                                  class="accordion-button collapsed"
+                                  type="button"
+                                  data-bs-toggle="collapse"
+                                  data-bs-target="#office-edit-billing-settings"
+                                  aria-expanded="false"
+                                  aria-controls="office-edit-billing-settings"
+                                >
+                                  Paramètres de facture
+                                </button>
+                              </h2>
+                              <div id="office-edit-billing-settings" class="accordion-collapse collapse" aria-labelledby="office-edit-billing-settings-head" data-bs-parent="#office-billing-edit-accordion">
+                                <div class="accordion-body">
+                                  <div class="row g-2">
+                                    <div class="col-12">
+                                      <label for="office-invoice-number-format" class="form-label">Format numérotation</label>
+                                      <select id="office-invoice-number-format" class="form-select" formControlName="invoiceNumberFormat">
+                                        @for (option of invoiceNumberFormatOptions; track option) {
+                                          <option [value]="option">{{ option }}</option>
+                                        }
+                                      </select>
+                                    </div>
+
+                                    <div class="col-12 col-md-8">
+                                      <label for="office-numbering-configuration" class="form-label">Configuration numérotation</label>
+                                      <select id="office-numbering-configuration" class="form-select" formControlName="numberingConfiguration">
+                                        @for (option of numberingConfigurationOptions; track option) {
+                                          <option [value]="option">{{ option }}</option>
+                                        }
+                                      </select>
+                                    </div>
+
+                                    <div class="col-12 col-md-4">
+                                      <label for="office-vat-number" class="form-label">N° de TVA</label>
+                                      <input
+                                        id="office-vat-number"
+                                        type="text"
+                                        class="form-control"
+                                        placeholder="FR12345678901"
+                                        formControlName="vatNumber"
+                                      />
+                                    </div>
+
+                                    <div class="col-12">
+                                      <div class="form-check form-switch">
+                                        <input id="office-show-insurance-fields" type="checkbox" class="form-check-input" formControlName="alwaysShowSocialSecurityAndMutuelle" />
+                                        <label class="form-check-label" for="office-show-insurance-fields">Toujours afficher Sécurité Sociale et Mutuelle sur les factures</label>
+                                      </div>
+                                    </div>
+
+                                    <div class="col-12">
+                                      <div class="form-check form-switch">
+                                        <input id="office-hide-vat-mention" type="checkbox" class="form-check-input" formControlName="hideVatMention" />
+                                        <label class="form-check-label" for="office-hide-vat-mention">Ne pas mentionner la TVA sur les factures</label>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div class="settings-invoice-template-builder mt-4">
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                      <h6 class="mb-0">Template builder facture PDF</h6>
+                                      <small class="text-secondary">Position en pourcentage de page</small>
+                                    </div>
+
+                                    <div class="row g-3">
+                                      <div class="col-12 col-xl-7">
+                                        <div class="settings-invoice-template-controls">
+                                          @for (block of invoiceTemplateBlockOptions; track block.key) {
+                                            <div class="settings-invoice-template-control-item">
+                                              <div class="d-flex align-items-center justify-content-between gap-2">
+                                                <p class="fw-semibold mb-0">{{ block.label }}</p>
+                                                <small class="text-secondary">
+                                                  X: {{ invoiceTemplateBlockValue(block.key, 'x') }}% ·
+                                                  Y: {{ invoiceTemplateBlockValue(block.key, 'y') }}%
+                                                </small>
+                                              </div>
+                                              <div class="mt-2">
+                                                <label class="form-label small mb-1" [for]="'invoice-edit-' + block.key + '-w'">Largeur</label>
+                                                <input
+                                                  [id]="'invoice-edit-' + block.key + '-w'"
+                                                  type="range"
+                                                  class="form-range"
+                                                  min="20"
+                                                  max="96"
+                                                  [value]="invoiceTemplateBlockValue(block.key, 'w')"
+                                                  (input)="updateInvoiceTemplateBlock(block.key, 'w', $any($event.target).value || '20')"
+                                                />
+                                              </div>
+                                            </div>
                                           }
-                                        </select>
-                                      </td>
-                                      <td class="text-end">
-                                        <div class="d-inline-flex gap-1">
-                                          <button type="button" class="btn btn-sm btn-outline-secondary" aria-label="Réorganiser la ligne">
-                                            <i class="fa-solid fa-grip-vertical"></i>
-                                          </button>
-                                          <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeServiceType(serviceType.tempKey)" aria-label="Supprimer la prestation">
-                                            <i class="fa-solid fa-trash"></i>
-                                          </button>
                                         </div>
-                                      </td>
-                                    </tr>
-                                  }
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
+                                      </div>
 
-                          <div class="mt-4">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                              <h6 class="mb-0">Moyens de paiement</h6>
-                              <button type="button" class="btn btn-sm btn-outline-primary" (click)="addPaymentMethod()">
-                                <i class="fa-solid fa-plus me-1"></i>Ajouter un moyen
-                              </button>
-                            </div>
-
-                            <div class="table-responsive">
-                              <table class="table table-sm align-middle settings-general-table mb-0">
-                                <thead>
-                                  <tr>
-                                    <th scope="col">Libellé</th>
-                                    <th scope="col">Actif</th>
-                                    <th scope="col" class="text-end">Actions</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  @for (paymentMethod of paymentMethods(); track paymentMethod.tempKey) {
-                                    <tr draggable="true" (dragstart)="onPaymentMethodDragStart($event, paymentMethod.tempKey)" (dragover)="allowDrop($event)" (drop)="onPaymentMethodDrop($event, paymentMethod.tempKey)">
-                                      <td>
-                                        <input type="text" class="form-control form-control-sm" [value]="paymentMethod.label" (input)="updatePaymentMethodLabel(paymentMethod.tempKey, $any($event.target).value || '')" />
-                                      </td>
-                                      <td>
-                                        <div class="form-check form-switch mb-0">
-                                          <input type="checkbox" class="form-check-input" [checked]="paymentMethod.isActive" (change)="togglePaymentMethodActive(paymentMethod.tempKey)" />
+                                      <div class="col-12 col-xl-5">
+                                        <div
+                                          class="settings-invoice-template-preview"
+                                          (dragover)="onInvoiceTemplatePreviewDragOver($event)"
+                                          (drop)="onInvoiceTemplatePreviewDrop($event)"
+                                        >
+                                          @for (block of invoiceTemplateBlockOptions; track block.key) {
+                                            <div
+                                              class="settings-invoice-template-preview-block"
+                                              [class.is-dragging]="draggedInvoiceTemplateBlockId() === block.key"
+                                              draggable="true"
+                                              (dragstart)="onInvoiceTemplateDragStart($event, block.key)"
+                                              (dragend)="onInvoiceTemplateDragEnd()"
+                                              [style.left.%]="invoiceTemplateBlockValue(block.key, 'x')"
+                                              [style.top.%]="invoiceTemplateBlockValue(block.key, 'y')"
+                                              [style.width.%]="invoiceTemplateBlockValue(block.key, 'w')"
+                                            >
+                                              {{ block.label }}
+                                            </div>
+                                          }
                                         </div>
-                                      </td>
-                                      <td class="text-end">
-                                        <div class="d-inline-flex gap-1">
-                                          <button type="button" class="btn btn-sm btn-outline-secondary" aria-label="Réorganiser la ligne">
-                                            <i class="fa-solid fa-grip-vertical"></i>
-                                          </button>
-                                          <button type="button" class="btn btn-sm btn-outline-danger" (click)="removePaymentMethod(paymentMethod.tempKey)" aria-label="Supprimer le moyen de paiement">
-                                            <i class="fa-solid fa-trash"></i>
-                                          </button>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  }
-                                </tbody>
-                              </table>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>

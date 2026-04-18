@@ -191,6 +191,7 @@ db.exec(`
     invoice_numbering_configuration TEXT NOT NULL DEFAULT 'Numérotation globale au cabinet',
     invoice_show_insurance_fields INTEGER NOT NULL DEFAULT 0,
     invoice_hide_vat_mention INTEGER NOT NULL DEFAULT 0,
+    invoice_template_layout_json TEXT NOT NULL DEFAULT '{}',
     address_line1 TEXT,
     address_line2 TEXT,
     postal_code TEXT,
@@ -826,6 +827,67 @@ function normalizeOfficeInvoiceNumberingConfiguration(rawValue) {
   return value === 'Numérotation par praticien' ? value : 'Numérotation globale au cabinet';
 }
 
+function clampInvoiceTemplateLayoutValue(value, min, max, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.round(parsed)));
+}
+
+function defaultInvoiceTemplateLayout() {
+  return {
+    logo: { x: 4, y: 4, w: 24 },
+    practitioner: { x: 30, y: 4, w: 32 },
+    patient: { x: 64, y: 4, w: 32 },
+    invoiceMeta: { x: 64, y: 20, w: 32 },
+    lineItems: { x: 4, y: 32, w: 92 },
+    totals: { x: 56, y: 74, w: 40 },
+    payment: { x: 4, y: 74, w: 50 },
+    mentions: { x: 4, y: 86, w: 92 },
+    signature: { x: 60, y: 92, w: 36 }
+  };
+}
+
+function normalizeInvoiceTemplateLayoutJson(rawValue) {
+  const normalized = defaultInvoiceTemplateLayout();
+  let source = {};
+
+  if (typeof rawValue === 'string' && rawValue.trim()) {
+    try {
+      const parsed = JSON.parse(rawValue);
+      if (parsed && typeof parsed === 'object') {
+        source = parsed;
+      }
+    } catch {
+      source = {};
+    }
+  } else if (rawValue && typeof rawValue === 'object') {
+    source = rawValue;
+  }
+
+  for (const [key, fallback] of Object.entries(normalized)) {
+    const candidate = source?.[key];
+    if (!candidate || typeof candidate !== 'object') {
+      continue;
+    }
+
+    const next = {
+      x: clampInvoiceTemplateLayoutValue(candidate.x, 0, 96, fallback.x),
+      y: clampInvoiceTemplateLayoutValue(candidate.y, 0, 96, fallback.y),
+      w: clampInvoiceTemplateLayoutValue(candidate.w, 20, 96, fallback.w)
+    };
+
+    if (next.x + next.w > 100) {
+      next.x = Math.max(0, 100 - next.w);
+    }
+
+    normalized[key] = next;
+  }
+
+  return JSON.stringify(normalized);
+}
+
 function readOfficeServiceTypes(officeId) {
   return db
     .prepare(
@@ -1117,7 +1179,7 @@ function replaceOfficeBusinessSettings(officeId, serviceTypes, paymentMethods) {
 }
 
 function mapOfficeRow(row) {
-  const { openingHoursJson, consultationProfilesJson, ...officeFields } = row;
+  const { openingHoursJson, consultationProfilesJson, invoiceTemplateLayoutJson, ...officeFields } = row;
   const officeId = Number(officeFields.id);
   return {
     ...officeFields,
@@ -1128,6 +1190,7 @@ function mapOfficeRow(row) {
     numberingConfiguration: normalizeOfficeInvoiceNumberingConfiguration(officeFields.invoiceNumberingConfiguration),
     alwaysShowSocialSecurityAndMutuelle: Boolean(officeFields.invoiceShowInsuranceFields),
     hideVatMention: Boolean(officeFields.invoiceHideVatMention),
+    invoiceTemplateLayoutJson: normalizeInvoiceTemplateLayoutJson(invoiceTemplateLayoutJson),
     serviceTypes: Number.isInteger(officeId) && officeId > 0 ? readOfficeServiceTypes(officeId) : [],
     paymentMethods: Number.isInteger(officeId) && officeId > 0 ? readOfficePaymentMethods(officeId) : [],
     officeUserDelegations: Number.isInteger(officeId) && officeId > 0 ? readOfficeUserDelegations(officeId) : [],
@@ -2373,6 +2436,7 @@ async function ensureSeedData() {
   ensureColumn('offices', 'invoice_numbering_configuration', "invoice_numbering_configuration TEXT NOT NULL DEFAULT 'Numérotation globale au cabinet'");
   ensureColumn('offices', 'invoice_show_insurance_fields', 'invoice_show_insurance_fields INTEGER NOT NULL DEFAULT 0');
   ensureColumn('offices', 'invoice_hide_vat_mention', 'invoice_hide_vat_mention INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('offices', 'invoice_template_layout_json', "invoice_template_layout_json TEXT NOT NULL DEFAULT '{}'");
   ensureColumn('offices', 'opening_hours_json', `opening_hours_json TEXT NOT NULL DEFAULT '{"monday":[],"tuesday":[],"wednesday":[],"thursday":[],"friday":[],"saturday":[],"sunday":[]}'`);
   ensureColumn('offices', 'consultation_profiles_json', "consultation_profiles_json TEXT NOT NULL DEFAULT '[]'");
   ensureColumn('consultations', 'office_id', 'office_id INTEGER');
@@ -3347,8 +3411,8 @@ function synchronizeBidirectionalRelatedPeople({
   }
 }
 
-function getDefaultCalendarForUser(userId) {
-  const accessibleCalendarIds = getAccessibleCalendarIdsForUser(userId, null);
+function getDefaultCalendarForUser(userId, officeIdFilter = null) {
+  const accessibleCalendarIds = getAccessibleCalendarIdsForUser(userId, officeIdFilter);
   if (!accessibleCalendarIds.length) {
     return null;
   }
@@ -3469,9 +3533,9 @@ function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}
   let localCalendarId = null;
   let slotDurationMinutes = 60;
   let alignedStartIso = String(data.startedAt ?? new Date().toISOString());
-  let consultationOfficeId = Number.isInteger(requestedOfficeId) && requestedOfficeId > 0
-    ? requestedOfficeId
-    : (Number.isInteger(draftOfficeId) && draftOfficeId > 0 ? draftOfficeId : null);
+  let consultationOfficeId = Number.isInteger(draftOfficeId) && draftOfficeId > 0
+    ? draftOfficeId
+    : (Number.isInteger(requestedOfficeId) && requestedOfficeId > 0 ? requestedOfficeId : null);
 
   if (consultationOfficeId != null) {
     const exists = db.prepare('SELECT id FROM offices WHERE id = ?').get(consultationOfficeId);
@@ -3481,7 +3545,7 @@ function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}
   }
 
   if (Number.isInteger(userId) && userId > 0) {
-    const defaultCalendar = getDefaultCalendarForUser(userId);
+    const defaultCalendar = getDefaultCalendarForUser(userId, consultationOfficeId);
     if (defaultCalendar) {
       localCalendarId = defaultCalendar.id;
       if (defaultCalendar.officeId != null) {
@@ -4417,6 +4481,7 @@ app.get('/api/offices', authMiddleware, adminOnlyMiddleware, (_req, res) => {
     SELECT id, name, default_session_duration_minutes as defaultSessionDurationMinutes, country, devise,
            invoice_number_format as invoiceNumberFormat, invoice_numbering_configuration as invoiceNumberingConfiguration,
            invoice_show_insurance_fields as invoiceShowInsuranceFields, invoice_hide_vat_mention as invoiceHideVatMention,
+           invoice_template_layout_json as invoiceTemplateLayoutJson,
            address_line1 as addressLine1, address_line2 as addressLine2,
            postal_code as postalCode, city, phone_mobile as phoneMobile,
            phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
@@ -4453,6 +4518,7 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
     website,
     vatNumber,
     logoData,
+    invoiceTemplateLayoutJson,
     openingHours,
     consultationProfiles,
     officeUserDelegations,
@@ -4472,6 +4538,7 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
   const normalizedInvoiceNumberingConfiguration = normalizeOfficeInvoiceNumberingConfiguration(numberingConfiguration);
   const normalizedInvoiceShowInsuranceFields = alwaysShowSocialSecurityAndMutuelle ? 1 : 0;
   const normalizedInvoiceHideVatMention = hideVatMention ? 1 : 0;
+  const normalizedInvoiceTemplateLayoutJson = normalizeInvoiceTemplateLayoutJson(invoiceTemplateLayoutJson);
   const normalizedConsultationProfiles = normalizeOfficeConsultationProfiles(consultationProfiles);
 
   try {
@@ -4480,15 +4547,16 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
 
     const insert = db.prepare(`
       INSERT INTO offices (name, default_session_duration_minutes, country, devise, invoice_number_format, invoice_numbering_configuration,
-                           invoice_show_insurance_fields, invoice_hide_vat_mention, address_line1, address_line2, postal_code, city, phone_mobile,
+                           invoice_show_insurance_fields, invoice_hide_vat_mention, invoice_template_layout_json, address_line1, address_line2, postal_code, city, phone_mobile,
                            phone_landline, phone_fax, email, website, vat_number, logo_data, opening_hours_json,
                            consultation_profiles_json, display_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = insert.run(
       name, normalizedDefaultSessionDurationMinutes, normalizedCountry, normalizedDevise,
       normalizedInvoiceNumberFormat, normalizedInvoiceNumberingConfiguration, normalizedInvoiceShowInsuranceFields, normalizedInvoiceHideVatMention,
+      normalizedInvoiceTemplateLayoutJson,
       addressLine1 || null, addressLine2 || null, postalCode || null, city || null,
       phoneMobile || null, phoneLandline || null, phoneFax || null, email || null,
       website || null, vatNumber || null, logoData || null, JSON.stringify(normalizedOpeningHours),
@@ -4515,6 +4583,7 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
           SELECT id, name, default_session_duration_minutes as defaultSessionDurationMinutes, country, devise,
             invoice_number_format as invoiceNumberFormat, invoice_numbering_configuration as invoiceNumberingConfiguration,
             invoice_show_insurance_fields as invoiceShowInsuranceFields, invoice_hide_vat_mention as invoiceHideVatMention,
+            invoice_template_layout_json as invoiceTemplateLayoutJson,
             address_line1 as addressLine1, address_line2 as addressLine2,
              postal_code as postalCode, city, phone_mobile as phoneMobile,
              phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
@@ -4553,6 +4622,7 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
     website,
     vatNumber,
     logoData,
+    invoiceTemplateLayoutJson,
     openingHours,
     consultationProfiles,
     officeUserDelegations,
@@ -4573,13 +4643,14 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
   const normalizedInvoiceNumberingConfiguration = normalizeOfficeInvoiceNumberingConfiguration(numberingConfiguration);
   const normalizedInvoiceShowInsuranceFields = alwaysShowSocialSecurityAndMutuelle ? 1 : 0;
   const normalizedInvoiceHideVatMention = hideVatMention ? 1 : 0;
+  const normalizedInvoiceTemplateLayoutJson = normalizeInvoiceTemplateLayoutJson(invoiceTemplateLayoutJson);
   const normalizedConsultationProfiles = normalizeOfficeConsultationProfiles(consultationProfiles);
 
   try {
     const update = db.prepare(`
       UPDATE offices
         SET name = ?, default_session_duration_minutes = ?, country = ?, devise = ?, invoice_number_format = ?,
-          invoice_numbering_configuration = ?, invoice_show_insurance_fields = ?, invoice_hide_vat_mention = ?, address_line1 = ?, address_line2 = ?, postal_code = ?, city = ?,
+          invoice_numbering_configuration = ?, invoice_show_insurance_fields = ?, invoice_hide_vat_mention = ?, invoice_template_layout_json = ?, address_line1 = ?, address_line2 = ?, postal_code = ?, city = ?,
           phone_mobile = ?, phone_landline = ?, phone_fax = ?, email = ?, website = ?,
           vat_number = ?, logo_data = ?, opening_hours_json = ?, consultation_profiles_json = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
@@ -4588,6 +4659,7 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
     update.run(
       name, normalizedDefaultSessionDurationMinutes, normalizedCountry, normalizedDevise,
       normalizedInvoiceNumberFormat, normalizedInvoiceNumberingConfiguration, normalizedInvoiceShowInsuranceFields, normalizedInvoiceHideVatMention,
+      normalizedInvoiceTemplateLayoutJson,
       addressLine1 || null, addressLine2 || null, postalCode || null, city || null,
       phoneMobile || null, phoneLandline || null, phoneFax || null, email || null,
       website || null, vatNumber || null, logoData || null, JSON.stringify(normalizedOpeningHours),
@@ -4603,6 +4675,7 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
           SELECT id, name, default_session_duration_minutes as defaultSessionDurationMinutes, country, devise,
             invoice_number_format as invoiceNumberFormat, invoice_numbering_configuration as invoiceNumberingConfiguration,
             invoice_show_insurance_fields as invoiceShowInsuranceFields, invoice_hide_vat_mention as invoiceHideVatMention,
+            invoice_template_layout_json as invoiceTemplateLayoutJson,
             address_line1 as addressLine1, address_line2 as addressLine2,
              postal_code as postalCode, city, phone_mobile as phoneMobile,
              phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
@@ -4653,6 +4726,7 @@ app.post('/api/offices/reorder', authMiddleware, adminOnlyMiddleware, (req, res)
           SELECT id, name, default_session_duration_minutes as defaultSessionDurationMinutes, country, devise,
             invoice_number_format as invoiceNumberFormat, invoice_numbering_configuration as invoiceNumberingConfiguration,
             invoice_show_insurance_fields as invoiceShowInsuranceFields, invoice_hide_vat_mention as invoiceHideVatMention,
+            invoice_template_layout_json as invoiceTemplateLayoutJson,
             address_line1 as addressLine1, address_line2 as addressLine2,
              postal_code as postalCode, city, phone_mobile as phoneMobile,
              phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
@@ -7493,7 +7567,7 @@ app.get('/api/appointments', authMiddleware, requirePermission('read-agenda'), (
 });
 
 app.post('/api/appointments', authMiddleware, requirePermission('write-agenda'), (req, res) => {
-  const { patientId, startsAt, reason, status, localCalendarId, consultationId } = req.body;
+  const { patientId, startsAt, reason, status, localCalendarId, consultationId, officeId } = req.body;
 
   // Validate required fields
   if (!Number.isInteger(Number(patientId)) || Number(patientId) <= 0) {
@@ -7519,7 +7593,41 @@ app.post('/api/appointments', authMiddleware, requirePermission('write-agenda'),
     return res.status(404).json({ error: 'Patient not found' });
   }
 
-  const effectiveCalendarId = Number.isInteger(Number(localCalendarId)) && Number(localCalendarId) > 0 ? Number(localCalendarId) : null;
+  const userOfficeIds = new Set(Array.isArray(req.userAccess?.officeIds) ? req.userAccess.officeIds : []);
+  let effectiveOfficeId = Number.isInteger(Number(officeId)) && Number(officeId) > 0 ? Number(officeId) : null;
+  if (effectiveOfficeId !== null && userOfficeIds.size > 0 && !userOfficeIds.has(effectiveOfficeId)) {
+    return res.status(403).json({ error: 'Office access denied' });
+  }
+
+  let effectiveCalendarId = Number.isInteger(Number(localCalendarId)) && Number(localCalendarId) > 0 ? Number(localCalendarId) : null;
+
+  if (effectiveCalendarId !== null) {
+    const calendar = db
+      .prepare('SELECT id, office_id FROM local_calendars WHERE id = ?')
+      .get(effectiveCalendarId);
+    if (!calendar) {
+      return res.status(404).json({ error: 'Calendar not found' });
+    }
+
+    const accessibleCalendarIds = new Set(getAccessibleCalendarIdsForUser(req.user.sub, effectiveOfficeId));
+    if (!accessibleCalendarIds.has(effectiveCalendarId)) {
+      return res.status(403).json({ error: 'Calendar access denied' });
+    }
+
+    const calendarOfficeId = calendar.office_id != null ? Number(calendar.office_id) : null;
+    if (calendarOfficeId !== null) {
+      effectiveOfficeId = calendarOfficeId;
+    }
+  } else {
+    const fallbackCalendar = getDefaultCalendarForUser(req.user.sub, effectiveOfficeId);
+    if (fallbackCalendar) {
+      effectiveCalendarId = fallbackCalendar.id;
+      if (fallbackCalendar.officeId != null) {
+        effectiveOfficeId = Number(fallbackCalendar.officeId);
+      }
+    }
+  }
+
   const effectiveConsultationId = Number.isInteger(Number(consultationId)) && Number(consultationId) > 0 ? Number(consultationId) : null;
 
   if (effectiveConsultationId !== null) {
@@ -7537,10 +7645,18 @@ app.post('/api/appointments', authMiddleware, requirePermission('write-agenda'),
   try {
     const result = db
       .prepare(
-        `INSERT INTO appointments (patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id)
-        VALUES (?, ?, ?, ?, ?, ?)`
+        `INSERT INTO appointments (patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(patientId, startsAt, encryptSensitiveField(reason.trim()), status, effectiveCalendarId, effectiveConsultationId);
+      .run(
+        patientId,
+        startsAt,
+        encryptSensitiveField(reason.trim()),
+        status,
+        effectiveCalendarId,
+        effectiveConsultationId,
+        effectiveOfficeId
+      );
 
     const newAppointment = db
       .prepare(

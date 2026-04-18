@@ -523,6 +523,62 @@
   color: var(--bs-body-color);
 }
 
+.settings-invoice-template-builder {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.85rem;
+  padding: 0.9rem;
+  background: var(--bs-body-bg);
+}
+
+.settings-invoice-template-controls {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.settings-invoice-template-control-item {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.7rem;
+  padding: 0.65rem 0.7rem;
+  background: var(--bs-tertiary-bg);
+}
+
+.settings-invoice-template-preview {
+  position: relative;
+  min-height: 420px;
+  border: 1px dashed var(--bs-border-color);
+  border-radius: 0.75rem;
+  background:
+    linear-gradient(180deg, rgb(77 146 209 / 6%), rgb(77 146 209 / 0%)),
+    var(--bs-body-bg);
+  overflow: hidden;
+  user-select: none;
+}
+
+.settings-invoice-template-preview-block {
+  position: absolute;
+  min-height: 2.1rem;
+  border: 1px solid rgb(77 146 209 / 50%);
+  background: rgb(77 146 209 / 16%);
+  color: var(--bs-heading-color);
+  border-radius: 0.55rem;
+  padding: 0.22rem 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: grab;
+  transition: box-shadow 0.12s ease, transform 0.12s ease;
+
+  &:hover {
+    box-shadow: 0 0 0 1px rgb(77 146 209 / 35%);
+  }
+
+  &.is-dragging {
+    cursor: grabbing;
+    box-shadow: 0 0 0 2px rgb(77 146 209 / 45%);
+    transform: scale(1.01);
+  }
+}
+
 .settings-general-table {
   border: 1px solid #d3dbe3;
 }

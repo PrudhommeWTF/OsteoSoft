@@ -140,6 +140,7 @@ export type CreateAppointmentPayload = {
   status: 'A confirmer' | 'En attente' | 'Termine';
   localCalendarId?: number | null;
   consultationId?: number | null;
+  officeId?: number | null;
 };
 
 export type Patient = {
@@ -702,6 +703,7 @@ export type Office = {
   website?: string;
   vatNumber?: string;
   logoData?: string;
+  invoiceTemplateLayoutJson: string;
   openingHours?: OfficeOpeningHours;
   consultationProfiles: OfficeConsultationProfile[];
   officeUserDelegations: OfficeUserDelegation[];
@@ -733,6 +735,7 @@ export type CreateOfficePayload = {
   website?: string;
   vatNumber?: string;
   logoData?: string;
+  invoiceTemplateLayoutJson: string;
   openingHours?: OfficeOpeningHours;
   consultationProfiles: OfficeConsultationProfile[];
   officeUserDelegations: OfficeUserDelegationPayload[];

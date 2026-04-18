@@ -3,13 +3,33 @@
     <div class="logo-block">
       <a class="logo-link" routerLink="/accueil" (click)="closeMenu()" aria-label="Aller a la page d'accueil">
         <p class="brand-lockup mb-0">
-          <span class="brand-mark"><i class="fa-solid fa-calendar-days"></i></span>
+          <span class="brand-mark">
+            <img src="/logo-osteosoft.svg" alt="Logo OsteoSoft" loading="eager" decoding="async" />
+          </span>
           <span>
             <span class="title">OsteoSoft</span>
             <span class="subtitle">logiciel pour osteopathes</span>
           </span>
         </p>
       </a>
+    </div>
+
+    <div class="sidebar-office-picker">
+      <label class="sidebar-office-label" for="sidebar-office-picker">Cabinet actif</label>
+      <select
+        id="sidebar-office-picker"
+        class="form-select form-select-sm"
+        [disabled]="offices().length <= 1"
+        [value]="activeOfficeId() ?? ''"
+        (change)="onActiveOfficeChange($any($event.target).value)">
+        @if (offices().length === 0) {
+          <option value="">Aucun cabinet disponible</option>
+        } @else {
+          @for (office of offices(); track office.id) {
+            <option [value]="office.id">{{ office.name }}</option>
+          }
+        }
+      </select>
     </div>
 
     <label class="sidebar-search-label" for="sidebar-search">Rechercher un patient</label>
@@ -86,22 +106,6 @@
     <div class="sidebar-footer">
       <section class="account-block" aria-label="Compte utilisateur">
         <p class="account-caption">Connecte(e) en tant que <span class="account-name">{{ username() || 'admin' }}</span></p>
-
-        <label class="form-label office-picker-label" for="sidebar-office-picker">Cabinet actif</label>
-        <select
-          id="sidebar-office-picker"
-          class="form-select form-select-sm"
-          [disabled]="offices().length <= 1"
-          [value]="activeOfficeId() ?? ''"
-          (change)="onActiveOfficeChange($any($event.target).value)">
-          @if (offices().length === 0) {
-            <option value="">Aucun cabinet disponible</option>
-          } @else {
-            @for (office of offices(); track office.id) {
-              <option [value]="office.id">{{ office.name }}</option>
-            }
-          }
-        </select>
       </section>
 
       <nav class="utility-nav" aria-label="Actions secondaires">

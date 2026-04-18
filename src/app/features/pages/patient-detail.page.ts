@@ -34,6 +34,7 @@ import {
   Practitioner,
   UserAgendaPreferences
 } from '../../core/api.types';
+import { AuthService } from '../../core/auth.service';
 import { TopbarService } from '../../core/topbar.service';
 
 declare const $: any;
@@ -74,7 +75,31 @@ type AntecedentTimelineItem = {
   important: boolean;
 };
 
+type ConsultationPaymentStatus = 'paid' | 'pending';
+
+type ConsultationPaymentEntry = {
+  id: string;
+  amount: number;
+  currency: string;
+  method: string;
+  paidAt: string;
+};
+
+type ConsultationBillingState = {
+  consultationId: number;
+  invoiceNumber: string;
+  totalAmount: number;
+  currency: string;
+  issuedAt: string;
+  internalComment: string;
+  practitionerName: string;
+  invoiceDocumentRef: string;
+  paymentStatus: ConsultationPaymentStatus;
+  payments: ConsultationPaymentEntry[];
+};
+
 const PAYMENT_PENDING_LABEL = 'Paiement en attente';
+const CONSULTATION_BILLING_STORAGE_KEY = 'osteosoft:consultation-billing:v1';
 
 @Component({
   selector: 'app-patient-detail-page',
@@ -85,6 +110,7 @@ const PAYMENT_PENDING_LABEL = 'Paiement en attente';
 })
 export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly authService = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly fb = inject(FormBuilder);
@@ -150,8 +176,12 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   readonly consultationRemarksHtml = signal('');
   readonly consultationBillingChoice = signal<'bill' | 'free' | null>(null);
   readonly isConsultationBillingModalOpen = signal(false);
+  readonly isGeneratingConsultationInvoice = signal(false);
   readonly consultationBillingServiceOptions = signal<Array<{ label: string; amountHt: number; tvaRate: number }>>([]);
   readonly consultationBillingPaymentMethodOptions = signal<string[]>([]);
+  readonly consultationBillingStates = signal<Record<number, ConsultationBillingState>>({});
+  readonly isConsultationPaymentModalOpen = signal(false);
+  readonly editingConsultationPaymentId = signal<string | null>(null);
 
   readonly showRelatedPicker = signal(false);
   readonly relatedSearch = signal('');
@@ -230,6 +260,12 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     includeSignature: [true],
     internalComment: [''],
     paymentMethod: [PAYMENT_PENDING_LABEL]
+  });
+
+  readonly consultationPaymentEditForm = this.fb.nonNullable.group({
+    amount: [0],
+    method: [''],
+    paidAtLocal: ['']
   });
 
   private readonly consultationProfileValue = toSignal(
@@ -503,6 +539,15 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   readonly isConsultationBillingPaymentPending = computed(() => {
     const value = String(this.consultationBillingForm.controls.paymentMethod.value ?? '').trim();
     return !value || value === PAYMENT_PENDING_LABEL;
+  });
+
+  readonly activeConsultationBillingState = computed<ConsultationBillingState | null>(() => {
+    const consultationId = this.activeConsultation()?.id;
+    if (!consultationId) {
+      return null;
+    }
+
+    return this.consultationBillingStates()[consultationId] ?? null;
   });
 
   readonly consultationAutosaveStatusText = computed(() => {
@@ -891,6 +936,23 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     try {
       await this.api.deletePatientDocument(documentRef);
       this.patientDocuments.update((items) => items.filter((item) => item.documentRef !== documentRef));
+      const currentStates = this.consultationBillingStates();
+      const nextStates: Record<number, ConsultationBillingState> = {};
+      let changed = false;
+
+      for (const [key, value] of Object.entries(currentStates)) {
+        if (value.invoiceDocumentRef === documentRef) {
+          changed = true;
+          continue;
+        }
+
+        nextStates[Number(key)] = value;
+      }
+
+      if (changed) {
+        this.consultationBillingStates.set(nextStates);
+        this.persistConsultationBillingStates();
+      }
     } catch {
       this.documentActionError.set('Impossible de supprimer le document.');
     } finally {
@@ -937,6 +999,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     });
 
     this.hydrateConsultationReasonsFromRecord(consultation.reasonItems);
+    void this.loadConsultationContext();
+    this.hydrateConsultationBillingState(consultation.id);
 
     this.cdr.detectChanges();
 
@@ -1319,10 +1383,26 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     else this.consultationRemarksHtml.set(html);
   }
 
-  prepareConsultationInvoice(): void {
+  async prepareConsultationInvoice(): Promise<void> {
+    await this.loadConsultationContext();
     this.consultationBillingChoice.set('bill');
-    this.populateConsultationBillingForm();
+    if (!this.activeConsultationBillingState()) {
+      this.populateConsultationBillingForm();
+    }
     this.isConsultationBillingModalOpen.set(true);
+  }
+
+  isConsultationPaymentPending(): boolean {
+    if (this.consultationBillingChoice() === 'free') {
+      return false;
+    }
+
+    const billing = this.activeConsultationBillingState();
+    if (!billing) {
+      return true;
+    }
+
+    return billing.paymentStatus !== 'paid';
   }
 
   markConsultationAsFreeAct(): void {
@@ -1334,9 +1414,86 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     this.isConsultationBillingModalOpen.set(false);
   }
 
-  saveConsultationBillingDraft(): void {
+  async saveConsultationBillingDraft(): Promise<void> {
+    const patient = this.patient();
+    if (!patient || this.isGeneratingConsultationInvoice()) {
+      return;
+    }
+
     this.consultationBillingChoice.set('bill');
-    this.isConsultationBillingModalOpen.set(false);
+    this.isGeneratingConsultationInvoice.set(true);
+    this.documentActionError.set('');
+
+    try {
+      const offices = await this.api.getOffices();
+      const office = this.resolveConsultationBillingOffice(offices);
+      if (!office) {
+        this.documentActionError.set('Aucun cabinet actif trouvé pour appliquer le template de facture.');
+        return;
+      }
+      const profile = await this.api.getMyUserProfile();
+      const nowIso = new Date().toISOString();
+      const invoiceNumber = this.generateConsultationInvoiceNumber(office, profile, new Date(nowIso));
+      const pdfBlob = await this.buildConsultationInvoicePdfBlob(office, profile, nowIso, invoiceNumber);
+      const base64 = await this.blobToBase64(pdfBlob);
+
+      const raw = this.consultationBillingForm.getRawValue();
+      const rawName = String(raw.documentName ?? '').trim() || 'Facture acquittee';
+      const fileName = rawName.toLowerCase().endsWith('.pdf') ? rawName : `${rawName}.pdf`;
+      const paymentMethod = String(raw.paymentMethod ?? '').trim();
+      const currency = String(office.devise ?? 'EUR').trim() || 'EUR';
+      const totalAmount = this.consultationBillingTotalTtc();
+      const status: ConsultationPaymentStatus = !paymentMethod || paymentMethod === PAYMENT_PENDING_LABEL
+        ? 'pending'
+        : 'paid';
+      const payments: ConsultationPaymentEntry[] = status === 'paid'
+        ? [
+          {
+            id: this.createTempKey('pay'),
+            amount: totalAmount,
+            currency,
+            method: paymentMethod,
+            paidAt: nowIso
+          }
+        ]
+        : [];
+
+      const created = await this.api.createPatientDocument(patient.id, {
+        consultationId: this.activeConsultation()?.id ?? null,
+        officeId: office.id,
+        fileName,
+        mimeType: 'application/pdf',
+        sizeBytes: pdfBlob.size,
+        title: rawName,
+        comment: String(raw.internalComment ?? '').trim(),
+        contentBase64: base64
+      });
+
+      this.patientDocuments.update((items) => [created, ...items]);
+      const consultationId = this.activeConsultation()?.id;
+      if (consultationId) {
+        const practitionerName = String(this.consultationEditForm.controls.practitioner.value ?? '').trim() || '-';
+        this.upsertConsultationBillingState({
+          consultationId,
+          invoiceNumber,
+          totalAmount,
+          currency,
+          issuedAt: nowIso,
+          internalComment: String(raw.internalComment ?? '').trim(),
+          practitionerName,
+          invoiceDocumentRef: created.documentRef,
+          paymentStatus: status,
+          payments
+        });
+      }
+
+      await this.openPatientDocument(created);
+      this.isConsultationBillingModalOpen.set(false);
+    } catch {
+      this.documentActionError.set('Impossible de générer la facture PDF pour cette consultation.');
+    } finally {
+      this.isGeneratingConsultationInvoice.set(false);
+    }
   }
 
   onConsultationBillingServiceChange(serviceLabel: string): void {
@@ -1351,6 +1508,131 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     this.consultationBillingForm.patchValue({
       amountHt: selected.amountHt,
       tvaRate: selected.tvaRate
+    });
+  }
+
+  async downloadFinalizedConsultationInvoice(): Promise<void> {
+    const billing = this.activeConsultationBillingState();
+    if (!billing) {
+      return;
+    }
+
+    const document = this.patientDocuments().find((item) => item.documentRef === billing.invoiceDocumentRef);
+    if (!document) {
+      this.documentActionError.set('Facture introuvable dans les documents de la consultation.');
+      return;
+    }
+
+    await this.openPatientDocument(document);
+  }
+
+  isConsultationPdfDownloadPreferred(): boolean {
+    return this.preferences()?.pdfDisplayMode === 'download';
+  }
+
+  async cancelConsultationInvoice(): Promise<void> {
+    const billing = this.activeConsultationBillingState();
+    if (!billing) {
+      return;
+    }
+
+    this.documentActionError.set('');
+    try {
+      await this.api.deletePatientDocument(billing.invoiceDocumentRef);
+      this.patientDocuments.update((items) => items.filter((item) => item.documentRef !== billing.invoiceDocumentRef));
+    } catch {
+      this.documentActionError.set('Impossible d\'annuler la facture pour le moment.');
+      return;
+    }
+
+    this.consultationBillingStates.update((items) => {
+      const next = { ...items };
+      delete next[billing.consultationId];
+      return next;
+    });
+
+    this.persistConsultationBillingStates();
+    this.consultationBillingChoice.set(null);
+  }
+
+  openConsultationPaymentEditModal(paymentId: string): void {
+    const billing = this.activeConsultationBillingState();
+    if (!billing) {
+      return;
+    }
+
+    const payment = billing.payments.find((entry) => entry.id === paymentId);
+    if (!payment) {
+      return;
+    }
+
+    this.consultationBillingChoice.set('bill');
+    this.consultationBillingForm.controls.paymentMethod.setValue(payment.method);
+    this.isConsultationBillingModalOpen.set(true);
+  }
+
+  openConsultationPaymentCreateModal(): void {
+    const billing = this.activeConsultationBillingState();
+    if (!billing) {
+      return;
+    }
+
+    this.consultationBillingChoice.set('bill');
+    this.consultationBillingForm.controls.paymentMethod.setValue(PAYMENT_PENDING_LABEL);
+    this.isConsultationBillingModalOpen.set(true);
+  }
+
+  closeConsultationPaymentEditModal(): void {
+    this.isConsultationPaymentModalOpen.set(false);
+    this.editingConsultationPaymentId.set(null);
+  }
+
+  saveConsultationPaymentEdit(): void {
+    const billing = this.activeConsultationBillingState();
+    const paymentId = this.editingConsultationPaymentId();
+    if (!billing || !paymentId) {
+      return;
+    }
+
+    const raw = this.consultationPaymentEditForm.getRawValue();
+    const amount = Math.max(0, Number(raw.amount) || 0);
+    const method = String(raw.method ?? '').trim();
+    const paidAt = this.fromDateTimeLocalValue(raw.paidAtLocal) ?? new Date().toISOString();
+
+    if (!method) {
+      return;
+    }
+
+    const payments = billing.payments.map((entry) =>
+      entry.id === paymentId
+        ? {
+          ...entry,
+          amount,
+          method,
+          paidAt
+        }
+        : entry
+    );
+
+    this.upsertConsultationBillingState({
+      ...billing,
+      payments,
+      paymentStatus: payments.length > 0 ? 'paid' : 'pending'
+    });
+    this.closeConsultationPaymentEditModal();
+  }
+
+  deleteConsultationPayment(paymentId: string): void {
+    const billing = this.activeConsultationBillingState();
+    if (!billing) {
+      return;
+    }
+
+    const payments = billing.payments.filter((entry) => entry.id !== paymentId);
+    this.upsertConsultationBillingState({
+      ...billing,
+      payments,
+      paymentStatus: payments.length > 0 ? 'paid' : 'pending'
     });
   }
 
@@ -1913,12 +2195,13 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
     this.isLoadingConsultationContext.set(true);
     try {
-      const context: ConsultationContextPayload = await this.api.getConsultationContext();
+      const preferredOfficeId = this.resolvePreferredConsultationOfficeId();
+      const context: ConsultationContextPayload = await this.api.getConsultationContext(preferredOfficeId);
       this.consultationOfficeId.set(context.officeId ?? null);
       this.consultationOfficeName.set(context.officeName ?? null);
       this.practitioners.set(Array.isArray(context.practitioners) ? context.practitioners : []);
       this.consultationOfficeProfiles.set(Array.isArray(context.profiles) ? context.profiles : []);
-      await this.loadConsultationBillingCatalog(context.officeId ?? null);
+      await this.loadConsultationBillingCatalog(context.officeId ?? preferredOfficeId ?? null);
     } catch {
       this.consultationOfficeId.set(null);
       this.consultationOfficeName.set(null);
@@ -1934,8 +2217,13 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   private async loadConsultationBillingCatalog(contextOfficeId: number | null): Promise<void> {
     try {
       const offices = await this.api.getOffices();
-      const contextId = Number.isInteger(contextOfficeId) && Number(contextOfficeId) > 0
+      const preferredOfficeId = this.resolvePreferredConsultationOfficeId();
+      const requestedOfficeId = Number.isInteger(contextOfficeId) && Number(contextOfficeId) > 0
         ? Number(contextOfficeId)
+        : (Number.isInteger(preferredOfficeId) && Number(preferredOfficeId) > 0 ? Number(preferredOfficeId) : null);
+
+      const contextId = Number.isInteger(requestedOfficeId) && Number(requestedOfficeId) > 0
+        ? Number(requestedOfficeId)
         : null;
 
       const office = (contextId !== null
@@ -1948,6 +2236,18 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       this.consultationBillingPaymentMethodOptions.set([]);
       this.applyConsultationBillingDefaults();
     }
+  }
+
+  private resolvePreferredConsultationOfficeId(): number | null {
+    const activeOfficeId = this.authService.activeOfficeId();
+    if (Number.isInteger(activeOfficeId) && Number(activeOfficeId) > 0) {
+      return Number(activeOfficeId);
+    }
+
+    const contextOfficeId = this.consultationOfficeId();
+    return Number.isInteger(contextOfficeId) && Number(contextOfficeId) > 0
+      ? Number(contextOfficeId)
+      : null;
   }
 
   private applyBillingCatalogFromOffice(office: Office | null): void {
@@ -2211,6 +2511,401 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     }
 
     return new Blob([bytes], { type: mimeType });
+  }
+
+  private resolveConsultationBillingOffice(offices: Office[]): Office | null {
+    const contextOfficeId = this.consultationOfficeId();
+    if (Number.isInteger(contextOfficeId) && Number(contextOfficeId) > 0) {
+      const contextOffice = offices.find((item) => item.id === Number(contextOfficeId));
+      if (contextOffice) {
+        return contextOffice;
+      }
+    }
+
+    return null;
+  }
+
+  private hydrateConsultationBillingState(consultationId: number): void {
+    const states = this.consultationBillingStates();
+    if (states[consultationId]) {
+      return;
+    }
+
+    const persisted = this.readPersistedConsultationBillingStates();
+    const state = persisted[consultationId];
+    if (!state) {
+      return;
+    }
+
+    this.consultationBillingStates.update((items) => ({
+      ...items,
+      [consultationId]: state
+    }));
+    this.consultationBillingChoice.set('bill');
+  }
+
+  private upsertConsultationBillingState(state: ConsultationBillingState): void {
+    this.consultationBillingStates.update((items) => ({
+      ...items,
+      [state.consultationId]: state
+    }));
+    this.persistConsultationBillingStates();
+    this.consultationBillingChoice.set('bill');
+  }
+
+  private generateConsultationInvoiceNumber(office: Office | null, profile: MyUserProfile | null, now: Date): string {
+    const year = String(now.getFullYear());
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const format = office?.invoiceNumberFormat ?? 'AAAA-XXXXXX';
+
+    let prefix = `${year}${month}${day}`;
+    let digits = 6;
+    if (format === 'AAAA-XXXXXX') {
+      prefix = year;
+      digits = 6;
+    } else if (format === 'AAAAMM-XXXXXX') {
+      prefix = `${year}${month}`;
+      digits = 6;
+    } else if (format === 'AAAAMMJJ-XXXXXX') {
+      prefix = `${year}${month}${day}`;
+      digits = 6;
+    } else if (format === 'AAAAMM-XXXX : RAZ mensuelle (déconseillé)') {
+      prefix = `${year}${month}`;
+      digits = 4;
+    } else if (format === 'AAAA-XXXX : RAZ annuel') {
+      prefix = year;
+      digits = 4;
+    }
+
+    const periodKey = prefix;
+    const numberingScope = office?.numberingConfiguration === 'Numérotation par praticien'
+      ? `user:${profile?.id ?? 0}`
+      : 'global';
+    const storageKey = `osteosoft:invoice-seq:${office?.id ?? 0}:${numberingScope}:${format}:${periodKey}`;
+
+    let sequence = 1;
+    if (typeof window !== 'undefined') {
+      try {
+        const previous = Number(window.localStorage.getItem(storageKey) ?? '0');
+        const safePrevious = Number.isFinite(previous) && previous > 0 ? previous : 0;
+        sequence = safePrevious + 1;
+        window.localStorage.setItem(storageKey, String(sequence));
+      } catch {
+        sequence = Math.floor(Math.random() * (10 ** digits));
+      }
+    } else {
+      sequence = Math.floor(Math.random() * (10 ** digits));
+    }
+
+    const sequenceLabel = String(sequence).padStart(digits, '0').slice(-digits);
+    return `${prefix}-${sequenceLabel}`;
+  }
+
+  private readPersistedConsultationBillingStates(): Record<number, ConsultationBillingState> {
+    const patientId = this.patient()?.id;
+    if (!patientId || typeof window === 'undefined') {
+      return {};
+    }
+
+    try {
+      const raw = window.localStorage.getItem(`${CONSULTATION_BILLING_STORAGE_KEY}:${patientId}`);
+      if (!raw) {
+        return {};
+      }
+
+      const parsed = JSON.parse(raw) as Record<string, ConsultationBillingState>;
+      const normalized: Record<number, ConsultationBillingState> = {};
+      for (const [key, value] of Object.entries(parsed ?? {})) {
+        const consultationId = Number(key);
+        if (!Number.isInteger(consultationId) || consultationId <= 0 || !value) {
+          continue;
+        }
+
+        normalized[consultationId] = value;
+      }
+
+      return normalized;
+    } catch {
+      return {};
+    }
+  }
+
+  private persistConsultationBillingStates(): void {
+    const patientId = this.patient()?.id;
+    if (!patientId || typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      const states = this.consultationBillingStates();
+      window.localStorage.setItem(`${CONSULTATION_BILLING_STORAGE_KEY}:${patientId}`, JSON.stringify(states));
+    } catch {
+      // Ignore localStorage failures.
+    }
+  }
+
+  private async buildConsultationInvoicePdfBlob(
+    office: Office | null,
+    profile: MyUserProfile,
+    issuedAtIso: string,
+    invoiceNumber: string
+  ): Promise<Blob> {
+    const raw = this.consultationBillingForm.getRawValue();
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 12;
+    const contentWidth = pageWidth - (margin * 2);
+    const currency = String(office?.devise ?? 'EUR').trim() || 'EUR';
+    const quantity = Math.max(0, Number(raw.quantity) || 0);
+    const unitPrice = Math.max(0, Number(raw.amountHt) || 0);
+    const tvaRate = Math.max(0, Number(raw.tvaRate) || 0);
+    const totalHt = Number((quantity * unitPrice).toFixed(2));
+    const totalTva = Number((totalHt * (tvaRate / 100)).toFixed(2));
+    const totalAmount = Number((totalHt + totalTva).toFixed(2));
+
+    const drawBox = (x: number, y: number, w: number, h: number): void => {
+      pdf.setDrawColor(206, 214, 226);
+      pdf.rect(x, y, w, h);
+    };
+
+    const writeRight = (text: string, xRight: number, y: number): void => {
+      const width = pdf.getTextWidth(text);
+      pdf.text(text, xRight - width, y);
+    };
+
+    const drawSection = (title: string, x: number, y: number, w: number, h: number, lines: string[]): void => {
+      drawBox(x, y, w, h);
+      pdf.setFillColor(246, 248, 251);
+      pdf.rect(x, y, w, 6, 'F');
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(9);
+      pdf.text(title, x + 2, y + 4.2);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8.6);
+      let lineY = y + 10;
+      for (const line of lines) {
+        if (lineY > y + h - 2) {
+          break;
+        }
+        pdf.text(line, x + 2, lineY);
+        lineY += 4;
+      }
+    };
+
+    let y = margin;
+
+    const officeX = margin;
+    const officeW = contentWidth * 0.58;
+    const invoiceX = officeX + officeW + 4;
+    const invoiceW = contentWidth - officeW - 4;
+    const topBlockH = 44;
+
+    drawBox(officeX, y, officeW, topBlockH);
+
+    if (office?.logoData && office.logoData.startsWith('data:image/')) {
+      try {
+        pdf.addImage(office.logoData, 'PNG', officeX + 2, y + 2, 16, 16);
+      } catch {
+        // Keep generating even if logo is invalid.
+      }
+    }
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(12);
+    const officeName = String(office?.name ?? this.consultationOfficeName() ?? 'Cabinet').trim() || 'Cabinet';
+    const officeHeading = officeName.toLowerCase().startsWith('cabinet') ? officeName : `Cabinet de ${officeName}`;
+    pdf.text(officeHeading, officeX + 21, y + 7);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8.8);
+
+    const topLeftLines = [
+      `${String(profile.lastName ?? '').trim()} ${String(profile.firstName ?? '').trim()}`.trim(),
+      String(profile.nameSuffixText ?? '').trim(),
+      String(office?.addressLine1 ?? '').trim(),
+      String(office?.addressLine2 ?? '').trim(),
+      `${String(office?.postalCode ?? '').trim()} ${String(office?.city ?? '').trim()}`.trim(),
+      String(office?.email ?? '').trim(),
+      String(office?.website ?? '').trim()
+    ].filter(Boolean);
+
+    let topY = y + 12;
+    for (const line of topLeftLines) {
+      pdf.text(line, officeX + 21, topY);
+      topY += 3.8;
+      if (topY > y + topBlockH - 2) {
+        break;
+      }
+    }
+
+    drawBox(invoiceX, y, invoiceW, topBlockH);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(22);
+    writeRight('FACTURE', invoiceX + invoiceW - 3, y + 11);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    writeRight(`N° ${invoiceNumber}`, invoiceX + invoiceW - 3, y + 19);
+    writeRight(`Date : ${this.formatShortDate(issuedAtIso)}`, invoiceX + invoiceW - 3, y + 24);
+    writeRight(`Échéance : ${this.formatShortDate(issuedAtIso)}`, invoiceX + invoiceW - 3, y + 29);
+
+    pdf.setDrawColor(200, 40, 40);
+    pdf.setTextColor(200, 40, 40);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(11);
+    writeRight('FACTURE ACQUITÉE', invoiceX + invoiceW - 3, y + 39);
+    pdf.setTextColor(0, 0, 0);
+
+    y += topBlockH + 6;
+
+    const leftInfoW = contentWidth * 0.5;
+    const rightInfoX = margin + leftInfoW + 4;
+    const rightInfoW = contentWidth - leftInfoW - 4;
+    const blockH = 36;
+
+    drawSection('Informations facture', margin, y, leftInfoW, blockH, [
+      `N° facture : ${invoiceNumber}`,
+      `Date facture : ${this.formatShortDate(issuedAtIso)}`,
+      `N° Sécu: ${String(raw.socialSecurityNumber ?? '').trim() || '-'}`,
+      `N° Mutuelle: ${String(raw.insurance ?? '').trim() || '-'}`
+    ]);
+
+    const patientLines = [
+      `${String(raw.lastName ?? '').trim()} ${String(raw.firstName ?? '').trim()}`.trim(),
+      String(raw.address1 ?? '').trim(),
+      String(raw.address2 ?? '').trim(),
+      `${String(raw.postalCode ?? '').trim()} ${String(raw.city ?? '').trim()}`.trim(),
+      String(raw.country ?? '').trim()
+    ].filter(Boolean);
+
+    const birthDateLine = this.formatShortDate(String(raw.birthDate ?? '').trim());
+    if (birthDateLine && birthDateLine !== String(raw.birthDate ?? '').trim()) {
+      patientLines.push(`Date de naissance : ${birthDateLine}`);
+    }
+
+    drawSection('A l\'attention de :', rightInfoX, y, rightInfoW, blockH, patientLines);
+
+    y += blockH + 8;
+
+    const tableX = margin;
+    const tableW = contentWidth;
+    const headerH = 7;
+    const rowH = 9;
+    const tableH = headerH + rowH;
+
+    drawBox(tableX, y, tableW, tableH);
+    pdf.setFillColor(246, 248, 251);
+    pdf.rect(tableX, y, tableW, headerH, 'F');
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(8.8);
+    pdf.text('Description', tableX + 2, y + 4.6);
+    pdf.text('Qté', tableX + (tableW * 0.56), y + 4.6);
+    pdf.text('PU HT', tableX + (tableW * 0.66), y + 4.6);
+    pdf.text('TVA', tableX + (tableW * 0.78), y + 4.6);
+    pdf.text('Total TTC', tableX + (tableW * 0.88), y + 4.6);
+    pdf.line(tableX, y + headerH, tableX + tableW, y + headerH);
+
+    const colQty = tableX + (tableW * 0.54);
+    const colPu = tableX + (tableW * 0.64);
+    const colTva = tableX + (tableW * 0.76);
+    const colTotal = tableX + (tableW * 0.86);
+    pdf.line(colQty, y, colQty, y + tableH);
+    pdf.line(colPu, y, colPu, y + tableH);
+    pdf.line(colTva, y, colTva, y + tableH);
+    pdf.line(colTotal, y, colTotal, y + tableH);
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8.8);
+    pdf.text(String(raw.serviceLabel ?? '').trim() || 'Consultation', tableX + 2, y + headerH + 5.2);
+    pdf.text(String(quantity), colQty + 2, y + headerH + 5.2);
+    pdf.text(`${unitPrice.toFixed(2)} ${currency}`, colPu + 2, y + headerH + 5.2);
+    pdf.text(`${tvaRate.toFixed(2)} %`, colTva + 2, y + headerH + 5.2);
+    writeRight(`${totalAmount.toFixed(2)} ${currency}`, tableX + tableW - 2, y + headerH + 5.2);
+
+    y += tableH + 4;
+    const totalsX = tableX + (tableW * 0.58);
+    const totalsW = tableX + tableW - totalsX;
+    const totalsRowH = 6.5;
+    drawBox(totalsX, y, totalsW, totalsRowH * 3);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8.8);
+    pdf.text('Total HT', totalsX + 2, y + 4.5);
+    writeRight(`${totalHt.toFixed(2)} ${currency}`, totalsX + totalsW - 2, y + 4.5);
+    pdf.line(totalsX, y + totalsRowH, totalsX + totalsW, y + totalsRowH);
+    pdf.text(`TVA (${tvaRate.toFixed(2)} %)`, totalsX + 2, y + totalsRowH + 4.5);
+    writeRight(`${totalTva.toFixed(2)} ${currency}`, totalsX + totalsW - 2, y + totalsRowH + 4.5);
+    pdf.line(totalsX, y + (totalsRowH * 2), totalsX + totalsW, y + (totalsRowH * 2));
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Total TTC', totalsX + 2, y + (totalsRowH * 2) + 4.5);
+    writeRight(`${totalAmount.toFixed(2)} ${currency}`, totalsX + totalsW - 2, y + (totalsRowH * 2) + 4.5);
+
+    y += (totalsRowH * 3) + 7;
+
+    const paymentBoxH = 20;
+    drawSection('Liste des paiements effectués', tableX, y, tableW * 0.62, paymentBoxH, []);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(8.8);
+    const paymentTextY = y + 11;
+    pdf.setFont('helvetica', 'normal');
+    const paymentMethod = String(raw.paymentMethod ?? '').trim();
+    if (paymentMethod && paymentMethod !== PAYMENT_PENDING_LABEL) {
+      pdf.text(`${this.formatShortDate(issuedAtIso)} - ${paymentMethod} - ${totalAmount.toFixed(2)} ${currency}`, tableX + 2, paymentTextY);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(26, 122, 58);
+      pdf.text('RÉGLÉ', tableX + 2, paymentTextY + 5);
+      pdf.setTextColor(0, 0, 0);
+    } else {
+      pdf.setTextColor(166, 125, 0);
+      pdf.text('Aucun paiement enregistré', tableX + 2, paymentTextY);
+      pdf.setTextColor(0, 0, 0);
+    }
+
+    const signatureX = tableX + (tableW * 0.65);
+    const signatureW = tableX + tableW - signatureX;
+    drawBox(signatureX, y, signatureW, paymentBoxH);
+    const editionPlace = String(office?.city ?? this.consultationOfficeName() ?? '').trim() || 'Cabinet';
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8.8);
+    writeRight(`Éditée à ${editionPlace}, le ${this.formatShortDate(issuedAtIso)}`, signatureX + signatureW - 2, y + 7);
+    pdf.setFont('helvetica', 'bold');
+    writeRight('Signature', signatureX + signatureW - 2, y + 13);
+    if (String(profile.signatureText ?? '').trim()) {
+      pdf.setFont('helvetica', 'italic');
+      writeRight(String(profile.signatureText ?? '').trim(), signatureX + signatureW - 2, y + 18);
+    }
+
+    const footerY = pageHeight - 14;
+    pdf.setDrawColor(214, 220, 229);
+    pdf.line(margin, footerY - 4, pageWidth - margin, footerY - 4);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8);
+
+    const regParts = [
+      `SIRET: ${String(profile.siret ?? '').trim() || '-'}`,
+      `RPPS: ${String(profile.rppsCode ?? '').trim() || '-'}`,
+      `APE: ${String(profile.apeNafCode ?? '').trim() || '-'}`,
+      `ADELI: ${String(profile.adeliCode ?? '').trim() || '-'}`
+    ];
+    const tvaText = 'TVA non applicable, art. 261-4-1 du CGI';
+    const footerText = `${regParts.join(' | ')} | ${tvaText}`;
+    const wrappedFooter = pdf.splitTextToSize(footerText, contentWidth) as string[];
+    pdf.text(wrappedFooter, margin, footerY);
+
+    return pdf.output('blob');
+  }
+
+  private blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = typeof reader.result === 'string' ? reader.result : '';
+        const marker = 'base64,';
+        const markerIndex = result.indexOf(marker);
+        resolve(markerIndex >= 0 ? result.slice(markerIndex + marker.length) : result);
+      };
+      reader.onerror = () => reject(new Error('Blob read failed'));
+      reader.readAsDataURL(blob);
+    });
   }
 
   private populateConsultationBillingForm(): void {

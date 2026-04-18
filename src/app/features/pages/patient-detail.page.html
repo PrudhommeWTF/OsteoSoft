@@ -536,6 +536,7 @@
               type="button"
               class="nav-link"
               [class.active]="consultationActiveTab() === 'paiement'"
+              [class.text-warning]="isConsultationPaymentPending()"
               role="tab"
               [attr.aria-selected]="consultationActiveTab() === 'paiement'"
               (click)="setConsultationTab('paiement')"
@@ -940,23 +941,99 @@
           }
 
           @if (consultationActiveTab() === 'paiement') {
-            <div class="alert alert-warning">
-              <div class="fw-semibold mb-2">Choisissez une option pour cette consultation</div>
-              <p class="mb-3">Définissez maintenant si la consultation doit être facturée ou enregistrée comme acte gratuit.</p>
-              <div class="d-flex flex-wrap gap-2">
-                <button type="button" class="btn btn-outline-primary" (click)="prepareConsultationInvoice()">
-                  <i class="fa-solid fa-file-invoice-dollar me-2"></i>Facturer cette consultation
-                </button>
-                <button type="button" class="btn btn-outline-secondary" (click)="markConsultationAsFreeAct()">
-                  <i class="fa-solid fa-hand-holding-heart me-2"></i>Définir comme acte gratuit
-                </button>
-              </div>
-            </div>
+            @if (activeConsultationBillingState(); as billing) {
+              <div class="accordion" id="consultation-billing-finalized-accordion">
+                <div class="accordion-item border-success">
+                  <h2 class="accordion-header" id="consultation-billing-finalized-heading">
+                    <button
+                      class="accordion-button bg-success-subtle text-success-emphasis"
+                      type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#consultation-billing-finalized-collapse"
+                      aria-expanded="true"
+                      aria-controls="consultation-billing-finalized-collapse">
+                      Facture Finalisée n° {{ billing.invoiceNumber }} ({{ billing.totalAmount.toFixed(2) }} {{ billing.currency }}) :
+                    </button>
+                  </h2>
+                  <div
+                    id="consultation-billing-finalized-collapse"
+                    class="accordion-collapse collapse show"
+                    aria-labelledby="consultation-billing-finalized-heading"
+                    data-bs-parent="#consultation-billing-finalized-accordion">
+                    <div class="accordion-body">
+                      <p class="mb-2">Cette consultation a été facturée le {{ formatShortDate(billing.issuedAt) }} à {{ formatConsultationDate(billing.issuedAt).slice(-5) }} pour un montant total de {{ billing.totalAmount.toFixed(2) }} {{ billing.currency }}</p>
+                      <p class="mb-2">Commentaire interne: {{ billing.internalComment || '-' }}</p>
+                      <p class="mb-3">Facture associée au praticien {{ billing.practitionerName }}</p>
 
-            @if (consultationBillingChoice() === 'bill') {
-              <div class="alert alert-info mb-0">Facturation en préparation pour cette consultation.</div>
-            } @else if (consultationBillingChoice() === 'free') {
-              <div class="alert alert-success mb-0">Cette consultation est marquée comme acte gratuit.</div>
+                      <div class="d-flex flex-wrap gap-2 mb-3">
+                        <button type="button" class="btn btn-outline-primary btn-sm" (click)="downloadFinalizedConsultationInvoice()">
+                          @if (isConsultationPdfDownloadPreferred()) {
+                            <i class="fa-solid fa-download me-2"></i>
+                            Télécharger la facture
+                          } @else {
+                            <i class="fa-solid fa-eye me-2"></i>
+                            Afficher la facture
+                          }
+                        </button>
+                        <button type="button" class="btn btn-outline-danger btn-sm" (click)="cancelConsultationInvoice()">
+                          <i class="fa-solid fa-ban me-2"></i>Annuler la facture
+                        </button>
+                      </div>
+
+                      <p class="fw-bold mb-2">Informations paiements ({{ billing.totalAmount.toFixed(2) }} {{ billing.currency }})</p>
+                      <p class="mb-2">
+                        Cette facture est
+                        <span class="badge" [class.text-bg-success]="billing.paymentStatus === 'paid'" [class.text-bg-warning]="billing.paymentStatus !== 'paid'">
+                          {{ billing.paymentStatus === 'paid' ? 'Payée' : 'Attente de paiement' }}
+                        </span>.
+                        Voici la liste des paiements :
+                      </p>
+
+                      <ul class="list-unstyled mb-0">
+                        @if (billing.payments.length === 0) {
+                          <li class="d-flex flex-wrap align-items-center gap-2">
+                            <span class="text-secondary">Aucun paiement enregistré.</span>
+                            <button type="button" class="btn btn-outline-warning btn-sm" (click)="openConsultationPaymentCreateModal()">
+                              <i class="fa-solid fa-pen-to-square me-1"></i>Renseigner le moyen de paiement
+                            </button>
+                          </li>
+                        } @else {
+                          @for (payment of billing.payments; track payment.id) {
+                            <li class="mb-2">
+                              <div class="d-flex flex-wrap align-items-center gap-2">
+                                <span>Paiement de {{ payment.amount.toFixed(2) }} {{ payment.currency }} par {{ payment.method }} le {{ formatConsultationDate(payment.paidAt) }}</span>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="openConsultationPaymentEditModal(payment.id)">
+                                  <i class="fa-solid fa-pen me-1"></i>Modifier
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" (click)="deleteConsultationPayment(payment.id)">
+                                  <i class="fa-solid fa-trash-can me-1"></i>Supprimer
+                                </button>
+                              </div>
+                            </li>
+                          }
+                        }
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            } @else {
+              <div class="alert alert-warning">
+                <div class="fw-semibold mb-2">Choisissez une option pour cette consultation</div>
+                <p class="mb-3">Définissez maintenant si la consultation doit être facturée ou enregistrée comme acte gratuit.</p>
+                <div class="d-flex flex-wrap gap-2">
+                  <button type="button" class="btn btn-outline-primary" (click)="prepareConsultationInvoice()">
+                    <i class="fa-solid fa-file-invoice-dollar me-2"></i>Facturer cette consultation
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary" (click)="markConsultationAsFreeAct()">
+                    <i class="fa-solid fa-hand-holding-heart me-2"></i>Définir comme acte gratuit
+                  </button>
+                </div>
+              </div>
+
+              @if (consultationBillingChoice() === 'free') {
+                <div class="alert alert-success mb-0">Cette consultation est marquée comme acte gratuit.</div>
+              }
             }
           }
 
@@ -1091,13 +1168,59 @@
               <i class="fa-solid fa-circle-exclamation me-2"></i>
               Attention, une fois enregistrée, cette facture entrera en comptabilité. En cas d'annulation, une facture d'avoir sera générée.
             </div>
+
+            @if (documentActionError()) {
+              <div class="alert alert-danger mt-3 mb-0">
+                <i class="fa-solid fa-triangle-exclamation me-2"></i>{{ documentActionError() }}
+              </div>
+            }
           </div>
 
           <div class="modal-footer">
-            <button type="button" class="btn btn-outline-secondary" (click)="closeConsultationBillingModal()">Annuler</button>
-            <button type="button" class="btn btn-success" (click)="saveConsultationBillingDraft()">
-              <i class="fa-solid fa-check me-1"></i>Enregistrer
+            <button type="button" class="btn btn-outline-secondary" [disabled]="isGeneratingConsultationInvoice()" (click)="closeConsultationBillingModal()">Annuler</button>
+            <button type="button" class="btn btn-success" [disabled]="isGeneratingConsultationInvoice()" (click)="saveConsultationBillingDraft()">
+              @if (isGeneratingConsultationInvoice()) {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Génération...
+              } @else {
+                <i class="fa-solid fa-check me-1"></i>Enregistrer
+              }
             </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+  }
+
+  @if (isConsultationPaymentModalOpen()) {
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="consultation-payment-modal-title">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h3 id="consultation-payment-modal-title" class="modal-title h5 mb-0">Modifier un paiement</h3>
+            <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeConsultationPaymentEditModal()"></button>
+          </div>
+
+          <div class="modal-body" [formGroup]="consultationPaymentEditForm">
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Montant</label>
+                <input type="number" step="0.01" min="0" class="form-control" formControlName="amount" />
+              </div>
+              <div class="col-12">
+                <label class="form-label">Moyen de paiement</label>
+                <input type="text" class="form-control" formControlName="method" />
+              </div>
+              <div class="col-12">
+                <label class="form-label">Date et heure</label>
+                <input type="datetime-local" class="form-control" formControlName="paidAtLocal" />
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" (click)="closeConsultationPaymentEditModal()">Annuler</button>
+            <button type="button" class="btn btn-primary" (click)="saveConsultationPaymentEdit()">Enregistrer</button>
           </div>
         </div>
       </div>

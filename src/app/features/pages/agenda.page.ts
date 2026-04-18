@@ -88,7 +88,9 @@ export class AgendaPage {
 
     const hasCurrentOffice = offices.some((office) => office.id === this.selectedOfficeId());
     if (!hasCurrentOffice) {
-      this.selectedOfficeId.set(offices.length > 1 ? offices[0].id : null);
+      const activeOfficeId = this.authService.activeOfficeId();
+      const hasActiveOffice = Number.isInteger(activeOfficeId) && offices.some((office) => office.id === activeOfficeId);
+      this.selectedOfficeId.set(hasActiveOffice ? activeOfficeId : (offices[0]?.id ?? null));
     }
 
     const officeId = this.selectedOfficeId();
@@ -196,7 +198,8 @@ export class AgendaPage {
         startsAt: raw.startsAt,
         reason: raw.reason,
         status: raw.status,
-        localCalendarId: calendarForOffice?.id ?? null
+        localCalendarId: calendarForOffice?.id ?? null,
+        officeId: activeOfficeId
       });
 
       this.createAppointmentSuccess.set('Rendez-vous créé avec succès.');
