@@ -87,6 +87,7 @@ type ConsultationPaymentEntry = {
 
 type ConsultationBillingState = {
   consultationId: number;
+  billingInvoiceId: number | null;
   invoiceNumber: string;
   totalAmount: number;
   currency: string;
@@ -1042,9 +1043,10 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
     const defaultProfile = this.consultationProfileOptions()[0] ?? '';
     const nowIso = new Date().toISOString();
+    const defaultPractitioner = this.getDefaultConsultationPractitioner(this.practitioners());
     this.consultationEditForm.reset({
       startedAtLocal: this.toDateTimeLocalValue(nowIso),
-      practitioner: this.practitionerPickerOptions()[0]?.displayName ?? '',
+      practitioner: defaultPractitioner?.displayName ?? defaultPractitioner?.username ?? '',
       title: '',
       important: false,
       heightCm: '',
@@ -1064,6 +1066,48 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
         bootstrap.Modal.getOrCreateInstance(modalElement).show();
       }
     });
+  }
+
+  private getDefaultConsultationPractitioner(practitioners: Practitioner[]): { username: string; displayName: string } | null {
+    const sessionUsername = this.authService.username().trim().toLowerCase();
+    const normalizedPractitioners = Array.isArray(practitioners) ? practitioners : [];
+    if (sessionUsername) {
+      const sessionMatch = normalizedPractitioners.find((item) => item.username.trim().toLowerCase() === sessionUsername);
+      if (sessionMatch) {
+        const displayName = String(sessionMatch.displayName ?? '').trim() || sessionMatch.username;
+        return {
+          username: sessionMatch.username,
+          displayName
+        };
+      }
+
+      return {
+        username: this.authService.username().trim(),
+        displayName: this.authService.username().trim()
+      };
+    }
+
+    if (normalizedPractitioners[0]) {
+      const displayName = String(normalizedPractitioners[0].displayName ?? '').trim() || normalizedPractitioners[0].username;
+      return {
+        username: normalizedPractitioners[0].username,
+        displayName
+      };
+    }
+
+    return null;
+  }
+
+  private applyDefaultConsultationPractitioner(force = false): void {
+    const currentValue = String(this.consultationEditForm.controls.practitioner.value ?? '').trim();
+    if (!force && currentValue) {
+      return;
+    }
+
+    const practitioner = this.getDefaultConsultationPractitioner(this.practitioners());
+    const nextValue = practitioner?.displayName ?? '';
+
+    this.consultationEditForm.controls.practitioner.setValue(nextValue);
   }
 
   closeConsultationModal(): void {
@@ -1420,6 +1464,16 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
+    // If the consultation has not been saved yet (create mode), save it first so we
+    // have a real consultation ID to attach the invoice to.
+    if (this.consultationModalMode() === 'create') {
+      await this.createConsultationFromModal(false);
+      // If the consultation still has no ID after the save attempt, abort billing.
+      if (!this.activeConsultation()?.id) {
+        return;
+      }
+    }
+
     this.consultationBillingChoice.set('bill');
     this.isGeneratingConsultationInvoice.set(true);
     this.documentActionError.set('');
@@ -1475,6 +1529,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
         const practitionerName = String(this.consultationEditForm.controls.practitioner.value ?? '').trim() || '-';
         this.upsertConsultationBillingState({
           consultationId,
+          billingInvoiceId: null,
           invoiceNumber,
           totalAmount,
           currency,
@@ -1485,9 +1540,29 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
           paymentStatus: status,
           payments
         });
+
+        // Record the invoice in the accounting table so it shows in Comptabilite.
+        try {
+          const invoiceId = await this.api.createBillingInvoice({
+            patientId: patient.id,
+            consultationId,
+            officeId: office.id,
+            invoiceNumber,
+            amountCents: Math.round(totalAmount * 100),
+            status: status === 'paid' ? 'payee' : 'impayee',
+            paymentMethod,
+            issuedAt: nowIso,
+            notes: String(raw.internalComment ?? '').trim()
+          });
+          this.upsertConsultationBillingState({
+            ...this.consultationBillingStates()[consultationId],
+            billingInvoiceId: invoiceId
+          });
+        } catch {
+          // Non-blocking: PDF is already saved; accounting record will be retried next time.
+        }
       }
 
-      await this.openPatientDocument(created);
       this.isConsultationBillingModalOpen.set(false);
     } catch {
       this.documentActionError.set('Impossible de générer la facture PDF pour cette consultation.');
@@ -1543,6 +1618,14 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     } catch {
       this.documentActionError.set('Impossible d\'annuler la facture pour le moment.');
       return;
+    }
+
+    if (billing.billingInvoiceId != null) {
+      try {
+        await this.api.deleteBillingInvoice(billing.billingInvoiceId);
+      } catch {
+        // Best-effort: document already removed, accounting record may need manual cleanup.
+      }
     }
 
     this.consultationBillingStates.update((items) => {
@@ -2201,6 +2284,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       this.consultationOfficeName.set(context.officeName ?? null);
       this.practitioners.set(Array.isArray(context.practitioners) ? context.practitioners : []);
       this.consultationOfficeProfiles.set(Array.isArray(context.profiles) ? context.profiles : []);
+      if (this.consultationModalMode() === 'create') {
+        this.applyDefaultConsultationPractitioner();
+      }
       await this.loadConsultationBillingCatalog(context.officeId ?? preferredOfficeId ?? null);
     } catch {
       this.consultationOfficeId.set(null);

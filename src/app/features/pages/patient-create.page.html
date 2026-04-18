@@ -70,6 +70,7 @@
           <div class="col-6">
             <label class="form-label fw-semibold" for="lastName">Nom <span class="text-danger">*</span></label>
             <input id="lastName" class="form-control" type="text" formControlName="lastName"
+                   (input)="onLastNameInput($event)"
                    [class.is-invalid]="form.controls.lastName.touched && form.controls.lastName.invalid" />
             @if (form.controls.lastName.touched && form.controls.lastName.errors?.['required']) {
               <div class="invalid-feedback">Le nom est obligatoire.</div>
@@ -78,6 +79,7 @@
           <div class="col-6">
             <label class="form-label fw-semibold" for="firstName">Prenom <span class="text-danger">*</span></label>
             <input id="firstName" class="form-control" type="text" formControlName="firstName"
+                   (input)="onFirstNameInput($event)"
                    [class.is-invalid]="form.controls.firstName.touched && form.controls.firstName.invalid" />
             @if (form.controls.firstName.touched && form.controls.firstName.errors?.['required']) {
               <div class="invalid-feedback">Le prenom est obligatoire.</div>

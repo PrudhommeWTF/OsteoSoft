@@ -73,7 +73,7 @@ export class ShellPage implements OnInit, OnDestroy {
     { path: '/agenda', label: 'Agenda', icon: 'fa-solid fa-calendar-days', exact: true, requiredPermission: 'read-agenda' },
     { path: '/patients', label: 'Listing patients', icon: 'fa-solid fa-list-ul', badge: '...', exact: true, requiredPermission: 'read-patient-list' },
     { path: '/repertoire', label: 'Repertoire', icon: 'fa-solid fa-address-book', badge: '...', exact: true, requiredPermission: 'read-directory' },
-    { path: '/facturation', label: 'Comptabilite', icon: 'fa-solid fa-file-invoice-dollar', badge: '414', requiredPermission: 'read-billing-kpis' },
+    { path: '/facturation', label: 'Comptabilite', icon: 'fa-solid fa-file-invoice-dollar', badge: '...', requiredPermission: 'read-billing-kpis' },
     { label: 'Statistiques', icon: 'fa-solid fa-chart-column', disabled: true, requiredPermission: 'read-advanced-statistics' },
     { path: '/parametres', label: 'Parametres', icon: 'fa-solid fa-gear', exact: true, adminOnly: true }
   ]);
@@ -166,6 +166,8 @@ export class ShellPage implements OnInit, OnDestroy {
         );
       }
     });
+
+    void this.refreshBillingBadge();
   }
 
   ngOnDestroy(): void {
@@ -200,7 +202,9 @@ export class ShellPage implements OnInit, OnDestroy {
 
   onActiveOfficeChange(value: string): void {
     const parsed = Number(value);
-    this.authService.setActiveOfficeId(Number.isInteger(parsed) && parsed > 0 ? parsed : null);
+    const nextOfficeId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+    this.authService.setActiveOfficeId(nextOfficeId);
+    void this.refreshBillingBadge();
   }
 
   closeMenu(): void {
@@ -314,5 +318,23 @@ export class ShellPage implements OnInit, OnDestroy {
   async logout(): Promise<void> {
     await this.authService.logout();
     await this.router.navigateByUrl('/login');
+  }
+
+  private async refreshBillingBadge(): Promise<void> {
+    try {
+      const revenue = await this.api.getBillingMonthlyRevenue(this.activeOfficeId());
+      const roundedAmount = Math.round(Number(revenue.amountCents ?? 0) / 100);
+      this.navItems.update((items) =>
+        items.map((item) =>
+          item.label === 'Comptabilite' ? { ...item, badge: String(roundedAmount) } : item
+        )
+      );
+    } catch {
+      this.navItems.update((items) =>
+        items.map((item) =>
+          item.label === 'Comptabilite' ? { ...item, badge: '?' } : item
+        )
+      );
+    }
   }
 }

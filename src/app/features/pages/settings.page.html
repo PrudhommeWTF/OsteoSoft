@@ -1,20 +1,19 @@
 <div class="container-fluid px-0">
   <div class="card border-0 shadow-sm mb-4">
     <div class="card-body p-4">
-      <p class="text-uppercase text-secondary small fw-semibold mb-2">Administration</p>
       <h1 class="h3 mb-1">Paramètres</h1>
       <p class="text-secondary mb-0">Configuration fonctionnelle et technique de l'application.</p>
     </div>
   </div>
 
   <section class="row g-4" aria-label="Configuration de l'application">
-    <nav class="col-12 col-sm-3 col-lg-2" aria-label="Onglets des paramètres">
-      <div class="card border-0 shadow-sm position-sticky top-0">
-        <div class="nav nav-pills flex-column p-3 gap-2" role="tablist" aria-orientation="vertical">
+    <nav class="col-12" aria-label="Onglets des paramètres">
+      <div class="card border-0 shadow-sm">
+        <div class="nav nav-pills flex-row flex-wrap p-3 gap-2" role="tablist" aria-orientation="horizontal">
           @for (section of sections; track section.id) {
             <button
               type="button"
-              class="nav-link text-start"
+              class="nav-link"
               role="tab"
               [class.active]="activeSectionId() === section.id"
               [attr.aria-selected]="activeSectionId() === section.id"
@@ -30,7 +29,7 @@
     </nav>
 
     <article
-      class="col-12 col-sm-9 col-lg-10"
+      class="col-12"
       role="tabpanel"
       [attr.aria-labelledby]="activeSection().id + '-tab'"
       [id]="activeSection().id + '-panel'"
@@ -40,7 +39,6 @@
           <div class="settings-panel-hero mb-4">
             <span class="settings-panel-icon"><i [class]="activeSection().icon"></i></span>
             <div>
-              <p class="settings-panel-kicker mb-1">Espace de configuration</p>
               <h2 class="h4 mb-2">{{ activeSection().label }}</h2>
               <p class="text-secondary mb-0">{{ activeSection().description }}</p>
             </div>
@@ -1301,13 +1299,13 @@
                                           @for (paymentMethod of paymentMethods(); track paymentMethod.tempKey) {
                                             <tr>
                                               <td>
-                                                <input type="text" class="form-control form-control-sm" [value]="paymentMethod.label" (input)="updatePaymentMethodLabel(paymentMethod.tempKey, $any($event.target).value || '')" />
+                                                <input type="text" class="form-control form-control-sm" [value]="paymentMethod.label" [readonly]="paymentMethod.isSystem" (input)="updatePaymentMethodLabel(paymentMethod.tempKey, $any($event.target).value || '')" />
                                               </td>
                                               <td>
                                                 <input type="checkbox" class="form-check-input" [checked]="paymentMethod.isActive" (change)="togglePaymentMethodActive(paymentMethod.tempKey)" />
                                               </td>
                                               <td class="text-end">
-                                                <button type="button" class="btn btn-sm btn-outline-danger" (click)="removePaymentMethod(paymentMethod.tempKey)">
+                                                <button type="button" class="btn btn-sm btn-outline-danger" [disabled]="paymentMethod.isSystem" (click)="removePaymentMethod(paymentMethod.tempKey)">
                                                   <i class="fa-solid fa-trash"></i>
                                                 </button>
                                               </td>
@@ -1360,65 +1358,7 @@
                                       </div>
                                     </div>
 
-                                    <div class="settings-invoice-template-builder mt-4">
-                                      <div class="d-flex align-items-center justify-content-between mb-2">
-                                        <h6 class="mb-0">Template builder facture PDF</h6>
-                                        <small class="text-secondary">Position en pourcentage de page</small>
-                                      </div>
 
-                                      <div class="row g-3">
-                                        <div class="col-12 col-xl-7">
-                                          <div class="settings-invoice-template-controls">
-                                            @for (block of invoiceTemplateBlockOptions; track block.key) {
-                                              <div class="settings-invoice-template-control-item">
-                                                <div class="d-flex align-items-center justify-content-between gap-2">
-                                                  <p class="fw-semibold mb-0">{{ block.label }}</p>
-                                                  <small class="text-secondary">
-                                                    X: {{ invoiceTemplateBlockValue(block.key, 'x') }}% ·
-                                                    Y: {{ invoiceTemplateBlockValue(block.key, 'y') }}%
-                                                  </small>
-                                                </div>
-                                                <div class="mt-2">
-                                                  <label class="form-label small mb-1" [for]="'invoice-create-' + block.key + '-w'">Largeur</label>
-                                                  <input
-                                                    [id]="'invoice-create-' + block.key + '-w'"
-                                                    type="range"
-                                                    class="form-range"
-                                                    min="20"
-                                                    max="96"
-                                                    [value]="invoiceTemplateBlockValue(block.key, 'w')"
-                                                    (input)="updateInvoiceTemplateBlock(block.key, 'w', $any($event.target).value || '20')"
-                                                  />
-                                                </div>
-                                              </div>
-                                            }
-                                          </div>
-                                        </div>
-
-                                        <div class="col-12 col-xl-5">
-                                          <div
-                                            class="settings-invoice-template-preview"
-                                            (dragover)="onInvoiceTemplatePreviewDragOver($event)"
-                                            (drop)="onInvoiceTemplatePreviewDrop($event)"
-                                          >
-                                            @for (block of invoiceTemplateBlockOptions; track block.key) {
-                                              <div
-                                                class="settings-invoice-template-preview-block"
-                                                [class.is-dragging]="draggedInvoiceTemplateBlockId() === block.key"
-                                                draggable="true"
-                                                (dragstart)="onInvoiceTemplateDragStart($event, block.key)"
-                                                (dragend)="onInvoiceTemplateDragEnd()"
-                                                [style.left.%]="invoiceTemplateBlockValue(block.key, 'x')"
-                                                [style.top.%]="invoiceTemplateBlockValue(block.key, 'y')"
-                                                [style.width.%]="invoiceTemplateBlockValue(block.key, 'w')"
-                                              >
-                                                {{ block.label }}
-                                              </div>
-                                            }
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -1837,7 +1777,7 @@
                                         @for (paymentMethod of paymentMethods(); track paymentMethod.tempKey) {
                                           <tr draggable="true" (dragstart)="onPaymentMethodDragStart($event, paymentMethod.tempKey)" (dragover)="allowDrop($event)" (drop)="onPaymentMethodDrop($event, paymentMethod.tempKey)">
                                             <td>
-                                              <input type="text" class="form-control form-control-sm" [value]="paymentMethod.label" (input)="updatePaymentMethodLabel(paymentMethod.tempKey, $any($event.target).value || '')" />
+                                              <input type="text" class="form-control form-control-sm" [value]="paymentMethod.label" [readonly]="paymentMethod.isSystem" (input)="updatePaymentMethodLabel(paymentMethod.tempKey, $any($event.target).value || '')" />
                                             </td>
                                             <td>
                                               <div class="form-check form-switch mb-0">
@@ -1849,7 +1789,7 @@
                                                 <button type="button" class="btn btn-sm btn-outline-secondary" aria-label="Réorganiser la ligne">
                                                   <i class="fa-solid fa-grip-vertical"></i>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-outline-danger" (click)="removePaymentMethod(paymentMethod.tempKey)" aria-label="Supprimer le moyen de paiement">
+                                                <button type="button" class="btn btn-sm btn-outline-danger" [disabled]="paymentMethod.isSystem" (click)="removePaymentMethod(paymentMethod.tempKey)" aria-label="Supprimer le moyen de paiement">
                                                   <i class="fa-solid fa-trash"></i>
                                                 </button>
                                               </div>

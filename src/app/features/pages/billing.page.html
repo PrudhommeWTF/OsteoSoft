@@ -1,11 +1,107 @@
 <section class="page-head d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
   <div>
-    <h1 class="h3 mb-1"><i class="fa-solid fa-file-invoice-dollar text-primary me-2"></i>Facturation</h1>
-    <p class="text-secondary mb-0">Suivi de la performance financière du cabinet.</p>
+    <h1 class="h3 mb-1"><i class="fa-solid fa-file-invoice-dollar text-primary me-2"></i>Comptabilite</h1>
+    <p class="text-secondary mb-0">Suivi des operations debit/credit du cabinet et des praticiens.</p>
+  </div>
+
+  <div class="d-flex flex-wrap gap-2 align-items-center">
+    <button type="button" class="btn btn-primary btn-sm" (click)="openExpenseModal()">
+      <i class="fa-solid fa-plus me-1"></i>Ajouter une depense
+    </button>
+    <div class="dropdown" (click)="$event.stopPropagation()">
+      <button
+        type="button"
+        class="btn btn-outline-primary btn-sm dropdown-toggle"
+        [class.show]="isDepositMenuOpen()"
+        [attr.aria-expanded]="isDepositMenuOpen()"
+        aria-label="Ouvrir le menu des remises"
+        (click)="toggleDepositMenu()">
+        <i class="fa-solid fa-building-columns me-1"></i>Remises
+      </button>
+      <ul class="dropdown-menu" [class.show]="isDepositMenuOpen()">
+        <li>
+          <button type="button" class="dropdown-item" (click)="openDepositModal('cheque')">
+            <i class="fa-solid fa-money-check-dollar me-2"></i>Remise de cheques
+          </button>
+        </li>
+        <li>
+          <button type="button" class="dropdown-item" (click)="openDepositModal('especes')">
+            <i class="fa-solid fa-money-bill-wave me-2"></i>Remise d'especes
+          </button>
+        </li>
+      </ul>
+    </div>
+    @if (canExportBilling()) {
+      <div class="dropdown" (click)="$event.stopPropagation()">
+        <button
+          type="button"
+          class="btn btn-outline-secondary btn-sm dropdown-toggle"
+          [class.show]="isExportMenuOpen()"
+          [attr.aria-expanded]="isExportMenuOpen()"
+          aria-label="Ouvrir le menu des exports"
+          (click)="toggleExportMenu()">
+          <i class="fa-solid fa-file-export me-1"></i>Exports
+        </button>
+        <ul class="dropdown-menu" [class.show]="isExportMenuOpen()">
+          <li>
+            <button type="button" class="dropdown-item" (click)="exportOperations('excel')">
+              <i class="fa-solid fa-file-excel me-2"></i>Export Excel
+            </button>
+          </li>
+          <li>
+            <button type="button" class="dropdown-item" (click)="exportOperations('json')">
+              <i class="fa-solid fa-file-code me-2"></i>Export JSON
+            </button>
+          </li>
+        </ul>
+      </div>
+    }
   </div>
 </section>
 
-<section class="row g-3" aria-label="KPI facturation">
+<section class="panel card border-0 shadow-sm mb-3">
+  <div class="card-body">
+    <div class="row g-2 align-items-end">
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1">Du</label>
+        <input type="date" class="form-control" [value]="fromDate()" (change)="fromDate.set($any($event.target).value || ''); onDateRangeChange()" />
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1">Au</label>
+        <input type="date" class="form-control" [value]="toDate()" (change)="toDate.set($any($event.target).value || ''); onDateRangeChange()" />
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1">Cabinet</label>
+        <select class="form-select" [value]="selectedOfficeId() ?? ''" (change)="onOfficeChange($any($event.target).value)">
+          <option value="">Tous les cabinets</option>
+          @for (office of offices(); track office.id) {
+            <option [value]="office.id">{{ office.name }}</option>
+          }
+        </select>
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1">Utilisateur</label>
+        <select class="form-select" [value]="selectedUserId() ?? ''" (change)="onUserChange($any($event.target).value)">
+          <option value="">Tous les utilisateurs</option>
+          @for (user of users(); track user.id) {
+            <option [value]="user.id">{{ user.displayName }}</option>
+          }
+        </select>
+      </div>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 mt-3">
+      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('today')">Aujourd'hui</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('yesterday')">Hier</button>
+      <button type="button" class="btn btn-outline-primary btn-sm" (click)="applyPreset('month')">Ce mois-ci</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('lastMonth')">Le mois dernier</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('year')">Cette annee</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('lastYear')">L'annee derniere</button>
+    </div>
+  </div>
+</section>
+
+<section class="row g-3" aria-label="KPI comptabilite">
   @for (tile of tiles(); track tile.label) {
     <article class="col-12 col-md-4">
       <div class="panel stat-panel card border-0 shadow-sm h-100">
@@ -21,11 +117,299 @@
 
 <section class="panel card border-0 shadow-sm mt-3">
   <div class="card-body">
-    <h2 class="h5 mb-3"><i class="fa-solid fa-bolt me-2 text-primary"></i>Actions rapides</h2>
-    <div class="actions d-flex gap-2 flex-wrap">
-      <button type="button" class="btn btn-primary"><i class="fa-solid fa-plus me-2"></i>Créer une facture</button>
-      <button type="button" class="btn btn-outline-primary"><i class="fa-solid fa-file-export me-2"></i>Exporter vers comptable</button>
-      <button type="button" class="btn btn-outline-secondary"><i class="fa-solid fa-envelope-circle-check me-2"></i>Relancer les impayés</button>
+    <div class="row g-2 mb-3">
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1">Proprietaire (selection)</label>
+        <select class="form-select form-select-sm" (change)="onBulkOwnerChange($any($event.target).value)">
+          <option value="">Ne pas modifier</option>
+          @for (user of users(); track user.id) {
+            <option [value]="user.id">{{ user.displayName }}</option>
+          }
+        </select>
+      </div>
+      <div class="col-12 col-md-2">
+        <label class="form-label mb-1">Retro %</label>
+        <input type="number" min="0" max="100" step="0.01" class="form-control form-control-sm" [value]="bulkRetrocessionPercent()" (input)="bulkRetrocessionPercent.set($any($event.target).value || '')" />
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label mb-1">Destinataire retrocession</label>
+        <input type="text" class="form-control form-control-sm" [value]="bulkRetrocessionRecipient()" (input)="bulkRetrocessionRecipient.set($any($event.target).value || '')" />
+      </div>
+      <div class="col-12 col-md-3 d-flex align-items-end gap-2">
+        <button type="button" class="btn btn-outline-primary btn-sm" [disabled]="selectedCount() === 0" (click)="applyBulkUpdate()">Appliquer</button>
+        <button type="button" class="btn btn-outline-danger btn-sm" [disabled]="selectedCount() === 0" (click)="deleteSelectedOperations()">Supprimer</button>
+      </div>
+    </div>
+
+    @if (errorMessage()) {
+      <div class="alert alert-danger py-2">{{ errorMessage() }}</div>
+    }
+    @if (successMessage()) {
+      <div class="alert alert-success py-2">{{ successMessage() }}</div>
+    }
+
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-secondary">
+          <tr>
+            <th class="text-center" style="width: 44px;">
+              <input
+                type="checkbox"
+                [checked]="operations().length > 0 && selectedCount() === operations().length"
+                (change)="toggleSelectAll(!!$any($event.target).checked)" />
+            </th>
+            <th>Date</th>
+            <th>Titre</th>
+            <th class="text-end">Debit</th>
+            <th class="text-end">Credit</th>
+            <th>Retrocession</th>
+            <th>Facture</th>
+            <th>Paiements</th>
+          </tr>
+        </thead>
+        <tbody>
+          @if (isLoading()) {
+            <tr>
+              <td colspan="8" class="text-center py-4 text-secondary">Chargement des operations...</td>
+            </tr>
+          } @else if (operations().length === 0) {
+            <tr>
+              <td colspan="8" class="text-center py-4 text-secondary">Aucune operation sur cette periode.</td>
+            </tr>
+          } @else {
+            @for (operation of operations(); track operation.id) {
+              <tr>
+                <td class="text-center">
+                  <input type="checkbox" [checked]="isOperationSelected(operation.id)" (change)="toggleOperationSelection(operation.id, !!$any($event.target).checked)" />
+                </td>
+                <td>{{ formatDateTime(operation.occurredAt) }}</td>
+                <td>{{ operation.title }}</td>
+                <td class="text-end">{{ operation.debitCents > 0 ? formatCurrency(operation.debitCents, operation.currency) : '-' }}</td>
+                <td class="text-end">{{ operation.creditCents > 0 ? formatCurrency(operation.creditCents, operation.currency) : '-' }}</td>
+                <td>{{ operation.retrocessionPercent.toFixed(2) }}% pour {{ operation.retrocessionRecipient || '-' }}</td>
+                <td>{{ operation.invoiceNumber || '-' }}</td>
+                <td>
+                  @if (operation.paymentRef.type === 'patient') {
+                    <button
+                      type="button"
+                      class="btn btn-outline-primary btn-sm"
+                      [routerLink]="['/patients', operation.paymentRef.patientId]">
+                      <i class="fa-solid fa-address-card me-1" aria-hidden="true"></i>
+                      Fiche patient
+                    </button>
+                  } @else {
+                    {{ operationPaymentLabel(operation) }}
+                  }
+                </td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
     </div>
   </div>
 </section>
+
+@if (isExpenseModalOpen()) {
+  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="billing-expense-modal-title">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 id="billing-expense-modal-title" class="modal-title">Ajouter une depense</h5>
+          <button type="button" class="btn-close" (click)="closeExpenseModal()" aria-label="Fermer"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2">
+            <label class="form-label">Date et heure</label>
+            <input type="datetime-local" class="form-control" [value]="expenseOccurredAt()" (input)="expenseOccurredAt.set($any($event.target).value || '')" />
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Titre</label>
+            <input type="text" class="form-control" [value]="expenseTitle()" (input)="expenseTitle.set($any($event.target).value || '')" />
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Montant (EUR)</label>
+            <input type="number" class="form-control" min="0" step="0.01" [value]="expenseAmount()" (input)="expenseAmount.set($any($event.target).value || '')" />
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Moyen de paiement</label>
+            <input type="text" class="form-control" [value]="expensePaymentMethod()" (input)="expensePaymentMethod.set($any($event.target).value || '')" />
+          </div>
+          <div class="mb-0">
+            <label class="form-label">Notes</label>
+            <textarea rows="3" class="form-control" (input)="expenseNotes.set($any($event.target).value || '')">{{ expenseNotes() }}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" (click)="closeExpenseModal()">Annuler</button>
+          <button type="button" class="btn btn-primary" [disabled]="isSaving()" (click)="saveExpense()">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop fade show"></div>
+}
+
+@if (isDepositListModalOpen()) {
+  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="billing-deposit-list-title">
+    <div class="modal-dialog modal-fullscreen">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 id="billing-deposit-list-title" class="modal-title">
+            {{ depositModalType() === 'especes' ? "Remises d'especes" : 'Remises de cheques' }}
+          </h5>
+          <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-primary btn-sm" (click)="openDepositEditorModal('create')">
+              <i class="fa-solid fa-plus me-1"></i>
+              Ajouter un bordereau de remise {{ depositModalType() === 'especes' ? "d'especes" : 'de cheques' }}
+            </button>
+            <button type="button" class="btn-close" (click)="closeDepositListModal()" aria-label="Fermer"></button>
+          </div>
+        </div>
+        <div class="modal-body">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle">
+              <thead class="table-secondary">
+                <tr>
+                  <th>Code</th>
+                  <th>Date</th>
+                  <th>Banque</th>
+                  <th>Compte</th>
+                  <th>Nb cheques</th>
+                  <th class="text-end">Montant</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (isLoadingDeposits()) {
+                  <tr><td colspan="7" class="text-center text-secondary py-4">Chargement des remises...</td></tr>
+                } @else if (deposits().length === 0) {
+                  <tr><td colspan="7" class="text-center text-secondary py-4">Aucune remise.</td></tr>
+                } @else {
+                  @for (deposit of deposits(); track deposit.id) {
+                    <tr>
+                      <td>{{ deposit.code || '-' }}</td>
+                      <td>{{ formatDateTime(deposit.occurredAt) }}</td>
+                      <td>{{ deposit.bankName || '-' }}</td>
+                      <td>{{ deposit.accountLabel || '-' }}</td>
+                      <td>{{ depositModalType() === 'cheque' ? deposit.chequeCount : '-' }}</td>
+                      <td class="text-end">{{ formatCurrency(deposit.amountCents, deposit.currency) }}</td>
+                      <td class="text-end">
+                        <button type="button" class="btn btn-outline-secondary btn-sm me-1" (click)="openDepositEditorModal('edit', deposit)">
+                          <i class="fa-solid fa-pen"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-primary btn-sm me-1" (click)="downloadDepositPdf(deposit.id)">
+                          <i class="fa-solid fa-file-pdf"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-danger btn-sm" (click)="deleteDeposit(deposit.id)">
+                          <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop fade show"></div>
+}
+
+@if (isDepositEditorModalOpen()) {
+  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="billing-deposit-editor-title">
+    <div class="modal-dialog modal-fullscreen">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 id="billing-deposit-editor-title" class="modal-title">
+            {{ editingDepositId() ? 'Modifier le bordereau' : "Ajouter un bordereau" }}
+          </h5>
+          <button type="button" class="btn-close" (click)="closeDepositEditorModal()" aria-label="Fermer"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3 mb-3">
+            <div class="col-12 col-lg-2">
+              <label class="form-label">Code</label>
+              <input type="text" class="form-control" [value]="depositCode()" (input)="depositCode.set($any($event.target).value || '')" />
+            </div>
+            <div class="col-12 col-lg-2">
+              <label class="form-label">Date</label>
+              <input type="datetime-local" class="form-control" [value]="depositOccurredAt()" (input)="depositOccurredAt.set($any($event.target).value || '')" />
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label">Banque</label>
+              <input type="text" class="form-control" [value]="depositBankName()" (input)="depositBankName.set($any($event.target).value || '')" />
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label">Compte</label>
+              <input type="text" class="form-control" [value]="depositAccountLabel()" (input)="depositAccountLabel.set($any($event.target).value || '')" />
+            </div>
+            <div class="col-12 col-lg-2">
+              <label class="form-label">Montant</label>
+              <input type="number" min="0" step="0.01" class="form-control" [value]="depositAmount()" (input)="depositAmount.set($any($event.target).value || '')" />
+            </div>
+            <div class="col-12 col-lg-6">
+              <label class="form-label">Intitule</label>
+              <input type="text" class="form-control" [value]="depositTitle()" (input)="depositTitle.set($any($event.target).value || '')" />
+            </div>
+            <div class="col-12 col-lg-6">
+              <label class="form-label">Notes</label>
+              <input type="text" class="form-control" [value]="depositNotes()" (input)="depositNotes.set($any($event.target).value || '')" />
+            </div>
+          </div>
+
+          @if (!editingDepositId()) {
+            <h6 class="fw-semibold mb-2">Consultations/paiements eligibles ({{ depositModalType() === 'especes' ? 'especes' : 'cheques' }})</h6>
+            <div class="table-responsive">
+              <table class="table table-sm align-middle">
+                <thead class="table-light">
+                  <tr>
+                    <th style="width:44px"></th>
+                    <th>Date</th>
+                    <th>Facture</th>
+                    <th>Patient</th>
+                    <th>Moyen de paiement</th>
+                    <th class="text-end">Montant</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @if (isLoadingDepositCandidates()) {
+                    <tr><td colspan="6" class="text-center text-secondary py-3">Chargement...</td></tr>
+                  } @else if (depositCandidates().length === 0) {
+                    <tr><td colspan="6" class="text-center text-secondary py-3">Aucun paiement eligible.</td></tr>
+                  } @else {
+                    @for (candidate of depositCandidates(); track candidate.operationId) {
+                      <tr>
+                        <td>
+                          <input
+                            type="checkbox"
+                            [checked]="depositEditorCandidateIds().includes(candidate.operationId)"
+                            (change)="toggleDepositCandidate(candidate.operationId, !!$any($event.target).checked)" />
+                        </td>
+                        <td>{{ formatDateTime(candidate.occurredAt) }}</td>
+                        <td>{{ candidate.invoiceNumber || '-' }}</td>
+                        <td>{{ candidate.patientName }}</td>
+                        <td>{{ candidate.paymentMethod || '-' }}</td>
+                        <td class="text-end">{{ formatCurrency(candidate.amountCents, candidate.currency) }}</td>
+                      </tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </div>
+            <div class="text-end fw-semibold">
+              Total selectionne: {{ formatCurrency(selectedDepositCandidateAmountCents(), 'EUR') }}
+            </div>
+          }
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" (click)="closeDepositEditorModal()">Annuler</button>
+          <button type="button" class="btn btn-primary" [disabled]="isSaving()" (click)="saveDepositEditor()">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop fade show"></div>
+}

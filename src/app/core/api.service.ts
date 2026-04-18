@@ -18,6 +18,13 @@ import {
   ConsultationUpdatePayload,
   ConsultationContextPayload,
   AppointmentConsultationConflict,
+  BillingBulkUpdatePayload,
+  BillingDepositCandidate,
+  BillingDepositDetail,
+  BillingDepositListItem,
+  BillingDepositPayload,
+  BillingExpensePayload,
+  BillingOperationsPayload,
   ConsultationMetaSummary,
   CreatePatientConsultationPayload,
   CreateAppointmentPayload,
@@ -222,6 +229,146 @@ export class ApiService {
     return response.summary;
   }
 
+  async getBillingOperations(filters?: {
+    from?: string;
+    to?: string;
+    officeId?: number | null;
+    userId?: number | null;
+  }): Promise<BillingOperationsPayload> {
+    let params = new HttpParams();
+    if (filters?.from?.trim()) {
+      params = params.set('from', filters.from.trim());
+    }
+    if (filters?.to?.trim()) {
+      params = params.set('to', filters.to.trim());
+    }
+    if (Number.isInteger(filters?.officeId) && Number(filters?.officeId) > 0) {
+      params = params.set('officeId', String(filters?.officeId));
+    }
+    if (Number.isInteger(filters?.userId) && Number(filters?.userId) > 0) {
+      params = params.set('userId', String(filters?.userId));
+    }
+
+    return firstValueFrom(this.http.get<BillingOperationsPayload>(`${this.baseUrl}/billing/operations`, { params }));
+  }
+
+  async createBillingExpense(payload: BillingExpensePayload): Promise<number> {
+    const response = await firstValueFrom(
+      this.http.post<{ expenseId: number }>(`${this.baseUrl}/billing/expenses`, payload)
+    );
+
+    return Number(response.expenseId ?? 0);
+  }
+
+  async createBillingDeposit(payload: BillingDepositPayload): Promise<number> {
+    const response = await firstValueFrom(
+      this.http.post<{ depositId: number }>(`${this.baseUrl}/billing/deposits`, payload)
+    );
+
+    return Number(response.depositId ?? 0);
+  }
+
+  async getBillingDeposits(type: 'cheque' | 'especes', officeId?: number | null): Promise<BillingDepositListItem[]> {
+    let params = new HttpParams().set('type', type);
+    if (Number.isInteger(officeId) && Number(officeId) > 0) {
+      params = params.set('officeId', String(officeId));
+    }
+
+    const response = await firstValueFrom(
+      this.http.get<{ deposits: BillingDepositListItem[] }>(`${this.baseUrl}/billing/deposits`, { params })
+    );
+
+    return Array.isArray(response.deposits) ? response.deposits : [];
+  }
+
+  async getBillingDepositCandidates(type: 'cheque' | 'especes', officeId?: number | null): Promise<BillingDepositCandidate[]> {
+    let params = new HttpParams().set('type', type);
+    if (Number.isInteger(officeId) && Number(officeId) > 0) {
+      params = params.set('officeId', String(officeId));
+    }
+
+    const response = await firstValueFrom(
+      this.http.get<{ candidates: BillingDepositCandidate[] }>(`${this.baseUrl}/billing/deposit-candidates`, { params })
+    );
+
+    return Array.isArray(response.candidates) ? response.candidates : [];
+  }
+
+  async updateBillingDeposit(
+    depositId: number,
+    payload: {
+      occurredAt: string;
+      code: string;
+      bankName: string;
+      accountLabel: string;
+      title: string;
+      notes: string;
+      amount: number;
+    }
+  ): Promise<void> {
+    await firstValueFrom(
+      this.http.patch<void>(`${this.baseUrl}/billing/deposits/${depositId}`, payload)
+    );
+  }
+
+  async deleteBillingDeposit(depositId: number): Promise<void> {
+    await firstValueFrom(this.http.delete<void>(`${this.baseUrl}/billing/deposits/${depositId}`));
+  }
+
+  async getBillingDepositDetail(depositId: number): Promise<BillingDepositDetail> {
+    const response = await firstValueFrom(
+      this.http.get<{ detail: BillingDepositDetail }>(`${this.baseUrl}/billing/deposits/${depositId}/detail`)
+    );
+    return response.detail;
+  }
+
+  async bulkUpdateBillingOperations(payload: BillingBulkUpdatePayload): Promise<void> {
+    await firstValueFrom(this.http.patch<void>(`${this.baseUrl}/billing/operations/bulk`, payload));
+  }
+
+  async exportBillingOperations(format: 'json' | 'excel', filters?: {
+    from?: string;
+    to?: string;
+    officeId?: number | null;
+    userId?: number | null;
+  }): Promise<Blob> {
+    let params = new HttpParams().set('format', format);
+    if (filters?.from?.trim()) {
+      params = params.set('from', filters.from.trim());
+    }
+    if (filters?.to?.trim()) {
+      params = params.set('to', filters.to.trim());
+    }
+    if (Number.isInteger(filters?.officeId) && Number(filters?.officeId) > 0) {
+      params = params.set('officeId', String(filters?.officeId));
+    }
+    if (Number.isInteger(filters?.userId) && Number(filters?.userId) > 0) {
+      params = params.set('userId', String(filters?.userId));
+    }
+
+    return firstValueFrom(
+      this.http.get(`${this.baseUrl}/billing/export`, {
+        params,
+        responseType: 'blob'
+      })
+    );
+  }
+
+  async getBillingMonthlyRevenue(officeId?: number | null): Promise<{ amountCents: number; currency: string }> {
+    let params = new HttpParams();
+    if (Number.isInteger(officeId) && Number(officeId) > 0) {
+      params = params.set('officeId', String(officeId));
+    }
+
+    const response = await firstValueFrom(
+      this.http.get<{ amountCents: number; currency: string }>(`${this.baseUrl}/billing/monthly-revenue`, { params })
+    );
+    return {
+      amountCents: Number(response.amountCents ?? 0),
+      currency: String(response.currency ?? 'EUR')
+    };
+  }
+
   async getDashboard(officeId?: number | null): Promise<DashboardPayload> {
     let params = new HttpParams();
     if (Number.isInteger(officeId) && Number(officeId) > 0) {
@@ -346,6 +493,29 @@ export class ApiService {
     );
 
     return response.consultation;
+  }
+
+  async createBillingInvoice(payload: {
+    patientId: number;
+    consultationId: number | null;
+    officeId: number | null;
+    invoiceNumber: string;
+    amountCents: number;
+    status: 'payee' | 'impayee';
+    paymentMethod: string;
+    issuedAt: string;
+    notes: string;
+  }): Promise<number> {
+    const response = await firstValueFrom(
+      this.http.post<{ invoiceId: number }>(`${this.baseUrl}/billing/invoices`, payload)
+    );
+    return response.invoiceId;
+  }
+
+  async deleteBillingInvoice(invoiceId: number): Promise<void> {
+    await firstValueFrom(
+      this.http.delete(`${this.baseUrl}/billing/invoices/${invoiceId}`)
+    );
   }
 
   async getPatientDocuments(id: number): Promise<PatientDocumentSummary[]> {

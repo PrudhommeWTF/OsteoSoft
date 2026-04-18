@@ -824,7 +824,13 @@ export class SettingsPage implements OnDestroy {
   }
 
   removePaymentMethod(tempKey: string): void {
-    this.paymentMethods.update((items) => items.filter((item) => item.tempKey !== tempKey));
+    this.paymentMethods.update((items) => {
+      const target = items.find((item) => item.tempKey === tempKey);
+      if (target?.isSystem) {
+        return items;
+      }
+      return items.filter((item) => item.tempKey !== tempKey);
+    });
   }
 
   togglePaymentMethodActive(tempKey: string): void {
@@ -880,6 +886,8 @@ export class SettingsPage implements OnDestroy {
       ...items,
       {
         id: 0,
+        systemKey: null,
+        isSystem: false,
         label: `Nouveau moyen ${items.length + 1}`,
         isActive: true,
         displayOrder: items.length + 1,
@@ -890,7 +898,12 @@ export class SettingsPage implements OnDestroy {
 
   updatePaymentMethodLabel(tempKey: string, value: string): void {
     this.paymentMethods.update((items) =>
-      items.map((item) => (item.tempKey === tempKey ? { ...item, label: value } : item))
+      items.map((item) => {
+        if (item.tempKey !== tempKey || item.isSystem) {
+          return item;
+        }
+        return { ...item, label: value };
+      })
     );
   }
 
@@ -2347,7 +2360,7 @@ export class SettingsPage implements OnDestroy {
       this.officeOpeningHoursDraft.set(openingHours);
       this.invoiceTemplateLayout.set(invoiceTemplateLayout);
       this.serviceTypes.set([]);
-      this.paymentMethods.set([]);
+      this.paymentMethods.set(this.createDefaultPaymentMethods());
       this.consultationProfiles.set([]);
       this.officeUserDelegations.set([]);
       this.officeForm.reset({
@@ -2941,14 +2954,19 @@ export class SettingsPage implements OnDestroy {
 
     this.paymentMethods.set(
       Array.isArray(payload.paymentMethods)
-        ? payload.paymentMethods.map((item, index) => ({
-          id: Number(item?.id) || 0,
-          label: String(item?.label ?? ''),
-          isActive: Boolean(item?.isActive),
-          displayOrder: index + 1,
-          tempKey: this.createTempKey('pay')
-        }))
-        : []
+        ? (() => {
+          const mapped = payload.paymentMethods.map((item, index) => ({
+            id: Number(item?.id) || 0,
+            systemKey: (item as { systemKey?: 'cb' | 'especes' | 'cheque' | null })?.systemKey ?? null,
+            isSystem: Boolean((item as { isSystem?: boolean })?.isSystem),
+            label: String(item?.label ?? ''),
+            isActive: Boolean(item?.isActive),
+            displayOrder: index + 1,
+            tempKey: this.createTempKey('pay')
+          }));
+          return mapped.length > 0 ? mapped : this.createDefaultPaymentMethods();
+        })()
+        : this.createDefaultPaymentMethods()
     );
 
     this.consultationProfiles.set(this.toEditableConsultationProfiles(payload.consultationProfiles));
@@ -3189,6 +3207,38 @@ export class SettingsPage implements OnDestroy {
       mentions: { x: 4, y: 86, w: 92 },
       signature: { x: 60, y: 92, w: 36 }
     };
+  }
+
+  private createDefaultPaymentMethods(): EditablePaymentMethod[] {
+    return [
+      {
+        id: 0,
+        systemKey: 'cb',
+        isSystem: true,
+        label: 'Carte bleu (CB)',
+        isActive: true,
+        displayOrder: 1,
+        tempKey: this.createTempKey('pay')
+      },
+      {
+        id: 0,
+        systemKey: 'especes',
+        isSystem: true,
+        label: 'Espèces',
+        isActive: true,
+        displayOrder: 2,
+        tempKey: this.createTempKey('pay')
+      },
+      {
+        id: 0,
+        systemKey: 'cheque',
+        isSystem: true,
+        label: 'Chèque',
+        isActive: true,
+        displayOrder: 3,
+        tempKey: this.createTempKey('pay')
+      }
+    ];
   }
 
   private parseInvoiceTemplateLayout(rawValue: string | undefined | null): InvoiceTemplateLayout {

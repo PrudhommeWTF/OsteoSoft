@@ -273,6 +273,134 @@ export type InvoiceSummaryTile = {
   trend: string;
 };
 
+export type BillingOperation = {
+  id: string;
+  sourceType: 'invoice' | 'expense' | 'deposit';
+  sourceId: number;
+  occurredAt: string;
+  title: string;
+  debitCents: number;
+  creditCents: number;
+  currency: string;
+  officeId: number | null;
+  ownerUserId: number | null;
+  retrocessionPercent: number;
+  retrocessionRecipient: string;
+  invoiceNumber: string;
+  paymentRef:
+    | { type: 'patient'; patientId: number }
+    | { type: 'expense'; expenseId: number }
+    | { type: 'deposit'; depositId: number };
+};
+
+export type BillingUserOption = {
+  id: number;
+  displayName: string;
+};
+
+export type BillingOperationsPayload = {
+  operations: BillingOperation[];
+  summary: InvoiceSummaryTile[];
+  stats: {
+    debitCents: number;
+    creditCents: number;
+    netCents: number;
+    operationCount: number;
+  };
+  offices: OfficeOption[];
+  users: BillingUserOption[];
+  selectedOwnerUserId: number | null;
+  selectedOfficeId: number | null;
+  from: string;
+  to: string;
+};
+
+export type BillingExpensePayload = {
+  occurredAt: string;
+  officeId: number | null;
+  ownerUserId: number | null;
+  title: string;
+  amount: number;
+  currency: string;
+  paymentMethod?: string;
+  notes?: string;
+};
+
+export type BillingDepositPayload = {
+  occurredAt: string;
+  officeId: number | null;
+  ownerUserId: number | null;
+  type: 'cheque' | 'especes';
+  depositCode?: string;
+  bankName?: string;
+  accountLabel?: string;
+  title?: string;
+  amount?: number;
+  currency: string;
+  notes?: string;
+  operationIds: string[];
+};
+
+export type BillingDepositListItem = {
+  id: number;
+  type: 'cheque' | 'especes';
+  code: string;
+  occurredAt: string;
+  bankName: string;
+  accountLabel: string;
+  chequeCount: number;
+  amountCents: number;
+  currency: string;
+  officeId: number | null;
+  officeName: string;
+  title: string;
+  notes: string;
+  operationIds: string[];
+};
+
+export type BillingDepositCandidate = {
+  operationId: string;
+  sourceId: number;
+  occurredAt: string;
+  patientName: string;
+  invoiceNumber: string;
+  amountCents: number;
+  currency: string;
+  paymentMethod: string;
+  officeId: number | null;
+};
+
+export type BillingDepositDetail = {
+  deposit: BillingDepositListItem;
+  office: {
+    id: number | null;
+    name: string;
+    address1: string;
+    address2: string;
+    postalCode: string;
+    city: string;
+    country: string;
+    phone: string;
+    email: string;
+  };
+  items: Array<{
+    operationId: string;
+    occurredAt: string;
+    patientName: string;
+    invoiceNumber: string;
+    amountCents: number;
+    currency: string;
+  }>;
+};
+
+export type BillingBulkUpdatePayload = {
+  operationIds: string[];
+  ownerUserId?: number | null;
+  retrocessionPercent?: number | null;
+  retrocessionRecipient?: string | null;
+  delete?: boolean;
+};
+
 export type DashboardEvent = {
   id: number;
   patientId: number;
@@ -579,6 +707,8 @@ export type ServiceTypeSetting = {
 
 export type PaymentMethodSetting = {
   id: number | null;
+  systemKey?: 'cb' | 'especes' | 'cheque' | null;
+  isSystem?: boolean;
   label: string;
   isActive: boolean;
   displayOrder: number;

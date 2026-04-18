@@ -494,10 +494,53 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     this.form.controls.sex.setValue(value);
   }
 
+  onLastNameInput(event: Event): void {
+    const input = event.target as HTMLInputElement | null;
+    if (!input) {
+      return;
+    }
+
+    const normalized = this.normalizeLastNameInput(input.value);
+    if (input.value !== normalized) {
+      input.value = normalized;
+    }
+
+    if (this.form.controls.lastName.value !== normalized) {
+      this.form.controls.lastName.setValue(normalized, { emitEvent: false });
+    }
+  }
+
+  onFirstNameInput(event: Event): void {
+    const input = event.target as HTMLInputElement | null;
+    if (!input) {
+      return;
+    }
+
+    const normalized = this.normalizeFirstNameInput(input.value);
+    if (input.value !== normalized) {
+      input.value = normalized;
+    }
+
+    if (this.form.controls.firstName.value !== normalized) {
+      this.form.controls.firstName.setValue(normalized, { emitEvent: false });
+    }
+  }
+
   onPostalCodeInput(value: string): void {
     this.updateLocationSuggestions(value, this.form.controls.city.value);
     this.syncCityFromPostalCode(value);
     this.showPostalCodeSuggestions.set(Boolean(value.trim()) && this.postalCodeSuggestions().length > 0);
+  }
+
+  private normalizeLastNameInput(value: string): string {
+    return String(value ?? '').toLocaleUpperCase('fr-FR');
+  }
+
+  private normalizeFirstNameInput(value: string): string {
+    const lower = String(value ?? '').toLocaleLowerCase('fr-FR');
+    return lower.replace(/(^|[\s\-'])([A-Za-zÀ-ÖØ-öø-ÿ])/g, (match, separator: string, letter: string) => {
+      return `${separator}${letter.toLocaleUpperCase('fr-FR')}`;
+    });
   }
 
   onCityInput(value: string): void {
@@ -2868,6 +2911,54 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     this.syncConsultationNoteFromState();
   }
 
+  private getDefaultConsultationPractitioner(practitioners: Practitioner[]): { username: string; displayName: string } | null {
+    const sessionUsername = this.authService.username().trim().toLowerCase();
+    const normalizedPractitioners = Array.isArray(practitioners) ? practitioners : [];
+    if (sessionUsername) {
+      const sessionMatch = normalizedPractitioners.find((item) => item.username.trim().toLowerCase() === sessionUsername);
+      if (sessionMatch) {
+        const displayName = String(sessionMatch.displayName ?? '').trim() || sessionMatch.username;
+        return {
+          username: sessionMatch.username,
+          displayName
+        };
+      }
+
+      return {
+        username: this.authService.username().trim(),
+        displayName: this.authService.username().trim()
+      };
+    }
+
+    if (normalizedPractitioners[0]) {
+      const displayName = String(normalizedPractitioners[0].displayName ?? '').trim() || normalizedPractitioners[0].username;
+      return {
+        username: normalizedPractitioners[0].username,
+        displayName
+      };
+    }
+
+    return null;
+  }
+
+  private applyDefaultConsultationPractitioner(practitioners: Practitioner[], force = false): void {
+    if (!force && this.consultationPractitioner().trim()) {
+      return;
+    }
+
+    const practitioner = this.getDefaultConsultationPractitioner(practitioners);
+    if (!practitioner) {
+      if (force) {
+        this.consultationPractitioner.set('');
+        this.consultationPractitionerUsername.set('');
+      }
+      return;
+    }
+
+    this.consultationPractitioner.set(practitioner.displayName);
+    this.consultationPractitionerUsername.set(practitioner.username);
+  }
+
   private async loadConsultationContext(activeOfficeId: number | null | undefined): Promise<void> {
     try {
       const officeId = Number.isInteger(activeOfficeId) && Number(activeOfficeId) > 0
@@ -2905,17 +2996,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       });
 
       if (!this.consultationPractitioner()) {
-        const sessionPractitioner = this.authService.username().trim();
-        const match = practitioners.find((item) => item.username === sessionPractitioner);
-        if (match) {
-          const displayName = String(match.displayName ?? '').trim() || match.username;
-          this.consultationPractitioner.set(displayName);
-          this.consultationPractitionerUsername.set(match.username);
-        } else if (practitioners[0]) {
-          const displayName = String(practitioners[0].displayName ?? '').trim() || practitioners[0].username;
-          this.consultationPractitioner.set(displayName);
-          this.consultationPractitionerUsername.set(practitioners[0].username);
-        }
+        this.applyDefaultConsultationPractitioner(practitioners);
         this.syncConsultationNoteFromState();
       }
     } catch {

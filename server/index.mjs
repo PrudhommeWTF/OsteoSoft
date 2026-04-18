@@ -54,6 +54,55 @@ try {
   console.warn('Migration check failed (may be normal if tables don\'t exist yet):', err.message);
 }
 
+// Migration: add office_id and consultation_id to invoices table
+try {
+  const cols = db.prepare(`PRAGMA table_info(invoices)`).all().map((c) => c.name);
+  if (cols.length > 0 && !cols.includes('office_id')) {
+    db.exec('ALTER TABLE invoices ADD COLUMN office_id INTEGER REFERENCES offices(id) ON DELETE SET NULL');
+    console.log('✓ Added office_id column to invoices');
+  }
+  if (cols.length > 0 && !cols.includes('consultation_id')) {
+    db.exec('ALTER TABLE invoices ADD COLUMN consultation_id INTEGER REFERENCES consultations(id) ON DELETE SET NULL');
+    console.log('✓ Added consultation_id column to invoices');
+  }
+  if (cols.length > 0 && !cols.includes('payment_method')) {
+    db.exec("ALTER TABLE invoices ADD COLUMN payment_method TEXT NOT NULL DEFAULT ''");
+    console.log('✓ Added payment_method column to invoices');
+  }
+} catch (err) {
+  console.warn('invoices migration failed:', err.message);
+}
+
+// Migration: add system_key to payment_methods and backfill known defaults
+try {
+  const cols = db.prepare(`PRAGMA table_info(payment_methods)`).all().map((c) => c.name);
+  if (cols.length > 0 && !cols.includes('system_key')) {
+    db.exec('ALTER TABLE payment_methods ADD COLUMN system_key TEXT');
+    console.log('✓ Added system_key column to payment_methods');
+  }
+} catch (err) {
+  console.warn('payment_methods migration failed:', err.message);
+}
+
+// Migration: add bordereau metadata columns for accounting_deposits
+try {
+  const cols = db.prepare(`PRAGMA table_info(accounting_deposits)`).all().map((c) => c.name);
+  if (cols.length > 0 && !cols.includes('deposit_code')) {
+    db.exec("ALTER TABLE accounting_deposits ADD COLUMN deposit_code TEXT NOT NULL DEFAULT ''");
+    console.log('✓ Added deposit_code column to accounting_deposits');
+  }
+  if (cols.length > 0 && !cols.includes('bank_name')) {
+    db.exec("ALTER TABLE accounting_deposits ADD COLUMN bank_name TEXT NOT NULL DEFAULT ''");
+    console.log('✓ Added bank_name column to accounting_deposits');
+  }
+  if (cols.length > 0 && !cols.includes('account_label')) {
+    db.exec("ALTER TABLE accounting_deposits ADD COLUMN account_label TEXT NOT NULL DEFAULT ''");
+    console.log('✓ Added account_label column to accounting_deposits');
+  }
+} catch (err) {
+  console.warn('accounting_deposits migration failed:', err.message);
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -140,8 +189,79 @@ db.exec(`
     issued_at TEXT NOT NULL,
     due_at TEXT NOT NULL,
     notes_cipher TEXT NOT NULL,
+    office_id INTEGER,
+    consultation_id INTEGER,
+    payment_method TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(patient_id) REFERENCES patients(id)
+    FOREIGN KEY(patient_id) REFERENCES patients(id),
+    FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE SET NULL,
+    FOREIGN KEY(consultation_id) REFERENCES consultations(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS accounting_expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    occurred_at TEXT NOT NULL,
+    office_id INTEGER,
+    owner_user_id INTEGER,
+    title TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'EUR',
+    payment_method TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    retrocession_percent REAL NOT NULL DEFAULT 0,
+    retrocession_recipient TEXT NOT NULL DEFAULT '',
+    is_deleted INTEGER NOT NULL DEFAULT 0,
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE SET NULL,
+    FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS accounting_deposits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    occurred_at TEXT NOT NULL,
+    office_id INTEGER,
+    owner_user_id INTEGER,
+    type TEXT NOT NULL DEFAULT 'cheque',
+    deposit_code TEXT NOT NULL DEFAULT '',
+    bank_name TEXT NOT NULL DEFAULT '',
+    account_label TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'EUR',
+    notes TEXT NOT NULL DEFAULT '',
+    retrocession_percent REAL NOT NULL DEFAULT 0,
+    retrocession_recipient TEXT NOT NULL DEFAULT '',
+    is_deleted INTEGER NOT NULL DEFAULT 0,
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE SET NULL,
+    FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS accounting_deposit_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    deposit_id INTEGER NOT NULL,
+    source_type TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(deposit_id) REFERENCES accounting_deposits(id) ON DELETE CASCADE,
+    UNIQUE(deposit_id, source_type, source_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS accounting_operation_meta (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_type TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    owner_user_id INTEGER,
+    retrocession_percent REAL NOT NULL DEFAULT 0,
+    retrocession_recipient TEXT NOT NULL DEFAULT '',
+    is_deleted INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    UNIQUE(source_type, source_id)
   );
 
   CREATE TABLE IF NOT EXISTS audit_logs (
@@ -174,6 +294,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS payment_methods (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     office_id INTEGER,
+    system_key TEXT,
     label TEXT NOT NULL,
     is_active INTEGER NOT NULL DEFAULT 1,
     display_order INTEGER NOT NULL DEFAULT 0,
@@ -909,7 +1030,7 @@ function readOfficeServiceTypes(officeId) {
 function readOfficePaymentMethods(officeId) {
   return db
     .prepare(
-      `SELECT id, label, is_active, display_order
+      `SELECT id, system_key, label, is_active, display_order
        FROM payment_methods
        WHERE office_id = ?
        ORDER BY display_order ASC, id ASC`
@@ -917,6 +1038,8 @@ function readOfficePaymentMethods(officeId) {
     .all(officeId)
     .map((row) => ({
       id: Number(row.id),
+      systemKey: String(row.system_key ?? '').trim() || null,
+      isSystem: ['cb', 'especes', 'cheque'].includes(String(row.system_key ?? '').trim()),
       label: String(row.label ?? '').trim(),
       isActive: Number(row.is_active) === 1,
       displayOrder: Number(row.display_order ?? 0)
@@ -1076,6 +1199,98 @@ function normalizeOfficeServiceTypesPayload(rawServiceTypes) {
     .filter(Boolean);
 }
 
+function getDefaultOfficePaymentMethods() {
+  return [
+    { systemKey: 'cb', label: 'Carte bleu (CB)', displayOrder: 1 },
+    { systemKey: 'especes', label: 'Espèces', displayOrder: 2 },
+    { systemKey: 'cheque', label: 'Chèque', displayOrder: 3 }
+  ];
+}
+
+function inferPaymentMethodSystemKey(rawLabel) {
+  const label = String(rawLabel ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (!label) {
+    return null;
+  }
+
+  if (label.includes('cb') || label.includes('carte')) {
+    return 'cb';
+  }
+  if (label.includes('espece') || label.includes('especes')) {
+    return 'especes';
+  }
+  if (label.includes('cheque') || label.includes('chq')) {
+    return 'cheque';
+  }
+  return null;
+}
+
+function ensureDefaultOfficePaymentMethods(officeId) {
+  const normalizedOfficeId = Number(officeId);
+  if (!Number.isInteger(normalizedOfficeId) || normalizedOfficeId <= 0) {
+    return;
+  }
+
+  const defaults = getDefaultOfficePaymentMethods();
+  const rows = db
+    .prepare(
+      `SELECT id, label, is_active, display_order, system_key
+       FROM payment_methods
+       WHERE office_id = ?
+       ORDER BY display_order ASC, id ASC`
+    )
+    .all(normalizedOfficeId)
+    .map((row) => ({
+      id: Number(row.id),
+      label: String(row.label ?? '').trim(),
+      isActive: Number(row.is_active) === 1,
+      displayOrder: Number(row.display_order ?? 0),
+      systemKey: String(row.system_key ?? '').trim()
+    }));
+
+  const bySystemKey = new Map();
+  for (const row of rows) {
+    if (row.systemKey) {
+      bySystemKey.set(row.systemKey, row);
+    }
+  }
+
+  const updateById = db.prepare(
+    `UPDATE payment_methods
+     SET system_key = ?, label = ?, is_active = ?, display_order = ?
+     WHERE id = ?`
+  );
+  const insertDefault = db.prepare(
+    `INSERT INTO payment_methods (office_id, system_key, label, is_active, display_order)
+     VALUES (?, ?, ?, ?, ?)`
+  );
+
+  for (const def of defaults) {
+    let current = bySystemKey.get(def.systemKey) ?? null;
+
+    if (!current) {
+      const fallback = rows.find((row) => !row.systemKey && inferPaymentMethodSystemKey(row.label) === def.systemKey) ?? null;
+      if (fallback) {
+        updateById.run(def.systemKey, def.label, fallback.isActive ? 1 : 0, def.displayOrder, fallback.id);
+        current = { ...fallback, systemKey: def.systemKey };
+        bySystemKey.set(def.systemKey, current);
+      }
+    }
+
+    if (!current) {
+      insertDefault.run(normalizedOfficeId, def.systemKey, def.label, 1, def.displayOrder);
+      continue;
+    }
+
+    updateById.run(def.systemKey, def.label, current.isActive ? 1 : 0, def.displayOrder, current.id);
+  }
+}
+
 function normalizeOfficePaymentMethodsPayload(rawPaymentMethods) {
   if (!Array.isArray(rawPaymentMethods)) {
     return [];
@@ -1142,27 +1357,76 @@ function replaceOfficeBusinessSettings(officeId, serviceTypes, paymentMethods) {
       db.prepare('DELETE FROM service_types WHERE office_id = ?').run(normalizedOfficeId);
     }
 
+    ensureDefaultOfficePaymentMethods(normalizedOfficeId);
+
+    const defaultRows = db
+      .prepare(
+        `SELECT id, system_key, is_active
+         FROM payment_methods
+         WHERE office_id = ? AND system_key IN ('cb', 'especes', 'cheque')
+         ORDER BY display_order ASC, id ASC`
+      )
+      .all(normalizedOfficeId)
+      .map((row) => ({
+        id: Number(row.id),
+        systemKey: String(row.system_key ?? '').trim(),
+        isActive: Number(row.is_active) === 1
+      }));
+
+    const defaultById = new Set(defaultRows.map((row) => row.id));
+    const defaultBySystemKey = new Map(defaultRows.map((row) => [row.systemKey, row]));
+    const incomingById = new Map(
+      normalizedPaymentMethods
+        .filter((item) => Number.isInteger(item.id) && item.id > 0)
+        .map((item) => [Number(item.id), item])
+    );
+
+    const updateDefaultPaymentMethod = db.prepare(
+      `UPDATE payment_methods
+       SET label = ?, is_active = ?, display_order = ?, system_key = ?
+       WHERE id = ?`
+    );
+
+    for (const def of getDefaultOfficePaymentMethods()) {
+      const current = defaultBySystemKey.get(def.systemKey);
+      if (!current) {
+        continue;
+      }
+
+      const incoming = incomingById.get(current.id);
+      const isActive = incoming ? incoming.isActive : current.isActive;
+      updateDefaultPaymentMethod.run(def.label, isActive ? 1 : 0, def.displayOrder, def.systemKey, current.id);
+    }
+
     const upsertPaymentMethod = db.prepare(
-      `INSERT INTO payment_methods (id, office_id, label, is_active, display_order)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO payment_methods (id, office_id, system_key, label, is_active, display_order)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(id)
        DO UPDATE SET office_id = excluded.office_id,
+                     system_key = excluded.system_key,
                      label = excluded.label,
                      is_active = excluded.is_active,
                      display_order = excluded.display_order`
     );
     const insertPaymentMethod = db.prepare(
-      `INSERT INTO payment_methods (office_id, label, is_active, display_order)
-       VALUES (?, ?, ?, ?)`
+      `INSERT INTO payment_methods (office_id, system_key, label, is_active, display_order)
+       VALUES (?, ?, ?, ?, ?)`
     );
-    const keepPaymentMethodIds = [];
+    const keepPaymentMethodIds = defaultRows.map((row) => row.id);
 
-    for (const item of normalizedPaymentMethods) {
+    const customPaymentMethods = normalizedPaymentMethods.filter((item) => {
+      if (!item.id) {
+        return inferPaymentMethodSystemKey(item.label) == null;
+      }
+      return !defaultById.has(item.id);
+    });
+
+    for (const item of customPaymentMethods) {
       if (item.id) {
-        upsertPaymentMethod.run(item.id, normalizedOfficeId, item.label, item.isActive ? 1 : 0, item.displayOrder);
+        upsertPaymentMethod.run(item.id, normalizedOfficeId, null, item.label, item.isActive ? 1 : 0, item.displayOrder);
         keepPaymentMethodIds.push(item.id);
       } else {
-        const result = insertPaymentMethod.run(normalizedOfficeId, item.label, item.isActive ? 1 : 0, item.displayOrder);
+        const result = insertPaymentMethod.run(normalizedOfficeId, null, item.label, item.isActive ? 1 : 0, item.displayOrder);
         keepPaymentMethodIds.push(Number(result.lastInsertRowid));
       }
     }
@@ -2766,10 +3030,9 @@ async function ensureSeedData() {
   ];
 
   const defaultPaymentMethods = [
-    ['Carte bancaire', 1, 1],
+    ['Carte bleu (CB)', 1, 1],
     ['Espèces', 1, 2],
-    ['Chèque', 1, 3],
-    ['Virement', 1, 4]
+    ['Chèque', 1, 3]
   ];
 
   for (const office of officesForBusinessSettings) {
@@ -2795,6 +3058,8 @@ async function ensureSeedData() {
         seedPaymentMethod.run(officeId, label, isActive, displayOrder);
       }
     }
+
+    ensureDefaultOfficePaymentMethods(officeId);
   }
 
   const existingAdmin = db.prepare('SELECT id FROM users WHERE username = ?').get('admin');
@@ -7995,34 +8260,1031 @@ app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePerm
   });
 });
 
-app.get('/api/invoices/summary', authMiddleware, requirePermission('read-billing-kpis'), (req, res) => {
-  const rows = db
-    .prepare('SELECT amount_cents, status FROM invoices')
+function parseBillingOperationId(rawValue) {
+  const value = String(rawValue ?? '').trim();
+  const separatorIndex = value.indexOf(':');
+  if (separatorIndex <= 0) {
+    return null;
+  }
+
+  const sourceType = value.slice(0, separatorIndex);
+  const sourceId = Number(value.slice(separatorIndex + 1));
+  if (!['invoice', 'expense', 'deposit'].includes(sourceType)) {
+    return null;
+  }
+  if (!Number.isInteger(sourceId) || sourceId <= 0) {
+    return null;
+  }
+
+  return { sourceType, sourceId };
+}
+
+function normalizeBillingPaymentMethod(rawValue) {
+  const value = String(rawValue ?? '').trim().toLowerCase();
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function billingPaymentMethodMatchesDepositType(rawMethod, depositType) {
+  const method = normalizeBillingPaymentMethod(rawMethod);
+  if (!method) {
+    return false;
+  }
+
+  if (depositType === 'cheque') {
+    return method.includes('cheq') || method.includes('chq');
+  }
+
+  return method.includes('espece') || method.includes('cash') || method.includes('liquide');
+}
+
+function buildBillingDateRange(fromRaw, toRaw) {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+  const parsedFrom = new Date(String(fromRaw ?? '').trim());
+  const parsedTo = new Date(String(toRaw ?? '').trim());
+
+  const from = Number.isNaN(parsedFrom.getTime()) ? monthStart : parsedFrom;
+  const to = Number.isNaN(parsedTo.getTime()) ? monthEnd : parsedTo;
+
+  from.setHours(0, 0, 0, 0);
+  to.setHours(23, 59, 59, 999);
+
+  return {
+    from,
+    to,
+    fromIso: from.toISOString(),
+    toIso: to.toISOString()
+  };
+}
+
+function getAccessibleBillingOfficeIds(access) {
+  return [...new Set(
+    (Array.isArray(access?.officeIds) ? access.officeIds : [])
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value > 0)
+  )];
+}
+
+function getScopedBillingOfficeIds(access, requestedOfficeId) {
+  const allowed = new Set(getAccessibleBillingOfficeIds(access));
+  const asked = Number(requestedOfficeId);
+  if (Number.isInteger(asked) && asked > 0) {
+    return allowed.has(asked) ? [asked] : [];
+  }
+  return [...allowed];
+}
+
+function getBillingUsersForOfficeIds(officeIds) {
+  if (!Array.isArray(officeIds) || officeIds.length === 0) {
+    return [];
+  }
+
+  const placeholders = officeIds.map(() => '?').join(', ');
+  return db
+    .prepare(
+      `SELECT DISTINCT u.id, u.first_name, u.last_name, u.username
+       FROM users u
+       INNER JOIN user_offices uo ON uo.user_id = u.id
+       WHERE u.is_active = 1 AND uo.office_id IN (${placeholders})
+       ORDER BY lower(u.last_name) ASC, lower(u.first_name) ASC, lower(u.username) ASC`
+    )
+    .all(...officeIds)
+    .map((row) => {
+      const firstName = String(row.first_name ?? '').trim();
+      const lastName = String(row.last_name ?? '').trim();
+      const displayName = `${lastName.toUpperCase()} ${firstName}`.trim() || String(row.username ?? '').trim();
+      return {
+        id: Number(row.id),
+        displayName
+      };
+    });
+}
+
+function getBillingOfficeOptions(officeIds) {
+  if (!Array.isArray(officeIds) || officeIds.length === 0) {
+    return [];
+  }
+
+  const placeholders = officeIds.map(() => '?').join(', ');
+  return db
+    .prepare(
+      `SELECT id, name
+       FROM offices
+       WHERE id IN (${placeholders})
+       ORDER BY lower(name) ASC, id ASC`
+    )
+    .all(...officeIds)
+    .map((row) => ({ id: Number(row.id), name: String(row.name ?? '').trim() }));
+}
+
+function getBillingOperationsData({ userId, access, fromIso, toIso, availableOfficeIds, filterOfficeIds, ownerUserId }) {
+  if (!Array.isArray(availableOfficeIds) || availableOfficeIds.length === 0) {
+    return {
+      operations: [],
+      summary: [
+        { label: 'Credits periode', value: '0.00 EUR', trend: '0 operations' },
+        { label: 'Debits periode', value: '0.00 EUR', trend: 'Aucune depense' },
+        { label: 'Resultat', value: '0.00 EUR', trend: 'Neutre' }
+      ],
+      stats: {
+        debitCents: 0,
+        creditCents: 0,
+        netCents: 0,
+        operationCount: 0
+      },
+      offices: [],
+      users: [],
+      selectedOwnerUserId: null,
+      selectedOfficeId: null
+    };
+  }
+
+  const metaRows = db
+    .prepare(
+      `SELECT source_type, source_id, owner_user_id, retrocession_percent, retrocession_recipient, is_deleted
+       FROM accounting_operation_meta`
+    )
     .all();
 
-  const monthlyRevenue = rows.reduce((sum, row) => sum + row.amount_cents, 0);
-  const unpaid = rows.filter((row) => row.status !== 'payee').reduce((sum, row) => sum + row.amount_cents, 0);
+  const metaByKey = new Map();
+  for (const meta of metaRows) {
+    metaByKey.set(`${meta.source_type}:${Number(meta.source_id)}`, {
+      ownerUserId: meta.owner_user_id != null ? Number(meta.owner_user_id) : null,
+      retrocessionPercent: Number(meta.retrocession_percent ?? 0),
+      retrocessionRecipient: String(meta.retrocession_recipient ?? '').trim(),
+      isDeleted: Number(meta.is_deleted) === 1
+    });
+  }
+
+  const invoices = db
+    .prepare(
+      `SELECT i.id, i.patient_id, i.invoice_number, i.amount_cents, i.issued_at,
+              p.cipher_full_name,
+              COALESCE(
+                i.office_id,
+                (
+                  SELECT c.office_id
+                  FROM consultations c
+                  WHERE c.patient_id = i.patient_id AND date(c.started_at) = date(i.issued_at)
+                  ORDER BY datetime(c.started_at) DESC, c.id DESC
+                  LIMIT 1
+                )
+              ) AS office_id
+       FROM invoices i
+       INNER JOIN patients p ON p.id = i.patient_id
+       WHERE datetime(i.issued_at) >= datetime(?)
+         AND datetime(i.issued_at) <= datetime(?)`
+    )
+    .all(fromIso, toIso);
+
+  const expenses = db
+    .prepare(
+      `SELECT id, occurred_at, office_id, owner_user_id, title, amount_cents, currency,
+              payment_method, notes, retrocession_percent, retrocession_recipient
+       FROM accounting_expenses
+       WHERE is_deleted = 0
+         AND datetime(occurred_at) >= datetime(?)
+         AND datetime(occurred_at) <= datetime(?)`
+    )
+    .all(fromIso, toIso);
+
+  const deposits = db
+    .prepare(
+      `SELECT id, occurred_at, office_id, owner_user_id, type, title, amount_cents, currency,
+              notes, retrocession_percent, retrocession_recipient
+       FROM accounting_deposits
+       WHERE is_deleted = 0
+         AND datetime(occurred_at) >= datetime(?)
+         AND datetime(occurred_at) <= datetime(?)`
+    )
+    .all(fromIso, toIso);
+
+  const operations = [];
+
+  for (const row of invoices) {
+    const operationId = `invoice:${Number(row.id)}`;
+    const meta = metaByKey.get(operationId);
+    if (meta?.isDeleted) {
+      continue;
+    }
+
+    const officeId = row.office_id != null ? Number(row.office_id) : null;
+    if (Array.isArray(filterOfficeIds) && filterOfficeIds.length > 0 && (officeId == null || !filterOfficeIds.includes(officeId))) {
+      continue;
+    }
+
+    const effectiveOwner = meta?.ownerUserId ?? null;
+    if (Number.isInteger(ownerUserId) && ownerUserId > 0 && effectiveOwner !== ownerUserId) {
+      continue;
+    }
+
+    operations.push({
+      id: operationId,
+      sourceType: 'invoice',
+      sourceId: Number(row.id),
+      occurredAt: String(row.issued_at),
+      title: `Consultation pour ${decryptSensitiveField(row.cipher_full_name)}`,
+      debitCents: 0,
+      creditCents: Number(row.amount_cents ?? 0),
+      currency: 'EUR',
+      officeId,
+      ownerUserId: effectiveOwner,
+      retrocessionPercent: meta?.retrocessionPercent ?? 0,
+      retrocessionRecipient: meta?.retrocessionRecipient ?? '',
+      invoiceNumber: String(row.invoice_number ?? '').trim(),
+      paymentRef: {
+        type: 'patient',
+        patientId: Number(row.patient_id)
+      }
+    });
+  }
+
+  for (const row of expenses) {
+    const officeId = row.office_id != null ? Number(row.office_id) : null;
+    if (Array.isArray(filterOfficeIds) && filterOfficeIds.length > 0 && (officeId == null || !filterOfficeIds.includes(officeId))) {
+      continue;
+    }
+
+    const effectiveOwner = row.owner_user_id != null ? Number(row.owner_user_id) : null;
+    if (Number.isInteger(ownerUserId) && ownerUserId > 0 && effectiveOwner !== ownerUserId) {
+      continue;
+    }
+
+    operations.push({
+      id: `expense:${Number(row.id)}`,
+      sourceType: 'expense',
+      sourceId: Number(row.id),
+      occurredAt: String(row.occurred_at),
+      title: String(row.title ?? '').trim() || 'Depense',
+      debitCents: Number(row.amount_cents ?? 0),
+      creditCents: 0,
+      currency: String(row.currency ?? 'EUR').trim() || 'EUR',
+      officeId,
+      ownerUserId: effectiveOwner,
+      retrocessionPercent: Number(row.retrocession_percent ?? 0),
+      retrocessionRecipient: String(row.retrocession_recipient ?? '').trim(),
+      invoiceNumber: '',
+      paymentRef: {
+        type: 'expense',
+        expenseId: Number(row.id)
+      }
+    });
+  }
+
+  for (const row of deposits) {
+    const officeId = row.office_id != null ? Number(row.office_id) : null;
+    if (Array.isArray(filterOfficeIds) && filterOfficeIds.length > 0 && (officeId == null || !filterOfficeIds.includes(officeId))) {
+      continue;
+    }
+
+    const effectiveOwner = row.owner_user_id != null ? Number(row.owner_user_id) : null;
+    if (Number.isInteger(ownerUserId) && ownerUserId > 0 && effectiveOwner !== ownerUserId) {
+      continue;
+    }
+
+    operations.push({
+      id: `deposit:${Number(row.id)}`,
+      sourceType: 'deposit',
+      sourceId: Number(row.id),
+      occurredAt: String(row.occurred_at),
+      title: String(row.title ?? '').trim() || (String(row.type ?? '').toLowerCase() === 'especes' ? 'Remise d\'especes' : 'Remise de cheques'),
+      debitCents: 0,
+      creditCents: Number(row.amount_cents ?? 0),
+      currency: String(row.currency ?? 'EUR').trim() || 'EUR',
+      officeId,
+      ownerUserId: effectiveOwner,
+      retrocessionPercent: Number(row.retrocession_percent ?? 0),
+      retrocessionRecipient: String(row.retrocession_recipient ?? '').trim(),
+      invoiceNumber: '',
+      paymentRef: {
+        type: 'deposit',
+        depositId: Number(row.id)
+      }
+    });
+  }
+
+  operations.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+
+  const debitCents = operations.reduce((sum, row) => sum + row.debitCents, 0);
+  const creditCents = operations.reduce((sum, row) => sum + row.creditCents, 0);
+  const netCents = creditCents - debitCents;
 
   const summary = [
     {
-      label: 'CA mensuel',
-      value: `${(monthlyRevenue / 100).toFixed(2)} EUR`,
-      trend: '+12%'
+      label: 'Credits periode',
+      value: `${(creditCents / 100).toFixed(2)} EUR`,
+      trend: `${operations.length} operations`
     },
     {
-      label: 'Impayes',
-      value: `${(unpaid / 100).toFixed(2)} EUR`,
-      trend: unpaid > 0 ? '+5%' : '-10%'
+      label: 'Debits periode',
+      value: `${(debitCents / 100).toFixed(2)} EUR`,
+      trend: debitCents > 0 ? 'Depenses enregistrees' : 'Aucune depense'
     },
     {
-      label: 'Factures',
-      value: String(rows.length),
-      trend: '+3'
+      label: 'Resultat',
+      value: `${(netCents / 100).toFixed(2)} EUR`,
+      trend: netCents >= 0 ? 'Positif' : 'Negatif'
     }
   ];
 
-  writeAuditLog(req.user.sub, 'READ_LIST', 'invoices', null, { count: rows.length });
-  return res.json({ summary });
+  const offices = getBillingOfficeOptions(availableOfficeIds);
+  const users = getBillingUsersForOfficeIds(filterOfficeIds.length > 0 ? filterOfficeIds : availableOfficeIds);
+
+  return {
+    operations,
+    summary,
+    stats: {
+      debitCents,
+      creditCents,
+      netCents,
+      operationCount: operations.length
+    },
+    offices,
+    users,
+    selectedOwnerUserId: Number.isInteger(ownerUserId) && ownerUserId > 0 ? ownerUserId : null,
+    selectedOfficeId: filterOfficeIds.length === 1 ? filterOfficeIds[0] : null
+  };
+}
+
+app.get('/api/billing/operations', authMiddleware, requirePermission('read-billing-kpis'), (req, res) => {
+  const range = buildBillingDateRange(req.query.from, req.query.to);
+  const availableOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+  const filterOfficeIds = getScopedBillingOfficeIds(req.userAccess, req.query.officeId);
+  const ownerUserId = Number(req.query.userId);
+
+  const payload = getBillingOperationsData({
+    userId: req.user.sub,
+    access: req.userAccess,
+    fromIso: range.fromIso,
+    toIso: range.toIso,
+    availableOfficeIds,
+    filterOfficeIds,
+    ownerUserId: Number.isInteger(ownerUserId) && ownerUserId > 0 ? ownerUserId : null
+  });
+
+  writeAuditLog(req.user.sub, 'READ_LIST', 'billing', null, {
+    from: range.fromIso,
+    to: range.toIso,
+    operationCount: payload.operations.length
+  });
+
+  return res.json({
+    ...payload,
+    from: range.fromIso,
+    to: range.toIso
+  });
+});
+
+app.post('/api/billing/invoices', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+  const patientId = Number(req.body?.patientId);
+  const consultationId = req.body?.consultationId != null ? Number(req.body.consultationId) : null;
+  const officeId = req.body?.officeId != null ? Number(req.body.officeId) : null;
+  const invoiceNumber = String(req.body?.invoiceNumber ?? '').trim();
+  const amountCents = Math.round(Number(req.body?.amountCents ?? 0));
+  const status = String(req.body?.status ?? 'payee').trim();
+  const issuedAt = String(req.body?.issuedAt ?? new Date().toISOString()).trim();
+  const notes = String(req.body?.notes ?? '').trim();
+  const paymentMethod = String(req.body?.paymentMethod ?? '').trim();
+
+  if (!Number.isInteger(patientId) || patientId <= 0) {
+    return res.status(400).json({ message: 'Patient invalide' });
+  }
+  if (!invoiceNumber) {
+    return res.status(400).json({ message: 'Numéro de facture requis' });
+  }
+  if (!Number.isFinite(amountCents) || amountCents < 0) {
+    return res.status(400).json({ message: 'Montant invalide' });
+  }
+
+  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
+  if (!patient) {
+    return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  const existing = db.prepare('SELECT id FROM invoices WHERE invoice_number = ?').get(invoiceNumber);
+  if (existing) {
+    return res.status(200).json({ invoiceId: Number(existing.id) });
+  }
+
+  const effectiveOfficeId = Number.isInteger(officeId) && officeId > 0 ? officeId : null;
+  const effectiveConsultationId = Number.isInteger(consultationId) && consultationId > 0 ? consultationId : null;
+  const effectiveStatus = ['payee', 'impayee'].includes(status) ? status : 'payee';
+  const dueAt = issuedAt;
+  const notesCipher = notes ? encryptSensitiveField(notes) : '';
+
+  const inserted = db.prepare(
+    `INSERT INTO invoices
+      (patient_id, invoice_number, amount_cents, status, issued_at, due_at, notes_cipher, office_id, consultation_id, payment_method)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    patientId,
+    invoiceNumber,
+    amountCents,
+    effectiveStatus,
+    issuedAt,
+    dueAt,
+    notesCipher,
+    effectiveOfficeId,
+    effectiveConsultationId,
+    paymentMethod
+  );
+
+  writeAuditLog(req.user.sub, 'CREATE', 'invoices', String(inserted.lastInsertRowid), {
+    patientId,
+    invoiceNumber,
+    amountCents
+  });
+
+  return res.status(201).json({ invoiceId: Number(inserted.lastInsertRowid) });
+});
+
+app.delete('/api/billing/invoices/:id', authMiddleware, requirePermission('mark-payment'), (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ message: 'ID invalide' });
+  }
+
+  const row = db.prepare('SELECT id FROM invoices WHERE id = ?').get(id);
+  if (!row) {
+    return res.status(404).json({ message: 'Facture introuvable' });
+  }
+
+  db.prepare('DELETE FROM invoices WHERE id = ?').run(id);
+  writeAuditLog(req.user.sub, 'DELETE', 'invoices', String(id), {});
+
+  return res.json({ ok: true });
+});
+
+app.post('/api/billing/expenses', authMiddleware, requirePermission('mark-payment'), (req, res) => {
+  const occurredAt = String(req.body?.occurredAt ?? '').trim() || new Date().toISOString();
+  const title = String(req.body?.title ?? '').trim();
+  const amount = Number(req.body?.amount ?? 0);
+  const currency = String(req.body?.currency ?? 'EUR').trim() || 'EUR';
+  const officeId = Number(req.body?.officeId);
+  const ownerUserId = Number(req.body?.ownerUserId);
+  const paymentMethod = String(req.body?.paymentMethod ?? '').trim();
+  const notes = String(req.body?.notes ?? '').trim();
+
+  if (!title) {
+    return res.status(400).json({ message: 'Titre requis' });
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ message: 'Montant invalide' });
+  }
+
+  const officeIds = getScopedBillingOfficeIds(req.userAccess, officeId);
+  if (!officeIds.length) {
+    return res.status(403).json({ message: 'Cabinet inaccessible' });
+  }
+  const effectiveOfficeId = officeIds[0];
+
+  const validatedOwnerUserId = Number.isInteger(ownerUserId) && ownerUserId > 0 ? ownerUserId : null;
+  const inserted = db.prepare(
+    `INSERT INTO accounting_expenses
+      (occurred_at, office_id, owner_user_id, title, amount_cents, currency, payment_method, notes, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    occurredAt,
+    effectiveOfficeId,
+    validatedOwnerUserId,
+    title,
+    Math.round(amount * 100),
+    currency,
+    paymentMethod,
+    notes,
+    req.user.sub
+  );
+
+  writeAuditLog(req.user.sub, 'CREATE', 'billing-expense', String(inserted.lastInsertRowid), {
+    officeId: effectiveOfficeId,
+    amount
+  });
+
+  return res.status(201).json({
+    expenseId: Number(inserted.lastInsertRowid)
+  });
+});
+
+app.post('/api/billing/deposits', authMiddleware, requirePermission('mark-payment'), (req, res) => {
+  const occurredAt = String(req.body?.occurredAt ?? '').trim() || new Date().toISOString();
+  const type = String(req.body?.type ?? 'cheque').trim().toLowerCase() === 'especes' ? 'especes' : 'cheque';
+  const depositCode = String(req.body?.depositCode ?? '').trim();
+  const bankName = String(req.body?.bankName ?? '').trim();
+  const accountLabel = String(req.body?.accountLabel ?? '').trim();
+  const titleRaw = String(req.body?.title ?? '').trim();
+  const title = titleRaw || (type === 'especes' ? 'Remise d\'especes' : 'Remise de cheques');
+  const amountRaw = Number(req.body?.amount ?? NaN);
+  const currency = String(req.body?.currency ?? 'EUR').trim() || 'EUR';
+  const officeId = Number(req.body?.officeId);
+  const ownerUserId = Number(req.body?.ownerUserId);
+  const notes = String(req.body?.notes ?? '').trim();
+  const operationIds = Array.isArray(req.body?.operationIds) ? req.body.operationIds : [];
+
+  const officeIds = getScopedBillingOfficeIds(req.userAccess, officeId);
+  if (!officeIds.length) {
+    return res.status(403).json({ message: 'Cabinet inaccessible' });
+  }
+  const effectiveOfficeId = officeIds[0];
+
+  const parsedOperationIds = operationIds
+    .map((value) => parseBillingOperationId(value))
+    .filter(Boolean);
+
+  let computedAmountCents = 0;
+  if (Number.isFinite(amountRaw) && amountRaw > 0) {
+    computedAmountCents = Math.round(amountRaw * 100);
+  } else if (parsedOperationIds.length > 0) {
+    const invoiceIds = parsedOperationIds.filter((item) => item.sourceType === 'invoice').map((item) => item.sourceId);
+    if (invoiceIds.length > 0) {
+      const placeholders = invoiceIds.map(() => '?').join(', ');
+      const invoiceRows = db
+        .prepare(`SELECT amount_cents FROM invoices WHERE id IN (${placeholders})`)
+        .all(...invoiceIds);
+      computedAmountCents += invoiceRows.reduce((sum, row) => sum + Number(row.amount_cents ?? 0), 0);
+    }
+  }
+
+  if (computedAmountCents <= 0) {
+    return res.status(400).json({ message: 'Montant de remise invalide' });
+  }
+
+  const validatedOwnerUserId = Number.isInteger(ownerUserId) && ownerUserId > 0 ? ownerUserId : null;
+  const tx = db.transaction(() => {
+    const inserted = db.prepare(
+      `INSERT INTO accounting_deposits
+        (occurred_at, office_id, owner_user_id, type, deposit_code, bank_name, account_label, title, amount_cents, currency, notes, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      occurredAt,
+      effectiveOfficeId,
+      validatedOwnerUserId,
+      type,
+      depositCode,
+      bankName,
+      accountLabel,
+      title,
+      computedAmountCents,
+      currency,
+      notes,
+      req.user.sub
+    );
+
+    const depositId = Number(inserted.lastInsertRowid);
+    const insertItem = db.prepare(
+      `INSERT OR IGNORE INTO accounting_deposit_items (deposit_id, source_type, source_id)
+       VALUES (?, ?, ?)`
+    );
+    for (const item of parsedOperationIds) {
+      insertItem.run(depositId, item.sourceType, item.sourceId);
+    }
+
+    return depositId;
+  });
+
+  const depositId = tx();
+
+  writeAuditLog(req.user.sub, 'CREATE', 'billing-deposit', String(depositId), {
+    officeId: effectiveOfficeId,
+    amountCents: computedAmountCents,
+    itemCount: parsedOperationIds.length
+  });
+
+  return res.status(201).json({ depositId });
+});
+
+app.get('/api/billing/deposits', authMiddleware, requirePermission('read-billing-kpis'), (req, res) => {
+  const type = String(req.query.type ?? 'cheque').trim().toLowerCase() === 'especes' ? 'especes' : 'cheque';
+  const officeId = Number(req.query.officeId);
+  const scopedOfficeIds = getScopedBillingOfficeIds(req.userAccess, officeId);
+
+  if (!scopedOfficeIds.length) {
+    return res.json({ deposits: [] });
+  }
+
+  const placeholders = scopedOfficeIds.map(() => '?').join(', ');
+  const rows = db.prepare(
+    `SELECT d.id, d.type, d.deposit_code, d.occurred_at, d.bank_name, d.account_label, d.title,
+            d.amount_cents, d.currency, d.office_id, d.notes, o.name AS office_name,
+            (
+              SELECT COUNT(*)
+              FROM accounting_deposit_items di
+              WHERE di.deposit_id = d.id AND di.source_type = 'invoice'
+            ) AS cheque_count
+     FROM accounting_deposits d
+     LEFT JOIN offices o ON o.id = d.office_id
+     WHERE d.is_deleted = 0
+       AND d.type = ?
+       AND d.office_id IN (${placeholders})
+     ORDER BY datetime(d.occurred_at) DESC, d.id DESC`
+  ).all(type, ...scopedOfficeIds);
+
+  const itemRows = db.prepare(
+    `SELECT deposit_id, source_type, source_id
+     FROM accounting_deposit_items
+     WHERE deposit_id IN (${rows.map(() => '?').join(', ') || 'NULL'})`
+  ).all(...rows.map((row) => Number(row.id)));
+
+  const itemMap = new Map();
+  for (const row of itemRows) {
+    const key = Number(row.deposit_id);
+    if (!itemMap.has(key)) {
+      itemMap.set(key, []);
+    }
+    itemMap.get(key).push(`${row.source_type}:${Number(row.source_id)}`);
+  }
+
+  return res.json({
+    deposits: rows.map((row) => ({
+      id: Number(row.id),
+      type: row.type === 'especes' ? 'especes' : 'cheque',
+      code: String(row.deposit_code ?? '').trim(),
+      occurredAt: String(row.occurred_at),
+      bankName: String(row.bank_name ?? '').trim(),
+      accountLabel: String(row.account_label ?? '').trim(),
+      chequeCount: Number(row.cheque_count ?? 0),
+      amountCents: Number(row.amount_cents ?? 0),
+      currency: String(row.currency ?? 'EUR'),
+      officeId: row.office_id != null ? Number(row.office_id) : null,
+      officeName: String(row.office_name ?? '').trim(),
+      title: String(row.title ?? '').trim(),
+      notes: String(row.notes ?? '').trim(),
+      operationIds: itemMap.get(Number(row.id)) ?? []
+    }))
+  });
+});
+
+app.get('/api/billing/deposit-candidates', authMiddleware, requirePermission('read-billing-kpis'), (req, res) => {
+  const type = String(req.query.type ?? 'cheque').trim().toLowerCase() === 'especes' ? 'especes' : 'cheque';
+  const officeId = Number(req.query.officeId);
+  const scopedOfficeIds = getScopedBillingOfficeIds(req.userAccess, officeId);
+
+  if (!scopedOfficeIds.length) {
+    return res.json({ candidates: [] });
+  }
+
+  const placeholders = scopedOfficeIds.map(() => '?').join(', ');
+  const rows = db.prepare(
+    `SELECT i.id, i.invoice_number, i.issued_at, i.amount_cents, i.status, i.payment_method, i.office_id,
+            p.cipher_full_name
+     FROM invoices i
+     INNER JOIN patients p ON p.id = i.patient_id
+     WHERE i.office_id IN (${placeholders})
+       AND i.status = 'payee'
+       AND NOT EXISTS (
+         SELECT 1
+         FROM accounting_deposit_items di
+         INNER JOIN accounting_deposits d ON d.id = di.deposit_id
+         WHERE di.source_type = 'invoice'
+           AND di.source_id = i.id
+           AND d.is_deleted = 0
+       )
+     ORDER BY datetime(i.issued_at) DESC, i.id DESC`
+  ).all(...scopedOfficeIds);
+
+  const candidates = rows
+    .filter((row) => billingPaymentMethodMatchesDepositType(row.payment_method, type))
+    .map((row) => ({
+      operationId: `invoice:${Number(row.id)}`,
+      sourceId: Number(row.id),
+      occurredAt: String(row.issued_at),
+      patientName: decryptSensitiveField(row.cipher_full_name),
+      invoiceNumber: String(row.invoice_number ?? '').trim(),
+      amountCents: Number(row.amount_cents ?? 0),
+      currency: 'EUR',
+      paymentMethod: String(row.payment_method ?? '').trim(),
+      officeId: row.office_id != null ? Number(row.office_id) : null
+    }));
+
+  return res.json({ candidates });
+});
+
+app.patch('/api/billing/deposits/:id', authMiddleware, requirePermission('mark-payment'), (req, res) => {
+  const depositId = Number(req.params.id);
+  if (!Number.isInteger(depositId) || depositId <= 0) {
+    return res.status(400).json({ message: 'ID de remise invalide' });
+  }
+
+  const existing = db.prepare('SELECT id, office_id FROM accounting_deposits WHERE id = ? AND is_deleted = 0').get(depositId);
+  if (!existing) {
+    return res.status(404).json({ message: 'Remise introuvable' });
+  }
+
+  const officeIds = getScopedBillingOfficeIds(req.userAccess, Number(existing.office_id));
+  if (!officeIds.length) {
+    return res.status(403).json({ message: 'Cabinet inaccessible' });
+  }
+
+  const occurredAt = String(req.body?.occurredAt ?? '').trim() || new Date().toISOString();
+  const code = String(req.body?.code ?? '').trim();
+  const bankName = String(req.body?.bankName ?? '').trim();
+  const accountLabel = String(req.body?.accountLabel ?? '').trim();
+  const title = String(req.body?.title ?? '').trim() || 'Remise';
+  const notes = String(req.body?.notes ?? '').trim();
+  const amount = Number(req.body?.amount ?? 0);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ message: 'Montant invalide' });
+  }
+
+  db.prepare(
+    `UPDATE accounting_deposits
+     SET occurred_at = ?, deposit_code = ?, bank_name = ?, account_label = ?, title = ?, notes = ?, amount_cents = ?
+     WHERE id = ?`
+  ).run(
+    occurredAt,
+    code,
+    bankName,
+    accountLabel,
+    title,
+    notes,
+    Math.round(amount * 100),
+    depositId
+  );
+
+  return res.status(204).send();
+});
+
+app.delete('/api/billing/deposits/:id', authMiddleware, requirePermission('mark-payment'), (req, res) => {
+  const depositId = Number(req.params.id);
+  if (!Number.isInteger(depositId) || depositId <= 0) {
+    return res.status(400).json({ message: 'ID de remise invalide' });
+  }
+
+  const existing = db.prepare('SELECT id, office_id FROM accounting_deposits WHERE id = ? AND is_deleted = 0').get(depositId);
+  if (!existing) {
+    return res.status(404).json({ message: 'Remise introuvable' });
+  }
+
+  const officeIds = getScopedBillingOfficeIds(req.userAccess, Number(existing.office_id));
+  if (!officeIds.length) {
+    return res.status(403).json({ message: 'Cabinet inaccessible' });
+  }
+
+  db.prepare('UPDATE accounting_deposits SET is_deleted = 1 WHERE id = ?').run(depositId);
+  return res.status(204).send();
+});
+
+app.get('/api/billing/deposits/:id/detail', authMiddleware, requirePermission('read-billing-kpis'), (req, res) => {
+  const depositId = Number(req.params.id);
+  if (!Number.isInteger(depositId) || depositId <= 0) {
+    return res.status(400).json({ message: 'ID de remise invalide' });
+  }
+
+  const row = db.prepare(
+    `SELECT d.id, d.type, d.deposit_code, d.occurred_at, d.bank_name, d.account_label, d.title,
+            d.amount_cents, d.currency, d.office_id, d.notes,
+            o.name AS office_name, o.address_line1, o.address_line2, o.postal_code, o.city, o.country, o.phone_landline, o.email
+     FROM accounting_deposits d
+     LEFT JOIN offices o ON o.id = d.office_id
+     WHERE d.id = ? AND d.is_deleted = 0`
+  ).get(depositId);
+
+  if (!row) {
+    return res.status(404).json({ message: 'Remise introuvable' });
+  }
+
+  const officeIds = getScopedBillingOfficeIds(req.userAccess, Number(row.office_id));
+  if (!officeIds.length) {
+    return res.status(403).json({ message: 'Cabinet inaccessible' });
+  }
+
+  const items = db.prepare(
+    `SELECT i.id AS invoice_id, i.invoice_number, i.issued_at, i.amount_cents, p.cipher_full_name
+     FROM accounting_deposit_items di
+     INNER JOIN invoices i ON i.id = di.source_id AND di.source_type = 'invoice'
+     INNER JOIN patients p ON p.id = i.patient_id
+     WHERE di.deposit_id = ?
+     ORDER BY datetime(i.issued_at) DESC, i.id DESC`
+  ).all(depositId);
+
+  return res.json({
+    detail: {
+      deposit: {
+        id: Number(row.id),
+        type: row.type === 'especes' ? 'especes' : 'cheque',
+        code: String(row.deposit_code ?? '').trim(),
+        occurredAt: String(row.occurred_at),
+        bankName: String(row.bank_name ?? '').trim(),
+        accountLabel: String(row.account_label ?? '').trim(),
+        chequeCount: items.length,
+        amountCents: Number(row.amount_cents ?? 0),
+        currency: String(row.currency ?? 'EUR'),
+        officeId: row.office_id != null ? Number(row.office_id) : null,
+        officeName: String(row.office_name ?? '').trim(),
+        title: String(row.title ?? '').trim(),
+        notes: String(row.notes ?? '').trim(),
+        operationIds: items.map((item) => `invoice:${Number(item.invoice_id)}`)
+      },
+      office: {
+        id: row.office_id != null ? Number(row.office_id) : null,
+        name: String(row.office_name ?? '').trim(),
+        address1: String(row.address_line1 ?? '').trim(),
+        address2: String(row.address_line2 ?? '').trim(),
+        postalCode: String(row.postal_code ?? '').trim(),
+        city: String(row.city ?? '').trim(),
+        country: String(row.country ?? '').trim(),
+        phone: String(row.phone_landline ?? '').trim(),
+        email: String(row.email ?? '').trim()
+      },
+      items: items.map((item) => ({
+        operationId: `invoice:${Number(item.invoice_id)}`,
+        occurredAt: String(item.issued_at),
+        patientName: decryptSensitiveField(item.cipher_full_name),
+        invoiceNumber: String(item.invoice_number ?? '').trim(),
+        amountCents: Number(item.amount_cents ?? 0),
+        currency: 'EUR'
+      }))
+    }
+  });
+});
+
+app.patch('/api/billing/operations/bulk', authMiddleware, requirePermission('mark-payment'), (req, res) => {
+  const operationIds = Array.isArray(req.body?.operationIds) ? req.body.operationIds : [];
+  const parsed = operationIds
+    .map((value) => parseBillingOperationId(value))
+    .filter(Boolean);
+
+  if (parsed.length === 0) {
+    return res.status(400).json({ message: 'Aucune operation selectionnee' });
+  }
+
+  const ownerUserId = req.body?.ownerUserId == null ? undefined : Number(req.body.ownerUserId);
+  const retrocessionPercent = req.body?.retrocessionPercent == null ? undefined : Number(req.body.retrocessionPercent);
+  const retrocessionRecipient = req.body?.retrocessionRecipient == null ? undefined : String(req.body.retrocessionRecipient ?? '').trim();
+  const shouldDelete = req.body?.delete === true;
+
+  const upsertMeta = db.prepare(
+    `INSERT INTO accounting_operation_meta (source_type, source_id, owner_user_id, retrocession_percent, retrocession_recipient, is_deleted, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(source_type, source_id)
+     DO UPDATE SET
+       owner_user_id = COALESCE(excluded.owner_user_id, accounting_operation_meta.owner_user_id),
+       retrocession_percent = excluded.retrocession_percent,
+       retrocession_recipient = excluded.retrocession_recipient,
+       is_deleted = excluded.is_deleted,
+       updated_at = CURRENT_TIMESTAMP`
+  );
+
+  const tx = db.transaction(() => {
+    for (const item of parsed) {
+      if (item.sourceType === 'invoice') {
+        upsertMeta.run(
+          item.sourceType,
+          item.sourceId,
+          Number.isInteger(ownerUserId) && ownerUserId > 0 ? ownerUserId : null,
+          Number.isFinite(retrocessionPercent) ? retrocessionPercent : 0,
+          retrocessionRecipient ?? '',
+          shouldDelete ? 1 : 0
+        );
+        continue;
+      }
+
+      const tableName = item.sourceType === 'expense' ? 'accounting_expenses' : 'accounting_deposits';
+      const updates = [];
+      const params = [];
+
+      if (Number.isInteger(ownerUserId) && ownerUserId > 0) {
+        updates.push('owner_user_id = ?');
+        params.push(ownerUserId);
+      }
+      if (Number.isFinite(retrocessionPercent)) {
+        updates.push('retrocession_percent = ?');
+        params.push(retrocessionPercent);
+      }
+      if (typeof retrocessionRecipient === 'string') {
+        updates.push('retrocession_recipient = ?');
+        params.push(retrocessionRecipient);
+      }
+      if (shouldDelete) {
+        updates.push('is_deleted = 1');
+      }
+
+      if (updates.length === 0) {
+        continue;
+      }
+
+      params.push(item.sourceId);
+      db.prepare(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    }
+  });
+
+  tx();
+
+  writeAuditLog(req.user.sub, 'UPDATE', 'billing-operations', null, {
+    count: parsed.length,
+    delete: shouldDelete
+  });
+
+  return res.status(204).send();
+});
+
+app.get('/api/billing/export', authMiddleware, requirePermission('export-billing'), (req, res) => {
+  const format = String(req.query.format ?? 'json').trim().toLowerCase();
+  if (!['json', 'excel'].includes(format)) {
+    return res.status(400).json({ message: 'Format invalide' });
+  }
+
+  const range = buildBillingDateRange(req.query.from, req.query.to);
+  const availableOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+  const filterOfficeIds = getScopedBillingOfficeIds(req.userAccess, req.query.officeId);
+  const ownerUserId = Number(req.query.userId);
+
+  const payload = getBillingOperationsData({
+    userId: req.user.sub,
+    access: req.userAccess,
+    fromIso: range.fromIso,
+    toIso: range.toIso,
+    availableOfficeIds,
+    filterOfficeIds,
+    ownerUserId: Number.isInteger(ownerUserId) && ownerUserId > 0 ? ownerUserId : null
+  });
+
+  const datePart = new Date().toISOString().slice(0, 10);
+  if (format === 'json') {
+    const fileName = `comptabilite-${datePart}.json`;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    return res.status(200).send(JSON.stringify({
+      meta: {
+        exportedAt: new Date().toISOString(),
+        from: range.fromIso,
+        to: range.toIso,
+        count: payload.operations.length
+      },
+      summary: payload.summary,
+      operations: payload.operations
+    }, null, 2));
+  }
+
+  const fileName = `comptabilite-${datePart}.csv`;
+  const header = ['Date', 'Titre', 'Debit', 'Credit', 'Devise', 'Retrocession', 'Facture', 'Type'];
+  const rows = payload.operations.map((row) => [
+    row.occurredAt,
+    row.title,
+    (row.debitCents / 100).toFixed(2),
+    (row.creditCents / 100).toFixed(2),
+    row.currency,
+    `${Number(row.retrocessionPercent ?? 0).toFixed(2)}% ${String(row.retrocessionRecipient ?? '').trim()}`.trim(),
+    row.invoiceNumber,
+    row.sourceType
+  ]);
+  const csv = [header, ...rows]
+    .map((line) => line.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(';'))
+    .join('\n');
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  return res.status(200).send(`\ufeff${csv}`);
+});
+
+app.get('/api/billing/monthly-revenue', authMiddleware, requirePermission('read-billing-kpis'), (req, res) => {
+  const now = new Date();
+  const from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0).toISOString();
+  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
+  const availableOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+  const filterOfficeIds = getScopedBillingOfficeIds(req.userAccess, req.query.officeId);
+
+  const payload = getBillingOperationsData({
+    userId: req.user.sub,
+    access: req.userAccess,
+    fromIso: from,
+    toIso: to,
+    availableOfficeIds,
+    filterOfficeIds,
+    ownerUserId: req.user.sub
+  });
+
+  const receiptsCents = payload.operations.reduce((sum, item) => sum + item.creditCents, 0);
+  return res.json({
+    amountCents: receiptsCents,
+    currency: 'EUR'
+  });
+});
+
+app.get('/api/invoices/summary', authMiddleware, requirePermission('read-billing-kpis'), (req, res) => {
+  const now = new Date();
+  const range = {
+    fromIso: new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0).toISOString(),
+    toIso: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString()
+  };
+
+  const availableOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+  const filterOfficeIds = getScopedBillingOfficeIds(req.userAccess, req.query.officeId);
+  const payload = getBillingOperationsData({
+    userId: req.user.sub,
+    access: req.userAccess,
+    fromIso: range.fromIso,
+    toIso: range.toIso,
+    availableOfficeIds,
+    filterOfficeIds,
+    ownerUserId: null
+  });
+
+  writeAuditLog(req.user.sub, 'READ_LIST', 'invoices', null, { count: payload.operations.length });
+  return res.json({ summary: payload.summary });
 });
 
 await ensureSeedData();
