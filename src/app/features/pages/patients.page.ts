@@ -9,7 +9,7 @@ import { Patient } from '../../core/api.types';
   selector: 'app-patients-page',
   imports: [RouterLink],
   templateUrl: './patients.page.html',
-  styleUrl: './pages.scss',
+  styleUrl: './patients.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class PatientsPage {

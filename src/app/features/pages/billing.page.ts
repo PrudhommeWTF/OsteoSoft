@@ -20,7 +20,7 @@ import { AuthService } from '../../core/auth.service';
   selector: 'app-billing-page',
   imports: [CommonModule, RouterLink],
   templateUrl: './billing.page.html',
-  styleUrl: './pages.scss',
+  styleUrl: './billing.page.scss',
   host: {
     '(document:click)': 'closeActionMenus()'
   },

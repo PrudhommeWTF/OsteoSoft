@@ -1,4 +1,4 @@
-<section class="page-head d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3 rounded-3 border bg-body-tertiary p-3">
+<section class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3 rounded-3 border bg-body-tertiary p-3">
   <div>
     <h1 class="h3 mb-1"><i class="fa-solid fa-calendar-days text-primary me-2"></i>Agenda</h1>
     <p class="text-secondary mb-0">Vue synthétique de votre journée de consultation.</p>
@@ -19,17 +19,17 @@
 <section class="row g-3" aria-label="Indicateurs">
   @for (stat of stats(); track stat.label) {
     <article class="col-12 col-md-4">
-      <div class="panel stat-panel card border-0 shadow-sm h-100">
+      <div class="card h-100">
         <div class="card-body">
-          <p class="muted text-uppercase small mb-1">{{ stat.label }}</p>
-          <p class="kpi mb-0">{{ stat.value }}</p>
+          <p class="text-secondary text-uppercase small mb-1">{{ stat.label }}</p>
+          <p class="fs-4 fw-bold mb-0">{{ stat.value }}</p>
         </div>
       </div>
     </article>
   }
 </section>
 
-<section class="panel card border-0 shadow-sm mt-3">
+<section class="card mt-3">
   <div class="card-body">
     <h2 class="h5 mb-3"><i class="fa-solid fa-calendar-week me-2 text-primary"></i>Calendrier des consultations</h2>
 
@@ -45,10 +45,7 @@
               (change)="toggleCalendar(calendar.id!)"
             />
             <label class="form-check-label d-flex align-items-center gap-2" [for]="'cal-filter-' + calendar.id">
-              <span
-                class="d-inline-block rounded-circle agenda-calendar-dot"
-                [style.background-color]="calendar.colorHex"
-              ></span>
+              <i class="fa-solid fa-circle small" [style.color]="calendar.colorHex" aria-hidden="true"></i>
               {{ calendar.name }}
             </label>
           </div>

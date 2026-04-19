@@ -18,7 +18,7 @@ import { WeekCalendar } from './week-calendar';
   standalone: true,
   imports: [CommonModule, ReactiveFormsModule, WeekCalendar],
   templateUrl: './agenda.page.html',
-  styleUrl: './pages.scss',
+  styleUrl: './agenda.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AgendaPage {

@@ -14,7 +14,7 @@ type ActiveFilter = 'all' | 'active' | 'inactive';
   standalone: true,
   imports: [ReactiveFormsModule],
   templateUrl: './directory.page.html',
-  styleUrl: './pages.scss',
+  styleUrl: './directory.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class DirectoryPage {

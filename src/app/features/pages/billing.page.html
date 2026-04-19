@@ -1,4 +1,4 @@
-<section class="page-head d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+<section class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
   <div>
     <h1 class="h3 mb-1"><i class="fa-solid fa-file-invoice-dollar text-primary me-2"></i>Comptabilite</h1>
     <p class="text-secondary mb-0">Suivi des operations debit/credit du cabinet et des praticiens.</p>
@@ -59,7 +59,7 @@
   </div>
 </section>
 
-<section class="panel card border-0 shadow-sm mb-3">
+<section class="card mb-3">
   <div class="card-body">
     <div class="row g-2 align-items-end">
       <div class="col-12 col-md-3">
@@ -104,18 +104,18 @@
 <section class="row g-3" aria-label="KPI comptabilite">
   @for (tile of tiles(); track tile.label) {
     <article class="col-12 col-md-4">
-      <div class="panel stat-panel card border-0 shadow-sm h-100">
+      <div class="card h-100">
         <div class="card-body">
-          <p class="muted text-uppercase small mb-1">{{ tile.label }}</p>
-          <p class="kpi mb-1">{{ tile.value }}</p>
-          <p class="trend mb-0">{{ tile.trend }}</p>
+          <p class="text-secondary text-uppercase small mb-1">{{ tile.label }}</p>
+          <p class="fs-4 fw-bold mb-1">{{ tile.value }}</p>
+          <p class="text-success fw-semibold mb-0">{{ tile.trend }}</p>
         </div>
       </div>
     </article>
   }
 </section>
 
-<section class="panel card border-0 shadow-sm mt-3">
+<section class="card mt-3">
   <div class="card-body">
     <div class="row g-2 mb-3">
       <div class="col-12 col-md-3">
@@ -150,7 +150,7 @@
 
     <div class="table-responsive">
       <table class="table table-hover align-middle mb-0">
-        <thead class="table-secondary">
+        <thead>
           <tr>
             <th class="text-center" style="width: 44px;">
               <input
@@ -269,7 +269,7 @@
         <div class="modal-body">
           <div class="table-responsive">
             <table class="table table-hover align-middle">
-              <thead class="table-secondary">
+              <thead>
                 <tr>
                   <th>Code</th>
                   <th>Date</th>
