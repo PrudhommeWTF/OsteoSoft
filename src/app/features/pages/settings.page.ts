@@ -204,6 +204,7 @@ export class SettingsPage implements OnDestroy {
       permissions: [
         { id: 'read-dashboard', label: 'Voir les tableaux de bord' },
         { id: 'read-advanced-statistics', label: 'Accéder aux statistiques avancées' },
+        { id: 'read-peer-statistics', label: 'Consulter les statistiques des autres utilisateurs' },
         { id: 'export-statistics', label: 'Exporter les statistiques' }
       ],
       impactedProfiles: ['Administrateur', 'Direction', 'Praticien référent']

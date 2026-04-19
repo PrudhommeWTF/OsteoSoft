@@ -60,6 +60,12 @@ export const routes: Routes = [
         loadComponent: () => import('./features/pages/billing.page').then((m) => m.BillingPage)
       },
       {
+        path: 'statistiques',
+        title: 'Statistiques',
+        canActivate: [permissionGuard('read-advanced-statistics')],
+        loadComponent: () => import('./features/pages/statistiques.page').then((m) => m.StatistiquesPage)
+      },
+      {
         path: 'parametres',
         title: 'Paramètres',
         canActivate: [adminGuard],

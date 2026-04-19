@@ -533,6 +533,139 @@ export type DashboardPayload = {
   localCalendars: LocalAgendaCalendar[];
 };
 
+export type StatisticsScopeMode = 'active-office' | 'consolidated';
+
+export type StatisticsGranularity = 'month' | 'quarter' | 'year';
+
+export type StatisticsFilters = {
+  scopeMode?: StatisticsScopeMode;
+  officeId?: number | null;
+  years?: number;
+  yearlyBreakdownYears?: number[];
+  consultationGranularity?: StatisticsGranularity;
+  userId?: number | null;
+};
+
+export type StatisticsUserOption = {
+  id: number;
+  displayName: string;
+};
+
+export type StatisticsValuePoint = {
+  label: string;
+  value: number;
+};
+
+export type StatisticsAgeSexPoint = {
+  label: string;
+  femaleCount: number;
+  maleCount: number;
+  unknownCount: number;
+  totalCount: number;
+};
+
+export type StatisticsPatientRankItem = {
+  rank: number;
+  patientId: number;
+  lastName: string;
+  firstName: string;
+  fullName: string;
+  age: number | null;
+  count: number;
+};
+
+export type StatisticsConsultationReasonRankItem = {
+  rank: number;
+  profile: string;
+  reason: string;
+  consultationCount: number;
+};
+
+export type StatisticsCityRankItem = {
+  rank: number;
+  city: string;
+  postalCode: string;
+  patientCount: number;
+};
+
+export type StatisticsAntecedentRankItem = {
+  rank: number;
+  category: string;
+  label: string;
+  patientCount: number;
+};
+
+export type StatisticsReferralRankItem = {
+  rank: number;
+  source: string;
+  patientCount: number;
+};
+
+export type StatisticsYearSeries = {
+  year: number;
+  points: StatisticsValuePoint[];
+};
+
+export type StatisticsScopePayload = {
+  mode: StatisticsScopeMode;
+  offices: OfficeOption[];
+  selectedOfficeId: number | null;
+  users: StatisticsUserOption[];
+  selectedUserId: number | null;
+  canViewPeerStatistics: boolean;
+};
+
+export type StatisticsPatientsPayload = {
+  bySex: DistributionPoint[];
+  byAgeRangeAndSex: StatisticsAgeSexPoint[];
+  topFollowedPatients: StatisticsPatientRankItem[];
+  topMissedAppointments: StatisticsPatientRankItem[];
+  topConsultationReasons: StatisticsConsultationReasonRankItem[];
+  topCities: StatisticsCityRankItem[];
+  topAntecedents: StatisticsAntecedentRankItem[];
+  topReferrals: StatisticsReferralRankItem[];
+};
+
+export type StatisticsConsultationsPayload = {
+  evolution: StatisticsValuePoint[];
+  monthlyByYear: StatisticsYearSeries[];
+  byType: DistributionPoint[];
+  byUser: DistributionPoint[];
+};
+
+export type StatisticsPaymentsPayload = {
+  revenueEvolution: StatisticsValuePoint[];
+  revenueMonthlyByYear: StatisticsYearSeries[];
+  profitEvolution: StatisticsValuePoint[];
+  profitMonthlyByYear: StatisticsYearSeries[];
+  paymentMethods: DistributionPoint[];
+};
+
+export type StatisticsUserPayload = {
+  user: StatisticsUserOption;
+  revenueEvolution: StatisticsValuePoint[];
+  revenueMonthlyByYear: StatisticsYearSeries[];
+  profitEvolution: StatisticsValuePoint[];
+  profitMonthlyByYear: StatisticsYearSeries[];
+  consultationEvolution: StatisticsValuePoint[];
+  consultationMonthlyByYear: StatisticsYearSeries[];
+  paymentMethods: DistributionPoint[];
+};
+
+export type StatisticsPayload = {
+  scope: StatisticsScopePayload;
+  filters: {
+    years: number;
+    availableYears: number[];
+    selectedYears: number[];
+    consultationGranularity: StatisticsGranularity;
+  };
+  patients: StatisticsPatientsPayload;
+  consultations: StatisticsConsultationsPayload;
+  payments: StatisticsPaymentsPayload;
+  userStats: StatisticsUserPayload | null;
+};
+
 export type AppConfig = {
   app_name: string;
   version: string;

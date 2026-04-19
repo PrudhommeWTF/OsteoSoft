@@ -53,6 +53,8 @@ import {
   PatientDocumentDetail,
   PatientDocumentSummary,
   PeoplePickerContact,
+  StatisticsPayload,
+  StatisticsFilters,
   UserAccountPayload,
   SystemAuditLog,
   UpdateAppointmentConsultationMetaPayload,
@@ -376,6 +378,31 @@ export class ApiService {
     }
 
     return firstValueFrom(this.http.get<DashboardPayload>(`${this.baseUrl}/dashboard`, { params }));
+  }
+
+  async getStatistics(filters?: StatisticsFilters): Promise<StatisticsPayload> {
+    let params = new HttpParams();
+
+    if (filters?.scopeMode) {
+      params = params.set('scopeMode', filters.scopeMode);
+    }
+    if (Number.isInteger(filters?.officeId) && Number(filters?.officeId) > 0) {
+      params = params.set('officeId', String(filters?.officeId));
+    }
+    if (Number.isInteger(filters?.years) && Number(filters?.years) > 0) {
+      params = params.set('years', String(filters?.years));
+    }
+    if (Array.isArray(filters?.yearlyBreakdownYears) && filters!.yearlyBreakdownYears.length > 0) {
+      params = params.set('yearlyBreakdownYears', filters!.yearlyBreakdownYears.join(','));
+    }
+    if (filters?.consultationGranularity) {
+      params = params.set('consultationGranularity', filters.consultationGranularity);
+    }
+    if (Number.isInteger(filters?.userId) && Number(filters?.userId) > 0) {
+      params = params.set('userId', String(filters?.userId));
+    }
+
+    return firstValueFrom(this.http.get<StatisticsPayload>(`${this.baseUrl}/statistics`, { params }));
   }
 
   async getConfig(): Promise<AppConfig> {

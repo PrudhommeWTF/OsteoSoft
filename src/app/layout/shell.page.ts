@@ -74,7 +74,7 @@ export class ShellPage implements OnInit, OnDestroy {
     { path: '/patients', label: 'Listing patients', icon: 'fa-solid fa-list-ul', badge: '...', exact: true, requiredPermission: 'read-patient-list' },
     { path: '/repertoire', label: 'Repertoire', icon: 'fa-solid fa-address-book', badge: '...', exact: true, requiredPermission: 'read-directory' },
     { path: '/facturation', label: 'Comptabilite', icon: 'fa-solid fa-file-invoice-dollar', badge: '...', requiredPermission: 'read-billing-kpis' },
-    { label: 'Statistiques', icon: 'fa-solid fa-chart-column', disabled: true, requiredPermission: 'read-advanced-statistics' },
+    { path: '/statistiques', label: 'Statistiques', icon: 'fa-solid fa-chart-column', requiredPermission: 'read-advanced-statistics' },
     { path: '/parametres', label: 'Parametres', icon: 'fa-solid fa-gear', exact: true, adminOnly: true }
   ]);
 

@@ -1,0 +1,432 @@
+<section class="page-head d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+  <div>
+    <h1 class="h3 mb-1"><i class="fa-solid fa-chart-column text-primary me-2"></i>Statistiques</h1>
+    <p class="text-secondary mb-0">Vue analytique des patients, consultations, paiements et utilisateurs selon le perimetre autorise.</p>
+  </div>
+</section>
+
+<section class="card mb-3">
+  <div class="card-header">
+    <h2 class="h6 mb-0">Filtres</h2>
+  </div>
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1">Perimetre</label>
+        <select class="form-select" [value]="scopeMode()" (change)="onScopeModeChange($any($event.target).value)">
+          <option value="active-office">Cabinet actif</option>
+          <option value="consolidated">Tous les cabinets accessibles</option>
+        </select>
+      </div>
+
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1">Cabinet</label>
+        <select class="form-select" [disabled]="scopeMode() === 'consolidated'" [value]="selectedOfficeId() ?? ''" (change)="onOfficeChange($any($event.target).value)">
+          <option value="">Cabinet actif</option>
+          @for (office of officeOptions(); track office.id) {
+            <option [value]="office.id">{{ office.name }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="col-12 col-md-2">
+        <label class="form-label mb-1">Fenetre annuelle</label>
+        <select class="form-select" [value]="years()" (change)="onYearsChange($any($event.target).value)">
+          @for (yearCount of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]; track yearCount) {
+            <option [value]="yearCount">{{ yearCount }} an{{ yearCount > 1 ? 's' : '' }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="col-12 col-md-2">
+        <label class="form-label mb-1">Granularite consultations</label>
+        <select class="form-select" [value]="consultationGranularity()" (change)="onGranularityChange($any($event.target).value)">
+          <option value="month">Mois</option>
+          <option value="quarter">Trimestre</option>
+          <option value="year">Annee</option>
+        </select>
+      </div>
+
+      <div class="col-12 col-md-2">
+        <label class="form-label mb-1">Utilisateur</label>
+        <select class="form-select" [value]="selectedUserId() ?? ''" (change)="onUserChange($any($event.target).value)">
+          @for (user of userOptions(); track user.id) {
+            <option [value]="user.id">{{ user.displayName }}</option>
+          }
+        </select>
+      </div>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+      <span class="small text-secondary fw-semibold">Annees affichees pour les vues mensuelles :</span>
+      @for (year of availableYears(); track year) {
+        <button
+          type="button"
+          class="btn btn-sm"
+          [class.btn-primary]="isYearSelected(year)"
+          [class.btn-outline-secondary]="!isYearSelected(year)"
+          (click)="toggleYear(year)">
+          {{ year }}
+        </button>
+      }
+    </div>
+
+    @if (!canViewPeerStatistics()) {
+      <p class="small text-secondary mt-3 mb-0">Le bloc Utilisateurs reste borne a votre propre perimetre de statistiques.</p>
+    }
+  </div>
+</section>
+
+<section class="card mb-3">
+  <div class="card-header">
+    <h2 class="h6 mb-0">Sections statistiques</h2>
+  </div>
+  <div class="card-body pt-2">
+    <ul class="nav nav-pills nav-fill stats-nav-pills" role="tablist" aria-label="Navigation des sections statistiques">
+      @for (tab of sectionTabs(); track tab.section) {
+        <li class="nav-item" role="presentation">
+          <button
+            type="button"
+            class="nav-link"
+            role="tab"
+            [class.active]="isSectionActive(tab.section)"
+            [attr.aria-selected]="isSectionActive(tab.section)"
+            [attr.aria-controls]="'stats-section-' + tab.section"
+            (click)="showSection(tab.section)">
+            <i [class]="tab.icon + ' me-2'" aria-hidden="true"></i>
+            {{ tab.section }}
+            <span class="badge rounded-pill text-bg-light ms-2">{{ tab.count }}</span>
+          </button>
+        </li>
+      }
+    </ul>
+  </div>
+</section>
+
+@if (isLoading()) {
+  <section class="card">
+    <div class="card-header">
+      <h2 class="h6 mb-0">Etat</h2>
+    </div>
+    <div class="card-body py-4">Chargement des statistiques...</div>
+  </section>
+} @else if (errorMessage()) {
+  <section class="card">
+    <div class="card-header">
+      <h2 class="h6 mb-0">Etat</h2>
+    </div>
+    <div class="card-body">
+      <div class="alert alert-danger mb-0">{{ errorMessage() }}</div>
+    </div>
+  </section>
+} @else {
+  <section #pageRoot class="stats-grid" [attr.id]="'stats-section-' + activeSection()" aria-label="Tableau de bord statistiques">
+    @for (card of visibleCards(); track card.id) {
+      <article
+        class="stats-card card"
+        [attr.data-card-id]="card.id"
+        [class.stats-card-full]="card.layout === 'full'"
+        [class.is-maximized]="isCardMaximized(card.id)"
+        [class.is-collapsed]="card.collapsed"
+        [class.is-dragging]="isDraggedCard(card.id)"
+        [draggable]="!isCardMaximized(card.id)"
+        (dragstart)="onCardDragStart(card.id)"
+        (dragend)="onCardDragEnd()"
+        (dragover)="onCardDragOver($event, card.id)"
+        (drop)="onCardDrop($event, card.id)">
+        <div class="card-header d-flex flex-wrap align-items-start justify-content-between gap-3">
+          <div>
+            <h2 class="h5 mb-1">{{ card.title }}</h2>
+          </div>
+
+          <div class="card-actions d-flex flex-wrap gap-2">
+            @if (isChartCard(card.id)) {
+              <button
+                type="button"
+                class="btn btn-outline-secondary btn-sm"
+                [title]="isCardMaximized(card.id) ? 'Reduire le graphique' : 'Maximiser le graphique aux bords'"
+                [attr.aria-label]="isCardMaximized(card.id) ? 'Reduire le graphique' : 'Maximiser le graphique aux bords'"
+                (click)="toggleCardMaximization(card.id)">
+                <i [class]="isCardMaximized(card.id) ? 'fa-solid fa-compress' : 'fa-solid fa-expand'"></i>
+              </button>
+            }
+            <span
+              class="drag-handle"
+              title="Glisser pour reordonner"
+              aria-hidden="true">
+              <i class="fa-solid fa-grip-vertical"></i>
+            </span>
+          </div>
+        </div>
+
+        @if (!card.collapsed) {
+          <div class="card-body">
+            @switch (card.id) {
+              @case ('patients-sex') {
+                @if (hasDistributionData(patientStats()?.bySex ?? EMPTY_DISTRIBUTION)) {
+                  <div class="chart-wrap"><canvas data-chart-key="patients-sex-chart" aria-label="Graphique patients par sexe"></canvas></div>
+                } @else {
+                  <p class="text-secondary mb-0">Aucune donnee disponible sur la repartition par sexe.</p>
+                }
+              }
+              @case ('patients-age') {
+                @if (hasAgeSeriesData(patientStats()?.byAgeRangeAndSex ?? EMPTY_AGE_POINTS)) {
+                  <div class="chart-wrap"><canvas data-chart-key="patients-age-chart" aria-label="Graphique patients par tranche d age et sexe"></canvas></div>
+                } @else {
+                  <p class="text-secondary mb-0">Aucune donnee disponible sur les tranches d age.</p>
+                }
+              }
+              @case ('patients-followed') {
+                <div class="table-responsive">
+                  <table class="table table-hover align-middle mb-0">
+                    <thead class="table-secondary">
+                      <tr><th>#</th><th>Nom</th><th>Prenom</th><th>Age</th><th class="text-end">Consultations</th></tr>
+                    </thead>
+                    <tbody>
+                      @for (item of patientStats()?.topFollowedPatients ?? EMPTY_PATIENT_ROWS; track item.patientId) {
+                        <tr>
+                          <td>{{ item.rank }}</td>
+                          <td><a [routerLink]="['/patients', item.patientId]">{{ item.lastName }}</a></td>
+                          <td>{{ item.firstName || '-' }}</td>
+                          <td>{{ formatAge(item.age) }}</td>
+                          <td class="text-end">{{ item.count }}</td>
+                        </tr>
+                      } @empty {
+                        <tr><td colspan="5" class="text-center py-4 text-secondary">Aucun patient dans ce classement.</td></tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+              @case ('patients-missed') {
+                <div class="table-responsive">
+                  <table class="table table-hover align-middle mb-0">
+                    <thead class="table-secondary">
+                      <tr><th>#</th><th>Nom</th><th>Prenom</th><th>Age</th><th class="text-end">RDV manques</th></tr>
+                    </thead>
+                    <tbody>
+                      @for (item of patientStats()?.topMissedAppointments ?? EMPTY_PATIENT_ROWS; track item.patientId) {
+                        <tr>
+                          <td>{{ item.rank }}</td>
+                          <td><a [routerLink]="['/patients', item.patientId]">{{ item.lastName }}</a></td>
+                          <td>{{ item.firstName || '-' }}</td>
+                          <td>{{ formatAge(item.age) }}</td>
+                          <td class="text-end">{{ item.count }}</td>
+                        </tr>
+                      } @empty {
+                        <tr><td colspan="5" class="text-center py-4 text-secondary">Aucun rendez-vous manque pour cette selection.</td></tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+              @case ('patients-reasons') {
+                <div class="table-responsive">
+                  <table class="table table-hover align-middle mb-0">
+                    <thead class="table-secondary">
+                      <tr><th>#</th><th>Profil</th><th>Motif</th><th class="text-end">Consultations</th></tr>
+                    </thead>
+                    <tbody>
+                      @for (item of patientStats()?.topConsultationReasons ?? EMPTY_REASON_ROWS; track item.rank) {
+                        <tr>
+                          <td>{{ item.rank }}</td>
+                          <td>{{ item.profile }}</td>
+                          <td>{{ item.reason }}</td>
+                          <td class="text-end">{{ item.consultationCount }}</td>
+                        </tr>
+                      } @empty {
+                        <tr><td colspan="4" class="text-center py-4 text-secondary">Aucun motif exploitable pour cette selection.</td></tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+              @case ('patients-cities') {
+                <div class="table-responsive">
+                  <table class="table table-hover align-middle mb-0">
+                    <thead class="table-secondary">
+                      <tr><th>#</th><th>Ville</th><th>Code postal</th><th class="text-end">Patients</th></tr>
+                    </thead>
+                    <tbody>
+                      @for (item of patientStats()?.topCities ?? EMPTY_CITY_ROWS; track item.rank) {
+                        <tr>
+                          <td>{{ item.rank }}</td>
+                          <td>{{ item.city }}</td>
+                          <td>{{ item.postalCode || '-' }}</td>
+                          <td class="text-end">{{ item.patientCount }}</td>
+                        </tr>
+                      } @empty {
+                        <tr><td colspan="4" class="text-center py-4 text-secondary">Aucune ville remontee pour cette selection.</td></tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+              @case ('patients-antecedents') {
+                <div class="table-responsive">
+                  <table class="table table-hover align-middle mb-0">
+                    <thead class="table-secondary">
+                      <tr><th>#</th><th>Type</th><th>Antecedent</th><th class="text-end">Patients</th></tr>
+                    </thead>
+                    <tbody>
+                      @for (item of patientStats()?.topAntecedents ?? EMPTY_ANTECEDENT_ROWS; track item.rank) {
+                        <tr>
+                          <td>{{ item.rank }}</td>
+                          <td>{{ item.category }}</td>
+                          <td>{{ item.label }}</td>
+                          <td class="text-end">{{ item.patientCount }}</td>
+                        </tr>
+                      } @empty {
+                        <tr><td colspan="4" class="text-center py-4 text-secondary">Aucun antecedent structure pour cette selection.</td></tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+              @case ('patients-referrals') {
+                <div class="table-responsive">
+                  <table class="table table-hover align-middle mb-0">
+                    <thead class="table-secondary">
+                      <tr><th>#</th><th>Origine du patient</th><th class="text-end">Patients</th></tr>
+                    </thead>
+                    <tbody>
+                      @for (item of patientStats()?.topReferrals ?? EMPTY_REFERRAL_ROWS; track item.rank) {
+                        <tr>
+                          <td>{{ item.rank }}</td>
+                          <td>{{ item.source }}</td>
+                          <td class="text-end">{{ item.patientCount }}</td>
+                        </tr>
+                      } @empty {
+                        <tr><td colspan="3" class="text-center py-4 text-secondary">Aucune origine patient remontee pour cette selection.</td></tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+              @case ('consultations-evolution') {
+                @if (hasValueSeriesData(consultationStats()?.evolution ?? EMPTY_VALUE_POINTS)) {
+                  <div class="chart-wrap"><canvas data-chart-key="consultations-evolution-chart" aria-label="Evolution des consultations"></canvas></div>
+                } @else {
+                  <p class="text-secondary mb-0">Aucune consultation sur la fenetre selectionnee.</p>
+                }
+              }
+              @case ('consultations-monthly') {
+                @if (hasYearSeriesData(consultationStats()?.monthlyByYear ?? EMPTY_YEAR_SERIES)) {
+                  <div class="chart-wrap"><canvas data-chart-key="consultations-monthly-combined" aria-label="Consultations mensuelles multi annees"></canvas></div>
+                } @else {
+                  <p class="text-secondary mb-0">Aucune serie mensuelle a afficher.</p>
+                }
+              }
+              @case ('consultations-type') {
+                @if (hasDistributionData(consultationStats()?.byType ?? EMPTY_DISTRIBUTION)) {
+                  <div class="chart-wrap"><canvas data-chart-key="consultations-type-chart" aria-label="Types de consultations"></canvas></div>
+                } @else {
+                  <p class="text-secondary mb-0">Aucun type de consultation remonte.</p>
+                }
+              }
+              @case ('consultations-users') {
+                @if (hasDistributionData(consultationStats()?.byUser ?? EMPTY_DISTRIBUTION)) {
+                  <div class="chart-wrap"><canvas data-chart-key="consultations-users-chart" aria-label="Consultations par utilisateur"></canvas></div>
+                } @else {
+                  <p class="text-secondary mb-0">Aucune ventilation par utilisateur disponible.</p>
+                }
+              }
+              @case ('payments-revenue-evolution') {
+                @if (hasValueSeriesData(paymentStats()?.revenueEvolution ?? EMPTY_VALUE_POINTS)) {
+                  <div class="chart-wrap"><canvas data-chart-key="payments-revenue-evolution-chart" aria-label="Evolution du chiffre d affaires"></canvas></div>
+                } @else {
+                  <p class="text-secondary mb-0">Aucun chiffre d affaires sur la fenetre selectionnee.</p>
+                }
+              }
+              @case ('payments-revenue-monthly') {
+                @if (hasYearSeriesData(paymentStats()?.revenueMonthlyByYear ?? EMPTY_YEAR_SERIES)) {
+                  <div class="chart-wrap"><canvas data-chart-key="payments-revenue-monthly-combined" aria-label="Chiffre d affaires mensuel multi annees"></canvas></div>
+                } @else {
+                  <p class="text-secondary mb-0">Aucune serie mensuelle de chiffre d affaires disponible.</p>
+                }
+              }
+              @case ('payments-profit-evolution') {
+                @if (hasValueSeriesData(paymentStats()?.profitEvolution ?? EMPTY_VALUE_POINTS)) {
+                  <div class="chart-wrap"><canvas data-chart-key="payments-profit-evolution-chart" aria-label="Evolution des benefices"></canvas></div>
+                } @else {
+                  <p class="text-secondary mb-0">Aucun benefice calcule sur la fenetre selectionnee.</p>
+                }
+              }
+              @case ('payments-profit-monthly') {
+                @if (hasYearSeriesData(paymentStats()?.profitMonthlyByYear ?? EMPTY_YEAR_SERIES)) {
+                  <div class="chart-wrap"><canvas data-chart-key="payments-profit-monthly-combined" aria-label="Benefices mensuels multi annees"></canvas></div>
+                } @else {
+                  <p class="text-secondary mb-0">Aucune serie mensuelle de benefices disponible.</p>
+                }
+              }
+              @case ('payments-methods') {
+                @if (hasDistributionData(paymentStats()?.paymentMethods ?? EMPTY_DISTRIBUTION)) {
+                  <div class="chart-wrap"><canvas data-chart-key="payments-methods-chart" aria-label="Repartition des types de paiement"></canvas></div>
+                } @else {
+                  <p class="text-secondary mb-0">Aucune ventilation de paiement disponible.</p>
+                }
+              }
+              @case ('user-revenue-evolution') {
+                @if (hasValueSeriesData(userStats()?.revenueEvolution ?? EMPTY_VALUE_POINTS)) {
+                  <div class="chart-wrap"><canvas data-chart-key="user-revenue-evolution-chart" aria-label="Evolution du chiffre d affaires utilisateur"></canvas></div>
+                } @else {
+                  <p class="text-secondary mb-0">{{ getUserCardEmptyMessage() }}</p>
+                }
+              }
+              @case ('user-revenue-monthly') {
+                @if (hasYearSeriesData(userStats()?.revenueMonthlyByYear ?? EMPTY_YEAR_SERIES)) {
+                  <div class="chart-wrap"><canvas data-chart-key="user-revenue-monthly-combined" aria-label="Chiffre d affaires mensuel utilisateur multi annees"></canvas></div>
+                } @else {
+                  <p class="text-secondary mb-0">{{ getUserCardEmptyMessage() }}</p>
+                }
+              }
+              @case ('user-profit-evolution') {
+                @if (hasValueSeriesData(userStats()?.profitEvolution ?? EMPTY_VALUE_POINTS)) {
+                  <div class="chart-wrap"><canvas data-chart-key="user-profit-evolution-chart" aria-label="Evolution des benefices utilisateur"></canvas></div>
+                } @else {
+                  <p class="text-secondary mb-0">{{ getUserCardEmptyMessage() }}</p>
+                }
+              }
+              @case ('user-profit-monthly') {
+                @if (hasYearSeriesData(userStats()?.profitMonthlyByYear ?? EMPTY_YEAR_SERIES)) {
+                  <div class="chart-wrap"><canvas data-chart-key="user-profit-monthly-combined" aria-label="Benefices mensuels utilisateur multi annees"></canvas></div>
+                } @else {
+                  <p class="text-secondary mb-0">{{ getUserCardEmptyMessage() }}</p>
+                }
+              }
+              @case ('user-consultations-evolution') {
+                @if (hasValueSeriesData(userStats()?.consultationEvolution ?? EMPTY_VALUE_POINTS)) {
+                  <div class="chart-wrap"><canvas data-chart-key="user-consultations-evolution-chart" aria-label="Evolution des consultations utilisateur"></canvas></div>
+                } @else {
+                  <p class="text-secondary mb-0">{{ getUserCardEmptyMessage() }}</p>
+                }
+              }
+              @case ('user-consultations-monthly') {
+                @if (hasYearSeriesData(userStats()?.consultationMonthlyByYear ?? EMPTY_YEAR_SERIES)) {
+                  <div class="chart-wrap"><canvas data-chart-key="user-consultations-monthly-combined" aria-label="Consultations mensuelles utilisateur multi annees"></canvas></div>
+                } @else {
+                  <p class="text-secondary mb-0">{{ getUserCardEmptyMessage() }}</p>
+                }
+              }
+              @case ('user-payment-methods') {
+                @if (hasDistributionData(userStats()?.paymentMethods ?? EMPTY_DISTRIBUTION)) {
+                  <div class="chart-wrap"><canvas data-chart-key="user-payment-methods-chart" aria-label="Types de paiement utilisateur"></canvas></div>
+                } @else {
+                  <p class="text-secondary mb-0">{{ getUserCardEmptyMessage() }}</p>
+                }
+              }
+            }
+          </div>
+        }
+      </article>
+    }
+
+    @if (maximizedCardId()) {
+      <button
+        type="button"
+        class="stats-maximize-backdrop"
+        aria-label="Fermer la vue maximisee"
+        (click)="clearCardMaximization()"></button>
+    }
+  </section>
+}
