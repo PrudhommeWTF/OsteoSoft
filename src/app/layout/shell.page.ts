@@ -25,6 +25,13 @@ type UtilityItem = {
   path?: string;
 };
 
+type DependencyCredit = {
+  name: string;
+  version: string;
+  website: string;
+  scope: 'runtime' | 'dev';
+};
+
 @Component({
   selector: 'app-shell-page',
   imports: [RouterLink, RouterLinkActive, RouterOutlet],
@@ -41,6 +48,7 @@ export class ShellPage implements OnInit, OnDestroy {
   readonly themeService = inject(ThemeService);
 
   readonly isMenuOpen = signal(false);
+  readonly isCreditsModalOpen = signal(false);
   readonly username = this.authService.username;
   readonly role = this.authService.role;
   readonly profileLabel = this.authService.profileLabel;
@@ -186,6 +194,41 @@ export class ShellPage implements OnInit, OnDestroy {
     { label: 'Editer mon profil', icon: 'fa-solid fa-user-pen', path: '/mon-profil' }
   ]);
 
+  readonly dependencyCredits = signal<DependencyCredit[]>([
+    { name: '@angular/common', version: '^21.2.0', website: 'https://www.npmjs.com/package/@angular/common', scope: 'runtime' },
+    { name: '@angular/compiler', version: '^21.2.0', website: 'https://www.npmjs.com/package/@angular/compiler', scope: 'runtime' },
+    { name: '@angular/core', version: '^21.2.0', website: 'https://www.npmjs.com/package/@angular/core', scope: 'runtime' },
+    { name: '@angular/forms', version: '^21.2.0', website: 'https://www.npmjs.com/package/@angular/forms', scope: 'runtime' },
+    { name: '@angular/platform-browser', version: '^21.2.0', website: 'https://www.npmjs.com/package/@angular/platform-browser', scope: 'runtime' },
+    { name: '@angular/router', version: '^21.2.0', website: 'https://www.npmjs.com/package/@angular/router', scope: 'runtime' },
+    { name: '@fortawesome/fontawesome-free', version: '^7.2.0', website: 'https://fontawesome.com', scope: 'runtime' },
+    { name: 'argon2', version: '^0.44.0', website: 'https://www.npmjs.com/package/argon2', scope: 'runtime' },
+    { name: 'better-sqlite3', version: '^12.9.0', website: 'https://www.npmjs.com/package/better-sqlite3', scope: 'runtime' },
+    { name: 'bootstrap', version: '^5.3.8', website: 'https://getbootstrap.com', scope: 'runtime' },
+    { name: 'bootstrap-datepicker', version: '^1.10.1', website: 'https://www.npmjs.com/package/bootstrap-datepicker', scope: 'runtime' },
+    { name: 'chart.js', version: '^4.5.1', website: 'https://www.chartjs.org', scope: 'runtime' },
+    { name: 'cookie-parser', version: '^1.4.7', website: 'https://www.npmjs.com/package/cookie-parser', scope: 'runtime' },
+    { name: 'cors', version: '^2.8.6', website: 'https://www.npmjs.com/package/cors', scope: 'runtime' },
+    { name: 'dotenv', version: '^17.4.2', website: 'https://www.npmjs.com/package/dotenv', scope: 'runtime' },
+    { name: 'express', version: '^5.2.1', website: 'https://expressjs.com', scope: 'runtime' },
+    { name: 'express-rate-limit', version: '^8.3.2', website: 'https://www.npmjs.com/package/express-rate-limit', scope: 'runtime' },
+    { name: 'helmet', version: '^8.1.0', website: 'https://helmetjs.github.io', scope: 'runtime' },
+    { name: 'jquery', version: '^3.7.1', website: 'https://jquery.com', scope: 'runtime' },
+    { name: 'jsonwebtoken', version: '^9.0.3', website: 'https://www.npmjs.com/package/jsonwebtoken', scope: 'runtime' },
+    { name: 'jspdf', version: '^4.2.1', website: 'https://www.npmjs.com/package/jspdf', scope: 'runtime' },
+    { name: 'moment', version: '^2.29.4', website: 'https://momentjs.com', scope: 'runtime' },
+    { name: 'rxjs', version: '~7.8.0', website: 'https://rxjs.dev', scope: 'runtime' },
+    { name: 'tslib', version: '^2.3.0', website: 'https://www.npmjs.com/package/tslib', scope: 'runtime' },
+    { name: 'xlsx', version: '^0.18.5', website: 'https://www.npmjs.com/package/xlsx', scope: 'runtime' },
+    { name: 'zod', version: '^4.3.6', website: 'https://zod.dev', scope: 'runtime' },
+    { name: '@angular/build', version: '^21.2.7', website: 'https://www.npmjs.com/package/@angular/build', scope: 'dev' },
+    { name: '@angular/cli', version: '^21.2.7', website: 'https://www.npmjs.com/package/@angular/cli', scope: 'dev' },
+    { name: '@angular/compiler-cli', version: '^21.2.0', website: 'https://www.npmjs.com/package/@angular/compiler-cli', scope: 'dev' },
+    { name: 'concurrently', version: '^9.2.1', website: 'https://www.npmjs.com/package/concurrently', scope: 'dev' },
+    { name: 'prettier', version: '^3.8.1', website: 'https://prettier.io', scope: 'dev' },
+    { name: 'typescript', version: '~5.9.2', website: 'https://www.typescriptlang.org', scope: 'dev' }
+  ]);
+
   readonly quickThemeAriaLabel = computed(() => {
     const effective = this.themeService.effectiveTheme();
     const mode = this.themeService.themeMode();
@@ -209,6 +252,14 @@ export class ShellPage implements OnInit, OnDestroy {
 
   closeMenu(): void {
     this.isMenuOpen.set(false);
+  }
+
+  openCreditsModal(): void {
+    this.isCreditsModalOpen.set(true);
+  }
+
+  closeCreditsModal(): void {
+    this.isCreditsModalOpen.set(false);
   }
 
   toggleQuickTheme(): void {

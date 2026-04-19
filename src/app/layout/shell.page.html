@@ -145,13 +145,25 @@
             </button>
           }
         }
+
         <button type="button" class="utility-button logout-link" (click)="logout()">
           <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-right-from-bracket fa-fw"></i></span>
           <span>Deconnexion</span>
         </button>
       </nav>
 
-      <p class="sidebar-license">© {{ configService.getAppName() }} v{{ configService.getVersion() }}</p>
+      <p class="sidebar-license">
+        © {{ configService.getAppName() }} v{{ configService.getVersion() }}
+        <button
+          type="button"
+          class="credits-inline-btn"
+          aria-label="Afficher les credits"
+          title="Credits"
+          (click)="openCreditsModal()"
+        >
+          <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-circle-info fa-fw"></i></span>
+        </button>
+      </p>
     </div>
   </aside>
 
@@ -198,3 +210,51 @@
     </main>
   </div>
 </div>
+
+@if (isCreditsModalOpen()) {
+  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="credits-modal-title">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="credits-modal-title" class="modal-title h5 mb-0">Credits et dependances</h3>
+          <button type="button" class="btn-close" aria-label="Fermer" (click)="closeCreditsModal()"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-secondary mb-3">Liste des dependances utilisees par l'application.</p>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Dependance</th>
+                  <th>Version</th>
+                  <th>Type</th>
+                  <th>Site web</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (dep of dependencyCredits(); track dep.name) {
+                  <tr>
+                    <td class="fw-semibold">{{ dep.name }}</td>
+                    <td>{{ dep.version }}</td>
+                    <td>
+                      <span class="badge" [class]="dep.scope === 'runtime' ? 'text-bg-primary' : 'text-bg-secondary'">
+                        {{ dep.scope === 'runtime' ? 'runtime' : 'dev' }}
+                      </span>
+                    </td>
+                    <td>
+                      <a [href]="dep.website" target="_blank" rel="noopener noreferrer">{{ dep.website }}</a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="closeCreditsModal()">Fermer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop fade show"></div>
+}
