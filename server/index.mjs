@@ -32,6 +32,9 @@ const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 db.pragma('secure_delete = ON');
+db.pragma('synchronous = NORMAL');
+db.pragma('busy_timeout = 5000');
+db.pragma('temp_store = MEMORY');
 
 // Migration: Rename patient_drafts table to draft
 try {
@@ -473,6 +476,42 @@ db.exec(`
     FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL
   );
+`);
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_users_office_id ON users(office_id);
+
+  CREATE INDEX IF NOT EXISTS idx_patients_is_deleted_last_visit ON patients(is_deleted, last_visit);
+
+  CREATE INDEX IF NOT EXISTS idx_appointments_patient_id ON appointments(patient_id);
+  CREATE INDEX IF NOT EXISTS idx_appointments_office_starts_at ON appointments(office_id, starts_at);
+  CREATE INDEX IF NOT EXISTS idx_appointments_calendar_starts_at ON appointments(local_calendar_id, starts_at);
+  CREATE INDEX IF NOT EXISTS idx_appointments_consultation_id ON appointments(consultation_id);
+
+  CREATE INDEX IF NOT EXISTS idx_consultations_patient_started_at ON consultations(patient_id, started_at);
+  CREATE INDEX IF NOT EXISTS idx_consultations_office_started_at ON consultations(office_id, started_at);
+
+  CREATE INDEX IF NOT EXISTS idx_invoices_patient_status ON invoices(patient_id, status);
+  CREATE INDEX IF NOT EXISTS idx_invoices_status_due_at ON invoices(status, due_at);
+  CREATE INDEX IF NOT EXISTS idx_invoices_office_id ON invoices(office_id);
+  CREATE INDEX IF NOT EXISTS idx_invoices_consultation_id ON invoices(consultation_id);
+
+  CREATE INDEX IF NOT EXISTS idx_directory_contacts_office_kind ON directory_contacts(office_id, kind);
+  CREATE INDEX IF NOT EXISTS idx_directory_contacts_office_name_sort ON directory_contacts(office_id, last_name, first_name, organization);
+
+  CREATE INDEX IF NOT EXISTS idx_user_offices_office_user ON user_offices(office_id, user_id);
+  CREATE INDEX IF NOT EXISTS idx_office_user_delegations_user_office ON office_user_delegations(user_id, office_id);
+
+  CREATE INDEX IF NOT EXISTS idx_service_types_office_order ON service_types(office_id, display_order);
+  CREATE INDEX IF NOT EXISTS idx_payment_methods_office_order_active ON payment_methods(office_id, display_order, is_active);
+  CREATE INDEX IF NOT EXISTS idx_local_calendars_office_order ON local_calendars(office_id, display_order);
+
+  CREATE INDEX IF NOT EXISTS idx_patient_documents_patient_created_at ON patient_documents(patient_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_patient_documents_consultation_id ON patient_documents(consultation_id);
+  CREATE INDEX IF NOT EXISTS idx_patient_documents_office_id ON patient_documents(office_id);
+
+  CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+  CREATE INDEX IF NOT EXISTS idx_audit_logs_user_created_at ON audit_logs(user_id, created_at);
 `);
 
 const rawDataKey = process.env.OSTEOSOFT_DATA_KEY;
@@ -7512,25 +7551,34 @@ app.get('/api/patients', authMiddleware, requirePermission('read-patient-list'),
     )
     .all();
 
-  const patients = rows
-    .map((row) => {
-      let city = '';
-      try {
-        const notes = JSON.parse(decryptSensitiveField(row.cipher_medical_notes));
-        city = String(notes?.city ?? '').trim();
-      } catch { /* ignore */ }
-      return {
-        id: row.id,
-        fullName: decryptSensitiveField(row.cipher_full_name),
-        phone: decryptSensitiveField(row.cipher_phone),
-        lastVisit: row.last_visit ? formatDateFr(row.last_visit) : '',
-        sex: row.sex === 'F' ? 'Femme' : row.sex === 'M' ? 'Homme' : 'Non renseigne',
-        age: getAgeFromBirthDate(row.birth_date),
-        city,
-        consultationCount: Number(row.consultation_count ?? 0)
-      };
-    })
-    .filter((patient) => (query ? patient.fullName.toLowerCase().includes(query) : true));
+  const patients = [];
+  for (const row of rows) {
+    const fullName = decryptSensitiveField(row.cipher_full_name);
+
+    // Short-circuit before additional expensive decryptions/parsing when searching.
+    if (query && !fullName.toLowerCase().includes(query)) {
+      continue;
+    }
+
+    let city = '';
+    try {
+      const notes = JSON.parse(decryptSensitiveField(row.cipher_medical_notes));
+      city = String(notes?.city ?? '').trim();
+    } catch {
+      // Ignore malformed notes payloads and keep city empty.
+    }
+
+    patients.push({
+      id: row.id,
+      fullName,
+      phone: decryptSensitiveField(row.cipher_phone),
+      lastVisit: row.last_visit ? formatDateFr(row.last_visit) : '',
+      sex: row.sex === 'F' ? 'Femme' : row.sex === 'M' ? 'Homme' : 'Non renseigne',
+      age: getAgeFromBirthDate(row.birth_date),
+      city,
+      consultationCount: Number(row.consultation_count ?? 0)
+    });
+  }
 
   writeAuditLog(req.user.sub, 'READ_LIST', 'patients', null, { count: patients.length });
   return res.json({ patients });

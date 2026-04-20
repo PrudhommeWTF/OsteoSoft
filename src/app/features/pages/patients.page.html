@@ -84,7 +84,7 @@
           </tr>
         </thead>
         <tbody>
-          @for (patient of pagedPatients(); track patient.fullName) {
+          @for (patient of pagedPatients(); track patient.id) {
             <tr [routerLink]="['/patients', patient.id]">
               <td>
                 @if (sexIcon(patient.sex); as icon) {

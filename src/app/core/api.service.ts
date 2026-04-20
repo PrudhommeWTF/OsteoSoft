@@ -132,7 +132,11 @@ export class ApiService {
   }
 
   async getPatients(search: string): Promise<Patient[]> {
-    const params = new HttpParams().set('search', search);
+    let params = new HttpParams();
+    const query = search.trim();
+    if (query) {
+      params = params.set('search', query);
+    }
     const response = await firstValueFrom(
       this.http.get<{ patients: Patient[] }>(`${this.baseUrl}/patients`, { params })
     );
