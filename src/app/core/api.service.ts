@@ -24,17 +24,20 @@ import {
   BillingDepositListItem,
   BillingDepositPayload,
   BillingExpensePayload,
+  BillingInvoiceCreatePayload,
+  BillingInvoiceDetail,
+  BillingInvoicePaymentsUpdatePayload,
   BillingOperationsPayload,
   ConsultationMetaSummary,
   CreatePatientConsultationPayload,
   CreateAppointmentPayload,
   CreatePatientPayload,
+  CreatePatientResult,
   CreateOfficePayload,
   CreateSetupOfficePayload,
   DirectoryContact,
   DirectoryContactPayload,
   DirectoryContactsPayload,
-  CreatedPatient,
   DashboardPayload,
   GeneralSettingsPayload,
   InvoiceSummaryTile,
@@ -230,12 +233,12 @@ export class ApiService {
     );
   }
 
-  async createPatient(payload: CreatePatientPayload): Promise<CreatedPatient> {
+  async createPatient(payload: CreatePatientPayload): Promise<CreatePatientResult> {
     const response = await firstValueFrom(
-      this.http.post<{ patient: CreatedPatient }>(`${this.baseUrl}/patients`, payload)
+      this.http.post<CreatePatientResult>(`${this.baseUrl}/patients`, payload)
     );
 
-    return response.patient;
+    return response;
   }
 
   async getPatientCount(): Promise<number> {
@@ -544,21 +547,25 @@ export class ApiService {
     return response.consultation;
   }
 
-  async createBillingInvoice(payload: {
-    patientId: number;
-    consultationId: number | null;
-    officeId: number | null;
-    invoiceNumber: string;
-    amountCents: number;
-    status: 'payee' | 'impayee';
-    paymentMethod: string;
-    issuedAt: string;
-    notes: string;
-  }): Promise<number> {
+  async createBillingInvoice(payload: BillingInvoiceCreatePayload): Promise<number> {
     const response = await firstValueFrom(
       this.http.post<{ invoiceId: number }>(`${this.baseUrl}/billing/invoices`, payload)
     );
     return response.invoiceId;
+  }
+
+  async getBillingInvoice(invoiceId: number): Promise<BillingInvoiceDetail> {
+    const response = await firstValueFrom(
+      this.http.get<{ invoice: BillingInvoiceDetail }>(`${this.baseUrl}/billing/invoices/${invoiceId}`)
+    );
+    return response.invoice;
+  }
+
+  async updateBillingInvoicePayments(invoiceId: number, payload: BillingInvoicePaymentsUpdatePayload): Promise<BillingInvoiceDetail> {
+    const response = await firstValueFrom(
+      this.http.put<{ invoice: BillingInvoiceDetail }>(`${this.baseUrl}/billing/invoices/${invoiceId}/payments`, payload)
+    );
+    return response.invoice;
   }
 
   async deleteBillingInvoice(invoiceId: number): Promise<void> {

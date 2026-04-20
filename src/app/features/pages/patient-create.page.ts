@@ -26,8 +26,9 @@ type AntecedentItem = {
 
 const LOCAL_DRAFT_KEY = 'osteosoft:new-patient-draft';
 const PAYMENT_PENDING_LABEL = 'Paiement en attente';
+const DEFAULT_PAYMENT_METHODS = ['Carte bancaire', 'Cheque', 'Especes', 'Virement'];
 
-type ConsultationPaymentStatus = 'paid' | 'pending';
+type ConsultationPaymentStatus = 'paid' | 'partial' | 'pending';
 
 type ConsultationPaymentEntry = {
   id: string;
@@ -38,6 +39,7 @@ type ConsultationPaymentEntry = {
 };
 
 type ConsultationBillingState = {
+  officeId: number | null;
   invoiceNumber: string;
   totalAmount: number;
   currency: string;
@@ -47,6 +49,12 @@ type ConsultationBillingState = {
   invoiceDocumentRef: string;
   paymentStatus: ConsultationPaymentStatus;
   payments: ConsultationPaymentEntry[];
+};
+
+type ConsultationLinkConflict = {
+  appointmentId: number | null;
+  startsAt: string;
+  officeId: number | null;
 };
 
 type DraftSaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -242,6 +250,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   readonly consultationBillingPaymentMethodOptions = signal<string[]>([]);
   readonly consultationBillingState = signal<ConsultationBillingState | null>(null);
   readonly isConsultationPaymentModalOpen = signal(false);
+  readonly isSavingConsultationPayment = signal(false);
   readonly editingConsultationPaymentId = signal<string | null>(null);
   readonly consultationMotifMainHtml = signal('');
   readonly consultationTestsHtml = signal('');
@@ -249,6 +258,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   readonly consultationTreatmentsHtml = signal('');
   readonly consultationRemarksHtml = signal('');
   readonly isConsultationLinkStrategyModalOpen = signal(false);
+  readonly consultationLinkConflict = signal<ConsultationLinkConflict | null>(null);
 
   readonly consultationProfileReasons = computed(() => {
     const selectedProfile = this.consultationProfile().trim();
@@ -345,7 +355,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   });
 
   readonly consultationPaymentEditForm = this.formBuilder.nonNullable.group({
-    amount: [0],
+    amount: ['0'],
     method: [''],
     paidAtLocal: ['']
   });
@@ -807,6 +817,14 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     this.antecedentDatePrecision.set(precision);
     this.antecedentDateDisplay.set('');
     this.initAntecedentDatepicker();
+  }
+
+  setAntecedentDateDisplay(value: string): void {
+    this.antecedentDateDisplay.set(value);
+  }
+
+  isDatepickerAvailable(): boolean {
+    return this.hasJQueryDatepicker();
   }
 
   setAntecedentCategory(value: string): void {
@@ -1390,6 +1408,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       ]);
 
       this.consultationBillingState.set({
+        officeId: office?.id ?? null,
         invoiceNumber,
         totalAmount,
         currency,
@@ -1473,9 +1492,13 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    this.consultationBillingChoice.set('bill');
-    this.consultationBillingForm.controls.paymentMethod.setValue(payment.method);
-    this.isConsultationBillingModalOpen.set(true);
+    this.editingConsultationPaymentId.set(payment.id);
+    this.consultationPaymentEditForm.reset({
+      amount: String(payment.amount),
+      method: payment.method,
+      paidAtLocal: this.toDateTimeLocalValue(payment.paidAt)
+    });
+    this.isConsultationPaymentModalOpen.set(true);
   }
 
   openConsultationPaymentCreateModal(): void {
@@ -1484,9 +1507,16 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    this.consultationBillingChoice.set('bill');
-    this.consultationBillingForm.controls.paymentMethod.setValue(PAYMENT_PENDING_LABEL);
-    this.isConsultationBillingModalOpen.set(true);
+    const totalPaid = billing.payments.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
+    const remaining = Math.max(0, Number((billing.totalAmount - totalPaid).toFixed(2)));
+
+    this.editingConsultationPaymentId.set(null);
+    this.consultationPaymentEditForm.reset({
+      amount: String(remaining),
+      method: '',
+      paidAtLocal: this.toDateTimeLocalValue(new Date().toISOString())
+    });
+    this.isConsultationPaymentModalOpen.set(true);
   }
 
   closeConsultationPaymentEditModal(): void {
@@ -1496,17 +1526,18 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
 
   saveConsultationPaymentEdit(): void {
     const billing = this.consultationBillingState();
-    const paymentId = this.editingConsultationPaymentId();
-    if (!billing) {
+    if (!billing || this.isSavingConsultationPayment()) {
       return;
     }
 
-    const raw = this.consultationPaymentEditForm.getRawValue();
-    const amount = Math.max(0, Number(raw.amount) || 0);
-    const method = String(raw.method ?? '').trim();
-    const paidAt = this.fromDateTimeLocalValue(raw.paidAtLocal) ?? new Date().toISOString();
+    const paymentId = this.editingConsultationPaymentId();
 
-    if (!method) {
+    const raw = this.consultationPaymentEditForm.getRawValue();
+    const amount = this.parsePaymentAmount(raw.amount);
+    const method = String(raw.method ?? '').trim();
+    const paidAt = this.fromDateTimeLocalValue(raw.paidAtLocal);
+
+    if (!method || amount <= 0 || !paidAt) {
       return;
     }
 
@@ -1525,26 +1556,36 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
         }
       ];
 
-    this.consultationBillingState.set({
-      ...billing,
-      payments,
-      paymentStatus: payments.length > 0 ? 'paid' : 'pending'
-    });
-    this.closeConsultationPaymentEditModal();
+    this.isSavingConsultationPayment.set(true);
+    try {
+      this.consultationBillingState.set({
+        ...billing,
+        payments,
+        paymentStatus: this.computeConsultationPaymentStatus(billing.totalAmount, payments)
+      });
+      this.closeConsultationPaymentEditModal();
+    } finally {
+      this.isSavingConsultationPayment.set(false);
+    }
   }
 
   deleteConsultationPayment(paymentId: string): void {
     const billing = this.consultationBillingState();
-    if (!billing) {
+    if (!billing || this.isSavingConsultationPayment()) {
       return;
     }
 
     const payments = billing.payments.filter((entry) => entry.id !== paymentId);
-    this.consultationBillingState.set({
-      ...billing,
-      payments,
-      paymentStatus: payments.length > 0 ? 'paid' : 'pending'
-    });
+    this.isSavingConsultationPayment.set(true);
+    try {
+      this.consultationBillingState.set({
+        ...billing,
+        payments,
+        paymentStatus: this.computeConsultationPaymentStatus(billing.totalAmount, payments)
+      });
+    } finally {
+      this.isSavingConsultationPayment.set(false);
+    }
   }
 
   onConsultationBillingServiceChange(serviceLabel: string): void {
@@ -1561,6 +1602,52 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       tvaRate: selected.tvaRate
     });
   }
+
+  getConsultationPaymentMethodOptions(): string[] {
+    const values = [
+      ...this.consultationBillingPaymentMethodOptions(),
+      ...DEFAULT_PAYMENT_METHODS
+    ]
+      .map((value) => String(value ?? '').trim())
+      .filter((value) => value.length > 0);
+
+    return [...new Set(values)];
+  }
+
+  getConsultationPaymentValidationError(): string {
+    const raw = this.consultationPaymentEditForm.getRawValue();
+    const amount = this.parsePaymentAmount(raw.amount);
+    if (amount <= 0) {
+      return 'Saisissez un montant supérieur à 0.';
+    }
+
+    const method = String(raw.method ?? '').trim();
+    if (!method) {
+      return 'Sélectionnez ou saisissez un moyen de paiement.';
+    }
+
+    const paidAtRaw = String(raw.paidAtLocal ?? '').trim();
+    if (!paidAtRaw) {
+      return 'Renseignez la date et heure du paiement.';
+    }
+
+    if (!this.fromDateTimeLocalValue(paidAtRaw)) {
+      return 'Date et heure de paiement invalides.';
+    }
+
+    return '';
+  }
+
+  getConsultationBillingPaidAmount(billing: ConsultationBillingState): number {
+    const total = billing.payments.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
+    return Number(total.toFixed(2));
+  }
+
+  getConsultationBillingRemainingAmount(billing: ConsultationBillingState): number {
+    const remaining = Math.max(0, billing.totalAmount - this.getConsultationBillingPaidAmount(billing));
+    return Number(remaining.toFixed(2));
+  }
+
   private async loadConsultationPdfDisplayMode(): Promise<void> {
     try {
       const preferences = await this.api.getMyAgendaPreferences();
@@ -1971,22 +2058,24 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     this.isViewReady = true;
 
     const el = this.birthDateInputRef().nativeElement;
-    $(el).datepicker({
-      language: 'fr',
-      format: 'dd/mm/yyyy',
-      container: 'body',
-      autoclose: true,
-      todayHighlight: true,
-      weekStart: 1,
-      startView: 2,
-      endDate: new Date()
-    }).on('changeDate', (e: any) => {
-      const d: Date = e.date;
-      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      this.form.controls.birthDate.setValue(iso);
-      this.form.controls.birthDate.markAsTouched();
-      this.birthDateIso.set(iso);
-    });
+    if (this.hasJQueryDatepicker()) {
+      $(el).datepicker({
+        language: 'fr',
+        format: 'dd/mm/yyyy',
+        container: 'body',
+        autoclose: true,
+        todayHighlight: true,
+        weekStart: 1,
+        startView: 2,
+        endDate: new Date()
+      }).on('changeDate', (e: any) => {
+        const d: Date = e.date;
+        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        this.form.controls.birthDate.setValue(iso);
+        this.form.controls.birthDate.markAsTouched();
+        this.birthDateIso.set(iso);
+      });
+    }
 
     if (this.pendingBirthDateIso) {
       this.applyBirthDateToPicker(this.pendingBirthDateIso);
@@ -2023,7 +2112,9 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     this.destroyAntecedentDatepicker();
 
     const el = this.birthDateInputRef().nativeElement;
-    $(el).datepicker('destroy');
+    if (this.hasJQueryDatepicker()) {
+      $(el).datepicker('destroy');
+    }
   }
 
   async skipAndSave(): Promise<void> {
@@ -2038,11 +2129,6 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    if (this.hasConsultationContent() && !this.pendingConsultationLinkStrategy) {
-      this.isConsultationLinkStrategyModalOpen.set(true);
-      return;
-    }
-
     this.isSaving.set(true);
     this.errorMessage.set('');
 
@@ -2052,12 +2138,32 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
           ? this.pendingConsultationLinkStrategy
           : undefined
       );
-      await this.api.createPatient(payload);
+      const created = await this.api.createPatient(payload);
+      await this.persistConsultationBillingInvoice(created);
       this.pendingConsultationLinkStrategy = null;
+      this.consultationLinkConflict.set(null);
       this.isConsultationLinkStrategyModalOpen.set(false);
       this.clearLocalDraft();
       await this.router.navigateByUrl('/patients');
     } catch (error) {
+      if (error instanceof HttpErrorResponse && error.status === 409) {
+        const conflictType = String(error.error?.conflict?.type ?? '');
+        if (conflictType === 'appointment-overlap') {
+          const startsAt = String(error.error?.conflict?.startsAt ?? '').trim();
+          const appointmentIdRaw = Number(error.error?.conflict?.appointmentId);
+          const officeIdRaw = Number(error.error?.conflict?.officeId);
+
+          this.consultationLinkConflict.set({
+            appointmentId: Number.isInteger(appointmentIdRaw) && appointmentIdRaw > 0 ? appointmentIdRaw : null,
+            startsAt,
+            officeId: Number.isInteger(officeIdRaw) && officeIdRaw > 0 ? officeIdRaw : null
+          });
+          this.isConsultationLinkStrategyModalOpen.set(true);
+          this.isSaving.set(false);
+          return;
+        }
+      }
+
       if (error instanceof HttpErrorResponse && error.status === 403) {
         this.errorMessage.set('Droit insuffisant pour creer un patient.');
       } else {
@@ -2071,6 +2177,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     if (this.isSaving()) {
       return;
     }
+    this.consultationLinkConflict.set(null);
     this.isConsultationLinkStrategyModalOpen.set(false);
   }
 
@@ -2078,6 +2185,23 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     this.pendingConsultationLinkStrategy = attachExisting ? 'attach-existing' : 'create-new';
     this.isConsultationLinkStrategyModalOpen.set(false);
     void this.submit();
+  }
+
+  getConsultationLinkConflictSummary(): string {
+    const conflict = this.consultationLinkConflict();
+    if (!conflict) {
+      return '';
+    }
+
+    const when = conflict.startsAt ? this.formatConsultationDate(conflict.startsAt) : '';
+    const appointmentPart = conflict.appointmentId ? `Rendez-vous #${conflict.appointmentId}` : 'Un rendez-vous';
+    const officePart = conflict.officeId ? `Cabinet #${conflict.officeId}` : 'cabinet actif';
+
+    if (when) {
+      return `${appointmentPart} est déjà planifié le ${when} dans le ${officePart}.`;
+    }
+
+    return `${appointmentPart} existe déjà sur ce créneau dans le ${officePart}.`;
   }
 
   async cancelCreation(): Promise<void> {
@@ -2297,6 +2421,10 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
+    if (!this.hasJQueryDatepicker()) {
+      return;
+    }
+
     const ref = this.antecedentDateInputRef();
     if (!ref) {
       return;
@@ -2329,11 +2457,20 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private destroyAntecedentDatepicker(): void {
+    if (!this.hasJQueryDatepicker()) {
+      return;
+    }
+
     const ref = this.antecedentDateInputRef();
     if (!ref) {
       return;
     }
     $(ref.nativeElement).datepicker('destroy');
+  }
+
+  private hasJQueryDatepicker(): boolean {
+    const jq = $ as any;
+    return typeof jq === 'function' && Boolean(jq.fn?.datepicker);
   }
 
   private buildAntecedentSortKey(precision: AntecedentPrecision, display: string): number | null {
@@ -2632,6 +2769,80 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       consultationDocuments: documents.length > 0 ? documents : undefined,
       ...(linkStrategy ? { consultationLinkStrategy: linkStrategy } : {})
     };
+  }
+
+  private async persistConsultationBillingInvoice(created: Awaited<ReturnType<ApiService['createPatient']>>): Promise<void> {
+    const billing = this.consultationBillingState();
+    const consultationId = created.consultation?.id ?? null;
+    if (!billing || consultationId == null || this.consultationBillingChoice() !== 'bill') {
+      return;
+    }
+
+    const raw = this.consultationBillingForm.getRawValue();
+    const serviceLabel = String(raw.serviceLabel ?? '').trim() || 'Consultation';
+    const quantity = Number(raw.quantity ?? 1);
+    const amountHt = Number(raw.amountHt ?? 0);
+    const tvaRate = Number(raw.tvaRate ?? 0);
+    const paymentStatus = this.computeConsultationPaymentStatus(billing.totalAmount, billing.payments);
+    const billingStatus = paymentStatus === 'paid'
+      ? 'payee'
+      : (paymentStatus === 'partial' ? 'partiellement_payee' : 'impayee');
+    const billingPaymentMethod = billing.payments.length === 1
+      ? String(billing.payments[0]?.method ?? '').trim()
+      : (billing.payments.length > 1 ? 'multiple' : '');
+
+    try {
+      await this.api.createBillingInvoice({
+        patientId: created.patient.id,
+        consultationId,
+        officeId: billing.officeId ?? created.consultation?.officeId ?? null,
+        invoiceNumber: billing.invoiceNumber,
+        amountCents: Math.round(billing.totalAmount * 100),
+        status: billingStatus,
+        paymentMethod: billingPaymentMethod,
+        issuedAt: billing.issuedAt,
+        currency: billing.currency,
+        notes: billing.internalComment,
+        lineItems: [{
+          label: serviceLabel,
+          quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+          unitAmountHtCents: Math.max(0, Math.round(amountHt * 100)),
+          vatRate: Number.isFinite(tvaRate) ? tvaRate : 0,
+          displayOrder: 0
+        }],
+        payments: billing.payments.map((payment) => ({
+          paidAt: payment.paidAt,
+          amountCents: Math.max(0, Math.round(payment.amount * 100)),
+          currency: payment.currency,
+          paymentMethod: payment.method
+        }))
+      });
+    } catch {
+      // Non-blocking: the patient and PDF were created successfully.
+    }
+  }
+
+  private computeConsultationPaymentStatus(totalAmount: number, payments: ConsultationPaymentEntry[]): ConsultationPaymentStatus {
+    const paidAmount = payments.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
+    const effectiveTotal = Math.max(0, Number(totalAmount) || 0);
+    if (paidAmount <= 0) {
+      return 'pending';
+    }
+    if (paidAmount >= effectiveTotal) {
+      return 'paid';
+    }
+    return 'partial';
+  }
+
+  private parsePaymentAmount(rawAmount: unknown): number {
+    const normalized = String(rawAmount ?? '')
+      .replace(/\s+/g, '')
+      .replace(',', '.');
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return 0;
+    }
+    return Number(parsed.toFixed(2));
   }
 
   private serializeConsultationDocumentsForPayload(): ConsultationDocumentUploadPayload[] {

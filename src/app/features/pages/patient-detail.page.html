@@ -1111,10 +1111,24 @@
                       <p class="fw-bold mb-2">Informations paiements ({{ billing.totalAmount.toFixed(2) }} {{ billing.currency }})</p>
                       <p class="mb-2">
                         Cette facture est
-                        <span class="badge" [class.text-bg-success]="billing.paymentStatus === 'paid'" [class.text-bg-warning]="billing.paymentStatus !== 'paid'">
-                          {{ billing.paymentStatus === 'paid' ? 'Payée' : 'Attente de paiement' }}
+                        <span
+                          class="badge"
+                          [class.text-bg-success]="billing.paymentStatus === 'paid'"
+                          [class.text-bg-info]="billing.paymentStatus === 'partial'"
+                          [class.text-bg-warning]="billing.paymentStatus === 'pending'">
+                          {{ billing.paymentStatus === 'paid' ? 'Payée' : (billing.paymentStatus === 'partial' ? 'Partiellement payée' : 'Attente de paiement') }}
                         </span>.
                         Voici la liste des paiements :
+                      </p>
+                      <p class="mb-3">
+                        <span class="text-secondary">Montant réglé: {{ getConsultationBillingPaidAmount(billing).toFixed(2) }} {{ billing.currency }}</span>
+                        <span class="mx-1 text-secondary">|</span>
+                        <span
+                          [class.text-warning]="getConsultationBillingRemainingAmount(billing) > 0"
+                          [class.fw-semibold]="getConsultationBillingRemainingAmount(billing) > 0"
+                          [class.text-success]="getConsultationBillingRemainingAmount(billing) === 0">
+                          Restant dû: {{ getConsultationBillingRemainingAmount(billing).toFixed(2) }} {{ billing.currency }}
+                        </span>
                       </p>
 
                       <ul class="list-unstyled mb-0">
@@ -1325,7 +1339,9 @@
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header bg-primary text-white">
-            <h3 id="consultation-payment-modal-title" class="modal-title h5 mb-0">Modifier un paiement</h3>
+            <h3 id="consultation-payment-modal-title" class="modal-title h5 mb-0">
+              {{ editingConsultationPaymentId() ? 'Modifier un paiement' : 'Ajouter un paiement' }}
+            </h3>
             <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeConsultationPaymentEditModal()"></button>
           </div>
 
@@ -1333,22 +1349,38 @@
             <div class="row g-3">
               <div class="col-12">
                 <label class="form-label">Montant</label>
-                <input type="number" step="0.01" min="0" class="form-control" formControlName="amount" />
+                <input type="text" inputmode="decimal" class="form-control" formControlName="amount" placeholder="Ex: 65,00" />
               </div>
               <div class="col-12">
                 <label class="form-label">Moyen de paiement</label>
-                <input type="text" class="form-control" formControlName="method" />
+                <input type="text" class="form-control" formControlName="method" list="consultation-payment-method-options" placeholder="Choisir ou saisir un moyen de paiement" />
+                <datalist id="consultation-payment-method-options">
+                  @for (method of getConsultationPaymentMethodOptions(); track method) {
+                    <option [value]="method"></option>
+                  }
+                </datalist>
               </div>
               <div class="col-12">
                 <label class="form-label">Date et heure</label>
                 <input type="datetime-local" class="form-control" formControlName="paidAtLocal" />
               </div>
             </div>
+
+            @if (getConsultationPaymentValidationError()) {
+              <div class="alert alert-danger py-2 mt-3 mb-0" role="alert">
+                {{ getConsultationPaymentValidationError() }}
+              </div>
+            }
           </div>
 
           <div class="modal-footer">
-            <button type="button" class="btn btn-outline-secondary" (click)="closeConsultationPaymentEditModal()">Annuler</button>
-            <button type="button" class="btn btn-primary" (click)="saveConsultationPaymentEdit()">Enregistrer</button>
+            <button type="button" class="btn btn-outline-secondary" [disabled]="isSavingConsultationPayment()" (click)="closeConsultationPaymentEditModal()">Annuler</button>
+            <button type="button" class="btn btn-primary" [disabled]="isSavingConsultationPayment() || !!getConsultationPaymentValidationError()" (click)="saveConsultationPaymentEdit()">
+              @if (isSavingConsultationPayment()) {
+                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+              }
+              Enregistrer
+            </button>
           </div>
         </div>
       </div>

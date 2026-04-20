@@ -570,8 +570,12 @@
               type="text"
               class="form-control cursor-pointer"
               [placeholder]="antecedentDatePrecision() === 'date' ? 'jj/mm/aaaa' : antecedentDatePrecision() === 'month' ? 'mm/aaaa' : 'aaaa'"
-              readonly
-              [value]="antecedentDateDisplay()" />
+              [readonly]="isDatepickerAvailable()"
+              [value]="antecedentDateDisplay()"
+              (input)="setAntecedentDateDisplay($any($event.target).value)" />
+            @if (!isDatepickerAvailable()) {
+              <div class="form-text">Saisie manuelle attendue au format indique dans le placeholder.</div>
+            }
           </div>
 
           <div class="mb-3">
@@ -1087,10 +1091,24 @@
                     <p class="fw-bold mb-2">Informations paiements ({{ billing.totalAmount.toFixed(2) }} {{ billing.currency }})</p>
                     <p class="mb-2">
                       Cette facture est
-                      <span class="badge" [class.text-bg-success]="billing.paymentStatus === 'paid'" [class.text-bg-warning]="billing.paymentStatus !== 'paid'">
-                        {{ billing.paymentStatus === 'paid' ? 'Payée' : 'Attente de paiement' }}
+                      <span
+                        class="badge"
+                        [class.text-bg-success]="billing.paymentStatus === 'paid'"
+                        [class.text-bg-info]="billing.paymentStatus === 'partial'"
+                        [class.text-bg-warning]="billing.paymentStatus === 'pending'">
+                        {{ billing.paymentStatus === 'paid' ? 'Payée' : (billing.paymentStatus === 'partial' ? 'Partiellement payée' : 'Attente de paiement') }}
                       </span>.
                       Voici la liste des paiements :
+                    </p>
+                    <p class="mb-3">
+                      <span class="text-secondary">Montant réglé: {{ getConsultationBillingPaidAmount(billing).toFixed(2) }} {{ billing.currency }}</span>
+                      <span class="mx-1 text-secondary">|</span>
+                      <span
+                        [class.text-warning]="getConsultationBillingRemainingAmount(billing) > 0"
+                        [class.fw-semibold]="getConsultationBillingRemainingAmount(billing) > 0"
+                        [class.text-success]="getConsultationBillingRemainingAmount(billing) === 0">
+                        Restant dû: {{ getConsultationBillingRemainingAmount(billing).toFixed(2) }} {{ billing.currency }}
+                      </span>
                     </p>
 
                     <ul class="list-unstyled mb-0">
@@ -1188,26 +1206,42 @@
       <div class="modal-dialog">
         <div class="modal-content" [formGroup]="consultationPaymentEditForm">
           <div class="modal-header">
-            <h5 id="create-consultation-payment-edit-modal-title" class="modal-title">Modifier le paiement</h5>
+            <h5 id="create-consultation-payment-edit-modal-title" class="modal-title">
+              {{ editingConsultationPaymentId() ? 'Modifier le paiement' : 'Ajouter un paiement' }}
+            </h5>
             <button type="button" class="btn-close" aria-label="Fermer" (click)="closeConsultationPaymentEditModal()"></button>
           </div>
           <div class="modal-body">
             <div class="mb-3">
               <label class="form-label fw-semibold">Montant</label>
-              <input type="number" class="form-control" min="0" step="0.01" formControlName="amount" />
+              <input type="text" inputmode="decimal" class="form-control" formControlName="amount" placeholder="Ex: 65,00" />
             </div>
             <div class="mb-3">
               <label class="form-label fw-semibold">Moyen de paiement</label>
-              <input type="text" class="form-control" formControlName="method" placeholder="Ex: Chèque, Carte bancaire..." />
+              <input type="text" class="form-control" formControlName="method" list="create-consultation-payment-method-options" placeholder="Choisir ou saisir un moyen de paiement" />
+              <datalist id="create-consultation-payment-method-options">
+                @for (method of getConsultationPaymentMethodOptions(); track method) {
+                  <option [value]="method"></option>
+                }
+              </datalist>
             </div>
             <div class="mb-3">
               <label class="form-label fw-semibold">Date et heure du paiement</label>
               <input type="datetime-local" class="form-control" formControlName="paidAtLocal" />
             </div>
+
+            @if (getConsultationPaymentValidationError()) {
+              <div class="alert alert-danger py-2 mb-0" role="alert">
+                {{ getConsultationPaymentValidationError() }}
+              </div>
+            }
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-outline-secondary" (click)="closeConsultationPaymentEditModal()">Annuler</button>
-            <button type="button" class="btn btn-primary" (click)="saveConsultationPaymentEdit()">
+            <button type="button" class="btn btn-outline-secondary" [disabled]="isSavingConsultationPayment()" (click)="closeConsultationPaymentEditModal()">Annuler</button>
+            <button type="button" class="btn btn-primary" [disabled]="isSavingConsultationPayment() || !!getConsultationPaymentValidationError()" (click)="saveConsultationPaymentEdit()">
+              @if (isSavingConsultationPayment()) {
+                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+              }
               <i class="fa-solid fa-check me-1"></i>Enregistrer
             </button>
           </div>
@@ -1335,20 +1369,26 @@
       aria-labelledby="consultationLinkStrategyModalTitle"
       (click)="$event.stopPropagation()">
       <div class="antecedent-modal-header">
-        <h3 id="consultationLinkStrategyModalTitle" class="mb-0">Strategie de liaison consultation/rendez-vous</h3>
+        <h3 id="consultationLinkStrategyModalTitle" class="mb-0">Consultation deja trouvee sur ce creneau</h3>
         <button type="button" class="btn-close" aria-label="Fermer" (click)="closeConsultationLinkStrategyModal()"></button>
       </div>
       <div class="antecedent-modal-body">
-        <p class="mb-2">Si une consultation existe deja autour du meme creneau, que faut-il faire ?</p>
+        <p class="mb-2">Une consultation existe deja a la meme date/heure (ou tres proche).</p>
+        @if (getConsultationLinkConflictSummary()) {
+          <div class="alert alert-warning py-2">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i>{{ getConsultationLinkConflictSummary() }}
+          </div>
+        }
+        <p class="mb-2">Choisissez comment lier cette creation de patient :</p>
         <div class="alert alert-secondary py-2 mb-0">
-          <div><strong>Oui</strong>: rattacher la consultation existante au lieu d'en creer une nouvelle.</div>
-          <div><strong>Non</strong>: creer une nouvelle consultation meme en cas de consultation existante.</div>
+          <div><strong>Rattacher l'existante</strong> : utiliser la consultation deja presente pour ce creneau.</div>
+          <div><strong>Creer une nouvelle consultation</strong> : ajouter une deuxieme consultation distincte.</div>
         </div>
       </div>
       <div class="antecedent-modal-footer">
         <button type="button" class="btn btn-outline-secondary" (click)="closeConsultationLinkStrategyModal()">Annuler</button>
-        <button type="button" class="btn btn-outline-primary" (click)="chooseConsultationLinkStrategy(false)">Non, creer une nouvelle consultation</button>
-        <button type="button" class="btn btn-success" (click)="chooseConsultationLinkStrategy(true)">Oui, rattacher l'existante</button>
+        <button type="button" class="btn btn-outline-primary" (click)="chooseConsultationLinkStrategy(false)">Creer une nouvelle consultation</button>
+        <button type="button" class="btn btn-success" (click)="chooseConsultationLinkStrategy(true)">Rattacher la consultation existante</button>
       </div>
     </div>
   }

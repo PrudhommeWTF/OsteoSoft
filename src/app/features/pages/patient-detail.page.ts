@@ -75,7 +75,7 @@ type AntecedentTimelineItem = {
   important: boolean;
 };
 
-type ConsultationPaymentStatus = 'paid' | 'pending';
+type ConsultationPaymentStatus = 'paid' | 'partial' | 'pending';
 
 type ConsultationPaymentEntry = {
   id: string;
@@ -100,6 +100,7 @@ type ConsultationBillingState = {
 };
 
 const PAYMENT_PENDING_LABEL = 'Paiement en attente';
+const DEFAULT_PAYMENT_METHODS = ['Carte bancaire', 'Cheque', 'Especes', 'Virement'];
 const CONSULTATION_BILLING_STORAGE_KEY = 'osteosoft:consultation-billing:v1';
 
 @Component({
@@ -188,6 +189,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   readonly consultationBillingPaymentMethodOptions = signal<string[]>([]);
   readonly consultationBillingStates = signal<Record<number, ConsultationBillingState>>({});
   readonly isConsultationPaymentModalOpen = signal(false);
+  readonly isSavingConsultationPayment = signal(false);
   readonly editingConsultationPaymentId = signal<string | null>(null);
   readonly autosaveToastVisible = signal(false);
   readonly autosaveToastMessage = signal('');
@@ -289,7 +291,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   });
 
   readonly consultationPaymentEditForm = this.fb.nonNullable.group({
-    amount: [0],
+    amount: ['0'],
     method: [''],
     paidAtLocal: ['']
   });
@@ -1163,7 +1165,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
     this.hydrateConsultationReasonsFromRecord(consultation.reasonItems);
     void this.loadConsultationContext();
-    this.hydrateConsultationBillingState(consultation.id);
+    void this.hydrateConsultationBillingState(consultation);
 
     this.cdr.detectChanges();
 
@@ -1662,6 +1664,10 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       const paymentMethod = String(raw.paymentMethod ?? '').trim();
       const currency = String(office.devise ?? 'EUR').trim() || 'EUR';
       const totalAmount = this.consultationBillingTotalTtc();
+      const serviceLabel = String(raw.serviceLabel ?? '').trim() || 'Consultation';
+      const quantity = Number(raw.quantity ?? 1);
+      const amountHt = Number(raw.amountHt ?? 0);
+      const tvaRate = Number(raw.tvaRate ?? 0);
       const status: ConsultationPaymentStatus = !paymentMethod || paymentMethod === PAYMENT_PENDING_LABEL
         ? 'pending'
         : 'paid';
@@ -1717,7 +1723,21 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
             status: status === 'paid' ? 'payee' : 'impayee',
             paymentMethod,
             issuedAt: nowIso,
-            notes: String(raw.internalComment ?? '').trim()
+            currency,
+            notes: String(raw.internalComment ?? '').trim(),
+            lineItems: [{
+              label: serviceLabel,
+              quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+              unitAmountHtCents: Math.max(0, Math.round(amountHt * 100)),
+              vatRate: Number.isFinite(tvaRate) ? tvaRate : 0,
+              displayOrder: 0
+            }],
+            payments: payments.map((payment) => ({
+              paidAt: payment.paidAt,
+              amountCents: Math.max(0, Math.round(payment.amount * 100)),
+              currency: payment.currency,
+              paymentMethod: payment.method
+            }))
           });
           this.upsertConsultationBillingState({
             ...this.consultationBillingStates()[consultationId],
@@ -1777,12 +1797,15 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     }
 
     this.documentActionError.set('');
-    try {
-      await this.api.deletePatientDocument(billing.invoiceDocumentRef);
-      this.patientDocuments.update((items) => items.filter((item) => item.documentRef !== billing.invoiceDocumentRef));
-    } catch {
-      this.documentActionError.set('Impossible d\'annuler la facture pour le moment.');
-      return;
+    const documentRef = String(billing.invoiceDocumentRef ?? '').trim();
+    if (documentRef) {
+      try {
+        await this.api.deletePatientDocument(documentRef);
+        this.patientDocuments.update((items) => items.filter((item) => item.documentRef !== documentRef));
+      } catch {
+        this.documentActionError.set('Impossible d\'annuler la facture pour le moment.');
+        return;
+      }
     }
 
     if (billing.billingInvoiceId != null) {
@@ -1814,9 +1837,13 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    this.consultationBillingChoice.set('bill');
-    this.consultationBillingForm.controls.paymentMethod.setValue(payment.method);
-    this.isConsultationBillingModalOpen.set(true);
+    this.editingConsultationPaymentId.set(payment.id);
+    this.consultationPaymentEditForm.reset({
+      amount: String(payment.amount),
+      method: payment.method,
+      paidAtLocal: this.toDateTimeLocalValue(payment.paidAt)
+    });
+    this.isConsultationPaymentModalOpen.set(true);
   }
 
   openConsultationPaymentCreateModal(): void {
@@ -1825,9 +1852,16 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    this.consultationBillingChoice.set('bill');
-    this.consultationBillingForm.controls.paymentMethod.setValue(PAYMENT_PENDING_LABEL);
-    this.isConsultationBillingModalOpen.set(true);
+    const totalPaid = billing.payments.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
+    const remaining = Math.max(0, Number((billing.totalAmount - totalPaid).toFixed(2)));
+
+    this.editingConsultationPaymentId.set(null);
+    this.consultationPaymentEditForm.reset({
+      amount: String(remaining),
+      method: '',
+      paidAtLocal: this.toDateTimeLocalValue(new Date().toISOString())
+    });
+    this.isConsultationPaymentModalOpen.set(true);
   }
 
   closeConsultationPaymentEditModal(): void {
@@ -1835,53 +1869,123 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     this.editingConsultationPaymentId.set(null);
   }
 
-  saveConsultationPaymentEdit(): void {
+  async saveConsultationPaymentEdit(): Promise<void> {
     const billing = this.activeConsultationBillingState();
     const paymentId = this.editingConsultationPaymentId();
-    if (!billing || !paymentId) {
+    if (!billing || this.isSavingConsultationPayment()) {
       return;
     }
 
     const raw = this.consultationPaymentEditForm.getRawValue();
-    const amount = Math.max(0, Number(raw.amount) || 0);
+    const amount = this.parsePaymentAmount(raw.amount);
     const method = String(raw.method ?? '').trim();
-    const paidAt = this.fromDateTimeLocalValue(raw.paidAtLocal) ?? new Date().toISOString();
+    const paidAt = this.fromDateTimeLocalValue(raw.paidAtLocal);
 
-    if (!method) {
+    if (!method || amount <= 0 || !paidAt) {
       return;
     }
 
-    const payments = billing.payments.map((entry) =>
-      entry.id === paymentId
-        ? {
-          ...entry,
+    const nextPayments = paymentId
+      ? billing.payments.map((entry) =>
+        entry.id === paymentId
+          ? {
+            ...entry,
+            amount,
+            method,
+            paidAt
+          }
+          : entry
+      )
+      : [
+        ...billing.payments,
+        {
+          id: this.createTempKey('pay'),
           amount,
+          currency: billing.currency,
           method,
           paidAt
         }
-        : entry
-    );
+      ];
 
-    this.upsertConsultationBillingState({
-      ...billing,
-      payments,
-      paymentStatus: payments.length > 0 ? 'paid' : 'pending'
-    });
-    this.closeConsultationPaymentEditModal();
+    this.isSavingConsultationPayment.set(true);
+    this.documentActionError.set('');
+
+    try {
+      const invoiceId = Number(billing.billingInvoiceId);
+      if (Number.isInteger(invoiceId) && invoiceId > 0) {
+        const invoice = await this.api.updateBillingInvoicePayments(invoiceId, {
+          payments: nextPayments.map((entry) => ({
+            paidAt: entry.paidAt,
+            amountCents: Math.max(0, Math.round(entry.amount * 100)),
+            currency: entry.currency,
+            paymentMethod: entry.method
+          }))
+        });
+        this.upsertConsultationBillingState(
+          this.mapInvoiceDetailToConsultationBillingState(
+            billing.consultationId,
+            billing.practitionerName,
+            billing.invoiceDocumentRef,
+            invoice
+          )
+        );
+      } else {
+        this.upsertConsultationBillingState({
+          ...billing,
+          payments: nextPayments,
+          paymentStatus: this.computeConsultationPaymentStatus(billing.totalAmount, nextPayments)
+        });
+      }
+
+      this.closeConsultationPaymentEditModal();
+    } catch {
+      this.documentActionError.set('Impossible de mettre à jour le paiement pour le moment.');
+    } finally {
+      this.isSavingConsultationPayment.set(false);
+    }
   }
 
-  deleteConsultationPayment(paymentId: string): void {
+  async deleteConsultationPayment(paymentId: string): Promise<void> {
     const billing = this.activeConsultationBillingState();
-    if (!billing) {
+    if (!billing || this.isSavingConsultationPayment()) {
       return;
     }
 
-    const payments = billing.payments.filter((entry) => entry.id !== paymentId);
-    this.upsertConsultationBillingState({
-      ...billing,
-      payments,
-      paymentStatus: payments.length > 0 ? 'paid' : 'pending'
-    });
+    const nextPayments = billing.payments.filter((entry) => entry.id !== paymentId);
+    this.isSavingConsultationPayment.set(true);
+    this.documentActionError.set('');
+
+    try {
+      const invoiceId = Number(billing.billingInvoiceId);
+      if (Number.isInteger(invoiceId) && invoiceId > 0) {
+        const invoice = await this.api.updateBillingInvoicePayments(invoiceId, {
+          payments: nextPayments.map((entry) => ({
+            paidAt: entry.paidAt,
+            amountCents: Math.max(0, Math.round(entry.amount * 100)),
+            currency: entry.currency,
+            paymentMethod: entry.method
+          }))
+        });
+        this.upsertConsultationBillingState(
+          this.mapInvoiceDetailToConsultationBillingState(
+            billing.consultationId,
+            billing.practitionerName,
+            billing.invoiceDocumentRef,
+            invoice
+          )
+        );
+      } else {
+        this.upsertConsultationBillingState({
+          ...billing,
+          payments: nextPayments,
+          paymentStatus: this.computeConsultationPaymentStatus(billing.totalAmount, nextPayments)
+        });
+      }
+    } catch {
+      this.documentActionError.set('Impossible de supprimer le paiement pour le moment.');
+    } finally {
+      this.isSavingConsultationPayment.set(false);
+    }
   }
 
   consultationBmi(consultation: ConsultationRecord): string | null {
@@ -1941,6 +2045,51 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       return `${(sizeBytes / 1024).toFixed(1)} Ko`;
     }
     return `${(sizeBytes / (1024 * 1024)).toFixed(1)} Mo`;
+  }
+
+  getConsultationBillingPaidAmount(billing: ConsultationBillingState): number {
+    const total = billing.payments.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
+    return Number(total.toFixed(2));
+  }
+
+  getConsultationPaymentMethodOptions(): string[] {
+    const values = [
+      ...this.consultationBillingPaymentMethodOptions(),
+      ...DEFAULT_PAYMENT_METHODS
+    ]
+      .map((value) => String(value ?? '').trim())
+      .filter((value) => value.length > 0);
+
+    return [...new Set(values)];
+  }
+
+  getConsultationPaymentValidationError(): string {
+    const raw = this.consultationPaymentEditForm.getRawValue();
+    const amount = this.parsePaymentAmount(raw.amount);
+    if (amount <= 0) {
+      return 'Saisissez un montant supérieur à 0.';
+    }
+
+    const method = String(raw.method ?? '').trim();
+    if (!method) {
+      return 'Sélectionnez ou saisissez un moyen de paiement.';
+    }
+
+    const paidAtRaw = String(raw.paidAtLocal ?? '').trim();
+    if (!paidAtRaw) {
+      return 'Renseignez la date et heure du paiement.';
+    }
+
+    if (!this.fromDateTimeLocalValue(paidAtRaw)) {
+      return 'Date et heure de paiement invalides.';
+    }
+
+    return '';
+  }
+
+  getConsultationBillingRemainingAmount(billing: ConsultationBillingState): number {
+    const remaining = Math.max(0, billing.totalAmount - this.getConsultationBillingPaidAmount(billing));
+    return Number(remaining.toFixed(2));
   }
 
   getRelatedPatientIcon(sex: Patient['sex']): string {
@@ -2970,10 +3119,38 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     return null;
   }
 
-  private hydrateConsultationBillingState(consultationId: number): void {
+  private async hydrateConsultationBillingState(consultation: ConsultationRecord): Promise<void> {
+    const consultationId = Number(consultation.id);
+    if (!Number.isInteger(consultationId) || consultationId <= 0) {
+      return;
+    }
+
     const states = this.consultationBillingStates();
     if (states[consultationId]) {
       return;
+    }
+
+    const billingInvoiceId = Number(consultation.billingInvoiceId);
+    if (Number.isInteger(billingInvoiceId) && billingInvoiceId > 0) {
+      try {
+        const invoice = await this.api.getBillingInvoice(billingInvoiceId);
+        const invoiceDocumentRef = this.resolveConsultationInvoiceDocumentRef(consultationId, invoice.issuedAt);
+
+        this.consultationBillingStates.update((items) => ({
+          ...items,
+          [consultationId]: this.mapInvoiceDetailToConsultationBillingState(
+            consultationId,
+            consultation.practitioner || '-',
+            invoiceDocumentRef,
+            invoice
+          )
+        }));
+        this.persistConsultationBillingStates();
+        this.consultationBillingChoice.set('bill');
+        return;
+      } catch {
+        // Fall back to locally persisted billing state.
+      }
     }
 
     const persisted = this.readPersistedConsultationBillingStates();
@@ -2987,6 +3164,98 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       [consultationId]: state
     }));
     this.consultationBillingChoice.set('bill');
+  }
+
+  private mapInvoiceDetailToConsultationBillingState(
+    consultationId: number,
+    practitionerName: string,
+    invoiceDocumentRef: string,
+    invoice: Awaited<ReturnType<ApiService['getBillingInvoice']>>
+  ): ConsultationBillingState {
+    return {
+      consultationId,
+      billingInvoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      totalAmount: Number((invoice.amountCents / 100).toFixed(2)),
+      currency: invoice.payments[0]?.currency || 'EUR',
+      issuedAt: invoice.issuedAt,
+      internalComment: invoice.notes,
+      practitionerName,
+      invoiceDocumentRef,
+      paymentStatus: this.computeConsultationPaymentStatus(
+        Number((invoice.amountCents / 100).toFixed(2)),
+        invoice.payments.map((entry) => ({
+          id: `db-pay-${entry.id}`,
+          amount: Number((entry.amountCents / 100).toFixed(2)),
+          currency: entry.currency,
+          method: entry.paymentMethod,
+          paidAt: entry.paidAt
+        }))
+      ),
+      payments: invoice.payments.map((entry) => ({
+        id: `db-pay-${entry.id}`,
+        amount: Number((entry.amountCents / 100).toFixed(2)),
+        currency: entry.currency,
+        method: entry.paymentMethod,
+        paidAt: entry.paidAt
+      }))
+    };
+  }
+
+  private computeConsultationPaymentStatus(totalAmount: number, payments: ConsultationPaymentEntry[]): ConsultationPaymentStatus {
+    const paidAmount = payments.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
+    const effectiveTotal = Math.max(0, Number(totalAmount) || 0);
+    if (paidAmount <= 0) {
+      return 'pending';
+    }
+    if (paidAmount >= effectiveTotal) {
+      return 'paid';
+    }
+    return 'partial';
+  }
+
+  private parsePaymentAmount(rawAmount: unknown): number {
+    const normalized = String(rawAmount ?? '')
+      .replace(/\s+/g, '')
+      .replace(',', '.');
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return 0;
+    }
+    return Number(parsed.toFixed(2));
+  }
+
+  private resolveConsultationInvoiceDocumentRef(consultationId: number, issuedAtIso: string): string {
+    const docs = this.patientDocuments()
+      .filter((item) => Number(item.consultationId) === consultationId && String(item.mimeType ?? '').toLowerCase() === 'application/pdf');
+
+    if (docs.length === 0) {
+      return '';
+    }
+
+    const invoiceDocs = docs.filter((item) => {
+      const title = String(item.title ?? '').toLowerCase();
+      const fileName = String(item.fileName ?? '').toLowerCase();
+      return title.includes('facture') || fileName.includes('facture');
+    });
+
+    const candidates = invoiceDocs.length > 0 ? invoiceDocs : docs;
+    const issuedAtMs = new Date(issuedAtIso).getTime();
+    const safeIssuedAtMs = Number.isFinite(issuedAtMs) ? issuedAtMs : null;
+
+    if (safeIssuedAtMs == null) {
+      return String(candidates[0]?.documentRef ?? '').trim();
+    }
+
+    const best = [...candidates].sort((left, right) => {
+      const leftMs = new Date(left.createdAt).getTime();
+      const rightMs = new Date(right.createdAt).getTime();
+      const leftDelta = Math.abs((Number.isFinite(leftMs) ? leftMs : safeIssuedAtMs) - safeIssuedAtMs);
+      const rightDelta = Math.abs((Number.isFinite(rightMs) ? rightMs : safeIssuedAtMs) - safeIssuedAtMs);
+      return leftDelta - rightDelta;
+    })[0];
+
+    return String(best?.documentRef ?? '').trim();
   }
 
   private upsertConsultationBillingState(state: ConsultationBillingState): void {

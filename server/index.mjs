@@ -202,6 +202,33 @@ db.exec(`
     FOREIGN KEY(consultation_id) REFERENCES consultations(id) ON DELETE SET NULL
   );
 
+  CREATE TABLE IF NOT EXISTS invoice_line_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_id INTEGER NOT NULL,
+    label TEXT NOT NULL,
+    quantity REAL NOT NULL DEFAULT 1,
+    unit_amount_ht_cents INTEGER NOT NULL DEFAULT 0,
+    vat_rate REAL NOT NULL DEFAULT 0,
+    display_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS invoice_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_id INTEGER NOT NULL,
+    paid_at TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'EUR',
+    payment_method TEXT NOT NULL DEFAULT '',
+    reference TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
+    FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL
+  );
+
   CREATE TABLE IF NOT EXISTS accounting_expenses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     occurred_at TEXT NOT NULL,
@@ -396,6 +423,20 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS patient_antecedents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id INTEGER NOT NULL,
+    date_precision TEXT NOT NULL DEFAULT 'date',
+    date_display TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    important INTEGER NOT NULL DEFAULT 0,
+    sort_key INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(patient_id) REFERENCES patients(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS draft (
     user_id INTEGER NOT NULL,
     flow_key TEXT NOT NULL,
@@ -495,6 +536,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_invoices_status_due_at ON invoices(status, due_at);
   CREATE INDEX IF NOT EXISTS idx_invoices_office_id ON invoices(office_id);
   CREATE INDEX IF NOT EXISTS idx_invoices_consultation_id ON invoices(consultation_id);
+  CREATE INDEX IF NOT EXISTS idx_invoice_line_items_invoice_order ON invoice_line_items(invoice_id, display_order);
+  CREATE INDEX IF NOT EXISTS idx_invoice_payments_invoice_paid_at ON invoice_payments(invoice_id, paid_at);
 
   CREATE INDEX IF NOT EXISTS idx_directory_contacts_office_kind ON directory_contacts(office_id, kind);
   CREATE INDEX IF NOT EXISTS idx_directory_contacts_office_name_sort ON directory_contacts(office_id, last_name, first_name, organization);
@@ -509,6 +552,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_patient_documents_patient_created_at ON patient_documents(patient_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_patient_documents_consultation_id ON patient_documents(consultation_id);
   CREATE INDEX IF NOT EXISTS idx_patient_documents_office_id ON patient_documents(office_id);
+  CREATE INDEX IF NOT EXISTS idx_patient_antecedents_patient_sort_key ON patient_antecedents(patient_id, sort_key);
 
   CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
   CREATE INDEX IF NOT EXISTS idx_audit_logs_user_created_at ON audit_logs(user_id, created_at);
@@ -2581,6 +2625,12 @@ function buildDataBackupSnapshot() {
        FROM antecedent_types
        ORDER BY id ASC`
     ).all(),
+    patientAntecedents: db.prepare(
+      `SELECT id, patient_id, date_precision, date_display, category, description,
+              important, sort_key, created_at, updated_at
+       FROM patient_antecedents
+       ORDER BY patient_id ASC, sort_key DESC, id DESC`
+    ).all(),
     serviceTypes: db.prepare(
       `SELECT id, office_id, label, amount_ht_cents, vat_rate, display_order, created_at
        FROM service_types
@@ -2654,6 +2704,7 @@ function restoreDataBackupSnapshot(backupPayload) {
     db.prepare('DELETE FROM user_offices').run();
     db.prepare('DELETE FROM users').run();
     db.prepare('DELETE FROM access_profiles').run();
+    db.prepare('DELETE FROM patient_antecedents').run();
     db.prepare('DELETE FROM antecedent_types').run();
     db.prepare('DELETE FROM service_types').run();
     db.prepare('DELETE FROM payment_methods').run();
@@ -2717,6 +2768,12 @@ function restoreDataBackupSnapshot(backupPayload) {
     const insertAntecedentType = db.prepare(
       `INSERT INTO antecedent_types (id, label, created_at)
        VALUES (?, ?, ?)`
+    );
+    const insertPatientAntecedent = db.prepare(
+      `INSERT INTO patient_antecedents (
+         id, patient_id, date_precision, date_display, category, description,
+         important, sort_key, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const insertServiceType = db.prepare(
       `INSERT INTO service_types (id, office_id, label, amount_ht_cents, vat_rate, display_order, created_at)
@@ -2910,6 +2967,21 @@ function restoreDataBackupSnapshot(backupPayload) {
         Number(row.consent_signed) ? 1 : 0,
         row.retention_until ?? null,
         Number(row.is_deleted) ? 1 : 0,
+        row.created_at ?? new Date().toISOString(),
+        row.updated_at ?? new Date().toISOString()
+      );
+    }
+
+    for (const row of Array.isArray(backup.patientAntecedents) ? backup.patientAntecedents : []) {
+      insertPatientAntecedent.run(
+        Number(row.id),
+        Number(row.patient_id),
+        String(row.date_precision ?? 'date').trim() || 'date',
+        String(row.date_display ?? '').trim(),
+        String(row.category ?? '').trim(),
+        String(row.description ?? '').trim(),
+        Number(row.important) ? 1 : 0,
+        Number(row.sort_key) || 0,
         row.created_at ?? new Date().toISOString(),
         row.updated_at ?? new Date().toISOString()
       );
@@ -3958,6 +4030,88 @@ function extractAntecedentCategories(medicalHistoryRaw) {
   }
 }
 
+function buildAntecedentSortKey(precision, display) {
+  if (precision === 'year') {
+    const year = Number(display);
+    if (!Number.isInteger(year) || year < 1800 || year > 2999) {
+      return null;
+    }
+    return year * 10000 + 1231;
+  }
+
+  if (precision === 'month') {
+    const [monthStr, yearStr] = String(display).split('/');
+    const month = Number(monthStr);
+    const year = Number(yearStr);
+    if (!Number.isInteger(month) || !Number.isInteger(year) || month < 1 || month > 12 || year < 1800 || year > 2999) {
+      return null;
+    }
+    return year * 10000 + month * 100 + 31;
+  }
+
+  const [dayStr, monthStr, yearStr] = String(display).split('/');
+  const day = Number(dayStr);
+  const month = Number(monthStr);
+  const year = Number(yearStr);
+  if (
+    !Number.isInteger(day) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(year) ||
+    day < 1 ||
+    day > 31 ||
+    month < 1 ||
+    month > 12 ||
+    year < 1800 ||
+    year > 2999
+  ) {
+    return null;
+  }
+  return year * 10000 + month * 100 + day;
+}
+
+function parsePatientAntecedentsFromMedicalHistory(medicalHistoryRaw) {
+  const raw = String(medicalHistoryRaw ?? '').trim();
+  if (!raw) {
+    return [];
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+
+  return parsed
+    .map((item) => {
+      const precision = item?.datePrecision === 'year' || item?.datePrecision === 'month' || item?.datePrecision === 'date'
+        ? item.datePrecision
+        : 'date';
+      const dateDisplay = String(item?.date ?? '').trim();
+      const category = String(item?.category ?? '').trim();
+      const description = String(item?.description ?? '').trim();
+      const sortKey = buildAntecedentSortKey(precision, dateDisplay);
+      if (!category || !dateDisplay || sortKey == null) {
+        return null;
+      }
+
+      return {
+        datePrecision: precision,
+        dateDisplay,
+        category,
+        description,
+        important: Boolean(item?.important),
+        sortKey
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 400);
+}
+
 function normalizePersonNameKey(name) {
   return String(name ?? '')
     .trim()
@@ -4204,6 +4358,150 @@ function findOverlappingAppointmentForPatient(patientId, localCalendarId, starts
   return null;
 }
 
+function resolveConsultationSchedulingContextFromRaw(consultationNoteRaw, options = {}) {
+  const raw = String(consultationNoteRaw ?? '').trim();
+  if (!raw) {
+    return null;
+  }
+
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  const normalizedReasonItems = Array.isArray(data.reasonItems)
+    ? data.reasonItems
+      .map((item) => ({
+        label: String(item?.label ?? '').trim(),
+        value: String(item?.value ?? '').trim(),
+        important: Boolean(item?.important)
+      }))
+      .filter((item, index, all) => item.label && all.findIndex((candidate) => candidate.label === item.label) === index)
+    : [];
+
+  const hasContent =
+    String(data.title ?? '').trim() ||
+    normalizedReasonItems.length > 0 ||
+    String(data.motifMainHtml ?? '').trim() ||
+    String(data.testsHtml ?? '').trim() ||
+    String(data.schemaHtml ?? '').trim() ||
+    String(data.treatmentsHtml ?? '').trim() ||
+    String(data.remarksHtml ?? '').trim();
+
+  if (!hasContent) {
+    return null;
+  }
+
+  const userId = Number(options.userId);
+  const requestedOfficeId = Number(options.officeId);
+  const draftOfficeId = Number(data.officeId);
+  const preferRequestedOffice = options.preferRequestedOffice === true;
+
+  let localCalendarId = null;
+  let slotDurationMinutes = 60;
+  let alignedStartIso = String(data.startedAt ?? new Date().toISOString());
+  let consultationOfficeId = preferRequestedOffice
+    ? (Number.isInteger(requestedOfficeId) && requestedOfficeId > 0 ? requestedOfficeId : null)
+    : (Number.isInteger(draftOfficeId) && draftOfficeId > 0
+      ? draftOfficeId
+      : (Number.isInteger(requestedOfficeId) && requestedOfficeId > 0 ? requestedOfficeId : null));
+
+  if (consultationOfficeId != null) {
+    const exists = db.prepare('SELECT id FROM offices WHERE id = ?').get(consultationOfficeId);
+    if (!exists) {
+      consultationOfficeId = null;
+    }
+  }
+
+  if (Number.isInteger(userId) && userId > 0) {
+    const defaultCalendar = getDefaultCalendarForUser(userId, consultationOfficeId);
+    if (defaultCalendar) {
+      localCalendarId = defaultCalendar.id;
+
+      if (defaultCalendar.officeId != null) {
+        if (consultationOfficeId == null) {
+          consultationOfficeId = Number(defaultCalendar.officeId);
+        }
+
+        const office = db
+          .prepare(
+            `SELECT default_session_duration_minutes AS durationMinutes, opening_hours_json AS openingHoursJson
+             FROM offices
+             WHERE id = ?`
+          )
+          .get(defaultCalendar.officeId);
+
+        slotDurationMinutes = normalizeOfficeDefaultSessionDurationMinutes(office?.durationMinutes);
+
+        const sourceDate = new Date(String(data.startedAt ?? new Date().toISOString()));
+        if (!Number.isNaN(sourceDate.getTime())) {
+          const openingHours = parseOfficeOpeningHours(office?.openingHoursJson);
+          const firstOpeningMinute = getFirstOpeningMinute(openingHours, sourceDate);
+          const alignedDate = alignDateToOfficeSlot(sourceDate, firstOpeningMinute, slotDurationMinutes);
+          alignedStartIso = alignedDate.toISOString();
+        }
+      }
+    }
+  }
+
+  return {
+    alignedStartIso,
+    consultationOfficeId,
+    localCalendarId,
+    slotDurationMinutes
+  };
+}
+
+function findOverlappingAppointmentForOffice(officeId, localCalendarId, startsAtIso, durationMinutes) {
+  const startDate = new Date(startsAtIso);
+  if (Number.isNaN(startDate.getTime())) {
+    return null;
+  }
+  const endDate = new Date(startDate.getTime() + (durationMinutes * 60 * 1000));
+
+  let rows = [];
+  if (Number.isInteger(officeId) && Number(officeId) > 0) {
+    rows = db
+      .prepare(
+        `SELECT id, starts_at
+         FROM appointments
+         WHERE office_id = ?
+         ORDER BY datetime(starts_at) ASC, id ASC`
+      )
+      .all(Number(officeId));
+  } else if (Number.isInteger(localCalendarId) && Number(localCalendarId) > 0) {
+    rows = db
+      .prepare(
+        `SELECT id, starts_at
+         FROM appointments
+         WHERE local_calendar_id = ?
+         ORDER BY datetime(starts_at) ASC, id ASC`
+      )
+      .all(Number(localCalendarId));
+  } else {
+    return null;
+  }
+
+  for (const row of rows) {
+    const currentStart = new Date(row.starts_at);
+    if (Number.isNaN(currentStart.getTime())) {
+      continue;
+    }
+
+    const currentEnd = new Date(currentStart.getTime() + (durationMinutes * 60 * 1000));
+    if (currentStart < endDate && currentEnd > startDate) {
+      return {
+        id: Number(row.id),
+        startsAt: String(row.starts_at)
+      };
+    }
+  }
+
+  return null;
+}
+
 function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}) {
   const raw = String(consultationNoteRaw ?? '').trim();
   if (!raw) return null;
@@ -4443,6 +4741,41 @@ function storeAntecedentTypes(labels) {
 
   const unique = [...new Set(labels.map((label) => label.trim()).filter(Boolean))];
   insertMany(unique);
+}
+
+function replacePatientAntecedents(patientId, medicalHistoryRaw) {
+  if (!Number.isInteger(patientId) || patientId <= 0) {
+    return;
+  }
+
+  const antecedents = parsePatientAntecedentsFromMedicalHistory(medicalHistoryRaw);
+  const replaceMany = db.transaction((id, items) => {
+    db.prepare('DELETE FROM patient_antecedents WHERE patient_id = ?').run(id);
+
+    if (!items.length) {
+      return;
+    }
+
+    const insertAntecedent = db.prepare(
+      `INSERT INTO patient_antecedents
+        (patient_id, date_precision, date_display, category, description, important, sort_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    );
+
+    for (const item of items) {
+      insertAntecedent.run(
+        id,
+        item.datePrecision,
+        item.dateDisplay,
+        item.category,
+        item.description,
+        item.important ? 1 : 0,
+        item.sortKey
+      );
+    }
+  });
+
+  replaceMany(patientId, antecedents);
 }
 
 function normalizeAuditValue(value) {
@@ -4837,6 +5170,7 @@ const backupDataSchema = z.object({
   invoices: z.array(z.record(z.string(), z.unknown())).optional().default([]),
   consultations: z.array(z.record(z.string(), z.unknown())).optional().default([]),
   antecedentTypes: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  patientAntecedents: z.array(z.record(z.string(), z.unknown())).optional().default([]),
   serviceTypes: z.array(z.record(z.string(), z.unknown())).optional().default([]),
   paymentMethods: z.array(z.record(z.string(), z.unknown())).optional().default([]),
   localCalendars: z.array(z.record(z.string(), z.unknown())).optional().default([]),
@@ -5850,6 +6184,63 @@ app.get('/api/antecedent-types', authMiddleware, (_req, res) => {
     .all();
 
   return res.json({ types: rows.map((row) => row.label) });
+});
+
+app.get('/api/patients/:id/antecedents', authMiddleware, requirePermission('read-patient-record'), (req, res) => {
+  const patientId = Number(req.params.id);
+  if (!Number.isInteger(patientId) || patientId <= 0) {
+    return res.status(400).json({ message: 'ID invalide' });
+  }
+
+  const patient = db
+    .prepare('SELECT id, cipher_medical_notes FROM patients WHERE id = ? AND is_deleted = 0')
+    .get(patientId);
+  if (!patient) {
+    return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  let rows = db
+    .prepare(
+      `SELECT id, date_precision, date_display, category, description, important, sort_key
+       FROM patient_antecedents
+       WHERE patient_id = ?
+       ORDER BY sort_key DESC, id DESC`
+    )
+    .all(patientId);
+
+  if (rows.length === 0) {
+    let notes = {};
+    try {
+      notes = JSON.parse(decryptSensitiveField(patient.cipher_medical_notes)) ?? {};
+    } catch {
+      notes = {};
+    }
+
+    const medicalHistory = String(notes.medicalHistory ?? '');
+    if (parsePatientAntecedentsFromMedicalHistory(medicalHistory).length > 0) {
+      replacePatientAntecedents(patientId, medicalHistory);
+      rows = db
+        .prepare(
+          `SELECT id, date_precision, date_display, category, description, important, sort_key
+           FROM patient_antecedents
+           WHERE patient_id = ?
+           ORDER BY sort_key DESC, id DESC`
+        )
+        .all(patientId);
+    }
+  }
+
+  const antecedents = rows.map((row) => ({
+    id: Number(row.id),
+    datePrecision: String(row.date_precision ?? 'date').trim() || 'date',
+    date: String(row.date_display ?? '').trim(),
+    category: String(row.category ?? '').trim(),
+    description: String(row.description ?? '').trim(),
+    important: Boolean(row.important),
+    sortKey: Number(row.sort_key) || 0
+  }));
+
+  return res.json({ antecedents });
 });
 
 app.get('/api/consultation-context', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
@@ -7206,6 +7597,34 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
   }
 
   const payload = parsed.data;
+
+  const consultationScheduling = resolveConsultationSchedulingContextFromRaw(payload.consultationNote, {
+    userId: req.user.sub,
+    officeId: req.userAccess?.officeIds?.[0] ?? null,
+    preferRequestedOffice: true
+  });
+
+  if (consultationScheduling && !payload.consultationLinkStrategy) {
+    const overlappingAppointment = findOverlappingAppointmentForOffice(
+      consultationScheduling.consultationOfficeId,
+      consultationScheduling.localCalendarId,
+      consultationScheduling.alignedStartIso,
+      consultationScheduling.slotDurationMinutes
+    );
+
+    if (overlappingAppointment) {
+      return res.status(409).json({
+        message: 'Un rendez-vous existe deja sur ce creneau dans le cabinet actif.',
+        conflict: {
+          type: 'appointment-overlap',
+          appointmentId: overlappingAppointment.id,
+          startsAt: overlappingAppointment.startsAt,
+          officeId: consultationScheduling.consultationOfficeId
+        }
+      });
+    }
+  }
+
   const lastName = payload.lastName.trim();
   const firstName = payload.firstName.trim();
   const fullName = `${lastName} ${firstName}`.trim();
@@ -7271,6 +7690,7 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
   });
 
   storeAntecedentTypes(antecedentCategories);
+  replacePatientAntecedents(Number(inserted.lastInsertRowid), payload.medicalHistory);
   const consultationCreation = insertConsultationFromNote(Number(inserted.lastInsertRowid), payload.consultationNote, {
     userId: req.user.sub,
     officeId: req.userAccess?.officeIds?.[0] ?? null,
@@ -7732,10 +8152,19 @@ app.get('/api/patients/:id/consultations', authMiddleware, requirePermission('re
   try {
     consultationRows = db
       .prepare(
-        `SELECT id, started_at, practitioner, title, important, height_cm, weight_kg,
+        `SELECT c.id, c.started_at, c.practitioner, c.title, c.important, c.height_cm, c.weight_kg,
                 eva_before, eva_after, profile, reason_items_cipher,
-                motif_main_cipher, tests_cipher, schema_cipher, treatments_cipher, remarks_cipher
-         FROM consultations WHERE patient_id = ? ORDER BY started_at DESC`
+                motif_main_cipher, tests_cipher, schema_cipher, treatments_cipher, remarks_cipher,
+                (
+                  SELECT i.id
+                  FROM invoices i
+                  WHERE i.consultation_id = c.id
+                  ORDER BY i.id DESC
+                  LIMIT 1
+                ) AS billing_invoice_id
+         FROM consultations c
+         WHERE c.patient_id = ?
+         ORDER BY c.started_at DESC`
       )
       .all(id);
   } catch { consultationRows = []; }
@@ -7781,7 +8210,8 @@ app.get('/api/patients/:id/consultations', authMiddleware, requirePermission('re
     schemaHtml: row.schema_cipher ? decryptSensitiveField(row.schema_cipher) : '',
     treatmentsHtml: row.treatments_cipher ? decryptSensitiveField(row.treatments_cipher) : '',
     remarksHtml: row.remarks_cipher ? decryptSensitiveField(row.remarks_cipher) : '',
-    status: 'Termine'
+    status: 'Termine',
+    billingInvoiceId: row.billing_invoice_id != null ? Number(row.billing_invoice_id) : null
   }));
 
   const consultationDates = new Set(consultations.map((c) => c.startedAt.slice(0, 10)));
@@ -7805,7 +8235,8 @@ app.get('/api/patients/:id/consultations', authMiddleware, requirePermission('re
       schemaHtml: '',
       treatmentsHtml: '',
       remarksHtml: '',
-      status: row.status
+      status: row.status,
+      billingInvoiceId: null
     }));
 
   const all = [...consultations, ...appointments].sort(
@@ -7908,7 +8339,8 @@ app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-pa
       schemaHtml: payload.schemaHtml,
       treatmentsHtml: payload.treatmentsHtml,
       remarksHtml: payload.remarksHtml,
-      status: 'Termine'
+      status: 'Termine',
+      billingInvoiceId: null
     }
   });
 });
@@ -8214,6 +8646,7 @@ app.put('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
   if (data.medicalHistory !== undefined) {
     storeAntecedentTypes(extractAntecedentCategories(data.medicalHistory));
   }
+  replacePatientAntecedents(id, String(updatedNotes.medicalHistory ?? ''));
 
   writeAuditLog(req.user.sub, 'UPDATE', 'patients', String(id), {
     changedFieldCount: changes.length,
@@ -9069,6 +9502,174 @@ function getScopedBillingOfficeIds(access, requestedOfficeId) {
     return allowed.has(asked) ? [asked] : [];
   }
   return [...allowed];
+}
+
+function normalizeInvoiceLineItems(rawItems, fallbackAmountCents) {
+  const items = Array.isArray(rawItems) ? rawItems : [];
+  const normalized = items
+    .map((item, index) => {
+      const label = String(item?.label ?? '').trim();
+      const quantity = Number(item?.quantity ?? 0);
+      const unitAmountHtCents = Math.round(Number(item?.unitAmountHtCents ?? 0));
+      const vatRate = Number(item?.vatRate ?? 0);
+      const displayOrder = Number.isInteger(Number(item?.displayOrder))
+        ? Number(item.displayOrder)
+        : index;
+
+      if (!label || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitAmountHtCents) || unitAmountHtCents < 0) {
+        return null;
+      }
+
+      return {
+        label,
+        quantity,
+        unitAmountHtCents,
+        vatRate: Number.isFinite(vatRate) ? vatRate : 0,
+        displayOrder
+      };
+    })
+    .filter(Boolean);
+
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  return [{
+    label: 'Consultation',
+    quantity: 1,
+    unitAmountHtCents: Math.max(0, Math.round(Number(fallbackAmountCents ?? 0))),
+    vatRate: 0,
+    displayOrder: 0
+  }];
+}
+
+function normalizeInvoicePayments(rawPayments, fallbackPaymentMethod, fallbackCurrency, amountCents, issuedAt) {
+  const payments = Array.isArray(rawPayments) ? rawPayments : [];
+  const normalized = payments
+    .map((item) => {
+      const amountCentsValue = Math.round(Number(item?.amountCents ?? 0));
+      const paidAt = String(item?.paidAt ?? issuedAt ?? new Date().toISOString()).trim() || new Date().toISOString();
+      const currency = String(item?.currency ?? fallbackCurrency ?? 'EUR').trim() || 'EUR';
+      const paymentMethod = String(item?.paymentMethod ?? fallbackPaymentMethod ?? '').trim();
+      const reference = String(item?.reference ?? '').trim();
+      const notes = String(item?.notes ?? '').trim();
+
+      if (!Number.isFinite(amountCentsValue) || amountCentsValue <= 0) {
+        return null;
+      }
+
+      return {
+        amountCents: amountCentsValue,
+        paidAt,
+        currency,
+        paymentMethod,
+        reference,
+        notes
+      };
+    })
+    .filter(Boolean);
+
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  if (String(fallbackPaymentMethod ?? '').trim()) {
+    return [{
+      amountCents: Math.max(0, Math.round(Number(amountCents ?? 0))),
+      paidAt: String(issuedAt ?? new Date().toISOString()).trim() || new Date().toISOString(),
+      currency: String(fallbackCurrency ?? 'EUR').trim() || 'EUR',
+      paymentMethod: String(fallbackPaymentMethod ?? '').trim(),
+      reference: '',
+      notes: ''
+    }].filter((item) => item.amountCents > 0);
+  }
+
+  return [];
+}
+
+function computeInvoiceStatusFromPayments(totalAmountCents, payments, requestedStatus) {
+  const requested = String(requestedStatus ?? '').trim();
+  const paidAmountCents = payments.reduce((sum, item) => sum + Number(item.amountCents ?? 0), 0);
+  const effectiveTotal = Math.max(0, Math.round(Number(totalAmountCents ?? 0)));
+
+  if (paidAmountCents <= 0) {
+    return requested === 'annulee' ? 'annulee' : 'impayee';
+  }
+  if (paidAmountCents >= effectiveTotal) {
+    return 'payee';
+  }
+  return 'partiellement_payee';
+}
+
+function getInvoiceDetail(invoiceId) {
+  const invoiceRow = db.prepare(
+    `SELECT i.id, i.patient_id, i.consultation_id, i.office_id, i.invoice_number, i.amount_cents, i.status,
+            i.issued_at, i.due_at, i.payment_method, i.notes_cipher,
+            p.cipher_full_name,
+            o.name AS office_name,
+            c.started_at AS consultation_started_at
+     FROM invoices i
+     INNER JOIN patients p ON p.id = i.patient_id
+     LEFT JOIN offices o ON o.id = i.office_id
+     LEFT JOIN consultations c ON c.id = i.consultation_id
+     WHERE i.id = ?`
+  ).get(invoiceId);
+
+  if (!invoiceRow) {
+    return null;
+  }
+
+  const lineItems = db.prepare(
+    `SELECT id, label, quantity, unit_amount_ht_cents, vat_rate, display_order
+     FROM invoice_line_items
+     WHERE invoice_id = ?
+     ORDER BY display_order ASC, id ASC`
+  ).all(invoiceId);
+
+  const payments = db.prepare(
+    `SELECT id, paid_at, amount_cents, currency, payment_method, reference, notes
+     FROM invoice_payments
+     WHERE invoice_id = ?
+     ORDER BY datetime(paid_at) ASC, id ASC`
+  ).all(invoiceId);
+
+  const paidAmountCents = payments.reduce((sum, item) => sum + Number(item.amount_cents ?? 0), 0);
+
+  return {
+    id: Number(invoiceRow.id),
+    patientId: Number(invoiceRow.patient_id),
+    patientName: decryptSensitiveField(invoiceRow.cipher_full_name),
+    consultationId: invoiceRow.consultation_id != null ? Number(invoiceRow.consultation_id) : null,
+    consultationStartedAt: invoiceRow.consultation_started_at != null ? String(invoiceRow.consultation_started_at) : null,
+    officeId: invoiceRow.office_id != null ? Number(invoiceRow.office_id) : null,
+    officeName: String(invoiceRow.office_name ?? '').trim(),
+    invoiceNumber: String(invoiceRow.invoice_number ?? '').trim(),
+    amountCents: Number(invoiceRow.amount_cents ?? 0),
+    paidAmountCents,
+    remainingAmountCents: Math.max(0, Number(invoiceRow.amount_cents ?? 0) - paidAmountCents),
+    status: String(invoiceRow.status ?? '').trim() || 'impayee',
+    issuedAt: String(invoiceRow.issued_at ?? ''),
+    dueAt: String(invoiceRow.due_at ?? ''),
+    notes: invoiceRow.notes_cipher ? decryptSensitiveField(invoiceRow.notes_cipher) : '',
+    paymentMethod: String(invoiceRow.payment_method ?? '').trim(),
+    lineItems: lineItems.map((item) => ({
+      id: Number(item.id),
+      label: String(item.label ?? '').trim(),
+      quantity: Number(item.quantity ?? 0),
+      unitAmountHtCents: Number(item.unit_amount_ht_cents ?? 0),
+      vatRate: Number(item.vat_rate ?? 0),
+      displayOrder: Number(item.display_order ?? 0)
+    })),
+    payments: payments.map((item) => ({
+      id: Number(item.id),
+      paidAt: String(item.paid_at ?? ''),
+      amountCents: Number(item.amount_cents ?? 0),
+      currency: String(item.currency ?? 'EUR').trim() || 'EUR',
+      paymentMethod: String(item.payment_method ?? '').trim(),
+      reference: String(item.reference ?? '').trim(),
+      notes: String(item.notes ?? '').trim()
+    }))
+  };
 }
 
 function getBillingUsersForOfficeIds(officeIds) {
@@ -10234,6 +10835,22 @@ app.get('/api/billing/operations', authMiddleware, requirePermission('read-billi
   });
 });
 
+app.get('/api/billing/invoices/:id', authMiddleware, requirePermission('read-billing-kpis'), (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ message: 'ID invalide' });
+  }
+
+  const invoice = getInvoiceDetail(id);
+  if (!invoice) {
+    return res.status(404).json({ message: 'Facture introuvable' });
+  }
+
+  writeAuditLog(req.user.sub, 'READ', 'invoices', String(id), {});
+
+  return res.json({ invoice });
+});
+
 app.post('/api/billing/invoices', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
   const patientId = Number(req.body?.patientId);
   const consultationId = req.body?.consultationId != null ? Number(req.body.consultationId) : null;
@@ -10244,6 +10861,9 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('create-pati
   const issuedAt = String(req.body?.issuedAt ?? new Date().toISOString()).trim();
   const notes = String(req.body?.notes ?? '').trim();
   const paymentMethod = String(req.body?.paymentMethod ?? '').trim();
+  const currency = String(req.body?.currency ?? 'EUR').trim() || 'EUR';
+  const lineItems = normalizeInvoiceLineItems(req.body?.lineItems, amountCents);
+  const payments = normalizeInvoicePayments(req.body?.payments, paymentMethod, currency, amountCents, issuedAt);
 
   if (!Number.isInteger(patientId) || patientId <= 0) {
     return res.status(400).json({ message: 'Patient invalide' });
@@ -10267,34 +10887,76 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('create-pati
 
   const effectiveOfficeId = Number.isInteger(officeId) && officeId > 0 ? officeId : null;
   const effectiveConsultationId = Number.isInteger(consultationId) && consultationId > 0 ? consultationId : null;
-  const effectiveStatus = ['payee', 'impayee'].includes(status) ? status : 'payee';
+  const effectiveStatus = computeInvoiceStatusFromPayments(amountCents, payments, status);
   const dueAt = issuedAt;
   const notesCipher = notes ? encryptSensitiveField(notes) : '';
 
-  const inserted = db.prepare(
-    `INSERT INTO invoices
-      (patient_id, invoice_number, amount_cents, status, issued_at, due_at, notes_cipher, office_id, consultation_id, payment_method)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
+  const createInvoice = db.transaction(() => {
+    const inserted = db.prepare(
+      `INSERT INTO invoices
+        (patient_id, invoice_number, amount_cents, status, issued_at, due_at, notes_cipher, office_id, consultation_id, payment_method)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      patientId,
+      invoiceNumber,
+      amountCents,
+      effectiveStatus,
+      issuedAt,
+      dueAt,
+      notesCipher,
+      effectiveOfficeId,
+      effectiveConsultationId,
+      paymentMethod
+    );
+
+    const invoiceId = Number(inserted.lastInsertRowid);
+    const insertLineItem = db.prepare(
+      `INSERT INTO invoice_line_items (invoice_id, label, quantity, unit_amount_ht_cents, vat_rate, display_order)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    );
+    const insertPayment = db.prepare(
+      `INSERT INTO invoice_payments (invoice_id, paid_at, amount_cents, currency, payment_method, reference, notes, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+
+    for (const item of lineItems) {
+      insertLineItem.run(
+        invoiceId,
+        item.label,
+        item.quantity,
+        item.unitAmountHtCents,
+        item.vatRate,
+        item.displayOrder
+      );
+    }
+
+    for (const payment of payments) {
+      insertPayment.run(
+        invoiceId,
+        payment.paidAt,
+        payment.amountCents,
+        payment.currency,
+        payment.paymentMethod,
+        payment.reference,
+        payment.notes,
+        req.user.sub
+      );
+    }
+
+    return invoiceId;
+  });
+
+  const invoiceId = createInvoice();
+
+  writeAuditLog(req.user.sub, 'CREATE', 'invoices', String(invoiceId), {
     patientId,
     invoiceNumber,
     amountCents,
-    effectiveStatus,
-    issuedAt,
-    dueAt,
-    notesCipher,
-    effectiveOfficeId,
-    effectiveConsultationId,
-    paymentMethod
-  );
-
-  writeAuditLog(req.user.sub, 'CREATE', 'invoices', String(inserted.lastInsertRowid), {
-    patientId,
-    invoiceNumber,
-    amountCents
+    lineItemCount: lineItems.length,
+    paymentCount: payments.length
   });
 
-  return res.status(201).json({ invoiceId: Number(inserted.lastInsertRowid) });
+  return res.status(201).json({ invoiceId });
 });
 
 app.delete('/api/billing/invoices/:id', authMiddleware, requirePermission('mark-payment'), (req, res) => {
@@ -10312,6 +10974,79 @@ app.delete('/api/billing/invoices/:id', authMiddleware, requirePermission('mark-
   writeAuditLog(req.user.sub, 'DELETE', 'invoices', String(id), {});
 
   return res.json({ ok: true });
+});
+
+app.put('/api/billing/invoices/:id/payments', authMiddleware, requirePermission('mark-payment'), (req, res) => {
+  const invoiceId = Number(req.params.id);
+  if (!Number.isInteger(invoiceId) || invoiceId <= 0) {
+    return res.status(400).json({ message: 'ID invalide' });
+  }
+
+  const invoice = db.prepare(
+    `SELECT id, amount_cents, status
+     FROM invoices
+     WHERE id = ?`
+  ).get(invoiceId);
+
+  if (!invoice) {
+    return res.status(404).json({ message: 'Facture introuvable' });
+  }
+
+  const payments = normalizeInvoicePayments(
+    req.body?.payments,
+    '',
+    'EUR',
+    0,
+    new Date().toISOString()
+  );
+
+  const replacePayments = db.transaction(() => {
+    db.prepare('DELETE FROM invoice_payments WHERE invoice_id = ?').run(invoiceId);
+
+    const insertPayment = db.prepare(
+      `INSERT INTO invoice_payments (invoice_id, paid_at, amount_cents, currency, payment_method, reference, notes, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+
+    for (const payment of payments) {
+      insertPayment.run(
+        invoiceId,
+        payment.paidAt,
+        payment.amountCents,
+        payment.currency,
+        payment.paymentMethod,
+        payment.reference,
+        payment.notes,
+        req.user.sub
+      );
+    }
+
+    const status = computeInvoiceStatusFromPayments(
+      Number(invoice.amount_cents ?? 0),
+      payments,
+      String(invoice.status ?? '')
+    );
+
+    const paymentMethod = payments.length === 1
+      ? String(payments[0].paymentMethod ?? '').trim()
+      : (payments.length > 1 ? 'multiple' : '');
+
+    db.prepare(
+      `UPDATE invoices
+       SET status = ?, payment_method = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    ).run(status, paymentMethod, invoiceId);
+  });
+
+  replacePayments();
+
+  const detail = getInvoiceDetail(invoiceId);
+  writeAuditLog(req.user.sub, 'UPDATE', 'invoices', String(invoiceId), {
+    paymentCount: payments.length,
+    status: detail?.status ?? String(invoice.status ?? '')
+  });
+
+  return res.json({ invoice: detail });
 });
 
 app.post('/api/billing/expenses', authMiddleware, requirePermission('mark-payment'), (req, res) => {

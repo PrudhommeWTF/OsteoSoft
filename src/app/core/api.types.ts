@@ -274,6 +274,19 @@ export type CreatedPatient = {
   fullName: string;
 };
 
+export type CreatedPatientConsultationResult = {
+  id: number;
+  officeId: number | null;
+  appointmentId: number | null;
+  linkedToExisting: boolean;
+};
+
+export type CreatePatientResult = {
+  patient: CreatedPatient;
+  consultation: CreatedPatientConsultationResult | null;
+  documents: PatientDocumentSummary[];
+};
+
 export type InvoiceSummaryTile = {
   label: string;
   value: string;
@@ -331,6 +344,78 @@ export type BillingExpensePayload = {
   currency: string;
   paymentMethod?: string;
   notes?: string;
+};
+
+export type BillingInvoiceLineItemPayload = {
+  label: string;
+  quantity: number;
+  unitAmountHtCents: number;
+  vatRate: number;
+  displayOrder?: number;
+};
+
+export type BillingInvoicePaymentPayload = {
+  paidAt: string;
+  amountCents: number;
+  currency: string;
+  paymentMethod: string;
+  reference?: string;
+  notes?: string;
+};
+
+export type BillingInvoicePaymentsUpdatePayload = {
+  payments: BillingInvoicePaymentPayload[];
+};
+
+export type BillingInvoiceCreatePayload = {
+  patientId: number;
+  consultationId: number | null;
+  officeId: number | null;
+  invoiceNumber: string;
+  amountCents: number;
+  status: 'payee' | 'impayee' | 'partiellement_payee';
+  paymentMethod: string;
+  issuedAt: string;
+  currency?: string;
+  notes: string;
+  lineItems?: BillingInvoiceLineItemPayload[];
+  payments?: BillingInvoicePaymentPayload[];
+};
+
+export type BillingInvoiceDetail = {
+  id: number;
+  patientId: number;
+  patientName: string;
+  consultationId: number | null;
+  consultationStartedAt: string | null;
+  officeId: number | null;
+  officeName: string;
+  invoiceNumber: string;
+  amountCents: number;
+  paidAmountCents: number;
+  remainingAmountCents: number;
+  status: 'payee' | 'impayee' | 'partiellement_payee' | 'annulee';
+  issuedAt: string;
+  dueAt: string;
+  notes: string;
+  paymentMethod: string;
+  lineItems: Array<{
+    id: number;
+    label: string;
+    quantity: number;
+    unitAmountHtCents: number;
+    vatRate: number;
+    displayOrder: number;
+  }>;
+  payments: Array<{
+    id: number;
+    paidAt: string;
+    amountCents: number;
+    currency: string;
+    paymentMethod: string;
+    reference: string;
+    notes: string;
+  }>;
 };
 
 export type BillingDepositPayload = {
@@ -756,6 +841,7 @@ export type ConsultationRecord = {
   treatmentsHtml: string;
   remarksHtml: string;
   status: string;
+  billingInvoiceId?: number | null;
 };
 
 export type ConsultationUpdatePayload = {
