@@ -10,7 +10,8 @@
     "seed:directory": "node server/scripts/seed-directory-contacts.mjs",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test --watch=false --browsers=ChromeHeadless",
+    "test:watch": "ng test"
   },
   "private": true,
   "packageManager": "npm@11.11.0",
@@ -20,6 +21,7 @@
     "@angular/core": "^21.2.0",
     "@angular/forms": "^21.2.0",
     "@angular/platform-browser": "^21.2.0",
+    "@angular/platform-browser-dynamic": "^21.2.8",
     "@angular/router": "^21.2.0",
     "@fortawesome/fontawesome-free": "^7.2.0",
     "argon2": "^0.44.0",
@@ -41,13 +43,21 @@
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
     "xlsx": "^0.18.5",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "zone.js": "^0.16.1"
   },
   "devDependencies": {
     "@angular/build": "^21.2.7",
     "@angular/cli": "^21.2.7",
     "@angular/compiler-cli": "^21.2.0",
+    "@types/jasmine": "^6.0.0",
     "concurrently": "^9.2.1",
+    "jasmine-core": "^6.2.0",
+    "karma": "^6.4.4",
+    "karma-chrome-launcher": "^3.2.0",
+    "karma-coverage": "^2.2.1",
+    "karma-jasmine": "^5.1.0",
+    "karma-jasmine-html-reporter": "^2.2.0",
     "prettier": "^3.8.1",
     "typescript": "~5.9.2"
   }
