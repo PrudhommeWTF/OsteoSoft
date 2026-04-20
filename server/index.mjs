@@ -10,6 +10,7 @@ import dotenv from 'dotenv';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
+import JSZip from 'jszip';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 
@@ -1759,125 +1760,226 @@ function ensureDefaultLocalCalendars() {
   // calendars will be created when the first office is created.
 }
 
-function buildDataBackupSnapshot() {
-  const appName = db.prepare('SELECT value FROM config WHERE key = ?').get('app_name')?.value ?? 'OsteoSoft';
-  const appVersion = db.prepare('SELECT value FROM config WHERE key = ?').get('version')?.value ?? '0.0.2';
+const BACKUP_MANIFEST_FORMAT = 'osteosoft-backup';
+const BACKUP_MANIFEST_VERSION = 1;
+
+function parseMajorVersion(version) {
+  const normalized = String(version ?? '').trim();
+  const match = normalized.match(/^(\d+)/);
+  if (!match) {
+    return null;
+  }
+
+  const value = Number(match[1]);
+  return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function computeBackupDataSha256(data) {
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(data))
+    .digest('hex');
+}
+
+function normalizeBackupEnvelope(backupPayload) {
+  const data = backupPayload?.data;
+  if (!data || typeof data !== 'object') {
+    throw new Error('Format de sauvegarde invalide');
+  }
+
+  const manifest = backupPayload?.manifest && typeof backupPayload.manifest === 'object'
+    ? backupPayload.manifest
+    : null;
+
+  if (manifest) {
+    if (manifest.format !== BACKUP_MANIFEST_FORMAT) {
+      throw new Error('Format de manifest invalide');
+    }
+
+    if (Number(manifest.manifestVersion) !== BACKUP_MANIFEST_VERSION) {
+      throw new Error('Version de manifest non supportee');
+    }
+
+    const expectedChecksum = String(manifest.dataSha256 ?? '').toLowerCase();
+    const actualChecksum = computeBackupDataSha256(data);
+    if (!expectedChecksum || expectedChecksum !== actualChecksum) {
+      throw new Error('Integrite de la sauvegarde invalide (checksum)');
+    }
+
+    const currentAppVersion = db.prepare('SELECT value FROM config WHERE key = ?').get('version')?.value ?? '0.0.2';
+    const currentMajor = parseMajorVersion(currentAppVersion);
+    const backupMajor = Number.isInteger(Number(manifest.appMajorVersion))
+      ? Number(manifest.appMajorVersion)
+      : parseMajorVersion(manifest.appVersion);
+
+    if (currentMajor != null && backupMajor != null && backupMajor < currentMajor - 1) {
+      throw new Error('Version de sauvegarde trop ancienne pour restauration automatique');
+    }
+  }
 
   return {
-    meta: {
-      schemaVersion: 1,
-      createdAt: new Date().toISOString(),
-      appName,
-      appVersion
-    },
-    data: {
-      accessProfiles: db.prepare(
-        `SELECT id, label, description, rights_json, immutable, created_at, updated_at
-         FROM access_profiles
-         ORDER BY created_at ASC, id ASC`
-      ).all(),
-      users: db.prepare(
-        `SELECT id, username, password_hash, role, profile_id, is_active,
-                office_id, last_name, first_name, email, mobile_phone, country,
-                siret, adeli_code, rpps_code, ape_naf_code, name_suffix_text,
-                letter_header, letter_footer, signature_text, color_hex,
-                bank_name, iban, retrocession_percent, retrocession_recipient,
-                default_agenda_view, visible_calendars, default_service, invoice_mentions,
-                created_at
-         FROM users
-         ORDER BY id ASC`
-      ).all(),
-      userOffices: db.prepare(
-        `SELECT user_id, office_id, created_at
-         FROM user_offices
-         ORDER BY user_id ASC, office_id ASC`
-      ).all(),
-      officeUserDelegations: db.prepare(
-        `SELECT office_id, user_id, profile_id, created_at
-         FROM office_user_delegations
-         ORDER BY office_id ASC, user_id ASC`
-      ).all(),
-      patients: db.prepare(
-        `SELECT id, cipher_full_name, cipher_phone, cipher_medical_notes, sex,
-                birth_date, last_visit, consent_signed, retention_until,
-                is_deleted, created_at, updated_at
-         FROM patients
-         ORDER BY id ASC`
-      ).all(),
-      appointments: db.prepare(
-        `SELECT id, patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id, created_at
-         FROM appointments
-         ORDER BY id ASC`
-      ).all(),
-      invoices: db.prepare(
-        `SELECT id, patient_id, invoice_number, amount_cents, status,
-                issued_at, due_at, notes_cipher, created_at
-         FROM invoices
-         ORDER BY id ASC`
-      ).all(),
-      consultations: db.prepare(
-        `SELECT id, patient_id, started_at, office_id, practitioner, title, important,
-          height_cm, weight_kg, eva_before, eva_after, profile, reason_items_cipher,
-                motif_main_cipher, tests_cipher, schema_cipher, treatments_cipher,
-                remarks_cipher, created_at
-         FROM consultations
-         ORDER BY id ASC`
-      ).all(),
-      patientDocuments: db.prepare(
-        `SELECT id, document_ref, patient_id, consultation_id, office_id, created_by,
-                file_name, mime_type, size_bytes, title_cipher, comment_cipher,
-                content_cipher, created_at
-         FROM patient_documents
-         ORDER BY id ASC`
-      ).all(),
-      antecedentTypes: db.prepare(
-        `SELECT id, label, created_at
-         FROM antecedent_types
-         ORDER BY id ASC`
-      ).all(),
-      serviceTypes: db.prepare(
-        `SELECT id, office_id, label, amount_ht_cents, vat_rate, display_order, created_at
-         FROM service_types
-         ORDER BY display_order ASC, id ASC`
-      ).all(),
-      paymentMethods: db.prepare(
-        `SELECT id, office_id, label, is_active, display_order, created_at
-         FROM payment_methods
-         ORDER BY display_order ASC, id ASC`
-      ).all(),
-      localCalendars: db.prepare(
-        `SELECT id, name, description, color_hex, is_visible_to_all, visible_user_ids, office_id, display_order, created_at, updated_at
-         FROM local_calendars
-         ORDER BY display_order ASC, id ASC`
-      ).all(),
-      directoryContacts: db.prepare(
-        `SELECT id, office_id, kind, first_name, last_name, organization, role,
-                email, mobile_phone, landline_phone,
-                address_line1, address_line2, postal_code, city, country,
-                notes, is_active, created_by, updated_by, created_at, updated_at
-         FROM directory_contacts
-         ORDER BY id ASC`
-      ).all(),
-      config: db.prepare('SELECT key, value FROM config ORDER BY key ASC').all(),
-      patientDrafts: db.prepare(
-        `SELECT user_id, flow_key, draft_json, step, updated_at
-         FROM draft
-         ORDER BY user_id ASC, flow_key ASC`
-      ).all(),
-      auditLogs: db.prepare(
-        `SELECT id, user_id, action, entity, entity_id, metadata, created_at
-         FROM audit_logs
-         ORDER BY id ASC`
-      ).all()
+    data,
+    manifest,
+    meta: backupPayload?.meta && typeof backupPayload.meta === 'object' ? backupPayload.meta : null
+  };
+}
+
+function getSetupStatusSnapshot() {
+  const nonAdminUsers = Number(
+    db.prepare("SELECT COUNT(*) AS count FROM users WHERE lower(username) <> 'admin'").get()?.count ?? 0
+  );
+  const patients = Number(db.prepare('SELECT COUNT(*) AS count FROM patients').get()?.count ?? 0);
+  const appointments = Number(db.prepare('SELECT COUNT(*) AS count FROM appointments').get()?.count ?? 0);
+  const consultations = Number(db.prepare('SELECT COUNT(*) AS count FROM consultations').get()?.count ?? 0);
+  const invoices = Number(db.prepare('SELECT COUNT(*) AS count FROM invoices').get()?.count ?? 0);
+
+  const hasBusinessData = patients + appointments + consultations + invoices > 0;
+  const requiresSetup = nonAdminUsers === 0 && !hasBusinessData;
+
+  return {
+    requiresSetup,
+    canRestoreWithoutAuth: requiresSetup,
+    stats: {
+      nonAdminUsers,
+      patients,
+      appointments,
+      consultations,
+      invoices
     }
   };
 }
 
+function buildDataBackupSnapshot() {
+  const appName = db.prepare('SELECT value FROM config WHERE key = ?').get('app_name')?.value ?? 'OsteoSoft';
+  const appVersion = db.prepare('SELECT value FROM config WHERE key = ?').get('version')?.value ?? '0.0.2';
+  const createdAt = new Date().toISOString();
+  const appMajorVersion = parseMajorVersion(appVersion);
+
+  const data = {
+    accessProfiles: db.prepare(
+      `SELECT id, label, description, rights_json, immutable, created_at, updated_at
+       FROM access_profiles
+       ORDER BY created_at ASC, id ASC`
+    ).all(),
+    users: db.prepare(
+      `SELECT id, username, password_hash, role, profile_id, is_active,
+              office_id, last_name, first_name, email, mobile_phone, country,
+              siret, adeli_code, rpps_code, ape_naf_code, name_suffix_text,
+              letter_header, letter_footer, signature_text, color_hex,
+              bank_name, iban, retrocession_percent, retrocession_recipient,
+              default_agenda_view, visible_calendars, default_service, invoice_mentions,
+              created_at
+       FROM users
+       ORDER BY id ASC`
+    ).all(),
+    userOffices: db.prepare(
+      `SELECT user_id, office_id, created_at
+       FROM user_offices
+       ORDER BY user_id ASC, office_id ASC`
+    ).all(),
+    officeUserDelegations: db.prepare(
+      `SELECT office_id, user_id, profile_id, created_at
+       FROM office_user_delegations
+       ORDER BY office_id ASC, user_id ASC`
+    ).all(),
+    patients: db.prepare(
+      `SELECT id, cipher_full_name, cipher_phone, cipher_medical_notes, sex,
+              birth_date, last_visit, consent_signed, retention_until,
+              is_deleted, created_at, updated_at
+       FROM patients
+       ORDER BY id ASC`
+    ).all(),
+    appointments: db.prepare(
+      `SELECT id, patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id, created_at
+       FROM appointments
+       ORDER BY id ASC`
+    ).all(),
+    invoices: db.prepare(
+      `SELECT id, patient_id, invoice_number, amount_cents, status,
+              issued_at, due_at, notes_cipher, created_at
+       FROM invoices
+       ORDER BY id ASC`
+    ).all(),
+    consultations: db.prepare(
+      `SELECT id, patient_id, started_at, office_id, practitioner, title, important,
+        height_cm, weight_kg, eva_before, eva_after, profile, reason_items_cipher,
+              motif_main_cipher, tests_cipher, schema_cipher, treatments_cipher,
+              remarks_cipher, created_at
+       FROM consultations
+       ORDER BY id ASC`
+    ).all(),
+    patientDocuments: db.prepare(
+      `SELECT id, document_ref, patient_id, consultation_id, office_id, created_by,
+              file_name, mime_type, size_bytes, title_cipher, comment_cipher,
+              content_cipher, created_at
+       FROM patient_documents
+       ORDER BY id ASC`
+    ).all(),
+    antecedentTypes: db.prepare(
+      `SELECT id, label, created_at
+       FROM antecedent_types
+       ORDER BY id ASC`
+    ).all(),
+    serviceTypes: db.prepare(
+      `SELECT id, office_id, label, amount_ht_cents, vat_rate, display_order, created_at
+       FROM service_types
+       ORDER BY display_order ASC, id ASC`
+    ).all(),
+    paymentMethods: db.prepare(
+      `SELECT id, office_id, label, is_active, display_order, created_at
+       FROM payment_methods
+       ORDER BY display_order ASC, id ASC`
+    ).all(),
+    localCalendars: db.prepare(
+      `SELECT id, name, description, color_hex, is_visible_to_all, visible_user_ids, office_id, display_order, created_at, updated_at
+       FROM local_calendars
+       ORDER BY display_order ASC, id ASC`
+    ).all(),
+    directoryContacts: db.prepare(
+      `SELECT id, office_id, kind, first_name, last_name, organization, role,
+              email, mobile_phone, landline_phone,
+              address_line1, address_line2, postal_code, city, country,
+              notes, is_active, created_by, updated_by, created_at, updated_at
+       FROM directory_contacts
+       ORDER BY id ASC`
+    ).all(),
+    config: db.prepare('SELECT key, value FROM config ORDER BY key ASC').all(),
+    patientDrafts: db.prepare(
+      `SELECT user_id, flow_key, draft_json, step, updated_at
+       FROM draft
+       ORDER BY user_id ASC, flow_key ASC`
+    ).all(),
+    auditLogs: db.prepare(
+      `SELECT id, user_id, action, entity, entity_id, metadata, created_at
+       FROM audit_logs
+       ORDER BY id ASC`
+    ).all()
+  };
+
+  const dataSha256 = computeBackupDataSha256(data);
+
+  return {
+    manifest: {
+      format: BACKUP_MANIFEST_FORMAT,
+      manifestVersion: BACKUP_MANIFEST_VERSION,
+      createdAt,
+      appVersion,
+      appMajorVersion,
+      sourceInstance: appName,
+      dataSha256
+    },
+    meta: {
+      schemaVersion: 2,
+      createdAt,
+      appName,
+      appVersion
+    },
+    data
+  };
+}
+
 function restoreDataBackupSnapshot(backupPayload) {
-  const backup = backupPayload?.data;
-  if (!backup || typeof backup !== 'object') {
-    throw new Error('Format de sauvegarde invalide');
-  }
+  const { data: backup } = normalizeBackupEnvelope(backupPayload);
 
   const transaction = db.transaction(() => {
     db.prepare('DELETE FROM audit_logs').run();
@@ -4357,24 +4459,40 @@ const updateMyProfileSchema = userAccountFieldsSchema.omit({
   officeIds: true
 });
 
+const backupManifestSchema = z.object({
+  format: z.literal(BACKUP_MANIFEST_FORMAT),
+  manifestVersion: z.number().int().min(1),
+  createdAt: z.string().min(1),
+  appVersion: z.string().min(1),
+  appMajorVersion: z.number().int().min(0).optional(),
+  sourceInstance: z.string().optional(),
+  dataSha256: z.string().regex(/^[a-f0-9]{64}$/i)
+});
+
+const backupDataSchema = z.object({
+  accessProfiles: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  users: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  userOffices: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  officeUserDelegations: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  patients: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  appointments: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  invoices: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  consultations: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  antecedentTypes: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  serviceTypes: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  paymentMethods: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  localCalendars: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  directoryContacts: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  patientDocuments: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  config: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  patientDrafts: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  auditLogs: z.array(z.record(z.string(), z.unknown())).optional().default([])
+});
+
 const dataRestoreSchema = z.object({
   meta: z.record(z.string(), z.unknown()).optional(),
-  data: z.object({
-    accessProfiles: z.array(z.record(z.string(), z.unknown())).optional().default([]),
-    users: z.array(z.record(z.string(), z.unknown())).optional().default([]),
-    userOffices: z.array(z.record(z.string(), z.unknown())).optional().default([]),
-    patients: z.array(z.record(z.string(), z.unknown())).optional().default([]),
-    appointments: z.array(z.record(z.string(), z.unknown())).optional().default([]),
-    invoices: z.array(z.record(z.string(), z.unknown())).optional().default([]),
-    consultations: z.array(z.record(z.string(), z.unknown())).optional().default([]),
-    antecedentTypes: z.array(z.record(z.string(), z.unknown())).optional().default([]),
-    serviceTypes: z.array(z.record(z.string(), z.unknown())).optional().default([]),
-    paymentMethods: z.array(z.record(z.string(), z.unknown())).optional().default([]),
-    localCalendars: z.array(z.record(z.string(), z.unknown())).optional().default([]),
-    config: z.array(z.record(z.string(), z.unknown())).optional().default([]),
-    patientDrafts: z.array(z.record(z.string(), z.unknown())).optional().default([]),
-    auditLogs: z.array(z.record(z.string(), z.unknown())).optional().default([])
-  })
+  manifest: backupManifestSchema.optional(),
+  data: backupDataSchema
 });
 
 const generalSettingsPayloadSchema = z.object({
@@ -5010,14 +5128,49 @@ app.post('/api/offices/reorder', authMiddleware, adminOnlyMiddleware, (req, res)
   }
 });
 
-app.get('/api/data-management/backup', authMiddleware, adminOnlyMiddleware, (_req, res) => {
+app.get('/api/setup/status', (_req, res) => {
+  return res.json(getSetupStatusSnapshot());
+});
+
+app.get('/api/data-management/backup', authMiddleware, adminOnlyMiddleware, async (_req, res) => {
   const snapshot = buildDataBackupSnapshot();
   const now = new Date().toISOString().replace(/[:.]/g, '-');
-  const fileName = `osteosoft-backup-${now}.json`;
+  const fileName = `osteosoft-backup-${now}.zip`;
 
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  const zip = new JSZip();
+  zip.file('manifest.json', JSON.stringify(snapshot.manifest, null, 2));
+  zip.file('data.json', JSON.stringify(snapshot.data, null, 2));
+  zip.file('meta.json', JSON.stringify(snapshot.meta, null, 2));
+
+  const archive = await zip.generateAsync({
+    type: 'nodebuffer',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 9 }
+  });
+
+  res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-  return res.status(200).send(JSON.stringify(snapshot, null, 2));
+  return res.status(200).send(archive);
+});
+
+app.post('/api/setup/restore', (req, res) => {
+  const setupStatus = getSetupStatusSnapshot();
+  if (!setupStatus.canRestoreWithoutAuth) {
+    return res.status(403).json({ message: 'La restauration initiale n\'est disponible qu\'au premier demarrage' });
+  }
+
+  const parsed = dataRestoreSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Fichier de sauvegarde invalide' });
+  }
+
+  try {
+    restoreDataBackupSnapshot(parsed.data);
+    return res.status(204).send();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'La restauration de la sauvegarde a echoue';
+    return res.status(400).json({ message });
+  }
 });
 
 app.post('/api/data-management/restore', authMiddleware, adminOnlyMiddleware, (req, res) => {
@@ -5029,8 +5182,9 @@ app.post('/api/data-management/restore', authMiddleware, adminOnlyMiddleware, (r
   try {
     restoreDataBackupSnapshot(parsed.data);
     return res.status(204).send();
-  } catch {
-    return res.status(500).json({ message: 'La restauration de la sauvegarde a échoué' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'La restauration de la sauvegarde a echoue';
+    return res.status(400).json({ message });
   }
 });
 

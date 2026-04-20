@@ -1,0 +1,107 @@
+<main class="setup-screen d-flex align-items-center justify-content-center" aria-labelledby="setup-title">
+  <section class="setup-card card border-0 shadow-lg" role="region" aria-describedby="setup-copy">
+    <div class="card-body p-4 p-lg-5">
+      <div class="d-flex align-items-center gap-3 mb-4">
+        <div class="setup-badge">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+        </div>
+        <div>
+          <h1 id="setup-title" class="h3 mb-1">Premiere installation</h1>
+          <p id="setup-copy" class="text-secondary mb-0">Initialisez l'application ou restaurez une sauvegarde existante.</p>
+        </div>
+      </div>
+
+      @if (isLoadingStatus()) {
+        <div class="alert alert-info mb-0" role="status">Verification de l'etat d'installation...</div>
+      } @else {
+        <div class="row g-3 mb-4">
+          <div class="col-12 col-lg-6">
+            <article class="setup-choice h-100">
+              <p class="small text-uppercase text-secondary mb-2">Option principale</p>
+              <h2 class="h5 mb-2">Nouvelle installation</h2>
+              <p class="text-secondary mb-3">Démarrez avec une base neuve, puis connectez-vous avec votre compte administrateur.</p>
+              <a class="btn btn-primary w-100" routerLink="/login">
+                <i class="fa-solid fa-play me-1"></i>
+                Continuer vers la connexion
+              </a>
+            </article>
+          </div>
+
+          <div class="col-12 col-lg-6">
+            <article class="setup-choice h-100">
+              <p class="small text-uppercase text-secondary mb-2">Option secondaire</p>
+              <h2 class="h5 mb-2">Restaurer une sauvegarde</h2>
+              <p class="text-secondary mb-3">Importez une sauvegarde JSON legacy ou ZIP (manifest + data).</p>
+
+              <label class="form-label" for="setup-backup-file">Fichier de sauvegarde</label>
+              <input
+                id="setup-backup-file"
+                type="file"
+                class="form-control mb-2"
+                accept=".zip,.json,application/zip,application/json"
+                [disabled]="isRestoring()"
+                (change)="onBackupFileSelected($event)"
+              />
+
+              @if (selectedBackupFileName()) {
+                <p class="small text-secondary mb-3">Fichier sélectionné: {{ selectedBackupFileName() }}</p>
+              }
+
+              <button
+                type="button"
+                class="btn btn-outline-primary w-100"
+                [disabled]="isRestoring() || !selectedBackupPayload()"
+                (click)="restoreBackup()"
+              >
+                <i class="fa-solid fa-rotate-left me-1"></i>
+                @if (isRestoring()) {
+                  Restauration en cours...
+                } @else {
+                  Restaurer la sauvegarde
+                }
+              </button>
+
+              @if (restoreProgressStep() !== 'idle') {
+                <div class="mt-3" aria-live="polite">
+                  <p class="small text-secondary mb-1">{{ restoreProgressLabel() }}</p>
+                  <div class="progress" role="progressbar" aria-label="Progression de restauration" [attr.aria-valuenow]="restoreProgressPercent()" aria-valuemin="0" aria-valuemax="100">
+                    <div class="progress-bar" [style.width.%]="restoreProgressPercent()">{{ restoreProgressPercent() }}%</div>
+                  </div>
+
+                  <ul class="list-group list-group-flush small mt-2">
+                    @for (step of restoreTimeline; track step.id) {
+                      @let stepStatus = getRestoreStepStatus(step.id);
+                      <li class="list-group-item px-0 py-1 border-0 d-flex align-items-center justify-content-between">
+                        <span class="text-secondary" [class.fw-semibold]="stepStatus === 'active' || stepStatus === 'error'" [class.text-body]="stepStatus === 'active' || stepStatus === 'error'">
+                          {{ step.label }}
+                        </span>
+
+                        @if (stepStatus === 'done') {
+                          <i class="fa-solid fa-circle-check text-success" aria-hidden="true"></i>
+                        } @else if (stepStatus === 'active') {
+                          <i class="fa-solid fa-circle-notch fa-spin text-primary" aria-hidden="true"></i>
+                        } @else if (stepStatus === 'error') {
+                          <i class="fa-solid fa-circle-xmark text-danger" aria-hidden="true"></i>
+                        } @else {
+                          <i class="fa-regular fa-circle text-secondary" aria-hidden="true"></i>
+                        }
+                      </li>
+                    }
+                  </ul>
+                </div>
+              }
+            </article>
+          </div>
+        </div>
+
+        @if (errorMessage()) {
+          <div class="alert alert-danger mb-0" role="alert">{{ errorMessage() }}</div>
+        }
+
+        @if (successMessage()) {
+          <div class="alert alert-success mb-0" role="status">{{ successMessage() }}</div>
+        }
+      }
+    </div>
+  </section>
+</main>

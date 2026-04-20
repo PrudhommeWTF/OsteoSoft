@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import JSZip from 'jszip';
 
 import { ApiService } from '../../core/api.service';
 import {
@@ -122,6 +123,8 @@ type OfficeModalTabId =
   | 'patient-letters';
 
 type OfficeCreateStep = 1 | 2 | 3 | 4 | 5 | 6;
+type RestoreProgressStep = 'idle' | 'reading' | 'validating' | 'checksum' | 'ready' | 'uploading' | 'applying' | 'done' | 'error';
+type RestoreStepStatus = 'pending' | 'active' | 'done' | 'error';
 type DraftSaveState = 'idle' | 'saving' | 'saved' | 'error';
 type UserModalTabId = 'application-rights' | 'cabinet-rights' | 'identity' | 'professional' | 'billing';
 
@@ -355,6 +358,19 @@ export class SettingsPage implements OnDestroy {
   readonly backupReminderError = signal('');
   readonly backupReminderSuccess = signal('');
   readonly selectedBackupFileName = signal('');
+  readonly restoreProgressStep = signal<RestoreProgressStep>('idle');
+  readonly restoreProgressLabel = signal('');
+  readonly restoreProgressPercent = signal(0);
+  readonly restoreLastOperationalStep = signal<RestoreProgressStep>('idle');
+  readonly restoreTimeline: Array<{ id: RestoreProgressStep; label: string }> = [
+    { id: 'reading', label: 'Lecture du fichier' },
+    { id: 'validating', label: 'Validation de la structure' },
+    { id: 'checksum', label: 'Verification du checksum' },
+    { id: 'ready', label: 'Sauvegarde prete' },
+    { id: 'uploading', label: 'Envoi vers le serveur' },
+    { id: 'applying', label: 'Application des donnees' },
+    { id: 'done', label: 'Restauration terminee' }
+  ];
   readonly selectedAuditLogLimit = signal(100);
   readonly isServiceTypeModalOpen = signal(false);
   readonly isOfficeDelegationModalOpen = signal(false);
@@ -1381,7 +1397,7 @@ export class SettingsPage implements OnDestroy {
       const anchor = document.createElement('a');
       const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
       anchor.href = url;
-      anchor.download = `osteosoft-backup-${stamp}.json`;
+      anchor.download = `osteosoft-backup-${stamp}.zip`;
       document.body.append(anchor);
       anchor.click();
       anchor.remove();
@@ -1401,6 +1417,7 @@ export class SettingsPage implements OnDestroy {
 
     this.dataManagementError.set('');
     this.dataManagementSuccess.set('');
+    this.resetRestoreProgress();
 
     if (!file) {
       this.selectedBackupFileName.set('');
@@ -1411,12 +1428,22 @@ export class SettingsPage implements OnDestroy {
     this.selectedBackupFileName.set(file.name);
 
     try {
-      const content = await file.text();
-      this.selectedBackupPayload.set(JSON.parse(content));
+      this.setRestoreProgress('reading', 'Lecture du fichier de sauvegarde...', 15);
+      const payload = await this.readBackupPayloadFromFile(file);
+
+      this.setRestoreProgress('validating', 'Validation de la structure de sauvegarde...', 45);
+      if (this.hasBackupManifest(payload)) {
+        this.setRestoreProgress('checksum', 'Verification du checksum SHA-256...', 70);
+        await this.verifyBackupChecksum(payload);
+      }
+
+      this.selectedBackupPayload.set(payload);
+      this.setRestoreProgress('ready', 'Sauvegarde validee. Prete pour restauration.', 100);
       this.dataManagementSuccess.set('Fichier de sauvegarde chargé, vous pouvez lancer la restauration.');
     } catch {
       this.selectedBackupPayload.set(null);
-      this.dataManagementError.set('Le fichier sélectionné n\'est pas une sauvegarde JSON valide.');
+      this.setRestoreProgress('error', 'Echec de validation de la sauvegarde.', 100);
+      this.dataManagementError.set('Le fichier sélectionné n\'est pas une sauvegarde ZIP ou JSON valide.');
     }
   }
 
@@ -1434,18 +1461,118 @@ export class SettingsPage implements OnDestroy {
     this.dataManagementError.set('');
     this.dataManagementSuccess.set('');
     this.isRestoringBackup.set(true);
+    this.setRestoreProgress('uploading', 'Envoi de la sauvegarde au serveur...', 20);
 
     try {
+      this.setRestoreProgress('applying', 'Application des donnees sur la base...', 65);
       await this.api.restoreDataBackup(this.selectedBackupPayload());
+      this.setRestoreProgress('done', 'Restauration terminee avec succes.', 100);
       this.dataManagementSuccess.set('Restauration terminée avec succès.');
       await this.loadAccessProfiles();
       await this.loadUsers();
       await this.loadCurrentUser();
     } catch {
+      this.setRestoreProgress('error', 'La restauration a echoue.', 100);
       this.dataManagementError.set('La restauration a échoué. Vérifiez le fichier de sauvegarde.');
     } finally {
       this.isRestoringBackup.set(false);
     }
+  }
+
+  private async readBackupPayloadFromFile(file: File): Promise<unknown> {
+    const fileName = file.name.toLowerCase();
+    if (fileName.endsWith('.json')) {
+      return JSON.parse(await file.text());
+    }
+
+    if (!fileName.endsWith('.zip')) {
+      throw new Error('Unsupported backup format');
+    }
+
+    const zip = await JSZip.loadAsync(await file.arrayBuffer());
+    const manifestText = await zip.file('manifest.json')?.async('string');
+    const dataText = await zip.file('data.json')?.async('string');
+    const metaText = await zip.file('meta.json')?.async('string');
+
+    if (!manifestText || !dataText) {
+      throw new Error('Archive incomplete');
+    }
+
+    return {
+      manifest: JSON.parse(manifestText),
+      data: JSON.parse(dataText),
+      ...(metaText ? { meta: JSON.parse(metaText) } : {})
+    };
+  }
+
+  private resetRestoreProgress(): void {
+    this.restoreProgressStep.set('idle');
+    this.restoreProgressLabel.set('');
+    this.restoreProgressPercent.set(0);
+    this.restoreLastOperationalStep.set('idle');
+  }
+
+  private setRestoreProgress(step: RestoreProgressStep, label: string, percent: number): void {
+    this.restoreProgressStep.set(step);
+    this.restoreProgressLabel.set(label);
+    this.restoreProgressPercent.set(Math.max(0, Math.min(100, Math.round(percent))));
+
+    if (step !== 'idle' && step !== 'error') {
+      this.restoreLastOperationalStep.set(step);
+    }
+  }
+
+  getRestoreStepStatus(stepId: RestoreProgressStep): RestoreStepStatus {
+    const currentStep = this.restoreProgressStep();
+    const effectiveCurrent = currentStep === 'error' ? this.restoreLastOperationalStep() : currentStep;
+    const currentIndex = this.getRestoreStepIndex(effectiveCurrent);
+    const stepIndex = this.getRestoreStepIndex(stepId);
+
+    if (currentStep === 'error' && stepId === effectiveCurrent) {
+      return 'error';
+    }
+
+    if (stepIndex < currentIndex) {
+      return 'done';
+    }
+
+    if (stepIndex === currentIndex) {
+      return effectiveCurrent === 'done' ? 'done' : 'active';
+    }
+
+    return 'pending';
+  }
+
+  private getRestoreStepIndex(stepId: RestoreProgressStep): number {
+    const index = this.restoreTimeline.findIndex((step) => step.id === stepId);
+    return index >= 0 ? index : Number.MAX_SAFE_INTEGER;
+  }
+
+  private hasBackupManifest(payload: unknown): payload is { manifest: Record<string, unknown>; data: unknown } {
+    if (!payload || typeof payload !== 'object') {
+      return false;
+    }
+
+    const envelope = payload as { manifest?: unknown; data?: unknown };
+    return Boolean(envelope.manifest && typeof envelope.manifest === 'object' && envelope.data && typeof envelope.data === 'object');
+  }
+
+  private async verifyBackupChecksum(payload: { manifest: Record<string, unknown>; data: unknown }): Promise<void> {
+    const expectedChecksum = String(payload.manifest['dataSha256'] ?? '').trim().toLowerCase();
+    if (!expectedChecksum) {
+      throw new Error('Missing checksum');
+    }
+
+    const actualChecksum = await this.computeSha256Hex(JSON.stringify(payload.data));
+    if (actualChecksum !== expectedChecksum) {
+      throw new Error('Checksum mismatch');
+    }
+  }
+
+  private async computeSha256Hex(input: string): Promise<string> {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+    const bytes = new Uint8Array(digest);
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
   }
 
   toggleRgpdPatientPicker(): void {

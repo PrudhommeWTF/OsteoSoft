@@ -61,6 +61,7 @@ import {
   UpdatePatientDocumentPayload,
   UpdateAccessProfileRightsPayload,
   UpdateOfficePayload,
+  SetupStatus,
   UserAgendaPreferences,
   UpdateMyUserProfilePayload,
   UpdatePatientPayload
@@ -85,6 +86,14 @@ export class ApiService {
 
   async logout(): Promise<void> {
     await firstValueFrom(this.http.post<void>(`${this.baseUrl}/auth/logout`, {}));
+  }
+
+  async getSetupStatus(): Promise<SetupStatus> {
+    return firstValueFrom(this.http.get<SetupStatus>(`${this.baseUrl}/setup/status`));
+  }
+
+  async restoreSetupBackup(payload: unknown): Promise<void> {
+    await firstValueFrom(this.http.post<void>(`${this.baseUrl}/setup/restore`, payload));
   }
 
   async me(): Promise<AuthUser> {

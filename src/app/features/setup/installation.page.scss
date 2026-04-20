@@ -1,0 +1,43 @@
+:host {
+  display: block;
+}
+
+.setup-screen {
+  min-height: 100dvh;
+  padding: clamp(1rem, 2vw, 2rem);
+  background:
+    radial-gradient(circle at 15% 20%, rgb(24 100 120 / 26%), transparent 45%),
+    radial-gradient(circle at 90% 85%, rgb(217 117 44 / 22%), transparent 46%),
+    linear-gradient(145deg, #13212c 0%, #163445 52%, #0f2837 100%);
+}
+
+.setup-card {
+  width: min(960px, 100%);
+  border-radius: 1.25rem;
+  background: rgb(244 248 250 / 96%);
+  backdrop-filter: blur(8px);
+}
+
+.setup-badge {
+  width: 3.5rem;
+  height: 3.5rem;
+  display: grid;
+  place-items: center;
+  border-radius: 1rem;
+  background: linear-gradient(180deg, #ef6f3c 0%, #db4f1b 100%);
+  color: #fff;
+  font-size: 1.25rem;
+}
+
+.setup-choice {
+  border: 1px solid #d9e3e8;
+  border-radius: 0.9rem;
+  padding: 1rem;
+  background: #fff;
+}
+
+@media (max-width: 767px) {
+  .setup-card {
+    border-radius: 1rem;
+  }
+}

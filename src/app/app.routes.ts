@@ -4,6 +4,11 @@ import { adminGuard, authGuard, guestGuard, permissionGuard } from './core/auth.
 
 export const routes: Routes = [
   {
+    path: 'installation',
+    canActivate: [guestGuard],
+    loadComponent: () => import('./features/setup/installation.page').then((m) => m.InstallationPage)
+  },
+  {
     path: 'login',
     canActivate: [guestGuard],
     loadComponent: () => import('./features/login/login.page').then((m) => m.LoginPage)

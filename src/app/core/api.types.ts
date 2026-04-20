@@ -14,6 +14,18 @@ export type OfficeOption = {
   name: string;
 };
 
+export type SetupStatus = {
+  requiresSetup: boolean;
+  canRestoreWithoutAuth: boolean;
+  stats: {
+    nonAdminUsers: number;
+    patients: number;
+    appointments: number;
+    consultations: number;
+    invoices: number;
+  };
+};
+
 export type AccessManagedUser = {
   id: number;
   username: string;
