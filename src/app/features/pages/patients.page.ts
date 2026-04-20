@@ -40,18 +40,19 @@ export class PatientsPage {
   readonly currentPage = signal(1);
 
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.filteredPatients().length / this.pageSize())));
+  readonly safeCurrentPage = computed(() => Math.min(this.currentPage(), this.totalPages()));
 
   readonly paginationInfo = computed(() => {
     const total = this.filteredPatients().length;
     const size = this.pageSize();
-    const page = this.currentPage();
+    const page = this.safeCurrentPage();
     const from = total === 0 ? 0 : (page - 1) * size + 1;
     const to = Math.min(page * size, total);
     return { from, to, total };
   });
 
   readonly pagedPatients = computed(() => {
-    const page = this.currentPage();
+    const page = this.safeCurrentPage();
     const size = this.pageSize();
     return this.filteredPatients().slice((page - 1) * size, page * size);
   });
@@ -64,23 +65,24 @@ export class PatientsPage {
   }
 
   goToPrevPage(): void {
-    if (this.currentPage() > 1) {
-      this.currentPage.update((p) => p - 1);
+    const page = this.safeCurrentPage();
+    if (page > 1) {
+      this.currentPage.set(page - 1);
     }
   }
 
   goToNextPage(): void {
-    if (this.currentPage() < this.totalPages()) {
-      this.currentPage.update((p) => p + 1);
+    const page = this.safeCurrentPage();
+    if (page < this.totalPages()) {
+      this.currentPage.set(page + 1);
     }
   }
 
-  async onSearch(event: Event): Promise<void> {
+  onSearch(event: Event): void {
     const target = event.target as HTMLInputElement | null;
     const query = target?.value ?? '';
     this.search.set(query);
     this.currentPage.set(1);
-    await this.load(query);
   }
 
   sexIcon(sex: Patient['sex']): string | null {

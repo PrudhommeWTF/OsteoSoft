@@ -80,18 +80,19 @@ export class DirectoryPage {
   readonly currentPage = signal(1);
 
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.filteredContacts().length / this.pageSize())));
+  readonly safeCurrentPage = computed(() => Math.min(this.currentPage(), this.totalPages()));
 
   readonly paginationInfo = computed(() => {
     const total = this.filteredContacts().length;
     const size = this.pageSize();
-    const page = this.currentPage();
+    const page = this.safeCurrentPage();
     const from = total === 0 ? 0 : (page - 1) * size + 1;
     const to = Math.min(page * size, total);
     return { from, to, total };
   });
 
   readonly pagedContacts = computed(() => {
-    const page = this.currentPage();
+    const page = this.safeCurrentPage();
     const size = this.pageSize();
     return this.filteredContacts().slice((page - 1) * size, page * size);
   });
@@ -104,14 +105,16 @@ export class DirectoryPage {
   }
 
   goToPrevPage(): void {
-    if (this.currentPage() > 1) {
-      this.currentPage.update((p) => p - 1);
+    const page = this.safeCurrentPage();
+    if (page > 1) {
+      this.currentPage.set(page - 1);
     }
   }
 
   goToNextPage(): void {
-    if (this.currentPage() < this.totalPages()) {
-      this.currentPage.update((p) => p + 1);
+    const page = this.safeCurrentPage();
+    if (page < this.totalPages()) {
+      this.currentPage.set(page + 1);
     }
   }
 

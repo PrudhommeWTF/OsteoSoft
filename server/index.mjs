@@ -3825,12 +3825,23 @@ async function ensureSeedData() {
   }
 }
 
+const FR_DATE_FORMATTER = new Intl.DateTimeFormat('fr-FR', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric'
+});
+
 function formatDateFr(value) {
-  return new Intl.DateTimeFormat('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  }).format(new Date(value));
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return FR_DATE_FORMATTER.format(date);
 }
 
 function getAgeRangeFromBirthDate(birthDate) {
@@ -6600,7 +6611,6 @@ app.get('/api/directory/contacts', authMiddleware, requirePermission('read-direc
 
   const search = String(req.query.search ?? '').trim().toLowerCase();
   const kindFilter = String(req.query.kind ?? '').trim().toLowerCase();
-  const activeFilterRaw = String(req.query.isActive ?? '').trim().toLowerCase();
 
   const whereParts = [];
   const params = [];
@@ -6621,6 +6631,36 @@ app.get('/api/directory/contacts', authMiddleware, requirePermission('read-direc
     params.push(kindFilter);
   }
 
+  if (search) {
+    const searchLike = `%${search}%`;
+    whereParts.push(`(
+      lower(trim(dc.last_name || ' ' || dc.first_name)) LIKE ?
+      OR lower(dc.first_name) LIKE ?
+      OR lower(dc.last_name) LIKE ?
+      OR lower(dc.organization) LIKE ?
+      OR lower(dc.role) LIKE ?
+      OR lower(dc.email) LIKE ?
+      OR lower(dc.mobile_phone) LIKE ?
+      OR lower(dc.landline_phone) LIKE ?
+      OR lower(dc.city) LIKE ?
+      OR lower(dc.postal_code) LIKE ?
+      OR lower(o.name) LIKE ?
+    )`);
+    params.push(
+      searchLike,
+      searchLike,
+      searchLike,
+      searchLike,
+      searchLike,
+      searchLike,
+      searchLike,
+      searchLike,
+      searchLike,
+      searchLike,
+      searchLike
+    );
+  }
+
   const rows = db
     .prepare(
       `SELECT dc.id, dc.office_id, o.name AS office_name, dc.kind,
@@ -6634,28 +6674,7 @@ app.get('/api/directory/contacts', authMiddleware, requirePermission('read-direc
        ORDER BY lower(dc.last_name) ASC, lower(dc.first_name) ASC, lower(dc.organization) ASC, dc.id ASC`
     )
     .all(...params)
-    .map(mapDirectoryContactRow)
-    .filter((contact) => {
-      if (!search) {
-        return true;
-      }
-
-      return [
-        contact.displayName,
-        contact.firstName,
-        contact.lastName,
-        contact.organization,
-        contact.role,
-        contact.email,
-        contact.mobilePhone,
-        contact.landlinePhone,
-        contact.city,
-        contact.postalCode,
-        contact.officeName
-      ]
-        .map((value) => String(value ?? '').toLowerCase())
-        .some((value) => value.includes(search));
-    });
+    .map(mapDirectoryContactRow);
 
   return res.json({ contacts: rows, offices, selectedOfficeId: officeIdFilter });
 });

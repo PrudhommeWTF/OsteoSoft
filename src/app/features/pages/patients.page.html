@@ -129,15 +129,15 @@
 
         <nav aria-label="Pagination patients">
           <ul class="pagination pagination-sm mb-0">
-            <li class="page-item" [class.disabled]="currentPage() === 1">
+            <li class="page-item" [class.disabled]="safeCurrentPage() === 1">
               <button type="button" class="page-link" (click)="goToPrevPage()" aria-label="Page précédente">
                 <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
               </button>
             </li>
             <li class="page-item disabled">
-              <span class="page-link">{{ currentPage() }} / {{ totalPages() }}</span>
+              <span class="page-link">{{ safeCurrentPage() }} / {{ totalPages() }}</span>
             </li>
-            <li class="page-item" [class.disabled]="currentPage() === totalPages()">
+            <li class="page-item" [class.disabled]="safeCurrentPage() === totalPages()">
               <button type="button" class="page-link" (click)="goToNextPage()" aria-label="Page suivante">
                 <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
               </button>
