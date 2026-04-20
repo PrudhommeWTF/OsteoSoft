@@ -24,9 +24,13 @@
       <div class="card h-100">
         <div class="card-body">
           <h2 class="h5 mb-3"><i class="fa-solid fa-chart-line me-2 text-primary"></i>Evolution des consultations par mois</h2>
-          <div class="ratio ratio-16x9">
-            <canvas #monthlyChartHost class="w-100 h-100" aria-label="Graphique des consultations mensuelles"></canvas>
-          </div>
+          @if (hasMonthlyChartData()) {
+            <div class="ratio ratio-16x9">
+              <canvas #monthlyChartHost class="w-100 h-100" aria-label="Graphique des consultations mensuelles"></canvas>
+            </div>
+          } @else {
+            <div class="alert alert-light border mb-0">Aucune consultation enregistree sur la periode.</div>
+          }
         </div>
       </div>
     </article>
@@ -38,15 +42,23 @@
           <div class="row g-3">
             <div class="col-12 col-md-6">
               <p class="text-secondary small text-uppercase mb-2">Par sexe</p>
-              <div class="ratio ratio-1x1">
-                <canvas #sexChartHost class="w-100 h-100" aria-label="Graphique de repartition des patients par sexe"></canvas>
-              </div>
+              @if (hasSexChartData()) {
+                <div class="ratio ratio-1x1">
+                  <canvas #sexChartHost class="w-100 h-100" aria-label="Graphique de repartition des patients par sexe"></canvas>
+                </div>
+              } @else {
+                <div class="alert alert-light border mb-0 small">Aucune repartition disponible.</div>
+              }
             </div>
             <div class="col-12 col-md-6">
               <p class="text-secondary small text-uppercase mb-2">Par tranche d'age</p>
-              <div class="ratio ratio-1x1">
-                <canvas #ageChartHost class="w-100 h-100" aria-label="Graphique de repartition des patients par tranche d'age"></canvas>
-              </div>
+              @if (hasAgeChartData()) {
+                <div class="ratio ratio-1x1">
+                  <canvas #ageChartHost class="w-100 h-100" aria-label="Graphique de repartition des patients par tranche d'age"></canvas>
+                </div>
+              } @else {
+                <div class="alert alert-light border mb-0 small">Aucune repartition disponible.</div>
+              }
             </div>
           </div>
         </div>
@@ -74,6 +86,10 @@
                     <td>{{ patient.fullName }}</td>
                     <td>{{ patient.phone }}</td>
                     <td>{{ patient.lastVisit }}</td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="3" class="text-center text-secondary py-3">Aucun patient consulte pour le moment.</td>
                   </tr>
                 }
               </tbody>
@@ -104,6 +120,10 @@
                     <td>{{ payment.patientName }}</td>
                     <td>{{ payment.dueAt }}</td>
                     <td class="text-end">{{ payment.amountEur.toFixed(2) }} EUR</td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="4" class="text-center text-secondary py-3">Aucun paiement en attente.</td>
                   </tr>
                 }
               </tbody>

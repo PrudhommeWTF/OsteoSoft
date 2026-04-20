@@ -96,6 +96,14 @@ export class ApiService {
     await firstValueFrom(this.http.post<void>(`${this.baseUrl}/setup/restore`, payload));
   }
 
+  async createSetupOffice(payload: CreateOfficePayload): Promise<void> {
+    await firstValueFrom(this.http.post<{ officeId: number }>(`${this.baseUrl}/setup/office`, payload));
+  }
+
+  async createSetupDemoInstance(): Promise<void> {
+    await firstValueFrom(this.http.post<{ officeId: number }>(`${this.baseUrl}/setup/demo`, {}));
+  }
+
   async me(): Promise<AuthUser> {
     const response = await firstValueFrom(this.http.get<{ user: AuthUser }>(`${this.baseUrl}/auth/me`));
     return response.user;

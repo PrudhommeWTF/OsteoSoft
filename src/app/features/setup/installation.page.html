@@ -1,107 +1,575 @@
-<main class="setup-screen d-flex align-items-center justify-content-center" aria-labelledby="setup-title">
-  <section class="setup-card card border-0 shadow-lg" role="region" aria-describedby="setup-copy">
-    <div class="card-body p-4 p-lg-5">
-      <div class="d-flex align-items-center gap-3 mb-4">
-        <div class="setup-badge">
-          <i class="fa-solid fa-wand-magic-sparkles"></i>
-        </div>
-        <div>
-          <h1 id="setup-title" class="h3 mb-1">Premiere installation</h1>
-          <p id="setup-copy" class="text-secondary mb-0">Initialisez l'application ou restaurez une sauvegarde existante.</p>
-        </div>
-      </div>
-
-      @if (isLoadingStatus()) {
-        <div class="alert alert-info mb-0" role="status">Verification de l'etat d'installation...</div>
-      } @else {
-        <div class="row g-3 mb-4">
-          <div class="col-12 col-lg-6">
-            <article class="setup-choice h-100">
-              <p class="small text-uppercase text-secondary mb-2">Option principale</p>
-              <h2 class="h5 mb-2">Nouvelle installation</h2>
-              <p class="text-secondary mb-3">Démarrez avec une base neuve, puis connectez-vous avec votre compte administrateur.</p>
-              <a class="btn btn-primary w-100" routerLink="/login">
-                <i class="fa-solid fa-play me-1"></i>
-                Continuer vers la connexion
-              </a>
-            </article>
+<main class="setup-screen d-flex align-items-center justify-content-center" aria-label="Configuration initiale">
+  <section class="setup-card card shadow-lg border-0">
+    <div class="card-body p-4">
+      @if (flowMode() === 'welcome') {
+        <div class="d-flex align-items-center gap-3 mb-4">
+          <div class="setup-badge flex-shrink-0"><img src="logo-osteosoft.svg" alt="Logo OsteoSoft" class="setup-logo" /></div>
+          <div>
+            <h1 class="h4 mb-0">Bienvenue dans OsteoSoft</h1>
+            <p class="text-secondary mb-0 small">Avant de commencer, choisissez le type d'installation.</p>
           </div>
+        </div>
+      } @else if (flowMode() === 'restore') {
+        <div class="d-flex align-items-center gap-3 mb-4">
+          <div class="setup-badge flex-shrink-0"><img src="logo-osteosoft.svg" alt="Logo OsteoSoft" class="setup-logo" /></div>
+          <div>
+            <h1 class="h4 mb-0">Restauration de sauvegarde</h1>
+            <p class="text-secondary mb-0 small">Importez une archive OsteoSoft pour restaurer vos données.</p>
+          </div>
+        </div>
+      } @else {
+        <div class="d-flex align-items-center gap-3 mb-4">
+          <div class="setup-badge flex-shrink-0"><img src="logo-osteosoft.svg" alt="Logo OsteoSoft" class="setup-logo" /></div>
+          <div>
+            <h1 class="h4 mb-0">Configuration du premier cabinet</h1>
+            <p class="text-secondary mb-0 small">Renseignez les informations de votre cabinet pour démarrer.</p>
+          </div>
+        </div>
+      }
 
-          <div class="col-12 col-lg-6">
-            <article class="setup-choice h-100">
-              <p class="small text-uppercase text-secondary mb-2">Option secondaire</p>
-              <h2 class="h5 mb-2">Restaurer une sauvegarde</h2>
-              <p class="text-secondary mb-3">Importez une sauvegarde JSON legacy ou ZIP (manifest + data).</p>
+      @if (error()) {
+        <div class="alert alert-danger py-2 mb-3" role="alert">{{ error() }}</div>
+      }
 
-              <label class="form-label" for="setup-backup-file">Fichier de sauvegarde</label>
-              <input
-                id="setup-backup-file"
-                type="file"
-                class="form-control mb-2"
-                accept=".zip,.json,application/zip,application/json"
-                [disabled]="isRestoring()"
-                (change)="onBackupFileSelected($event)"
-              />
+      @if (restoreSuccess()) {
+        <div class="alert alert-success py-2 mb-3" role="status">{{ restoreSuccess() }}</div>
+      }
 
-              @if (selectedBackupFileName()) {
-                <p class="small text-secondary mb-3">Fichier sélectionné: {{ selectedBackupFileName() }}</p>
+      @if (flowMode() === 'welcome') {
+        <div class="welcome-panel welcome-panel-commercial mb-3">
+          <p class="welcome-panel-kicker mb-2">Le cabinet osteopathique, en plus simple</p>
+          <h2 class="h5 mb-3">OsteoSoft centralise la gestion de votre activite clinique et administrative.</h2>
+          <p class="mb-3 text-secondary">
+            Concue pour les osteopathes, l'application vous aide a structurer le suivi patient, piloter l'agenda,
+            retrouver l'historique des consultations, suivre la facturation et garder un repertoire professionnel exploitable.
+          </p>
+          <div class="row g-3 small">
+            <div class="col-12 col-md-4">
+              <div class="welcome-benefit">
+                <strong class="d-block mb-1">Gagner du temps au quotidien</strong>
+                <span class="text-secondary">Moins de ressaisie, plus de fluidite entre prise de rendez-vous, consultation et facturation.</span>
+              </div>
+            </div>
+            <div class="col-12 col-md-4">
+              <div class="welcome-benefit">
+                <strong class="d-block mb-1">Mieux suivre vos patients</strong>
+                <span class="text-secondary">Historique, liens de parente, motifs et observations restent accessibles au meme endroit.</span>
+              </div>
+            </div>
+            <div class="col-12 col-md-4">
+              <div class="welcome-benefit">
+                <strong class="d-block mb-1">Structurer votre cabinet</strong>
+                <span class="text-secondary">Cabinets, profils de consultation, moyens de paiement et contacts sont prets des l'installation.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="welcome-panel">
+          <p class="mb-3">
+            L'assistant va vous guider étape par étape pour préparer votre instance.
+          </p>
+          <ul class="mb-4 ps-3 welcome-summary-list">
+            <li>Configuration des informations du cabinet (identité et coordonnées)</li>
+            <li>Paramétrage de la facturation et des moyens de paiement</li>
+            <li>Création des plages horaires d'ouverture</li>
+            <li>Initialisation des profils patients et motifs de consultation</li>
+          </ul>
+          <p class="text-secondary small mb-3">
+            Vous pouvez aussi démarrer avec une instance de démonstration incluant des patients liés entre eux,
+            des consultations multi-annuelles, des rendez-vous, des factures et des contacts de répertoire.
+          </p>
+          <div class="d-flex flex-column flex-md-row gap-2">
+            <button type="button" class="btn btn-primary" (click)="startNewInstallation()">
+              <i class="fa-solid fa-plus me-2"></i>Installation d'une nouvelle instance
+            </button>
+            <button type="button" class="btn btn-outline-secondary" (click)="startRestore()">
+              <i class="fa-solid fa-upload me-2"></i>Restauration depuis une sauvegarde
+            </button>
+            <button type="button" class="btn btn-outline-success" [disabled]="isInstallingDemo()" (click)="installDemoInstance()">
+              @if (isInstallingDemo()) {
+                <i class="fa-solid fa-circle-notch fa-spin me-2"></i>Installation demo en cours...
+              } @else {
+                <i class="fa-solid fa-flask me-2"></i>Installer une instance de démonstration
               }
+            </button>
+          </div>
+        </div>
+      }
 
-              <button
-                type="button"
-                class="btn btn-outline-primary w-100"
-                [disabled]="isRestoring() || !selectedBackupPayload()"
-                (click)="restoreBackup()"
-              >
-                <i class="fa-solid fa-rotate-left me-1"></i>
-                @if (isRestoring()) {
-                  Restauration en cours...
-                } @else {
-                  Restaurer la sauvegarde
+      @if (flowMode() === 'restore') {
+        <div class="mb-3">
+          <label class="form-label fw-semibold d-block">Fichier de sauvegarde</label>
+          <div
+            class="border rounded-3 p-4 text-center restore-dropzone"
+            [class.bg-body-tertiary]="!isRestoreDragOver()"
+            [class.bg-primary-subtle]="isRestoreDragOver()"
+            (dragover)="onRestoreDragOver($event)"
+            (dragleave)="onRestoreDragLeave($event)"
+            (drop)="onRestoreDrop($event)">
+            <i class="fa-solid fa-file-arrow-up fs-2 text-secondary d-block mb-2"></i>
+            <p class="mb-2">Glissez-deposez votre sauvegarde ici</p>
+            <label class="btn btn-outline-primary btn-sm mb-0" for="setup-restore-input">
+              Ou cliquez pour choisir un fichier
+            </label>
+            <input
+              id="setup-restore-input"
+              type="file"
+              class="d-none"
+              accept=".zip,.json,application/zip,application/json"
+              [disabled]="isRestoring()"
+              (change)="onRestoreFileSelected($event)" />
+            <p class="text-muted small mb-0 mt-2">Formats supportés : .zip et .json</p>
+            @if (restoreFileName()) {
+              <p class="small text-secondary mt-2 mb-0">Fichier sélectionné : {{ restoreFileName() }}</p>
+            }
+            @if (isRestoring()) {
+              <p class="small text-muted mt-2 mb-0">Restauration en cours...</p>
+            }
+          </div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center gap-2">
+          <button type="button" class="btn btn-outline-secondary" [disabled]="isRestoring()" (click)="backToWelcome()">
+            <i class="fa-solid fa-arrow-left me-1"></i>Retour
+          </button>
+          <span class="small text-secondary">La restauration est disponible uniquement au premier démarrage.</span>
+        </div>
+      }
+
+      @if (flowMode() === 'create') {
+        <div class="office-wizard-progress mb-4">
+          <div class="progress-step" [class.active]="step() >= 1" [class.done]="step() > 1">
+            <div class="step-circle">@if (step() > 1) { <i class="fa-solid fa-check"></i> } @else { 1 }</div>
+            <span class="step-label">Identité</span>
+          </div>
+          <div class="progress-connector" [class.done]="step() > 1"></div>
+          <div class="progress-step" [class.active]="step() >= 2" [class.done]="step() > 2">
+            <div class="step-circle">@if (step() > 2) { <i class="fa-solid fa-check"></i> } @else { 2 }</div>
+            <span class="step-label">Coordonnées</span>
+          </div>
+          <div class="progress-connector" [class.done]="step() > 2"></div>
+          <div class="progress-step" [class.active]="step() >= 3" [class.done]="step() > 3">
+            <div class="step-circle">@if (step() > 3) { <i class="fa-solid fa-check"></i> } @else { 3 }</div>
+            <span class="step-label">Facturation</span>
+          </div>
+          <div class="progress-connector" [class.done]="step() > 3"></div>
+          <div class="progress-step" [class.active]="step() >= 4" [class.done]="step() > 4">
+            <div class="step-circle">@if (step() > 4) { <i class="fa-solid fa-check"></i> } @else { 4 }</div>
+            <span class="step-label">Agenda</span>
+          </div>
+          <div class="progress-connector" [class.done]="step() > 4"></div>
+          <div class="progress-step" [class.active]="step() >= 5" [class.done]="step() > 5">
+            <div class="step-circle">@if (step() > 5) { <i class="fa-solid fa-check"></i> } @else { 5 }</div>
+            <span class="step-label">Référentiels</span>
+          </div>
+          <div class="progress-connector" [class.done]="step() > 5"></div>
+          <div class="progress-step" [class.active]="step() >= 6">
+            <div class="step-circle">6</div>
+            <span class="step-label">Validation</span>
+          </div>
+        </div>
+
+        <form [formGroup]="officeForm" novalidate>
+          @if (step() === 1) {
+            <div>
+              <div class="mb-3">
+                <label for="setup-name" class="form-label">Nom du cabinet <span class="text-danger">*</span></label>
+                <input
+                  id="setup-name"
+                  type="text"
+                  class="form-control"
+                  [class.is-invalid]="officeForm.controls.name.invalid && officeForm.controls.name.touched"
+                  placeholder="Ex: Cabinet Ostéo"
+                  formControlName="name"
+                />
+                @if (officeForm.controls.name.invalid && officeForm.controls.name.touched) {
+                  <div class="invalid-feedback">Le nom du cabinet est obligatoire.</div>
                 }
-              </button>
-
-              @if (restoreProgressStep() !== 'idle') {
-                <div class="mt-3" aria-live="polite">
-                  <p class="small text-secondary mb-1">{{ restoreProgressLabel() }}</p>
-                  <div class="progress" role="progressbar" aria-label="Progression de restauration" [attr.aria-valuenow]="restoreProgressPercent()" aria-valuemin="0" aria-valuemax="100">
-                    <div class="progress-bar" [style.width.%]="restoreProgressPercent()">{{ restoreProgressPercent() }}%</div>
-                  </div>
-
-                  <ul class="list-group list-group-flush small mt-2">
-                    @for (step of restoreTimeline; track step.id) {
-                      @let stepStatus = getRestoreStepStatus(step.id);
-                      <li class="list-group-item px-0 py-1 border-0 d-flex align-items-center justify-content-between">
-                        <span class="text-secondary" [class.fw-semibold]="stepStatus === 'active' || stepStatus === 'error'" [class.text-body]="stepStatus === 'active' || stepStatus === 'error'">
-                          {{ step.label }}
-                        </span>
-
-                        @if (stepStatus === 'done') {
-                          <i class="fa-solid fa-circle-check text-success" aria-hidden="true"></i>
-                        } @else if (stepStatus === 'active') {
-                          <i class="fa-solid fa-circle-notch fa-spin text-primary" aria-hidden="true"></i>
-                        } @else if (stepStatus === 'error') {
-                          <i class="fa-solid fa-circle-xmark text-danger" aria-hidden="true"></i>
-                        } @else {
-                          <i class="fa-regular fa-circle text-secondary" aria-hidden="true"></i>
-                        }
-                      </li>
+              </div>
+              <div class="mb-3">
+                <label for="setup-duration" class="form-label">
+                  Durée par défaut des séances : {{ officeForm.controls.defaultSessionDurationMinutes.value }} min
+                </label>
+                <input
+                  id="setup-duration"
+                  type="range"
+                  class="form-range"
+                  formControlName="defaultSessionDurationMinutes"
+                  min="15"
+                  max="90"
+                  step="5"
+                />
+              </div>
+              <div class="row g-2">
+                <div class="col-12 col-md-6">
+                  <label for="setup-country" class="form-label">Pays</label>
+                  <select id="setup-country" class="form-select" formControlName="country">
+                    @for (country of countryOptions; track country) {
+                      <option [value]="country">{{ country }}</option>
                     }
-                  </ul>
+                  </select>
+                </div>
+                <div class="col-12 col-md-6">
+                  <label for="setup-devise" class="form-label">Devise</label>
+                  <select id="setup-devise" class="form-select" formControlName="devise">
+                    @for (devise of generalDeviseOptions; track devise) {
+                      <option [value]="devise">{{ devise }}</option>
+                    }
+                  </select>
+                </div>
+              </div>
+              <div class="mt-3">
+                <label for="setup-logo" class="form-label">Logo <span class="text-secondary small">(optionnel)</span></label>
+                <input id="setup-logo" type="file" class="form-control" accept="image/*" (change)="onOfficeLogoSelected($event)" />
+                <div class="form-text">Format PNG, JPG, GIF - max 2 Mo</div>
+              </div>
+            </div>
+          }
+
+          @else if (step() === 2) {
+            <div>
+              <div class="row g-2">
+                <div class="col-12 col-md-6">
+                  <label for="setup-address-line1" class="form-label">Adresse</label>
+                  <input id="setup-address-line1" type="text" class="form-control" placeholder="Rue" formControlName="addressLine1" />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label for="setup-address-line2" class="form-label">Adresse (suite)</label>
+                  <input id="setup-address-line2" type="text" class="form-control" placeholder="Bâtiment" formControlName="addressLine2" />
+                </div>
+                <div class="col-12 col-md-4">
+                  <label for="setup-postal-code" class="form-label">Code postal</label>
+                  <input id="setup-postal-code" type="text" class="form-control" placeholder="75000" formControlName="postalCode" />
+                </div>
+                <div class="col-12 col-md-8">
+                  <label for="setup-city" class="form-label">Ville</label>
+                  <input id="setup-city" type="text" class="form-control" placeholder="Paris" formControlName="city" />
+                </div>
+                <div class="col-12 col-md-4">
+                  <label for="setup-phone-mobile" class="form-label">Téléphone mobile</label>
+                  <input id="setup-phone-mobile" type="tel" class="form-control" placeholder="06 12 34 56 78" formControlName="phoneMobile" />
+                </div>
+                <div class="col-12 col-md-4">
+                  <label for="setup-phone-landline" class="form-label">Téléphone fixe</label>
+                  <input id="setup-phone-landline" type="tel" class="form-control" placeholder="01 23 45 67 89" formControlName="phoneLandline" />
+                </div>
+                <div class="col-12 col-md-4">
+                  <label for="setup-phone-fax" class="form-label">Fax</label>
+                  <input id="setup-phone-fax" type="tel" class="form-control" formControlName="phoneFax" />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label for="setup-email" class="form-label">Email</label>
+                  <input id="setup-email" type="email" class="form-control" placeholder="contact@cabinet.fr" formControlName="email" />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label for="setup-website" class="form-label">Site internet</label>
+                  <input id="setup-website" type="url" class="form-control" placeholder="https://cabinet.fr" formControlName="website" />
+                </div>
+              </div>
+            </div>
+          }
+
+          @else if (step() === 3) {
+            <div class="accordion" id="setup-billing-accordion">
+              <div class="accordion-item">
+                <h2 class="accordion-header">
+                  <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#setup-services" aria-expanded="true" aria-controls="setup-services">
+                    Prestations proposées
+                  </button>
+                </h2>
+                <div id="setup-services" class="accordion-collapse collapse show" data-bs-parent="#setup-billing-accordion">
+                  <div class="accordion-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                      <h6 class="mb-0">Catalogue des prestations</h6>
+                      <button type="button" class="btn btn-sm btn-outline-primary" (click)="addServiceTypeRow()">
+                        <i class="fa-solid fa-plus me-1"></i>Ajouter
+                      </button>
+                    </div>
+                    @if (serviceTypes().length === 0) {
+                      <p class="text-secondary small mb-0">Aucune prestation. Cliquez sur Ajouter pour commencer.</p>
+                    } @else {
+                      <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                          <thead>
+                            <tr>
+                              <th scope="col">Libellé</th>
+                              <th scope="col">Montant HT</th>
+                              <th scope="col" class="text-end">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (serviceType of serviceTypes(); track serviceType.tempKey) {
+                              <tr>
+                                <td>
+                                  <input type="text" class="form-control form-control-sm" [value]="serviceType.label"
+                                    (input)="updateServiceTypeLabel(serviceType.tempKey, $any($event.target).value || '')" />
+                                </td>
+                                <td>
+                                  <input type="number" class="form-control form-control-sm" step="0.01" min="0" [value]="serviceType.amountHt"
+                                    (input)="updateServiceTypeAmount(serviceType.tempKey, $any($event.target).value || '0')" />
+                                </td>
+                                <td class="text-end">
+                                  <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeServiceType(serviceType.tempKey)">
+                                    <i class="fa-solid fa-trash"></i>
+                                  </button>
+                                </td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      </div>
+                    }
+                  </div>
+                </div>
+              </div>
+
+              <div class="accordion-item">
+                <h2 class="accordion-header">
+                  <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#setup-payments" aria-expanded="false" aria-controls="setup-payments">
+                    Moyens de paiement
+                  </button>
+                </h2>
+                <div id="setup-payments" class="accordion-collapse collapse" data-bs-parent="#setup-billing-accordion">
+                  <div class="accordion-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                      <h6 class="mb-0">Modes acceptés</h6>
+                      <button type="button" class="btn btn-sm btn-outline-primary" (click)="addPaymentMethod()">
+                        <i class="fa-solid fa-plus me-1"></i>Ajouter
+                      </button>
+                    </div>
+                    <div class="table-responsive">
+                      <table class="table table-sm align-middle mb-0">
+                        <thead>
+                          <tr>
+                            <th scope="col">Libellé</th>
+                            <th scope="col">Actif</th>
+                            <th scope="col" class="text-end">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @for (paymentMethod of paymentMethods(); track paymentMethod.tempKey) {
+                            <tr>
+                              <td>
+                                <input type="text" class="form-control form-control-sm" [value]="paymentMethod.label"
+                                  [readonly]="paymentMethod.isSystem"
+                                  (input)="updatePaymentMethodLabel(paymentMethod.tempKey, $any($event.target).value || '')" />
+                              </td>
+                              <td>
+                                <input type="checkbox" class="form-check-input" [checked]="paymentMethod.isActive"
+                                  (change)="togglePaymentMethodActive(paymentMethod.tempKey)" />
+                              </td>
+                              <td class="text-end">
+                                <button type="button" class="btn btn-sm btn-outline-danger"
+                                  [disabled]="paymentMethod.isSystem"
+                                  (click)="removePaymentMethod(paymentMethod.tempKey)">
+                                  <i class="fa-solid fa-trash"></i>
+                                </button>
+                              </td>
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="accordion-item">
+                <h2 class="accordion-header">
+                  <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#setup-invoice-settings" aria-expanded="false" aria-controls="setup-invoice-settings">
+                    Paramètres de facture
+                  </button>
+                </h2>
+                <div id="setup-invoice-settings" class="accordion-collapse collapse" data-bs-parent="#setup-billing-accordion">
+                  <div class="accordion-body row g-2">
+                    <div class="col-12">
+                      <label for="setup-invoice-format" class="form-label">Format numérotation</label>
+                      <select id="setup-invoice-format" class="form-select" formControlName="invoiceNumberFormat">
+                        @for (option of invoiceNumberFormatOptions; track option) {
+                          <option [value]="option">{{ option }}</option>
+                        }
+                      </select>
+                    </div>
+                    <div class="col-12">
+                      <label for="setup-numbering-config" class="form-label">Configuration numérotation</label>
+                      <select id="setup-numbering-config" class="form-select" formControlName="numberingConfiguration">
+                        @for (option of numberingConfigurationOptions; track option) {
+                          <option [value]="option">{{ option }}</option>
+                        }
+                      </select>
+                    </div>
+                    <div class="col-12">
+                      <div class="form-check form-switch">
+                        <input id="setup-insurance-fields" type="checkbox" class="form-check-input" formControlName="alwaysShowSocialSecurityAndMutuelle" />
+                        <label class="form-check-label" for="setup-insurance-fields">Toujours afficher Sécurité Sociale et Mutuelle sur les factures</label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          }
+
+          @else if (step() === 4) {
+            <div>
+              <div class="table-responsive mb-3">
+                <table class="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th scope="col">Jour</th>
+                      <th scope="col">Plages horaires</th>
+                      <th scope="col" class="text-end">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (day of officeWeekDays; track day) {
+                      <tr>
+                        <td class="fw-semibold">{{ officeDayLabel(day) }}</td>
+                        <td>
+                          <div class="d-flex flex-column gap-2">
+                            @for (range of officeOpeningHoursDraft()[day]; track $index; let rangeIndex = $index) {
+                              <div class="d-flex align-items-center gap-2">
+                                <input type="time" class="form-control form-control-sm" [value]="range.start"
+                                  (input)="updateOfficeOpeningRange(day, rangeIndex, 'start', $any($event.target).value || '')" />
+                                <span class="text-secondary">à</span>
+                                <input type="time" class="form-control form-control-sm" [value]="range.end"
+                                  (input)="updateOfficeOpeningRange(day, rangeIndex, 'end', $any($event.target).value || '')" />
+                                <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeOfficeOpeningRange(day, rangeIndex)">
+                                  <i class="fa-solid fa-trash"></i>
+                                </button>
+                              </div>
+                            }
+                            @if (officeOpeningHoursDraft()[day].length === 0) {
+                              <small class="text-secondary">Fermé</small>
+                            }
+                          </div>
+                        </td>
+                        <td class="text-end">
+                          <button type="button" class="btn btn-sm btn-outline-primary" (click)="addOfficeOpeningRange(day)">
+                            <i class="fa-solid fa-plus me-1"></i>Ajouter
+                          </button>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+              <div class="alert alert-info mb-0 small">Les agendas individuels seront configurables après création du cabinet dans les Paramètres.</div>
+            </div>
+          }
+
+          @else if (step() === 5) {
+            <div>
+              <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                <div>
+                  <h6 class="mb-1">Profils patients et motifs de consultation</h6>
+                  <p class="text-secondary small mb-0">Définissez les profils types et leurs motifs.</p>
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" (click)="addConsultationProfile()">
+                  <i class="fa-solid fa-plus me-1"></i>Ajouter un profil
+                </button>
+              </div>
+
+              @if (consultationProfiles().length === 0) {
+                <div class="border rounded-3 p-4 text-center bg-light-subtle">
+                  <p class="mb-3 text-muted">Aucun profil configuré.</p>
+                  <button type="button" class="btn btn-outline-primary btn-sm" (click)="addConsultationProfile()">
+                    <i class="fa-solid fa-plus me-2"></i>Créer le premier profil
+                  </button>
+                </div>
+              } @else {
+                <div class="row row-cols-1 row-cols-md-2 g-3">
+                  @for (profile of consultationProfiles(); track profile.tempKey) {
+                    <div class="col">
+                      <div class="card h-100">
+                        <div class="card-header d-flex align-items-center gap-2">
+                          <input type="text" class="form-control form-control-sm" [value]="profile.name"
+                            (input)="updateConsultationProfileName(profile.tempKey, $any($event.target).value)"
+                            placeholder="Ex: Adulte sportif" />
+                          <button type="button" class="btn btn-outline-primary btn-sm flex-shrink-0"
+                            (click)="addConsultationReason(profile.tempKey)" title="Ajouter un motif">
+                            <i class="fa-solid fa-plus"></i>
+                          </button>
+                          <button type="button" class="btn btn-outline-danger btn-sm flex-shrink-0"
+                            (click)="removeConsultationProfile(profile.tempKey)" title="Supprimer le profil">
+                            <i class="fa-solid fa-trash-can"></i>
+                          </button>
+                        </div>
+                        <div class="card-body p-2">
+                          @if (profile.reasons.length === 0) {
+                            <div class="p-3 text-muted small text-center">Aucun motif dans ce profil.</div>
+                          } @else {
+                            <div class="d-flex flex-column gap-2">
+                              @for (reason of profile.reasons; track reason.tempKey) {
+                                <div class="d-flex align-items-center gap-1 px-1 py-1 bg-body-tertiary"
+                                  draggable="true"
+                                  (dragstart)="onConsultationReasonDragStart($event, profile.tempKey, reason.tempKey)"
+                                  (dragover)="onConsultationReasonDragOver($event)"
+                                  (drop)="onConsultationReasonDrop($event, profile.tempKey, reason.tempKey)">
+                                  <span class="text-muted" title="Glisser pour réordonner">
+                                    <i class="fa-solid fa-grip-vertical"></i>
+                                  </span>
+                                  <input type="text" class="form-control form-control-sm" [value]="reason.label"
+                                    (input)="updateConsultationReasonLabel(profile.tempKey, reason.tempKey, $any($event.target).value)"
+                                    placeholder="Nom du motif" />
+                                  <button type="button" class="btn btn-sm btn-outline-danger"
+                                    (click)="removeConsultationReason(profile.tempKey, reason.tempKey)">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                  </button>
+                                </div>
+                              }
+                            </div>
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  }
                 </div>
               }
-            </article>
-          </div>
-        </div>
+            </div>
+          }
 
-        @if (errorMessage()) {
-          <div class="alert alert-danger mb-0" role="alert">{{ errorMessage() }}</div>
-        }
-
-        @if (successMessage()) {
-          <div class="alert alert-success mb-0" role="status">{{ successMessage() }}</div>
-        }
+          @else {
+            <div>
+              <div class="alert alert-light border mb-2"><strong>Cabinet :</strong> {{ officeForm.controls.name.value || '—' }}</div>
+              <div class="alert alert-light border mb-2"><strong>Ville :</strong> {{ officeForm.controls.city.value || '—' }}</div>
+              <div class="alert alert-light border mb-2"><strong>Durée séance :</strong> {{ officeForm.controls.defaultSessionDurationMinutes.value }} min</div>
+              <div class="alert alert-light border mb-0">
+                <strong>Prestations :</strong> {{ serviceTypes().length }} &nbsp;|&nbsp;
+                <strong>Moyens de paiement :</strong> {{ paymentMethods().length }} &nbsp;|&nbsp;
+                <strong>Profils :</strong> {{ consultationProfiles().length }}
+              </div>
+            </div>
+          }
+        </form>
       }
     </div>
+
+    @if (flowMode() === 'create') {
+      <div class="card-footer d-flex justify-content-between align-items-center gap-2 border-top-0 pt-0 p-4">
+        <button type="button" class="btn btn-outline-secondary" [disabled]="step() <= 1 || isCreating()" (click)="previousStep()">
+          <i class="fa-solid fa-arrow-left me-1"></i>Précédent
+        </button>
+
+        <div class="d-flex align-items-center gap-2">
+          <button type="button" class="btn btn-outline-secondary" [disabled]="isCreating()" (click)="backToWelcome()">
+            Annuler
+          </button>
+          @if (step() < 6) {
+            <button type="button" class="btn btn-primary" (click)="nextStep()">
+              Suivant<i class="fa-solid fa-arrow-right ms-1"></i>
+            </button>
+          } @else {
+            <button type="button" class="btn btn-success" [disabled]="isCreating()" (click)="createOffice()">
+              @if (isCreating()) {
+                <i class="fa-solid fa-circle-notch fa-spin me-1"></i>Création en cours...
+              } @else {
+                <i class="fa-solid fa-check me-1"></i>Créer le cabinet
+              }
+            </button>
+          }
+        </div>
+      </div>
+    }
   </section>
 </main>

@@ -2,6 +2,7 @@ import {
   AfterViewInit,
   ChangeDetectionStrategy,
   Component,
+  computed,
   ElementRef,
   Injector,
   OnDestroy,
@@ -37,6 +38,16 @@ export class HomePage implements AfterViewInit, OnDestroy {
   readonly pendingPayments = signal<DashboardPayload['pendingPayments']>([]);
   readonly calendarEvents = signal<DashboardEvent[]>([]);
   readonly calendarSettings = signal<AgendaSettings | null>(null);
+
+  readonly hasMonthlyChartData = computed(() =>
+    (this.pendingPayload()?.monthlyConsultations ?? []).some((point) => Number(point.count) > 0)
+  );
+  readonly hasSexChartData = computed(() =>
+    (this.pendingPayload()?.patientsBySex ?? []).some((point) => Number(point.count) > 0)
+  );
+  readonly hasAgeChartData = computed(() =>
+    (this.pendingPayload()?.patientsByAgeRange ?? []).some((point) => Number(point.count) > 0)
+  );
 
   private readonly pendingPayload = signal<DashboardPayload | null>(null);
 
@@ -87,80 +98,83 @@ export class HomePage implements AfterViewInit, OnDestroy {
     const monthlyEl = this.monthlyChartHost()?.nativeElement;
     const sexEl = this.sexChartHost()?.nativeElement;
     const ageEl = this.ageChartHost()?.nativeElement;
-    if (!monthlyEl || !sexEl || !ageEl) {
-      return;
+
+    if (this.hasMonthlyChartData() && monthlyEl) {
+      this.monthlyChart = new Chart(monthlyEl, {
+        type: 'line',
+        data: {
+          labels: payload.monthlyConsultations.map((point) => point.month),
+          datasets: [
+            {
+              label: 'Consultations',
+              data: payload.monthlyConsultations.map((point) => point.count),
+              borderColor: '#2878b5',
+              backgroundColor: 'rgba(40, 120, 181, 0.15)',
+              fill: true,
+              tension: 0.3
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                precision: 0
+              }
+            }
+          }
+        }
+      });
     }
 
-    this.monthlyChart = new Chart(monthlyEl, {
-      type: 'line',
-      data: {
-        labels: payload.monthlyConsultations.map((point) => point.month),
-        datasets: [
-          {
-            label: 'Consultations',
-            data: payload.monthlyConsultations.map((point) => point.count),
-            borderColor: '#2878b5',
-            backgroundColor: 'rgba(40, 120, 181, 0.15)',
-            fill: true,
-            tension: 0.3
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: {
-              precision: 0
+    if (this.hasSexChartData() && sexEl) {
+      this.sexChart = new Chart(sexEl, {
+        type: 'doughnut',
+        data: {
+          labels: payload.patientsBySex.map((point) => point.label),
+          datasets: [
+            {
+              data: payload.patientsBySex.map((point) => point.count),
+              backgroundColor: ['#4d92d1', '#f08a5d', '#7f8c8d', '#8bc34a']
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false
+        }
+      });
+    }
+
+    if (this.hasAgeChartData() && ageEl) {
+      this.ageChart = new Chart(ageEl, {
+        type: 'bar',
+        data: {
+          labels: payload.patientsByAgeRange.map((point) => point.label),
+          datasets: [
+            {
+              label: 'Patients',
+              data: payload.patientsByAgeRange.map((point) => point.count),
+              backgroundColor: '#3ca374'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                precision: 0
+              }
             }
           }
         }
-      }
-    });
-
-    this.sexChart = new Chart(sexEl, {
-      type: 'doughnut',
-      data: {
-        labels: payload.patientsBySex.map((point) => point.label),
-        datasets: [
-          {
-            data: payload.patientsBySex.map((point) => point.count),
-            backgroundColor: ['#4d92d1', '#f08a5d', '#7f8c8d', '#8bc34a']
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false
-      }
-    });
-
-    this.ageChart = new Chart(ageEl, {
-      type: 'bar',
-      data: {
-        labels: payload.patientsByAgeRange.map((point) => point.label),
-        datasets: [
-          {
-            label: 'Patients',
-            data: payload.patientsByAgeRange.map((point) => point.count),
-            backgroundColor: '#3ca374'
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: {
-              precision: 0
-            }
-          }
-        }
-      }
-    });
+      });
+    }
   }
 }

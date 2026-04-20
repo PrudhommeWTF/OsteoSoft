@@ -2,10 +2,23 @@ import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 
 import { AuthService } from './auth.service';
+import { SetupService } from './setup.service';
+
+export const setupRequiredGuard: CanActivateFn = () => {
+  const setupService = inject(SetupService);
+  const router = inject(Router);
+
+  return setupService.requiresSetup() ? true : router.createUrlTree(['/login']);
+};
 
 export const authGuard: CanActivateFn = () => {
   const authService = inject(AuthService);
+  const setupService = inject(SetupService);
   const router = inject(Router);
+
+  if (setupService.requiresSetup()) {
+    return router.createUrlTree(['/installation']);
+  }
 
   return authService
     .ensureSessionChecked()
@@ -14,7 +27,12 @@ export const authGuard: CanActivateFn = () => {
 
 export const guestGuard: CanActivateFn = () => {
   const authService = inject(AuthService);
+  const setupService = inject(SetupService);
   const router = inject(Router);
+
+  if (setupService.requiresSetup()) {
+    return router.createUrlTree(['/installation']);
+  }
 
   return authService
     .ensureSessionChecked()

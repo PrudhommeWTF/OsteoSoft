@@ -18,11 +18,7 @@ export type SetupStatus = {
   requiresSetup: boolean;
   canRestoreWithoutAuth: boolean;
   stats: {
-    nonAdminUsers: number;
-    patients: number;
-    appointments: number;
-    consultations: number;
-    invoices: number;
+    offices: number;
   };
 };
 

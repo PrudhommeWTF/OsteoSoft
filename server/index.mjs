@@ -1733,6 +1733,300 @@ function createLocalCalendarFromOffice(officeId, officeName) {
   ).run(trimmedName, `Agenda du cabinet ${trimmedName}`, getCalendarColorByIndex(displayOrder - 1), officeId, displayOrder);
 }
 
+function clearBusinessDataForInitialSetup() {
+  db.exec('DELETE FROM patient_documents');
+  db.exec('DELETE FROM appointments');
+  db.exec('DELETE FROM consultations');
+  db.exec('DELETE FROM invoices');
+  db.exec('DELETE FROM patients');
+  db.exec('DELETE FROM directory_contacts');
+}
+
+function seedDemoInstanceDataForOffice(officeId) {
+  const normalizedOfficeId = Number(officeId);
+  if (!Number.isInteger(normalizedOfficeId) || normalizedOfficeId <= 0) {
+    return { patients: 0, consultations: 0, appointments: 0, invoices: 0, directoryContacts: 0 };
+  }
+
+  const calendarId = Number(
+    db.prepare('SELECT id FROM local_calendars WHERE office_id = ? ORDER BY id ASC LIMIT 1').get(normalizedOfficeId)?.id ?? 0
+  ) || null;
+
+  const demoPatients = [
+    {
+      lastName: 'DURAND',
+      firstName: 'Emma',
+      sex: 'F',
+      birthDate: '1989-04-12',
+      mobilePhone: '06 71 22 18 34',
+      city: 'Nantes',
+      postalCode: '44000',
+      relatedPeople: 'DURAND Leo, DURAND Chloé',
+      notes: 'Lombalgie recurrente, travail sur posture au bureau.'
+    },
+    {
+      lastName: 'DURAND',
+      firstName: 'Leo',
+      sex: 'M',
+      birthDate: '2015-09-02',
+      mobilePhone: '06 71 22 18 35',
+      city: 'Nantes',
+      postalCode: '44000',
+      relatedPeople: 'DURAND Emma, DURAND Chloé',
+      notes: 'Suivi pediatrique, croissance et posture scolaire.'
+    },
+    {
+      lastName: 'DURAND',
+      firstName: 'Chloe',
+      sex: 'F',
+      birthDate: '2018-01-27',
+      mobilePhone: '06 71 22 18 36',
+      city: 'Nantes',
+      postalCode: '44000',
+      relatedPeople: 'DURAND Emma, DURAND Leo',
+      notes: 'Troubles du sommeil, tensions cervicales legeres.'
+    },
+    {
+      lastName: 'MARTIN',
+      firstName: 'Hugo',
+      sex: 'M',
+      birthDate: '1993-11-08',
+      mobilePhone: '07 88 44 12 50',
+      city: 'Rezé',
+      postalCode: '44400',
+      relatedPeople: 'MARTIN Alice',
+      notes: 'Sportif amateur, chevilles fragiles.'
+    },
+    {
+      lastName: 'MARTIN',
+      firstName: 'Alice',
+      sex: 'F',
+      birthDate: '1995-02-16',
+      mobilePhone: '07 88 44 12 51',
+      city: 'Rezé',
+      postalCode: '44400',
+      relatedPeople: 'MARTIN Hugo',
+      notes: 'Cervicalgies chroniques avec migraines episodiques.'
+    },
+    {
+      lastName: 'BERNARD',
+      firstName: 'Noah',
+      sex: 'M',
+      birthDate: '2002-07-19',
+      mobilePhone: '06 60 12 70 91',
+      city: 'Saint-Herblain',
+      postalCode: '44800',
+      relatedPeople: '',
+      notes: 'Reprise post-traumatique du membre inferieur droit.'
+    }
+  ];
+
+  const consultationTemplates = [
+    { offsetYears: 4, month: 2, day: 14, hour: 9, minute: 0, status: 'Termine', title: 'Bilan osteopathique annuel', amountCents: 7000, paid: true },
+    { offsetYears: 3, month: 5, day: 6, hour: 11, minute: 15, status: 'Termine', title: 'Suivi fonctionnel', amountCents: 6500, paid: true },
+    { offsetYears: 2, month: 8, day: 21, hour: 15, minute: 45, status: 'Termine', title: 'Controle postural', amountCents: 6800, paid: true },
+    { offsetYears: 1, month: 11, day: 4, hour: 10, minute: 30, status: 'En attente', title: 'Consultation douleur aigue', amountCents: 7200, paid: false },
+    { offsetYears: 0, month: 3, day: 18, hour: 14, minute: 0, status: 'A confirmer', title: 'Suivi trimestriel', amountCents: 6900, paid: false }
+  ];
+
+  const directoryContacts = [
+    { kind: 'person', firstName: 'Camille', lastName: 'Roux', organization: '', role: 'Kinesitherapeute', email: 'camille.roux@example.test', mobilePhone: '06 30 10 20 30', landlinePhone: '', address1: '12 rue des Acacias', address2: '', postalCode: '44000', city: 'Nantes', country: 'France', notes: 'Partenaire reeducation sportive.' },
+    { kind: 'person', firstName: 'Julien', lastName: 'Perrin', organization: '', role: 'Medecin traitant', email: 'julien.perrin@example.test', mobilePhone: '06 22 30 45 10', landlinePhone: '02 40 10 10 10', address1: '4 avenue de la Sante', address2: '', postalCode: '44000', city: 'Nantes', country: 'France', notes: 'Suivi de plusieurs patients communs.' },
+    { kind: 'company', firstName: '', lastName: '', organization: 'Clinique Atlantique', role: 'Etablissement', email: 'contact@clinique-atlantique.test', mobilePhone: '', landlinePhone: '02 40 00 00 00', address1: '45 boulevard Maritime', address2: '', postalCode: '44100', city: 'Nantes', country: 'France', notes: 'Orientation post-operatoire.' },
+    { kind: 'company', firstName: '', lastName: '', organization: 'Laboratoire Biocentre', role: 'Laboratoire', email: 'support@biocentre.test', mobilePhone: '', landlinePhone: '02 40 11 22 33', address1: '8 impasse des Sciences', address2: '', postalCode: '44200', city: 'Nantes', country: 'France', notes: 'Examens complementaires.' }
+  ];
+
+  const insertPatient = db.prepare(
+    `INSERT INTO patients
+     (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count, last_visit, consent_signed, retention_until)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const insertConsultation = db.prepare(
+    `INSERT INTO consultations
+      (patient_id, started_at, office_id, practitioner, title, important,
+       height_cm, weight_kg, eva_before, eva_after, profile, reason_items_cipher,
+       motif_main_cipher, tests_cipher, schema_cipher, treatments_cipher, remarks_cipher)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const insertAppointment = db.prepare(
+    `INSERT INTO appointments (patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  );
+  const insertInvoice = db.prepare(
+    `INSERT INTO invoices
+     (patient_id, invoice_number, amount_cents, status, issued_at, due_at, notes_cipher, office_id, consultation_id, payment_method)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const insertDirectoryContact = db.prepare(
+    `INSERT INTO directory_contacts (
+       office_id, kind, first_name, last_name, organization, role,
+       email, mobile_phone, landline_phone,
+       address_line1, address_line2, postal_code, city, country,
+       notes, is_active, created_by, updated_by
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
+  );
+
+  const retentionDate = new Date();
+  retentionDate.setFullYear(retentionDate.getFullYear() + 10);
+  const retentionUntil = retentionDate.toISOString().slice(0, 10);
+  const now = new Date();
+  const adminUserId = Number(db.prepare("SELECT id FROM users WHERE lower(username) = 'admin' LIMIT 1").get()?.id ?? 0) || null;
+
+  let patientCount = 0;
+  let consultationCount = 0;
+  let appointmentCount = 0;
+  let invoiceCount = 0;
+  let directoryContactCount = 0;
+
+  const tx = db.transaction(() => {
+    for (const [patientIndex, patient] of demoPatients.entries()) {
+      const fullName = `${patient.lastName} ${patient.firstName}`.trim();
+      const mobilePhone = String(patient.mobilePhone ?? '').trim();
+      const landlinePhone = '';
+      const mainPhone = mobilePhone || landlinePhone || 'Non renseigne';
+      const normalizedRelatedPeople = formatRelatedPeople(parseRelatedPeople(patient.relatedPeople));
+      const lastVisit = new Date(now.getFullYear(), 2 + (patientIndex % 4), 10 + patientIndex).toISOString().slice(0, 10);
+
+      const medicalRecord = {
+        generalRemarks: patient.notes,
+        medicalHistory: '',
+        consultationNote: '',
+        relatedPeople: normalizedRelatedPeople,
+        mobilePhone,
+        landlinePhone,
+        email: '',
+        address1: 'Adresse de test',
+        address2: '',
+        postalCode: patient.postalCode,
+        city: patient.city,
+        country: 'France',
+        maritalStatus: 'Non renseigne',
+        childrenCount: 0,
+        occupationOrSchool: '',
+        hobbies: '',
+        primaryDoctor: '',
+        socialSecurityNumber: '',
+        referredBy: '',
+        manualPreference: 'Non renseigne',
+        isDeceased: false
+      };
+
+      const patientResult = insertPatient.run(
+        encryptSensitiveField(fullName),
+        encryptSensitiveField(mainPhone),
+        encryptSensitiveField(JSON.stringify(medicalRecord)),
+        patient.sex,
+        patient.birthDate,
+        'Non renseigne',
+        0,
+        lastVisit,
+        1,
+        retentionUntil
+      );
+
+      const patientId = Number(patientResult.lastInsertRowid);
+      patientCount += 1;
+
+      for (const [index, template] of consultationTemplates.entries()) {
+        const startedAt = new Date(
+          now.getFullYear() - template.offsetYears,
+          template.month,
+          template.day + patientIndex,
+          template.hour,
+          template.minute,
+          0,
+          0
+        ).toISOString();
+
+        const consultationTitle = `${template.title} - ${patient.firstName}`;
+        const consultationResult = insertConsultation.run(
+          patientId,
+          startedAt,
+          normalizedOfficeId,
+          'Cabinet Demo',
+          consultationTitle,
+          0,
+          null,
+          null,
+          5,
+          2,
+          patientIndex % 3 === 0 ? 'Adulte' : patientIndex % 3 === 1 ? 'Enfant' : 'Senior',
+          null,
+          encryptSensitiveField(`<p>${consultationTitle}</p>`),
+          null,
+          null,
+          null,
+          encryptSensitiveField(`<p>Compte rendu de demonstration (${index + 1}).</p>`)
+        );
+        const consultationId = Number(consultationResult.lastInsertRowid);
+        consultationCount += 1;
+
+        insertAppointment.run(
+          patientId,
+          startedAt,
+          encryptSensitiveField(consultationTitle),
+          template.status,
+          calendarId,
+          consultationId,
+          normalizedOfficeId
+        );
+        appointmentCount += 1;
+
+        const issuedAt = startedAt.slice(0, 10);
+        const dueAt = new Date(new Date(startedAt).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        const invoiceNumber = `DEMO-${now.getFullYear()}-${String(patientIndex + 1).padStart(2, '0')}${String(index + 1).padStart(2, '0')}`;
+
+        insertInvoice.run(
+          patientId,
+          invoiceNumber,
+          template.amountCents,
+          template.paid ? 'payee' : 'impayee',
+          issuedAt,
+          dueAt,
+          encryptSensitiveField(`Facture demo ${consultationTitle}`),
+          normalizedOfficeId,
+          consultationId,
+          template.paid ? 'cb' : 'cheque'
+        );
+        invoiceCount += 1;
+      }
+    }
+
+    for (const contact of directoryContacts) {
+      insertDirectoryContact.run(
+        normalizedOfficeId,
+        contact.kind,
+        contact.firstName,
+        contact.lastName,
+        contact.organization,
+        contact.role,
+        contact.email,
+        contact.mobilePhone,
+        contact.landlinePhone,
+        contact.address1,
+        contact.address2,
+        contact.postalCode,
+        contact.city,
+        contact.country,
+        contact.notes,
+        adminUserId,
+        adminUserId
+      );
+      directoryContactCount += 1;
+    }
+  });
+
+  tx();
+
+  return {
+    patients: patientCount,
+    consultations: consultationCount,
+    appointments: appointmentCount,
+    invoices: invoiceCount,
+    directoryContacts: directoryContactCount
+  };
+}
+
 function ensureDefaultLocalCalendars() {
   const count = db.prepare('SELECT COUNT(*) AS count FROM local_calendars').get();
   if (Number(count?.count ?? 0) > 0) {
@@ -1825,27 +2119,13 @@ function normalizeBackupEnvelope(backupPayload) {
 }
 
 function getSetupStatusSnapshot() {
-  const nonAdminUsers = Number(
-    db.prepare("SELECT COUNT(*) AS count FROM users WHERE lower(username) <> 'admin'").get()?.count ?? 0
-  );
-  const patients = Number(db.prepare('SELECT COUNT(*) AS count FROM patients').get()?.count ?? 0);
-  const appointments = Number(db.prepare('SELECT COUNT(*) AS count FROM appointments').get()?.count ?? 0);
-  const consultations = Number(db.prepare('SELECT COUNT(*) AS count FROM consultations').get()?.count ?? 0);
-  const invoices = Number(db.prepare('SELECT COUNT(*) AS count FROM invoices').get()?.count ?? 0);
-
-  const hasBusinessData = patients + appointments + consultations + invoices > 0;
-  const requiresSetup = nonAdminUsers === 0 && !hasBusinessData;
+  const offices = Number(db.prepare('SELECT COUNT(*) AS count FROM offices').get()?.count ?? 0);
+  const requiresSetup = offices === 0;
 
   return {
     requiresSetup,
     canRestoreWithoutAuth: requiresSetup,
-    stats: {
-      nonAdminUsers,
-      patients,
-      appointments,
-      consultations,
-      invoices
-    }
+    stats: { offices }
   };
 }
 
@@ -3235,304 +3515,10 @@ async function ensureSeedData() {
     }
   }
 
-  const patientCount = db.prepare('SELECT COUNT(*) as count FROM patients').get().count;
-
-  if (patientCount === 0) {
-    const insertPatient = db.prepare(
-      `INSERT INTO patients
-       (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, last_visit, consent_signed, retention_until)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    );
-
-    const inserted = [
-      {
-        name: 'DUBOIS Claire',
-        phone: '06 44 81 00 23',
-        notes: 'Lombalgie chronique. Exercices domiciliaires recommandes.',
-        sex: 'F',
-        birthDate: '1988-06-14',
-        visit: '2026-04-08'
-      },
-      {
-        name: 'MARTIN Yanis',
-        phone: '06 81 17 94 52',
-        notes: 'Suivi sportif: genou droit.',
-        sex: 'M',
-        birthDate: '1995-02-03',
-        visit: '2026-04-12'
-      },
-      {
-        name: 'KACEM Nora',
-        phone: '07 62 50 02 18',
-        notes: 'Cervicalgies posturales.',
-        sex: 'F',
-        birthDate: '1979-11-25',
-        visit: '2026-04-14'
-      }
-    ].map((patient) =>
-      insertPatient.run(
-        encryptSensitiveField(patient.name),
-        encryptSensitiveField(patient.phone),
-        encryptSensitiveField(patient.notes),
-        patient.sex,
-        patient.birthDate,
-        patient.visit,
-        1,
-        '2031-12-31'
-      ).lastInsertRowid
-    );
-
-    const insertAppointment = db.prepare(
-      'INSERT INTO appointments (patient_id, starts_at, reason_cipher, status) VALUES (?, ?, ?, ?)'
-    );
-
-    insertAppointment.run(
-      inserted[0],
-      '2026-04-15T08:30:00.000Z',
-      encryptSensitiveField('Lombalgie'),
-      'A confirmer'
-    );
-    insertAppointment.run(
-      inserted[1],
-      '2026-04-15T09:15:00.000Z',
-      encryptSensitiveField('Suivi sportif'),
-      'En attente'
-    );
-    insertAppointment.run(
-      inserted[2],
-      '2026-04-15T10:00:00.000Z',
-      encryptSensitiveField('Douleur cervicale'),
-      'Termine'
-    );
-
-    const insertInvoice = db.prepare(
-      `INSERT INTO invoices
-       (patient_id, invoice_number, amount_cents, status, issued_at, due_at, notes_cipher)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    );
-
-    insertInvoice.run(
-      inserted[0],
-      'FAC-2026-0415-001',
-      7000,
-      'payee',
-      '2026-04-03',
-      '2026-04-03',
-      encryptSensitiveField('Consultation osteopathie')
-    );
-    insertInvoice.run(
-      inserted[1],
-      'FAC-2026-0415-002',
-      6500,
-      'impayee',
-      '2026-04-12',
-      '2026-04-22',
-      encryptSensitiveField('Seance de suivi')
-    );
-  }
-
-  const activePatientCount = db
-    .prepare('SELECT COUNT(*) as count FROM patients WHERE is_deleted = 0')
-    .get().count;
-
-  if (activePatientCount < 12) {
-    const additionalPatients = [
-      {
-        name: 'BERNARD Lucas',
-        phone: '06 83 11 03 88',
-        notes: 'Suivi postural.',
-        sex: 'M',
-        birthDate: '1991-08-10',
-        visit: '2026-03-20',
-        startsAt: '2026-03-20T15:30:00.000Z',
-        reason: 'Suivi postural',
-        status: 'Termine',
-        invoiceNumber: 'FAC-2026-DASH-001',
-        amountCents: 6200,
-        invoiceStatus: 'payee',
-        dueAt: '2026-03-25'
-      },
-      {
-        name: 'MOREL Eva',
-        phone: '07 45 21 99 70',
-        notes: 'Douleur thoracique fonctionnelle.',
-        sex: 'F',
-        birthDate: '1982-03-04',
-        visit: '2026-03-28',
-        startsAt: '2026-03-28T09:45:00.000Z',
-        reason: 'Douleur thoracique',
-        status: 'A confirmer',
-        invoiceNumber: 'FAC-2026-DASH-002',
-        amountCents: 6800,
-        invoiceStatus: 'impayee',
-        dueAt: '2026-04-10'
-      },
-      {
-        name: 'GIRAUD Mathis',
-        phone: '07 57 03 26 41',
-        notes: 'Entorse cheville en reprise.',
-        sex: 'M',
-        birthDate: '2000-01-17',
-        visit: '2026-02-14',
-        startsAt: '2026-02-14T11:15:00.000Z',
-        reason: 'Entorse cheville',
-        status: 'Termine',
-        invoiceNumber: 'FAC-2026-DASH-003',
-        amountCents: 6000,
-        invoiceStatus: 'payee',
-        dueAt: '2026-02-18'
-      },
-      {
-        name: 'FARHAT Selma',
-        phone: '06 91 12 42 21',
-        notes: 'Migraine cervico-genique.',
-        sex: 'F',
-        birthDate: '1973-09-30',
-        visit: '2026-01-23',
-        startsAt: '2026-01-23T08:15:00.000Z',
-        reason: 'Migraine',
-        status: 'En attente',
-        invoiceNumber: 'FAC-2026-DASH-004',
-        amountCents: 7200,
-        invoiceStatus: 'impayee',
-        dueAt: '2026-02-02'
-      },
-      {
-        name: 'LAMBERT Noe',
-        phone: '06 99 62 15 13',
-        notes: 'Suivi scoliose.',
-        sex: 'M',
-        birthDate: '2008-12-11',
-        visit: '2025-12-17',
-        startsAt: '2025-12-17T16:00:00.000Z',
-        reason: 'Suivi scoliose',
-        status: 'Termine',
-        invoiceNumber: 'FAC-2026-DASH-005',
-        amountCents: 5800,
-        invoiceStatus: 'payee',
-        dueAt: '2025-12-20'
-      },
-      {
-        name: 'OUALI Karim',
-        phone: '07 82 12 80 72',
-        notes: 'Lombalgie aigue.',
-        sex: 'M',
-        birthDate: '1986-07-22',
-        visit: '2025-11-04',
-        startsAt: '2025-11-04T10:30:00.000Z',
-        reason: 'Lombalgie',
-        status: 'Termine',
-        invoiceNumber: 'FAC-2026-DASH-006',
-        amountCents: 7000,
-        invoiceStatus: 'impayee',
-        dueAt: '2025-11-12'
-      },
-      {
-        name: 'ROCHE Lea',
-        phone: '06 59 61 18 33',
-        notes: 'Consultation preventive.',
-        sex: 'F',
-        birthDate: '1999-10-09',
-        visit: '2025-10-19',
-        startsAt: '2025-10-19T13:20:00.000Z',
-        reason: 'Consultation preventive',
-        status: 'Termine',
-        invoiceNumber: 'FAC-2026-DASH-007',
-        amountCents: 6400,
-        invoiceStatus: 'payee',
-        dueAt: '2025-10-24'
-      },
-      {
-        name: 'JOLY Pierre',
-        phone: '06 25 44 80 56',
-        notes: 'Tensions dorsales.',
-        sex: 'M',
-        birthDate: '1968-05-27',
-        visit: '2025-09-07',
-        startsAt: '2025-09-07T09:00:00.000Z',
-        reason: 'Tensions dorsales',
-        status: 'Termine',
-        invoiceNumber: 'FAC-2026-DASH-008',
-        amountCents: 7600,
-        invoiceStatus: 'impayee',
-        dueAt: '2025-09-18'
-      },
-      {
-        name: 'PARENT Ines',
-        phone: '07 66 88 73 19',
-        notes: 'Suivi postpartum.',
-        sex: 'F',
-        birthDate: '1993-04-02',
-        visit: '2025-08-12',
-        startsAt: '2025-08-12T14:15:00.000Z',
-        reason: 'Suivi postpartum',
-        status: 'Termine',
-        invoiceNumber: 'FAC-2026-DASH-009',
-        amountCents: 6900,
-        invoiceStatus: 'payee',
-        dueAt: '2025-08-20'
-      },
-      {
-        name: 'BELKADI Sofia',
-        phone: '06 77 08 15 91',
-        notes: 'Douleurs de hanche.',
-        sex: 'F',
-        birthDate: '1959-01-19',
-        visit: '2025-07-01',
-        startsAt: '2025-07-01T08:40:00.000Z',
-        reason: 'Douleurs de hanche',
-        status: 'Termine',
-        invoiceNumber: 'FAC-2026-DASH-010',
-        amountCents: 7300,
-        invoiceStatus: 'impayee',
-        dueAt: '2025-07-12'
-      }
-    ];
-
-    const slotsToFill = Math.min(12 - activePatientCount, additionalPatients.length);
-    const insertPatient = db.prepare(
-      `INSERT INTO patients
-       (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, last_visit, consent_signed, retention_until)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    );
-    const insertAppointment = db.prepare(
-      'INSERT INTO appointments (patient_id, starts_at, reason_cipher, status) VALUES (?, ?, ?, ?)'
-    );
-    const insertInvoice = db.prepare(
-      `INSERT INTO invoices
-       (patient_id, invoice_number, amount_cents, status, issued_at, due_at, notes_cipher)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    );
-
-    for (const patient of additionalPatients.slice(0, slotsToFill)) {
-      const insertedPatientId = insertPatient.run(
-        encryptSensitiveField(patient.name),
-        encryptSensitiveField(patient.phone),
-        encryptSensitiveField(patient.notes),
-        patient.sex,
-        patient.birthDate,
-        patient.visit,
-        1,
-        '2031-12-31'
-      ).lastInsertRowid;
-
-      insertAppointment.run(
-        insertedPatientId,
-        patient.startsAt,
-        encryptSensitiveField(patient.reason),
-        patient.status
-      );
-
-      insertInvoice.run(
-        insertedPatientId,
-        patient.invoiceNumber,
-        patient.amountCents,
-        patient.invoiceStatus,
-        patient.visit,
-        patient.dueAt,
-        encryptSensitiveField(patient.reason)
-      );
-    }
+  const officeCount = Number(db.prepare('SELECT COUNT(*) as count FROM offices').get()?.count ?? 0);
+  if (officeCount === 0) {
+    // Keep first-run setup deterministic: no business entities until the first office is configured or restored.
+    clearBusinessDataForInitialSetup();
   }
 }
 
@@ -5170,6 +5156,174 @@ app.post('/api/setup/restore', (req, res) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'La restauration de la sauvegarde a echoue';
     return res.status(400).json({ message });
+  }
+});
+
+app.post('/api/setup/office', (req, res) => {
+  const setupStatus = getSetupStatusSnapshot();
+  if (!setupStatus.requiresSetup) {
+    return res.status(403).json({ message: 'La configuration initiale n\'est disponible qu\'au premier demarrage' });
+  }
+
+  const {
+    name,
+    defaultSessionDurationMinutes,
+    country,
+    devise,
+    invoiceNumberFormat,
+    numberingConfiguration,
+    alwaysShowSocialSecurityAndMutuelle,
+    addressLine1,
+    addressLine2,
+    postalCode,
+    city,
+    phoneMobile,
+    phoneLandline,
+    phoneFax,
+    email,
+    website,
+    logoData,
+    openingHours,
+    consultationProfiles,
+    serviceTypes,
+    paymentMethods
+  } = req.body;
+
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({ message: 'Le nom du cabinet est obligatoire' });
+  }
+
+  const normalizedOpeningHours = normalizeOfficeOpeningHours(openingHours);
+  const normalizedDefaultSessionDurationMinutes = normalizeOfficeDefaultSessionDurationMinutes(defaultSessionDurationMinutes);
+  const normalizedCountry = String(country ?? '').trim() || 'France';
+  const normalizedDevise = normalizeOfficeDevise(devise);
+  const normalizedInvoiceNumberFormat = normalizeOfficeInvoiceNumberFormat(invoiceNumberFormat);
+  const normalizedInvoiceNumberingConfiguration = normalizeOfficeInvoiceNumberingConfiguration(numberingConfiguration);
+  const normalizedInvoiceShowInsuranceFields = alwaysShowSocialSecurityAndMutuelle ? 1 : 0;
+  const normalizedConsultationProfiles = normalizeOfficeConsultationProfiles(consultationProfiles);
+
+  try {
+    clearBusinessDataForInitialSetup();
+
+    const insert = db.prepare(`
+      INSERT INTO offices (name, default_session_duration_minutes, country, devise, invoice_number_format, invoice_numbering_configuration,
+                           invoice_show_insurance_fields, invoice_hide_vat_mention, invoice_template_layout_json, address_line1, address_line2, postal_code, city, phone_mobile,
+                           phone_landline, phone_fax, email, website, vat_number, logo_data, opening_hours_json,
+                           consultation_profiles_json, display_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const result = insert.run(
+      name.trim(), normalizedDefaultSessionDurationMinutes, normalizedCountry, normalizedDevise,
+      normalizedInvoiceNumberFormat, normalizedInvoiceNumberingConfiguration, normalizedInvoiceShowInsuranceFields, 0,
+      '{}',
+      addressLine1 || null, addressLine2 || null, postalCode || null, city || null,
+      phoneMobile || null, phoneLandline || null, phoneFax || null, email || null,
+      website || null, null, logoData || null, JSON.stringify(normalizedOpeningHours),
+      JSON.stringify(normalizedConsultationProfiles), 1
+    );
+
+    const createdOfficeId = Number(result.lastInsertRowid);
+    replaceOfficeBusinessSettings(createdOfficeId, serviceTypes, paymentMethods);
+    createLocalCalendarFromOffice(createdOfficeId, name.trim());
+
+    // Assign admin user to the new office
+    const adminUser = db.prepare("SELECT id FROM users WHERE lower(username) = 'admin' LIMIT 1").get();
+    if (adminUser) {
+      db.prepare('INSERT OR IGNORE INTO user_offices (user_id, office_id) VALUES (?, ?)').run(adminUser.id, createdOfficeId);
+    }
+
+    return res.status(201).json({ officeId: createdOfficeId });
+  } catch (err) {
+    console.error('Error creating setup office:', err);
+    return res.status(500).json({ message: 'Erreur lors de la creation du cabinet' });
+  }
+});
+
+app.post('/api/setup/demo', (_req, res) => {
+  const setupStatus = getSetupStatusSnapshot();
+  if (!setupStatus.requiresSetup) {
+    return res.status(403).json({ message: 'La configuration de demonstration n\'est disponible qu\'au premier demarrage' });
+  }
+
+  const officeName = 'Cabinet Osteo Demo';
+  const defaultServiceTypes = [
+    { id: null, label: 'Consultation osteopathique', amountHt: 70, vatRate: 0 },
+    { id: null, label: 'Consultation pediatrique', amountHt: 65, vatRate: 0 },
+    { id: null, label: 'Suivi sportif', amountHt: 75, vatRate: 0 }
+  ];
+  const defaultPaymentMethods = [
+    { id: null, label: 'Carte bleue (CB)', isActive: true },
+    { id: null, label: 'Especes', isActive: true },
+    { id: null, label: 'Cheque', isActive: true }
+  ];
+
+  try {
+    clearBusinessDataForInitialSetup();
+
+    const insert = db.prepare(`
+      INSERT INTO offices (name, default_session_duration_minutes, country, devise, invoice_number_format, invoice_numbering_configuration,
+                           invoice_show_insurance_fields, invoice_hide_vat_mention, invoice_template_layout_json, address_line1, address_line2, postal_code, city, phone_mobile,
+                           phone_landline, phone_fax, email, website, vat_number, logo_data, opening_hours_json,
+                           consultation_profiles_json, display_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const openingHours = normalizeOfficeOpeningHours({
+      monday: [{ start: '09:00', end: '18:00' }],
+      tuesday: [{ start: '09:00', end: '18:00' }],
+      wednesday: [{ start: '09:00', end: '18:00' }],
+      thursday: [{ start: '09:00', end: '18:00' }],
+      friday: [{ start: '09:00', end: '17:00' }],
+      saturday: [{ start: '09:00', end: '12:00' }],
+      sunday: []
+    });
+    const consultationProfiles = normalizeOfficeConsultationProfiles([
+      { id: 'adult', name: 'Adulte', reasons: ['Lombalgie', 'Cervicalgie', 'Suivi postural'], displayOrder: 1 },
+      { id: 'child', name: 'Enfant', reasons: ['Suivi croissance', 'Troubles du sommeil'], displayOrder: 2 },
+      { id: 'sport', name: 'Sportif', reasons: ['Preparation competition', 'Recuperation'], displayOrder: 3 }
+    ]);
+
+    const result = insert.run(
+      officeName,
+      60,
+      'France',
+      'EUR',
+      'AAAA-XXXXXX',
+      'Numérotation globale au cabinet',
+      0,
+      0,
+      '{}',
+      '24 rue de la Demo',
+      '',
+      '44000',
+      'Nantes',
+      '06 00 00 00 00',
+      '',
+      '',
+      'contact@demo.osteosoft',
+      'https://demo.osteosoft.local',
+      '',
+      null,
+      JSON.stringify(openingHours),
+      JSON.stringify(consultationProfiles),
+      1
+    );
+
+    const createdOfficeId = Number(result.lastInsertRowid);
+    replaceOfficeBusinessSettings(createdOfficeId, defaultServiceTypes, defaultPaymentMethods);
+    createLocalCalendarFromOffice(createdOfficeId, officeName);
+
+    const adminUser = db.prepare("SELECT id FROM users WHERE lower(username) = 'admin' LIMIT 1").get();
+    if (adminUser) {
+      db.prepare('INSERT OR IGNORE INTO user_offices (user_id, office_id) VALUES (?, ?)').run(adminUser.id, createdOfficeId);
+    }
+
+    const seeded = seedDemoInstanceDataForOffice(createdOfficeId);
+    return res.status(201).json({ officeId: createdOfficeId, seeded });
+  } catch (err) {
+    console.error('Error creating setup demo instance:', err);
+    return res.status(500).json({ message: 'Erreur lors de la creation de l\'instance de demonstration' });
   }
 });
 

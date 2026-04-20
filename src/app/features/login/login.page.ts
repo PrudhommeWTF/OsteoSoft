@@ -1,21 +1,19 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { ReactiveFormsModule, Validators, FormBuilder } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 
-import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { ConfigService } from '../../core/config.service';
 
 @Component({
   selector: 'app-login-page',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule],
   templateUrl: './login.page.html',
   styleUrl: './login.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class LoginPage implements OnInit {
+export class LoginPage {
   private readonly formBuilder = inject(FormBuilder);
-  private readonly api = inject(ApiService);
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
   readonly configService = inject(ConfigService);
@@ -28,17 +26,6 @@ export class LoginPage implements OnInit {
     password: ['admin', [Validators.required]],
     remember: [true]
   });
-
-  async ngOnInit(): Promise<void> {
-    try {
-      const setup = await this.api.getSetupStatus();
-      if (setup.requiresSetup) {
-        await this.router.navigateByUrl('/installation');
-      }
-    } catch {
-      // If setup status is unavailable, keep default login flow.
-    }
-  }
 
   async submit(): Promise<void> {
     if (this.form.invalid || this.isSubmitting()) {

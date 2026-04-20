@@ -1,11 +1,11 @@
 import { Routes } from '@angular/router';
 
-import { adminGuard, authGuard, guestGuard, permissionGuard } from './core/auth.guard';
+import { adminGuard, authGuard, guestGuard, permissionGuard, setupRequiredGuard } from './core/auth.guard';
 
 export const routes: Routes = [
   {
     path: 'installation',
-    canActivate: [guestGuard],
+    canActivate: [setupRequiredGuard],
     loadComponent: () => import('./features/setup/installation.page').then((m) => m.InstallationPage)
   },
   {
