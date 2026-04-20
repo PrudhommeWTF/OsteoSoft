@@ -77,20 +77,74 @@
         <thead>
           <tr>
             <th>Nom</th>
+            <th>Âge</th>
+            <th>Ville</th>
             <th>Téléphone</th>
             <th>Dernière visite</th>
           </tr>
         </thead>
         <tbody>
-          @for (patient of filteredPatients(); track patient.fullName) {
+          @for (patient of pagedPatients(); track patient.fullName) {
             <tr [routerLink]="['/patients', patient.id]">
-              <td>{{ patient.fullName }}</td>
+              <td>
+                @if (sexIcon(patient.sex); as icon) {
+                  <i [class]="icon + ' me-2 ' + sexColorClass(patient.sex)" aria-hidden="true"></i>
+                }
+                {{ patient.fullName }}
+              </td>
+              <td>{{ patient.age != null ? patient.age + ' ans' : '—' }}</td>
+              <td>{{ patient.city || '—' }}</td>
               <td>{{ patient.phone }}</td>
               <td>{{ patient.lastVisit }}</td>
             </tr>
           }
         </tbody>
       </table>
+    </div>
+
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-3">
+      <div class="text-secondary small">
+        @if (paginationInfo().total === 0) {
+          Aucun résultat
+        } @else {
+          {{ paginationInfo().from }}&ndash;{{ paginationInfo().to }} sur {{ paginationInfo().total }} patients
+        }
+      </div>
+
+      <div class="d-flex align-items-center gap-3">
+        <div class="d-flex align-items-center gap-2">
+          <label class="form-label mb-0 small text-secondary text-nowrap" for="patients-page-size">Par page</label>
+          <select
+            id="patients-page-size"
+            class="form-select form-select-sm"
+            style="width:auto"
+            [value]="pageSize()"
+            (change)="setPageSize(+$any($event.target).value)"
+          >
+            @for (opt of pageSizeOptions; track opt) {
+              <option [value]="opt">{{ opt }}</option>
+            }
+          </select>
+        </div>
+
+        <nav aria-label="Pagination patients">
+          <ul class="pagination pagination-sm mb-0">
+            <li class="page-item" [class.disabled]="currentPage() === 1">
+              <button type="button" class="page-link" (click)="goToPrevPage()" aria-label="Page précédente">
+                <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+              </button>
+            </li>
+            <li class="page-item disabled">
+              <span class="page-link">{{ currentPage() }} / {{ totalPages() }}</span>
+            </li>
+            <li class="page-item" [class.disabled]="currentPage() === totalPages()">
+              <button type="button" class="page-link" (click)="goToNextPage()" aria-label="Page suivante">
+                <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+              </button>
+            </li>
+          </ul>
+        </nav>
+      </div>
     </div>
   </div>
 </section>

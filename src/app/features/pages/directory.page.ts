@@ -7,7 +7,6 @@ import { AuthService } from '../../core/auth.service';
 import { DirectoryContact, DirectoryContactPayload, OfficeOption } from '../../core/api.types';
 
 type ContactKindFilter = 'all' | 'person' | 'company';
-type ActiveFilter = 'all' | 'active' | 'inactive';
 
 @Component({
   selector: 'app-directory-page',
@@ -40,7 +39,6 @@ export class DirectoryPage {
   readonly search = signal('');
   readonly selectedOfficeId = signal<number | null>(null);
   readonly kindFilter = signal<ContactKindFilter>('all');
-  readonly activeFilter = signal<ActiveFilter>('all');
 
   readonly isModalOpen = signal(false);
   readonly editingContactId = signal<number | null>(null);
@@ -53,18 +51,9 @@ export class DirectoryPage {
   readonly filteredContacts = computed(() => {
     const search = this.search().trim().toLowerCase();
     const kind = this.kindFilter();
-    const active = this.activeFilter();
 
     return this.contacts().filter((contact) => {
       if (kind !== 'all' && contact.kind !== kind) {
-        return false;
-      }
-
-      if (active === 'active' && !contact.isActive) {
-        return false;
-      }
-
-      if (active === 'inactive' && contact.isActive) {
         return false;
       }
 
@@ -87,6 +76,45 @@ export class DirectoryPage {
     });
   });
 
+  readonly pageSize = signal(25);
+  readonly currentPage = signal(1);
+
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.filteredContacts().length / this.pageSize())));
+
+  readonly paginationInfo = computed(() => {
+    const total = this.filteredContacts().length;
+    const size = this.pageSize();
+    const page = this.currentPage();
+    const from = total === 0 ? 0 : (page - 1) * size + 1;
+    const to = Math.min(page * size, total);
+    return { from, to, total };
+  });
+
+  readonly pagedContacts = computed(() => {
+    const page = this.currentPage();
+    const size = this.pageSize();
+    return this.filteredContacts().slice((page - 1) * size, page * size);
+  });
+
+  readonly pageSizeOptions = [10, 25, 50, 100];
+
+  setPageSize(size: number): void {
+    this.pageSize.set(size);
+    this.currentPage.set(1);
+  }
+
+  goToPrevPage(): void {
+    if (this.currentPage() > 1) {
+      this.currentPage.update((p) => p - 1);
+    }
+  }
+
+  goToNextPage(): void {
+    if (this.currentPage() < this.totalPages()) {
+      this.currentPage.update((p) => p + 1);
+    }
+  }
+
   readonly form = this.fb.nonNullable.group({
     officeId: [0, [Validators.required, Validators.min(1)]],
     kind: ['person' as 'person' | 'company', [Validators.required]],
@@ -103,7 +131,6 @@ export class DirectoryPage {
     city: ['', [Validators.maxLength(120)]],
     country: ['France', [Validators.maxLength(80)]],
     notes: ['', [Validators.maxLength(4000)]],
-    isActive: [true]
   });
 
   constructor() {
@@ -118,7 +145,6 @@ export class DirectoryPage {
       const payload = await this.api.getDirectoryContacts({
         officeId: this.selectedOfficeId(),
         kind: this.kindFilter(),
-        isActive: this.activeFilter() === 'all' ? null : this.activeFilter() === 'active'
       });
 
       this.contacts.set(payload.contacts);
@@ -148,21 +174,19 @@ export class DirectoryPage {
 
   onSearch(value: string): void {
     this.search.set(value);
+    this.currentPage.set(1);
   }
 
   async onOfficeChange(value: string): Promise<void> {
     const parsed = Number(value);
     this.selectedOfficeId.set(Number.isInteger(parsed) && parsed > 0 ? parsed : null);
+    this.currentPage.set(1);
     await this.loadContacts();
   }
 
   async onKindFilterChange(value: ContactKindFilter): Promise<void> {
     this.kindFilter.set(value);
-    await this.loadContacts();
-  }
-
-  async onActiveFilterChange(value: ActiveFilter): Promise<void> {
-    this.activeFilter.set(value);
+    this.currentPage.set(1);
     await this.loadContacts();
   }
 
@@ -185,7 +209,6 @@ export class DirectoryPage {
       city: '',
       country: 'France',
       notes: '',
-      isActive: true
     });
     this.isModalOpen.set(true);
   }
@@ -209,7 +232,6 @@ export class DirectoryPage {
       city: contact.city,
       country: contact.country || 'France',
       notes: contact.notes,
-      isActive: contact.isActive
     });
     this.isModalOpen.set(true);
   }
@@ -255,7 +277,6 @@ export class DirectoryPage {
         city: value.city.trim(),
         country: value.country.trim() || 'France',
         notes: value.notes.trim(),
-        isActive: Boolean(value.isActive)
       };
 
       const editingId = this.editingContactId();
@@ -344,8 +365,7 @@ export class DirectoryPage {
             count: rows.length,
             officeId: this.selectedOfficeId(),
             search: this.search().trim(),
-            kindFilter: this.kindFilter(),
-            activeFilter: this.activeFilter()
+            kindFilter: this.kindFilter()
           },
           contacts: rows.map((contact) => ({
             id: contact.id,
@@ -361,8 +381,7 @@ export class DirectoryPage {
             postalCode: contact.postalCode,
             city: contact.city,
             country: contact.country,
-            notes: contact.notes,
-            isActive: contact.isActive
+            notes: contact.notes
           }))
         };
 
@@ -385,7 +404,6 @@ export class DirectoryPage {
           codePostal: contact.postalCode,
           ville: contact.city,
           pays: contact.country,
-          statut: contact.isActive ? 'Actif' : 'Inactif',
           notes: contact.notes
         }));
 

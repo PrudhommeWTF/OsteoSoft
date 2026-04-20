@@ -78,7 +78,7 @@ try {
 try {
   const cols = db.prepare(`PRAGMA table_info(payment_methods)`).all().map((c) => c.name);
   if (cols.length > 0 && !cols.includes('system_key')) {
-    db.exec('ALTER TABLE payment_methods ADD COLUMN system_key TEXT');
+    db.exec("ALTER TABLE payment_methods ADD COLUMN system_key TEXT NOT NULL DEFAULT ''");
     console.log('✓ Added system_key column to payment_methods');
   }
 } catch (err) {
@@ -576,6 +576,23 @@ function buildAccessRightsForPermissions(enabledPermissionIds) {
   }
 
   return rights;
+}
+
+function mergeAccessRights(rightsList) {
+  const merged = buildAccessRights(false);
+
+  for (const rights of Array.isArray(rightsList) ? rightsList : []) {
+    const normalized = normalizeAccessRights(rights, false);
+    for (const [domainId, domainRights] of Object.entries(normalized)) {
+      for (const [permissionId, enabled] of Object.entries(domainRights)) {
+        if (enabled === true) {
+          merged[domainId][permissionId] = true;
+        }
+      }
+    }
+  }
+
+  return merged;
 }
 
 function createAccessProfileId(label) {
@@ -1654,7 +1671,6 @@ function mapDirectoryContactRow(row) {
     city: String(row.city ?? '').trim(),
     country: String(row.country ?? 'France').trim() || 'France',
     notes: String(row.notes ?? '').trim(),
-    isActive: Number(row.is_active) === 1,
     createdAt: String(row.created_at ?? ''),
     updatedAt: String(row.updated_at ?? '')
   };
@@ -1742,84 +1758,127 @@ function clearBusinessDataForInitialSetup() {
   db.exec('DELETE FROM directory_contacts');
 }
 
-function seedDemoInstanceDataForOffice(officeId) {
+function resetDatabaseForDemoInstance() {
+  const hasTable = (tableName) => Boolean(
+    db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get(String(tableName ?? '').trim())
+  );
+
+  db.exec('DELETE FROM patient_documents');
+  db.exec('DELETE FROM appointments');
+  db.exec('DELETE FROM consultations');
+  db.exec('DELETE FROM invoices');
+  db.exec('DELETE FROM directory_contacts');
+  if (hasTable('draft')) {
+    db.exec('DELETE FROM draft');
+  } else if (hasTable('patient_drafts')) {
+    db.exec('DELETE FROM patient_drafts');
+  }
+  db.exec('DELETE FROM patients');
+  db.exec('DELETE FROM accounting_operation_meta');
+  db.exec('DELETE FROM accounting_expenses');
+  db.exec('DELETE FROM accounting_deposits');
+  db.exec('DELETE FROM office_user_delegations');
+  db.exec('DELETE FROM user_offices');
+  db.exec('DELETE FROM local_calendars');
+  db.exec('DELETE FROM service_types');
+  db.exec('DELETE FROM payment_methods');
+  db.exec("UPDATE users SET office_id = NULL WHERE lower(username) = 'admin'");
+  db.exec("DELETE FROM users WHERE lower(username) <> 'admin'");
+  db.exec('DELETE FROM offices');
+}
+
+function isStrongPassword(password) {
+  const normalized = String(password ?? '').trim();
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])\S{12,256}$/.test(normalized);
+}
+
+function deleteUsersByUsernames(usernames) {
+  const normalized = Array.from(
+    new Set(
+      usernames
+        .map((username) => String(username ?? '').trim().toLowerCase())
+        .filter(Boolean)
+    )
+  );
+
+  if (normalized.length === 0) {
+    return [];
+  }
+
+  const placeholders = normalized.map(() => '?').join(', ');
+  const users = db
+    .prepare(`SELECT id FROM users WHERE lower(username) IN (${placeholders})`)
+    .all(...normalized);
+
+  const userIds = users
+    .map((row) => Number(row.id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+
+  if (userIds.length === 0) {
+    return [];
+  }
+
+  const idPlaceholders = userIds.map(() => '?').join(', ');
+  db.prepare(`DELETE FROM draft WHERE user_id IN (${idPlaceholders})`).run(...userIds);
+  db.prepare(`DELETE FROM audit_logs WHERE user_id IN (${idPlaceholders})`).run(...userIds);
+  db.prepare(`DELETE FROM office_user_delegations WHERE user_id IN (${idPlaceholders})`).run(...userIds);
+  db.prepare(`DELETE FROM user_offices WHERE user_id IN (${idPlaceholders})`).run(...userIds);
+  db.prepare(`DELETE FROM user_preference WHERE user_id IN (${idPlaceholders})`).run(...userIds);
+  db.prepare(`DELETE FROM users WHERE id IN (${idPlaceholders})`).run(...userIds);
+
+  return userIds;
+}
+
+function seedDemoInstanceDataForOffice(officeId, options = {}) {
   const normalizedOfficeId = Number(officeId);
   if (!Number.isInteger(normalizedOfficeId) || normalizedOfficeId <= 0) {
     return { patients: 0, consultations: 0, appointments: 0, invoices: 0, directoryContacts: 0 };
   }
 
+  const practitionerName = String(options.practitionerName ?? '').trim() || 'Cabinet Demo';
+  const patientSetKey = String(options.patientSetKey ?? '').trim().toLowerCase() || 'nantes';
+  const createdByUserId = Number(options.createdByUserId);
+  const normalizedCreatedByUserId = Number.isInteger(createdByUserId) && createdByUserId > 0 ? createdByUserId : null;
+  const officeLabel = String(options.officeLabel ?? '').trim() || practitionerName;
+
   const calendarId = Number(
     db.prepare('SELECT id FROM local_calendars WHERE office_id = ? ORDER BY id ASC LIMIT 1').get(normalizedOfficeId)?.id ?? 0
   ) || null;
 
-  const demoPatients = [
-    {
-      lastName: 'DURAND',
-      firstName: 'Emma',
-      sex: 'F',
-      birthDate: '1989-04-12',
-      mobilePhone: '06 71 22 18 34',
-      city: 'Nantes',
-      postalCode: '44000',
-      relatedPeople: 'DURAND Leo, DURAND Chloé',
-      notes: 'Lombalgie recurrente, travail sur posture au bureau.'
-    },
-    {
-      lastName: 'DURAND',
-      firstName: 'Leo',
-      sex: 'M',
-      birthDate: '2015-09-02',
-      mobilePhone: '06 71 22 18 35',
-      city: 'Nantes',
-      postalCode: '44000',
-      relatedPeople: 'DURAND Emma, DURAND Chloé',
-      notes: 'Suivi pediatrique, croissance et posture scolaire.'
-    },
-    {
-      lastName: 'DURAND',
-      firstName: 'Chloe',
-      sex: 'F',
-      birthDate: '2018-01-27',
-      mobilePhone: '06 71 22 18 36',
-      city: 'Nantes',
-      postalCode: '44000',
-      relatedPeople: 'DURAND Emma, DURAND Leo',
-      notes: 'Troubles du sommeil, tensions cervicales legeres.'
-    },
-    {
-      lastName: 'MARTIN',
-      firstName: 'Hugo',
-      sex: 'M',
-      birthDate: '1993-11-08',
-      mobilePhone: '07 88 44 12 50',
-      city: 'Rezé',
-      postalCode: '44400',
-      relatedPeople: 'MARTIN Alice',
-      notes: 'Sportif amateur, chevilles fragiles.'
-    },
-    {
-      lastName: 'MARTIN',
-      firstName: 'Alice',
-      sex: 'F',
-      birthDate: '1995-02-16',
-      mobilePhone: '07 88 44 12 51',
-      city: 'Rezé',
-      postalCode: '44400',
-      relatedPeople: 'MARTIN Hugo',
-      notes: 'Cervicalgies chroniques avec migraines episodiques.'
-    },
-    {
-      lastName: 'BERNARD',
-      firstName: 'Noah',
-      sex: 'M',
-      birthDate: '2002-07-19',
-      mobilePhone: '06 60 12 70 91',
-      city: 'Saint-Herblain',
-      postalCode: '44800',
-      relatedPeople: '',
-      notes: 'Reprise post-traumatique du membre inferieur droit.'
-    }
-  ];
+  const demoPatientsBySet = {
+    nantes: [
+      { lastName: 'DURAND', firstName: 'Emma', sex: 'F', birthDate: '1989-04-12', mobilePhone: '06 71 22 18 34', city: 'Nantes', postalCode: '44000', relatedPeople: 'DURAND Leo, DURAND Chloe', notes: 'Lombalgie recurrente, travail sur posture au bureau.' },
+      { lastName: 'DURAND', firstName: 'Leo', sex: 'M', birthDate: '2015-09-02', mobilePhone: '06 71 22 18 35', city: 'Nantes', postalCode: '44000', relatedPeople: 'DURAND Emma, DURAND Chloe', notes: 'Suivi pediatrique, croissance et posture scolaire.' },
+      { lastName: 'DURAND', firstName: 'Chloe', sex: 'F', birthDate: '2018-01-27', mobilePhone: '06 71 22 18 36', city: 'Nantes', postalCode: '44000', relatedPeople: 'DURAND Emma, DURAND Leo', notes: 'Troubles du sommeil, tensions cervicales legeres.' },
+      { lastName: 'RIVIERE', firstName: 'Pauline', sex: 'F', birthDate: '1984-07-10', mobilePhone: '06 80 10 22 31', city: 'Nantes', postalCode: '44100', relatedPeople: 'RIVIERE Luc', notes: 'Douleurs thoraciques fonctionnelles et stress professionnel.' },
+      { lastName: 'RIVIERE', firstName: 'Luc', sex: 'M', birthDate: '1982-01-19', mobilePhone: '06 80 10 22 32', city: 'Nantes', postalCode: '44100', relatedPeople: 'RIVIERE Pauline', notes: 'Suivi suite a une entorse lombaire repetee.' },
+      { lastName: 'LEGRAND', firstName: 'Maya', sex: 'F', birthDate: '2006-11-05', mobilePhone: '07 43 28 16 04', city: 'Orvault', postalCode: '44700', relatedPeople: '', notes: 'Preparation sportive et prevention des blessures.' },
+      { lastName: 'CHEVALIER', firstName: 'Nolan', sex: 'M', birthDate: '1997-03-23', mobilePhone: '07 62 80 14 56', city: 'Sautron', postalCode: '44880', relatedPeople: '', notes: 'Gene cervicale chronique en teletravail.' },
+      { lastName: 'PERRAUD', firstName: 'Ines', sex: 'F', birthDate: '1992-09-30', mobilePhone: '06 57 41 93 28', city: 'Nantes', postalCode: '44200', relatedPeople: '', notes: 'Post-partum avec douleurs pelviennes persistantes.' },
+      { lastName: 'BRETON', firstName: 'Mathis', sex: 'M', birthDate: '2011-12-14', mobilePhone: '06 93 70 26 45', city: 'Nantes', postalCode: '44300', relatedPeople: 'BRETON Elise', notes: 'Suivi croissance et adaptation posturale scolaire.' },
+      { lastName: 'BRETON', firstName: 'Elise', sex: 'F', birthDate: '1980-05-04', mobilePhone: '06 93 70 26 46', city: 'Nantes', postalCode: '44300', relatedPeople: 'BRETON Mathis', notes: 'Tensions cervicales et cephalees recurrentes.' },
+      { lastName: 'GUILLAUME', firstName: 'Axel', sex: 'M', birthDate: '1976-02-17', mobilePhone: '07 11 22 33 44', city: 'Nantes', postalCode: '44000', relatedPeople: '', notes: 'Suivi chronicite epaule droite, ergonomie professionnelle.' },
+      { lastName: 'LAMY', firstName: 'Salome', sex: 'F', birthDate: '1999-08-08', mobilePhone: '07 15 48 29 60', city: 'Carquefou', postalCode: '44470', relatedPeople: '', notes: 'Douleurs lombaires liees a la course longue distance.' }
+    ],
+    reze: [
+      { lastName: 'MARTIN', firstName: 'Hugo', sex: 'M', birthDate: '1993-11-08', mobilePhone: '07 88 44 12 50', city: 'Reze', postalCode: '44400', relatedPeople: 'MARTIN Alice', notes: 'Sportif amateur, chevilles fragiles.' },
+      { lastName: 'MARTIN', firstName: 'Alice', sex: 'F', birthDate: '1995-02-16', mobilePhone: '07 88 44 12 51', city: 'Reze', postalCode: '44400', relatedPeople: 'MARTIN Hugo', notes: 'Cervicalgies chroniques avec migraines episodiques.' },
+      { lastName: 'BERNARD', firstName: 'Noah', sex: 'M', birthDate: '2002-07-19', mobilePhone: '06 60 12 70 91', city: 'Saint-Herblain', postalCode: '44800', relatedPeople: '', notes: 'Reprise post-traumatique du membre inferieur droit.' },
+      { lastName: 'MOREAU', firstName: 'Jeanne', sex: 'F', birthDate: '1987-10-21', mobilePhone: '06 18 20 40 72', city: 'Bouguenais', postalCode: '44340', relatedPeople: '', notes: 'Troubles digestifs fonctionnels avec tensions dorsales.' },
+      { lastName: 'PICHON', firstName: 'Loris', sex: 'M', birthDate: '2013-06-12', mobilePhone: '06 51 17 25 09', city: 'Reze', postalCode: '44400', relatedPeople: 'PICHON Clara', notes: 'Suivi pediatrique et adaptation respiratoire.' },
+      { lastName: 'PICHON', firstName: 'Clara', sex: 'F', birthDate: '1988-01-27', mobilePhone: '06 51 17 25 10', city: 'Reze', postalCode: '44400', relatedPeople: 'PICHON Loris', notes: 'Recuperation post-accouchement et douleurs sacro-iliaques.' },
+      { lastName: 'LEMAIRE', firstName: 'Theo', sex: 'M', birthDate: '1990-09-03', mobilePhone: '07 70 34 88 91', city: 'Les Sorinieres', postalCode: '44840', relatedPeople: '', notes: 'Suivi suite a une chute en velo.' },
+      { lastName: 'VIDAL', firstName: 'Iris', sex: 'F', birthDate: '1979-04-15', mobilePhone: '07 40 58 63 12', city: 'Vertou', postalCode: '44120', relatedPeople: '', notes: 'Douleurs thoraco-lombaires au poste de travail.' },
+      { lastName: 'HUBERT', firstName: 'Sacha', sex: 'M', birthDate: '2008-02-11', mobilePhone: '06 72 94 21 87', city: 'Reze', postalCode: '44400', relatedPeople: '', notes: 'Suivi adolescent avec asymetrie posturale.' },
+      { lastName: 'ROUSSEL', firstName: 'Maelle', sex: 'F', birthDate: '1996-12-01', mobilePhone: '06 63 15 77 43', city: 'Nantes', postalCode: '44200', relatedPeople: '', notes: 'Fatigue chronique et douleurs cervicales recidivantes.' },
+      { lastName: 'TESSIER', firstName: 'Gabin', sex: 'M', birthDate: '1985-05-26', mobilePhone: '06 98 23 66 14', city: 'Reze', postalCode: '44400', relatedPeople: '', notes: 'Suivi de prevention sur contraintes physiques au travail.' },
+      { lastName: 'MORIN', firstName: 'Lina', sex: 'F', birthDate: '2004-03-09', mobilePhone: '07 84 62 10 58', city: 'Pont-Saint-Martin', postalCode: '44860', relatedPeople: '', notes: 'Preparation examens et troubles du sommeil associes.' }
+    ]
+  };
+
+  const demoPatients = demoPatientsBySet[patientSetKey] ?? demoPatientsBySet.nantes;
 
   const consultationTemplates = [
     { offsetYears: 4, month: 2, day: 14, hour: 9, minute: 0, status: 'Termine', title: 'Bilan osteopathique annuel', amountCents: 7000, paid: true },
@@ -1862,8 +1921,8 @@ function seedDemoInstanceDataForOffice(officeId) {
        office_id, kind, first_name, last_name, organization, role,
        email, mobile_phone, landline_phone,
        address_line1, address_line2, postal_code, city, country,
-       notes, is_active, created_by, updated_by
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
+       notes, created_by, updated_by
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
   const retentionDate = new Date();
@@ -1894,7 +1953,7 @@ function seedDemoInstanceDataForOffice(officeId) {
         relatedPeople: normalizedRelatedPeople,
         mobilePhone,
         landlinePhone,
-        email: '',
+        email: `${patient.firstName.toLowerCase()}.${patient.lastName.toLowerCase()}@example.test`,
         address1: 'Adresse de test',
         address2: '',
         postalCode: patient.postalCode,
@@ -1902,14 +1961,16 @@ function seedDemoInstanceDataForOffice(officeId) {
         country: 'France',
         maritalStatus: 'Non renseigne',
         childrenCount: 0,
-        occupationOrSchool: '',
-        hobbies: '',
-        primaryDoctor: '',
+        occupationOrSchool: patientIndex % 3 === 0 ? 'Cadre' : patientIndex % 3 === 1 ? 'Etudiant' : 'Profession liberale',
+        hobbies: patientIndex % 2 === 0 ? 'Running, yoga' : 'Natation, randonnee',
+        primaryDoctor: patientIndex % 4 === 0 ? 'Dr Perrin' : '',
         socialSecurityNumber: '',
-        referredBy: '',
+        referredBy: patientIndex % 5 === 0 ? 'Recommande par un patient du cabinet' : '',
         manualPreference: 'Non renseigne',
         isDeceased: false
       };
+
+      const consentSigned = patientIndex % 7 === 0 ? 0 : 1;
 
       const patientResult = insertPatient.run(
         encryptSensitiveField(fullName),
@@ -1920,7 +1981,7 @@ function seedDemoInstanceDataForOffice(officeId) {
         'Non renseigne',
         0,
         lastVisit,
-        1,
+        consentSigned,
         retentionUntil
       );
 
@@ -1928,22 +1989,36 @@ function seedDemoInstanceDataForOffice(officeId) {
       patientCount += 1;
 
       for (const [index, template] of consultationTemplates.entries()) {
+        const jitterSeed = (normalizedOfficeId * 97) + ((patientIndex + 1) * 53) + ((index + 1) * 17);
+        const hourJitter = ((jitterSeed * 13) % 3) - 1;
+        const minuteJitter = ((jitterSeed * 37) % 41) - 20;
+        const baseMinutes = (template.hour * 60) + template.minute;
+        const jitteredMinutes = baseMinutes + (hourJitter * 60) + minuteJitter;
+        const boundedMinutes = Math.min(Math.max(jitteredMinutes, 8 * 60), (19 * 60) + 30);
+        const roundedMinutes = Math.round(boundedMinutes / 5) * 5;
+        const startHour = Math.floor(roundedMinutes / 60);
+        const startMinute = roundedMinutes % 60;
+
         const startedAt = new Date(
           now.getFullYear() - template.offsetYears,
           template.month,
           template.day + patientIndex,
-          template.hour,
-          template.minute,
+          startHour,
+          startMinute,
           0,
           0
         ).toISOString();
 
         const consultationTitle = `${template.title} - ${patient.firstName}`;
+        const isFreeConsultation = patientIndex % 9 === 0 && index === 2;
+        const shouldSkipInvoice = patientIndex % 8 === 0 && index === consultationTemplates.length - 1;
+        const invoiceAmountCents = isFreeConsultation ? 0 : template.amountCents;
+        const invoiceStatus = isFreeConsultation ? 'payee' : (template.paid ? 'payee' : 'impayee');
         const consultationResult = insertConsultation.run(
           patientId,
           startedAt,
           normalizedOfficeId,
-          'Cabinet Demo',
+          practitionerName,
           consultationTitle,
           0,
           null,
@@ -1956,7 +2031,7 @@ function seedDemoInstanceDataForOffice(officeId) {
           null,
           null,
           null,
-          encryptSensitiveField(`<p>Compte rendu de demonstration (${index + 1}).</p>`)
+          encryptSensitiveField(`<p>Compte rendu de demonstration ${officeLabel} (${index + 1}).</p>`)
         );
         const consultationId = Number(consultationResult.lastInsertRowid);
         consultationCount += 1;
@@ -1972,23 +2047,29 @@ function seedDemoInstanceDataForOffice(officeId) {
         );
         appointmentCount += 1;
 
-        const issuedAt = startedAt.slice(0, 10);
-        const dueAt = new Date(new Date(startedAt).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-        const invoiceNumber = `DEMO-${now.getFullYear()}-${String(patientIndex + 1).padStart(2, '0')}${String(index + 1).padStart(2, '0')}`;
+        if (!shouldSkipInvoice) {
+          const issuedAt = startedAt.slice(0, 10);
+          const dueAt = new Date(new Date(startedAt).getTime() + (invoiceStatus === 'impayee' ? 14 : 7) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+          const invoiceNumber = `DEMO-${now.getFullYear()}-O${String(normalizedOfficeId).padStart(2, '0')}-${String(patientIndex + 1).padStart(2, '0')}${String(index + 1).padStart(2, '0')}`;
 
-        insertInvoice.run(
-          patientId,
-          invoiceNumber,
-          template.amountCents,
-          template.paid ? 'payee' : 'impayee',
-          issuedAt,
-          dueAt,
-          encryptSensitiveField(`Facture demo ${consultationTitle}`),
-          normalizedOfficeId,
-          consultationId,
-          template.paid ? 'cb' : 'cheque'
-        );
-        invoiceCount += 1;
+          insertInvoice.run(
+            patientId,
+            invoiceNumber,
+            invoiceAmountCents,
+            invoiceStatus,
+            issuedAt,
+            dueAt,
+            encryptSensitiveField(
+              isFreeConsultation
+                ? `Facture demo ${consultationTitle} - seance gracieuse`
+                : `Facture demo ${consultationTitle}`
+            ),
+            normalizedOfficeId,
+            consultationId,
+            invoiceStatus === 'payee' ? 'cb' : 'cheque'
+          );
+          invoiceCount += 1;
+        }
       }
     }
 
@@ -2009,8 +2090,8 @@ function seedDemoInstanceDataForOffice(officeId) {
         contact.city,
         contact.country,
         contact.notes,
-        adminUserId,
-        adminUserId
+        normalizedCreatedByUserId,
+        normalizedCreatedByUserId
       );
       directoryContactCount += 1;
     }
@@ -2024,6 +2105,267 @@ function seedDemoInstanceDataForOffice(officeId) {
     appointments: appointmentCount,
     invoices: invoiceCount,
     directoryContacts: directoryContactCount
+  };
+}
+
+async function installDemoInstanceData() {
+  const defaultServiceTypes = [
+    { id: null, label: 'Consultation osteopathique', amountHt: 70, vatRate: 0 },
+    { id: null, label: 'Consultation pediatrique', amountHt: 65, vatRate: 0 },
+    { id: null, label: 'Suivi sportif', amountHt: 75, vatRate: 0 }
+  ];
+  const defaultPaymentMethods = [
+    { id: null, label: 'Carte bleue (CB)', isActive: true },
+    { id: null, label: 'Especes', isActive: true },
+    { id: null, label: 'Cheque', isActive: true }
+  ];
+  const officeDefinitions = [
+    {
+      name: 'Cabinet Osteo Demo Nantes Centre',
+      addressLine1: '24 rue de la Demo',
+      postalCode: '44000',
+      city: 'Nantes',
+      phoneMobile: '06 00 00 00 01',
+      email: 'nantes@demo.osteosoft',
+      website: 'https://demo.osteosoft.local/nantes',
+      displayOrder: 1,
+      patientSetKey: 'nantes',
+      practitionerName: 'Claire Martin'
+    },
+    {
+      name: 'Cabinet Osteo Demo Rezé',
+      addressLine1: '8 place du Marche',
+      postalCode: '44400',
+      city: 'Reze',
+      phoneMobile: '06 00 00 00 02',
+      email: 'reze@demo.osteosoft',
+      website: 'https://demo.osteosoft.local/reze',
+      displayOrder: 2,
+      patientSetKey: 'reze',
+      practitionerName: 'Antoine Rousseau'
+    }
+  ];
+  const demoUsers = [
+    {
+      reuseBootstrapAdmin: true,
+      username: 'admin',
+      password: 'admin',
+      role: 'admin',
+      profileId: SUPER_ADMIN_PROFILE_ID,
+      firstName: '',
+      lastName: '',
+      email: '',
+      mobilePhone: '',
+      colorHex: '#4d92d1'
+    },
+    {
+      reuseBootstrapAdmin: false,
+      assignedOfficeIndex: 0,
+      username: 'claire.martin',
+      password: 'demo-claire',
+      role: 'practitioner',
+      profileId: 'cabinet-member',
+      firstName: 'Claire',
+      lastName: 'Martin',
+      email: 'claire.martin@demo.osteosoft',
+      mobilePhone: '06 11 22 33 44',
+      colorHex: '#4d92d1'
+    },
+    {
+      reuseBootstrapAdmin: false,
+      assignedOfficeIndex: 1,
+      username: 'antoine.rousseau',
+      password: 'demo-antoine',
+      role: 'practitioner',
+      profileId: 'cabinet-member',
+      firstName: 'Antoine',
+      lastName: 'Rousseau',
+      email: 'antoine.rousseau@demo.osteosoft',
+      mobilePhone: '06 55 66 77 88',
+      colorHex: '#5d8f5a'
+    }
+  ];
+
+  resetDatabaseForDemoInstance();
+  deleteUsersByUsernames(['assistant', 'secretariat', 'compta', 'claire.martin', 'antoine.rousseau']);
+
+  const insert = db.prepare(`
+    INSERT INTO offices (name, default_session_duration_minutes, country, devise, invoice_number_format, invoice_numbering_configuration,
+                         invoice_show_insurance_fields, invoice_hide_vat_mention, invoice_template_layout_json, address_line1, address_line2, postal_code, city, phone_mobile,
+                         phone_landline, phone_fax, email, website, vat_number, logo_data, opening_hours_json,
+                         consultation_profiles_json, display_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const openingHours = normalizeOfficeOpeningHours({
+    monday: [{ start: '09:00', end: '18:00' }],
+    tuesday: [{ start: '09:00', end: '18:00' }],
+    wednesday: [{ start: '09:00', end: '18:00' }],
+    thursday: [{ start: '09:00', end: '18:00' }],
+    friday: [{ start: '09:00', end: '17:00' }],
+    saturday: [{ start: '09:00', end: '12:00' }],
+    sunday: []
+  });
+  const consultationProfiles = normalizeOfficeConsultationProfiles([
+    { id: 'adult', name: 'Adulte', reasons: ['Lombalgie', 'Cervicalgie', 'Suivi postural'], displayOrder: 1 },
+    { id: 'child', name: 'Enfant', reasons: ['Suivi croissance', 'Troubles du sommeil'], displayOrder: 2 },
+    { id: 'sport', name: 'Sportif', reasons: ['Preparation competition', 'Recuperation'], displayOrder: 3 }
+  ]);
+
+  const createdOffices = officeDefinitions.map((office) => {
+    const result = insert.run(
+      office.name,
+      60,
+      'France',
+      'EUR',
+      'AAAA-XXXXXX',
+      'Numérotation globale au cabinet',
+      0,
+      0,
+      '{}',
+      office.addressLine1,
+      '',
+      office.postalCode,
+      office.city,
+      office.phoneMobile,
+      '',
+      '',
+      office.email,
+      office.website,
+      '',
+      null,
+      JSON.stringify(openingHours),
+      JSON.stringify(consultationProfiles),
+      office.displayOrder
+    );
+
+    const createdOfficeId = Number(result.lastInsertRowid);
+    replaceOfficeBusinessSettings(createdOfficeId, defaultServiceTypes, defaultPaymentMethods);
+    createLocalCalendarFromOffice(createdOfficeId, office.name);
+
+    return { ...office, id: createdOfficeId };
+  });
+
+  const officeIds = createdOffices.map((office) => office.id);
+  const bootstrapAdminUser = db.prepare("SELECT id FROM users WHERE lower(username) = 'admin' LIMIT 1").get();
+  if (!bootstrapAdminUser) {
+    throw new Error('Compte bootstrap introuvable pour initialiser la demonstration');
+  }
+
+  const createdUsers = [];
+  for (const demoUser of demoUsers) {
+    const passwordHash = await argon2.hash(demoUser.password, {
+      type: argon2.argon2id,
+      memoryCost: 2 ** 16,
+      timeCost: 3,
+      parallelism: 1
+    });
+
+    if (demoUser.reuseBootstrapAdmin) {
+      db.prepare(
+        `UPDATE users
+         SET username = ?,
+             password_hash = ?,
+             role = ?,
+             is_active = 1,
+             profile_id = ?,
+             office_id = ?,
+             last_name = ?,
+             first_name = ?,
+             email = ?,
+             mobile_phone = ?,
+             country = ?,
+             color_hex = ?
+         WHERE id = ?`
+      ).run(
+        demoUser.username,
+        passwordHash,
+        demoUser.role,
+        demoUser.profileId,
+        officeIds[0] ?? null,
+        demoUser.lastName,
+        demoUser.firstName,
+        demoUser.email,
+        demoUser.mobilePhone,
+        '',
+        demoUser.colorHex,
+        bootstrapAdminUser.id
+      );
+
+      createdUsers.push({ id: Number(bootstrapAdminUser.id), ...demoUser });
+      continue;
+    }
+
+    const result = db.prepare(
+      `INSERT INTO users (
+        username, password_hash, role, is_active, profile_id, office_id,
+        last_name, first_name, email, mobile_phone, country, color_hex
+      ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      demoUser.username,
+      passwordHash,
+      demoUser.role,
+      demoUser.profileId,
+      officeIds[demoUser.assignedOfficeIndex] ?? officeIds[0] ?? null,
+      demoUser.lastName,
+      demoUser.firstName,
+      demoUser.email,
+      demoUser.mobilePhone,
+      'France',
+      demoUser.colorHex
+    );
+
+    createdUsers.push({ id: Number(result.lastInsertRowid), ...demoUser });
+  }
+
+  for (const [index, user] of createdUsers.entries()) {
+    if (user.username === 'admin') {
+      syncUserOffices(user.id, officeIds);
+      continue;
+    }
+
+    const scopedOfficeId = officeIds[index - 1] ?? officeIds[0] ?? null;
+    syncUserOffices(user.id, scopedOfficeId ? [scopedOfficeId] : []);
+  }
+
+  replaceOfficeUserDelegations(createdOffices[0]?.id ?? null, createdUsers[1] ? [
+    { userId: createdUsers[1].id, profileId: SUPER_ADMIN_PROFILE_ID }
+  ] : []);
+  replaceOfficeUserDelegations(createdOffices[1]?.id ?? null, createdUsers[2] ? [
+    { userId: createdUsers[2].id, profileId: SUPER_ADMIN_PROFILE_ID }
+  ] : []);
+
+  const seeded = createdOffices.reduce(
+    (totals, office, index) => {
+      const user = createdUsers[index + 1] ?? createdUsers[0] ?? null;
+      const officeSeed = seedDemoInstanceDataForOffice(office.id, {
+        practitionerName: office.practitionerName,
+        patientSetKey: office.patientSetKey,
+        officeLabel: office.name,
+        createdByUserId: user?.id ?? null
+      });
+
+      totals.patients += officeSeed.patients;
+      totals.consultations += officeSeed.consultations;
+      totals.appointments += officeSeed.appointments;
+      totals.invoices += officeSeed.invoices;
+      totals.directoryContacts += officeSeed.directoryContacts;
+      return totals;
+    },
+    { patients: 0, consultations: 0, appointments: 0, invoices: 0, directoryContacts: 0 }
+  );
+
+  return {
+    officeId: createdOffices[0]?.id ?? null,
+    officeIds,
+    demoUsers: createdUsers.map(({ id, username, password, firstName, lastName }) => ({
+      id,
+      username,
+      password,
+      firstName,
+      lastName
+    })),
+    seeded
   };
 }
 
@@ -2354,8 +2696,8 @@ function restoreDataBackupSnapshot(backupPayload) {
          id, office_id, kind, first_name, last_name, organization, role,
          email, mobile_phone, landline_phone,
          address_line1, address_line2, postal_code, city, country,
-         notes, is_active, created_by, updated_by, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         notes, created_by, updated_by, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const insertConfig = db.prepare(
       'INSERT INTO config (key, value) VALUES (?, ?)'
@@ -2510,7 +2852,6 @@ function restoreDataBackupSnapshot(backupPayload) {
         String(row.city ?? ''),
         String(row.country ?? 'France'),
         String(row.notes ?? ''),
-        Number(row.is_active) ? 1 : 0,
         row.created_by != null ? Number(row.created_by) : null,
         row.updated_by != null ? Number(row.updated_by) : null,
         row.created_at ?? new Date().toISOString(),
@@ -3270,6 +3611,13 @@ async function ensureSeedData() {
 
   const defaultAccessProfiles = [
     {
+      id: 'cabinet-member',
+      label: 'Cabinet uniquement',
+      description: 'Aucun droit applicatif global. Les acces sont definis par cabinet.',
+      immutable: 0,
+      rights: buildAccessRights(false)
+    },
+    {
       id: 'assistant',
       label: 'Assistant',
       description: 'Accueil patient, consultation simple et agenda.',
@@ -3469,51 +3817,6 @@ async function ensureSeedData() {
      WHERE username = ?`
   ).run(superAdminProfileId, 'admin');
 
-  const testUsers = [
-    {
-      username: 'assistant',
-      password: 'assistant',
-      role: 'assistant',
-      profileId: 'assistant'
-    },
-    {
-      username: 'secretariat',
-      password: 'secretariat',
-      role: 'secretariat',
-      profileId: 'secretariat'
-    },
-    {
-      username: 'compta',
-      password: 'compta',
-      role: 'comptabilite',
-      profileId: 'comptabilite'
-    }
-  ];
-
-  const existingUsers = db.prepare('SELECT id, username FROM users').all();
-  const existingByUsername = new Map(existingUsers.map((row) => [row.username, row]));
-
-  for (const userSeed of testUsers) {
-    const existing = existingByUsername.get(userSeed.username);
-    if (!existing) {
-      const passwordHash = await argon2.hash(userSeed.password, {
-        type: argon2.argon2id,
-        memoryCost: 2 ** 16,
-        timeCost: 3,
-        parallelism: 1
-      });
-
-      db.prepare(
-        'INSERT INTO users (username, password_hash, role, profile_id) VALUES (?, ?, ?, ?)'
-      ).run(userSeed.username, passwordHash, userSeed.role, userSeed.profileId);
-    } else {
-      db.prepare('UPDATE users SET role = ?, profile_id = ? WHERE id = ?').run(
-        userSeed.role,
-        userSeed.profileId,
-        existing.id
-      );
-    }
-  }
 
   const officeCount = Number(db.prepare('SELECT COUNT(*) as count FROM offices').get()?.count ?? 0);
   if (officeCount === 0) {
@@ -4196,6 +4499,23 @@ function getUserAccessContext(userId) {
     parsedRights = {};
   }
 
+  const delegatedRightsRows = db
+    .prepare(
+      `SELECT p.rights_json
+       FROM office_user_delegations oud
+       INNER JOIN access_profiles p ON p.id = oud.profile_id
+       WHERE oud.user_id = ?`
+    )
+    .all(userId);
+
+  const delegatedRights = delegatedRightsRows.map((delegation) => {
+    try {
+      return delegation.rights_json ? JSON.parse(delegation.rights_json) : {};
+    } catch {
+      return {};
+    }
+  });
+
   const hasGlobalOfficeAccess = row.role === 'admin' || row.profile_id === SUPER_ADMIN_PROFILE_ID;
   let offices = hasGlobalOfficeAccess
     ? db
@@ -4223,7 +4543,9 @@ function getUserAccessContext(userId) {
     profileLabel: row.profile_label ?? null,
     officeIds,
     offices,
-    rights: hasGlobalOfficeAccess ? buildAccessRights(true) : normalizeAccessRights(parsedRights, false)
+    rights: hasGlobalOfficeAccess
+      ? buildAccessRights(true)
+      : mergeAccessRights(delegatedRights.length > 0 ? delegatedRights : [parsedRights])
   };
 }
 
@@ -5159,7 +5481,7 @@ app.post('/api/setup/restore', (req, res) => {
   }
 });
 
-app.post('/api/setup/office', (req, res) => {
+app.post('/api/setup/office', async (req, res) => {
   const setupStatus = getSetupStatusSnapshot();
   if (!setupStatus.requiresSetup) {
     return res.status(403).json({ message: 'La configuration initiale n\'est disponible qu\'au premier demarrage' });
@@ -5186,11 +5508,18 @@ app.post('/api/setup/office', (req, res) => {
     openingHours,
     consultationProfiles,
     serviceTypes,
-    paymentMethods
+    paymentMethods,
+    adminPassword
   } = req.body;
 
   if (!name || typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ message: 'Le nom du cabinet est obligatoire' });
+  }
+
+  if (!isStrongPassword(adminPassword)) {
+    return res.status(400).json({
+      message: 'Le mot de passe admin doit contenir au moins 12 caracteres, une majuscule, une minuscule, un chiffre et un caractere special.'
+    });
   }
 
   const normalizedOpeningHours = normalizeOfficeOpeningHours(openingHours);
@@ -5227,6 +5556,33 @@ app.post('/api/setup/office', (req, res) => {
     replaceOfficeBusinessSettings(createdOfficeId, serviceTypes, paymentMethods);
     createLocalCalendarFromOffice(createdOfficeId, name.trim());
 
+    const adminPasswordHash = await argon2.hash(String(adminPassword).trim(), {
+      type: argon2.argon2id,
+      memoryCost: 2 ** 16,
+      timeCost: 3,
+      parallelism: 1
+    });
+
+    const existingAdminUser = db.prepare("SELECT id FROM users WHERE lower(username) = 'admin' LIMIT 1").get();
+    let adminUserId = Number(existingAdminUser?.id ?? 0);
+
+    if (!Number.isInteger(adminUserId) || adminUserId <= 0) {
+      const insertAdmin = db
+        .prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)')
+        .run('admin', adminPasswordHash, 'admin');
+      adminUserId = Number(insertAdmin.lastInsertRowid);
+    }
+
+    db.prepare(
+      `UPDATE users
+       SET password_hash = ?,
+           profile_id = ?,
+           role = 'admin',
+           is_active = 1,
+           office_id = ?
+       WHERE id = ?`
+    ).run(adminPasswordHash, SUPER_ADMIN_PROFILE_ID, createdOfficeId, adminUserId);
+
     // Assign admin user to the new office
     const adminUser = db.prepare("SELECT id FROM users WHERE lower(username) = 'admin' LIMIT 1").get();
     if (adminUser) {
@@ -5240,90 +5596,28 @@ app.post('/api/setup/office', (req, res) => {
   }
 });
 
-app.post('/api/setup/demo', (_req, res) => {
+app.post('/api/setup/demo', async (_req, res) => {
   const setupStatus = getSetupStatusSnapshot();
   if (!setupStatus.requiresSetup) {
     return res.status(403).json({ message: 'La configuration de demonstration n\'est disponible qu\'au premier demarrage' });
   }
 
-  const officeName = 'Cabinet Osteo Demo';
-  const defaultServiceTypes = [
-    { id: null, label: 'Consultation osteopathique', amountHt: 70, vatRate: 0 },
-    { id: null, label: 'Consultation pediatrique', amountHt: 65, vatRate: 0 },
-    { id: null, label: 'Suivi sportif', amountHt: 75, vatRate: 0 }
-  ];
-  const defaultPaymentMethods = [
-    { id: null, label: 'Carte bleue (CB)', isActive: true },
-    { id: null, label: 'Especes', isActive: true },
-    { id: null, label: 'Cheque', isActive: true }
-  ];
-
   try {
-    clearBusinessDataForInitialSetup();
-
-    const insert = db.prepare(`
-      INSERT INTO offices (name, default_session_duration_minutes, country, devise, invoice_number_format, invoice_numbering_configuration,
-                           invoice_show_insurance_fields, invoice_hide_vat_mention, invoice_template_layout_json, address_line1, address_line2, postal_code, city, phone_mobile,
-                           phone_landline, phone_fax, email, website, vat_number, logo_data, opening_hours_json,
-                           consultation_profiles_json, display_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const openingHours = normalizeOfficeOpeningHours({
-      monday: [{ start: '09:00', end: '18:00' }],
-      tuesday: [{ start: '09:00', end: '18:00' }],
-      wednesday: [{ start: '09:00', end: '18:00' }],
-      thursday: [{ start: '09:00', end: '18:00' }],
-      friday: [{ start: '09:00', end: '17:00' }],
-      saturday: [{ start: '09:00', end: '12:00' }],
-      sunday: []
-    });
-    const consultationProfiles = normalizeOfficeConsultationProfiles([
-      { id: 'adult', name: 'Adulte', reasons: ['Lombalgie', 'Cervicalgie', 'Suivi postural'], displayOrder: 1 },
-      { id: 'child', name: 'Enfant', reasons: ['Suivi croissance', 'Troubles du sommeil'], displayOrder: 2 },
-      { id: 'sport', name: 'Sportif', reasons: ['Preparation competition', 'Recuperation'], displayOrder: 3 }
-    ]);
-
-    const result = insert.run(
-      officeName,
-      60,
-      'France',
-      'EUR',
-      'AAAA-XXXXXX',
-      'Numérotation globale au cabinet',
-      0,
-      0,
-      '{}',
-      '24 rue de la Demo',
-      '',
-      '44000',
-      'Nantes',
-      '06 00 00 00 00',
-      '',
-      '',
-      'contact@demo.osteosoft',
-      'https://demo.osteosoft.local',
-      '',
-      null,
-      JSON.stringify(openingHours),
-      JSON.stringify(consultationProfiles),
-      1
-    );
-
-    const createdOfficeId = Number(result.lastInsertRowid);
-    replaceOfficeBusinessSettings(createdOfficeId, defaultServiceTypes, defaultPaymentMethods);
-    createLocalCalendarFromOffice(createdOfficeId, officeName);
-
-    const adminUser = db.prepare("SELECT id FROM users WHERE lower(username) = 'admin' LIMIT 1").get();
-    if (adminUser) {
-      db.prepare('INSERT OR IGNORE INTO user_offices (user_id, office_id) VALUES (?, ?)').run(adminUser.id, createdOfficeId);
-    }
-
-    const seeded = seedDemoInstanceDataForOffice(createdOfficeId);
-    return res.status(201).json({ officeId: createdOfficeId, seeded });
+    const result = await installDemoInstanceData();
+    return res.status(201).json(result);
   } catch (err) {
     console.error('Error creating setup demo instance:', err);
     return res.status(500).json({ message: 'Erreur lors de la creation de l\'instance de demonstration' });
+  }
+});
+
+app.post('/api/data-management/reset-demo', authMiddleware, adminOnlyMiddleware, async (_req, res) => {
+  try {
+    const result = await installDemoInstanceData();
+    return res.status(201).json(result);
+  } catch (err) {
+    console.error('Error resetting demo instance:', err);
+    return res.status(500).json({ message: 'Erreur lors de la reinitialisation de l\'instance de demonstration' });
   }
 });
 
@@ -6327,18 +6621,13 @@ app.get('/api/directory/contacts', authMiddleware, requirePermission('read-direc
     params.push(kindFilter);
   }
 
-  if (activeFilterRaw === 'true' || activeFilterRaw === 'false') {
-    whereParts.push('dc.is_active = ?');
-    params.push(activeFilterRaw === 'true' ? 1 : 0);
-  }
-
   const rows = db
     .prepare(
       `SELECT dc.id, dc.office_id, o.name AS office_name, dc.kind,
               dc.first_name, dc.last_name, dc.organization, dc.role,
               dc.email, dc.mobile_phone, dc.landline_phone,
               dc.address_line1, dc.address_line2, dc.postal_code, dc.city, dc.country,
-              dc.notes, dc.is_active, dc.created_at, dc.updated_at
+              dc.notes, dc.created_at, dc.updated_at
        FROM directory_contacts dc
        INNER JOIN offices o ON o.id = dc.office_id
        ${whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''}
@@ -6417,7 +6706,6 @@ app.post('/api/directory/contacts', authMiddleware, requirePermission('create-di
       city: z.string().trim().max(120).optional().default(''),
       country: z.string().trim().max(80).optional().default('France'),
       notes: z.string().trim().max(4000).optional().default(''),
-      isActive: z.boolean().optional().default(true)
     })
     .safeParse(req.body);
 
@@ -6448,8 +6736,8 @@ app.post('/api/directory/contacts', authMiddleware, requirePermission('create-di
          office_id, kind, first_name, last_name, organization, role,
          email, mobile_phone, landline_phone,
          address_line1, address_line2, postal_code, city, country,
-         notes, is_active, created_by, updated_by
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         notes, created_by, updated_by
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       parsed.data.officeId,
@@ -6467,7 +6755,6 @@ app.post('/api/directory/contacts', authMiddleware, requirePermission('create-di
       parsed.data.city,
       parsed.data.country,
       parsed.data.notes,
-      parsed.data.isActive ? 1 : 0,
       req.user.sub,
       req.user.sub
     );
@@ -6478,7 +6765,7 @@ app.post('/api/directory/contacts', authMiddleware, requirePermission('create-di
               dc.first_name, dc.last_name, dc.organization, dc.role,
               dc.email, dc.mobile_phone, dc.landline_phone,
               dc.address_line1, dc.address_line2, dc.postal_code, dc.city, dc.country,
-              dc.notes, dc.is_active, dc.created_at, dc.updated_at
+              dc.notes, dc.created_at, dc.updated_at
        FROM directory_contacts dc
        INNER JOIN offices o ON o.id = dc.office_id
        WHERE dc.id = ?`
@@ -6516,7 +6803,6 @@ app.put('/api/directory/contacts/:id', authMiddleware, requirePermission('edit-d
       city: z.string().trim().max(120).optional().default(''),
       country: z.string().trim().max(80).optional().default('France'),
       notes: z.string().trim().max(4000).optional().default(''),
-      isActive: z.boolean().optional().default(true)
     })
     .safeParse(req.body);
 
@@ -6546,7 +6832,7 @@ app.put('/api/directory/contacts/:id', authMiddleware, requirePermission('edit-d
      SET office_id = ?, kind = ?, first_name = ?, last_name = ?, organization = ?, role = ?,
          email = ?, mobile_phone = ?, landline_phone = ?,
          address_line1 = ?, address_line2 = ?, postal_code = ?, city = ?, country = ?,
-         notes = ?, is_active = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+         notes = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`
   ).run(
     parsed.data.officeId,
@@ -6564,7 +6850,6 @@ app.put('/api/directory/contacts/:id', authMiddleware, requirePermission('edit-d
     parsed.data.city,
     parsed.data.country,
     parsed.data.notes,
-    parsed.data.isActive ? 1 : 0,
     req.user.sub,
     contactId
   );
@@ -6575,7 +6860,7 @@ app.put('/api/directory/contacts/:id', authMiddleware, requirePermission('edit-d
               dc.first_name, dc.last_name, dc.organization, dc.role,
               dc.email, dc.mobile_phone, dc.landline_phone,
               dc.address_line1, dc.address_line2, dc.postal_code, dc.city, dc.country,
-              dc.notes, dc.is_active, dc.created_at, dc.updated_at
+              dc.notes, dc.created_at, dc.updated_at
        FROM directory_contacts dc
        INNER JOIN offices o ON o.id = dc.office_id
        WHERE dc.id = ?`
@@ -6648,7 +6933,7 @@ app.get('/api/directory/contacts/export', authMiddleware, requirePermission('exp
               dc.first_name, dc.last_name, dc.organization, dc.role,
               dc.email, dc.mobile_phone, dc.landline_phone,
               dc.address_line1, dc.address_line2, dc.postal_code, dc.city, dc.country,
-              dc.notes, dc.is_active, dc.created_at, dc.updated_at
+              dc.notes, dc.created_at, dc.updated_at
        FROM directory_contacts dc
        INNER JOIN offices o ON o.id = dc.office_id
        ${whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''}
@@ -6672,8 +6957,7 @@ app.get('/api/directory/contacts/export', authMiddleware, requirePermission('exp
     'adresse2',
     'code_postal',
     'ville',
-    'pays',
-    'actif'
+    'pays'
   ];
 
   const escapeCsv = (value) => {
@@ -6702,7 +6986,6 @@ app.get('/api/directory/contacts/export', authMiddleware, requirePermission('exp
       row.postalCode,
       row.city,
       row.country,
-      row.isActive ? 'oui' : 'non'
     ].map(escapeCsv).join(';'));
   }
 
@@ -7195,6 +7478,7 @@ app.get('/api/patients', authMiddleware, requirePermission('read-patient-list'),
       `SELECT p.id,
               p.cipher_full_name,
               p.cipher_phone,
+              p.cipher_medical_notes,
               p.last_visit,
               p.sex,
               p.birth_date,
@@ -7210,15 +7494,23 @@ app.get('/api/patients', authMiddleware, requirePermission('read-patient-list'),
     .all();
 
   const patients = rows
-    .map((row) => ({
-      id: row.id,
-      fullName: decryptSensitiveField(row.cipher_full_name),
-      phone: decryptSensitiveField(row.cipher_phone),
-      lastVisit: row.last_visit ?? '',
-      sex: row.sex === 'F' ? 'Femme' : row.sex === 'M' ? 'Homme' : 'Non renseigne',
-      age: getAgeFromBirthDate(row.birth_date),
-      consultationCount: Number(row.consultation_count ?? 0)
-    }))
+    .map((row) => {
+      let city = '';
+      try {
+        const notes = JSON.parse(decryptSensitiveField(row.cipher_medical_notes));
+        city = String(notes?.city ?? '').trim();
+      } catch { /* ignore */ }
+      return {
+        id: row.id,
+        fullName: decryptSensitiveField(row.cipher_full_name),
+        phone: decryptSensitiveField(row.cipher_phone),
+        lastVisit: row.last_visit ? formatDateFr(row.last_visit) : '',
+        sex: row.sex === 'F' ? 'Femme' : row.sex === 'M' ? 'Homme' : 'Non renseigne',
+        age: getAgeFromBirthDate(row.birth_date),
+        city,
+        consultationCount: Number(row.consultation_count ?? 0)
+      };
+    })
     .filter((patient) => (query ? patient.fullName.toLowerCase().includes(query) : true));
 
   writeAuditLog(req.user.sub, 'READ_LIST', 'patients', null, { count: patients.length });
@@ -7333,7 +7625,7 @@ app.get('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
       sex: row.sex === 'F' ? 'Femme' : row.sex === 'M' ? 'Homme' : 'Non renseigne',
       birthDate: row.birth_date ?? '',
       age: getAgeFromBirthDate(row.birth_date),
-      lastVisit: row.last_visit ?? '',
+      lastVisit: row.last_visit ? formatDateFr(row.last_visit) : '',
       consultationCount: Number(row.consultation_count ?? 0),
       phone,
       mobilePhone: notes.mobilePhone ?? (phone !== 'Non renseigne' ? phone : ''),
@@ -7988,7 +8280,7 @@ app.get('/api/patients/:id/export', authMiddleware, requirePermission('export-pa
       consultationNote: notes.consultationNote ?? '',
       relatedPeople: notes.relatedPeople ?? '',
       isDeceased: Boolean(notes.isDeceased),
-      lastVisit: row.last_visit ?? '',
+      lastVisit: row.last_visit ? formatDateFr(row.last_visit) : '',
       consentSigned: Boolean(row.consent_signed),
       retentionUntil: row.retention_until ?? '',
       createdAt: row.created_at,
@@ -8417,25 +8709,91 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
 
   const pendingPayments = db
     .prepare(
-      `SELECT i.invoice_number, i.amount_cents, i.due_at, i.status, p.cipher_full_name
+      `SELECT i.invoice_number, i.amount_cents, i.due_at, i.status, i.office_id, i.patient_id, i.consultation_id, p.cipher_full_name
        FROM invoices i
        INNER JOIN patients p ON p.id = i.patient_id
        WHERE p.is_deleted = 0 AND i.status != 'payee'
        ORDER BY i.due_at ASC`
     )
     .all()
+    .filter((row) => {
+      const rowOfficeId = row.office_id != null ? Number(row.office_id) : null;
+      if (officeIdFilter !== null) {
+        return rowOfficeId === officeIdFilter;
+      }
+
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!Array.isArray(accessibleOfficeIds) || accessibleOfficeIds.length === 0) {
+        return true;
+      }
+
+      if (rowOfficeId === null) {
+        return true;
+      }
+
+      return accessibleOfficeIds.includes(rowOfficeId);
+    })
     .map((row) => ({
       invoiceNumber: row.invoice_number,
+      patientId: Number(row.patient_id),
+      consultationId: row.consultation_id != null ? Number(row.consultation_id) : null,
       patientName: decryptSensitiveField(row.cipher_full_name),
       amountEur: Number((row.amount_cents / 100).toFixed(2)),
       dueAt: formatDateFr(row.due_at),
+      sortAt: String(row.due_at ?? ''),
       status: row.status
     }));
+
+  const pendingConsultationsWithoutInvoice = db
+    .prepare(
+      `SELECT c.id AS consultation_id, c.started_at, c.office_id, p.id AS patient_id, p.cipher_full_name
+       FROM consultations c
+       INNER JOIN patients p ON p.id = c.patient_id
+       WHERE p.is_deleted = 0
+         AND NOT EXISTS (
+           SELECT 1
+           FROM invoices i
+           WHERE i.consultation_id = c.id
+         )
+       ORDER BY datetime(c.started_at) DESC`
+    )
+    .all()
+    .filter((row) => {
+      const rowOfficeId = row.office_id != null ? Number(row.office_id) : null;
+      if (officeIdFilter !== null) {
+        return rowOfficeId === officeIdFilter;
+      }
+
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!Array.isArray(accessibleOfficeIds) || accessibleOfficeIds.length === 0) {
+        return true;
+      }
+
+      if (rowOfficeId === null) {
+        return true;
+      }
+
+      return accessibleOfficeIds.includes(rowOfficeId);
+    })
+    .map((row) => ({
+      invoiceNumber: `CONS-${Number(row.consultation_id)}`,
+      patientId: Number(row.patient_id),
+      consultationId: Number(row.consultation_id),
+      patientName: decryptSensitiveField(row.cipher_full_name),
+      amountEur: 0,
+      dueAt: formatDateFr(row.started_at),
+      sortAt: String(row.started_at ?? ''),
+      status: 'impayee'
+    }));
+
+  const allPendingPayments = [...pendingPayments, ...pendingConsultationsWithoutInvoice]
+    .sort((left, right) => left.sortAt.localeCompare(right.sortAt))
+    .map(({ sortAt, ...item }) => item);
 
   writeAuditLog(req.user.sub, 'READ_DASHBOARD', 'dashboard', null, {
     events: events.length,
     recentPatients: recentPatients.length,
-    pendingPayments: pendingPayments.length
+    pendingPayments: allPendingPayments.length
   });
 
   return res.json({
@@ -8444,7 +8802,7 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
     patientsBySex,
     patientsByAgeRange,
     recentPatients,
-    pendingPayments,
+    pendingPayments: allPendingPayments,
     agendaSettings: agendaConfig.settings,
     localCalendars: agendaConfig.localCalendars
   });
@@ -10424,7 +10782,9 @@ app.get('/api/billing/monthly-revenue', authMiddleware, requirePermission('read-
     toIso: to,
     availableOfficeIds,
     filterOfficeIds,
-    ownerUserId: req.user.sub
+    // Badge should represent monthly office receipts visible to the user,
+    // not only operations owned by the connected practitioner.
+    ownerUserId: null
   });
 
   const receiptsCents = payload.operations.reduce((sum, item) => sum + item.creditCents, 0);

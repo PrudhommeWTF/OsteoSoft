@@ -111,19 +111,6 @@
         </select>
       </div>
 
-      <div class="col-6 col-md-4 col-lg-3">
-        <label class="form-label" for="directory-active-filter">Statut</label>
-        <select
-          id="directory-active-filter"
-          class="form-select"
-          [value]="activeFilter()"
-          (change)="onActiveFilterChange($any($event.target).value || 'all')"
-        >
-          <option value="all">Tous</option>
-          <option value="active">Actifs</option>
-          <option value="inactive">Inactifs</option>
-        </select>
-      </div>
     </div>
   </div>
 </section>
@@ -146,7 +133,6 @@
               <th>Fonction</th>
               <th>Contact</th>
               <th>Ville</th>
-              <th>Statut</th>
               <th class="text-end">Actions</th>
             </tr>
           </thead>
@@ -157,8 +143,11 @@
               </tr>
             }
 
-            @for (contact of filteredContacts(); track contact.id) {
-              <tr>
+            @for (contact of pagedContacts(); track contact.id) {
+              <tr
+                [class.cursor-pointer]="canEdit()"
+                (click)="canEdit() && openEditModal(contact)"
+              >
                 <td>
                   <div class="fw-semibold">{{ contactName(contact) }}</div>
                   @if (contact.organization && contact.kind === 'person') {
@@ -173,26 +162,33 @@
                   <div class="small text-secondary">{{ contact.mobilePhone || contact.landlinePhone || '-' }}</div>
                 </td>
                 <td>{{ contact.city || '-' }}</td>
-                <td>
-                  <span class="badge" [class]="contact.isActive ? 'text-bg-success' : 'text-bg-secondary'">
-                    {{ contact.isActive ? 'Actif' : 'Inactif' }}
-                  </span>
-                </td>
                 <td class="text-end">
                   <div class="btn-group btn-group-sm" role="group" aria-label="Actions contact">
                     @if (canEdit()) {
-                      <button type="button" class="btn btn-outline-primary" (click)="openEditModal(contact)">
-                        Modifier
+                      <button
+                        type="button"
+                        class="btn btn-outline-primary"
+                        title="Modifier"
+                        (click)="$event.stopPropagation(); openEditModal(contact)"
+                      >
+                        <i class="fa-solid fa-pen" aria-hidden="true"></i>
+                        <span class="visually-hidden">Modifier</span>
                       </button>
                     }
                     @if (canDelete()) {
                       <button
                         type="button"
                         class="btn btn-outline-danger"
+                        title="Supprimer"
                         [disabled]="isDeletingId() === contact.id"
-                        (click)="deleteContact(contact)"
+                        (click)="$event.stopPropagation(); deleteContact(contact)"
                       >
-                        Supprimer
+                        @if (isDeletingId() === contact.id) {
+                          <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        } @else {
+                          <i class="fa-solid fa-trash" aria-hidden="true"></i>
+                        }
+                        <span class="visually-hidden">Supprimer</span>
                       </button>
                     }
                   </div>
@@ -201,6 +197,51 @@
             }
           </tbody>
         </table>
+      </div>
+
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-3">
+        <div class="text-secondary small">
+          @if (paginationInfo().total === 0) {
+            Aucun résultat
+          } @else {
+            {{ paginationInfo().from }}&ndash;{{ paginationInfo().to }} sur {{ paginationInfo().total }} contacts
+          }
+        </div>
+
+        <div class="d-flex align-items-center gap-3">
+          <div class="d-flex align-items-center gap-2">
+            <label class="form-label mb-0 small text-secondary text-nowrap" for="dir-page-size">Par page</label>
+            <select
+              id="dir-page-size"
+              class="form-select form-select-sm"
+              style="width:auto"
+              [value]="pageSize()"
+              (change)="setPageSize(+$any($event.target).value)"
+            >
+              @for (opt of pageSizeOptions; track opt) {
+                <option [value]="opt">{{ opt }}</option>
+              }
+            </select>
+          </div>
+
+          <nav aria-label="Pagination répertoire">
+            <ul class="pagination pagination-sm mb-0">
+              <li class="page-item" [class.disabled]="currentPage() === 1">
+                <button type="button" class="page-link" (click)="goToPrevPage()" aria-label="Page précédente">
+                  <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+                </button>
+              </li>
+              <li class="page-item disabled">
+                <span class="page-link">{{ currentPage() }} / {{ totalPages() }}</span>
+              </li>
+              <li class="page-item" [class.disabled]="currentPage() === totalPages()">
+                <button type="button" class="page-link" (click)="goToNextPage()" aria-label="Page suivante">
+                  <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+                </button>
+              </li>
+            </ul>
+          </nav>
+        </div>
       </div>
     }
   </div>
@@ -238,13 +279,6 @@
                 <option value="person">Personne</option>
                 <option value="company">Societe</option>
               </select>
-            </div>
-
-            <div class="col-12 col-md-4 d-flex align-items-end">
-              <div class="form-check mb-2">
-                <input id="contact-active" class="form-check-input" type="checkbox" formControlName="isActive" />
-                <label class="form-check-label" for="contact-active">Contact actif</label>
-              </div>
             </div>
 
             <div class="col-12 col-md-6">

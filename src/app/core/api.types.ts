@@ -158,6 +158,7 @@ export type Patient = {
   lastVisit: string;
   sex: 'Non renseigne' | 'Femme' | 'Homme';
   age: number | null;
+  city: string;
   consultationCount: number;
 };
 
@@ -193,7 +194,6 @@ export type DirectoryContact = {
   city: string;
   country: string;
   notes: string;
-  isActive: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -214,7 +214,6 @@ export type DirectoryContactPayload = {
   city: string;
   country: string;
   notes: string;
-  isActive: boolean;
 };
 
 export type DirectoryContactsPayload = {
@@ -524,6 +523,8 @@ export type RecentPatient = {
 
 export type PendingPayment = {
   invoiceNumber: string;
+  patientId: number;
+  consultationId: number | null;
   patientName: string;
   amountEur: number;
   dueAt: string;
@@ -1012,6 +1013,10 @@ export type CreateOfficePayload = {
   officeUserDelegations: OfficeUserDelegationPayload[];
   serviceTypes: ServiceTypeSetting[];
   paymentMethods: PaymentMethodSetting[];
+};
+
+export type CreateSetupOfficePayload = CreateOfficePayload & {
+  adminPassword: string;
 };
 
 export type UpdateOfficePayload = CreateOfficePayload & {

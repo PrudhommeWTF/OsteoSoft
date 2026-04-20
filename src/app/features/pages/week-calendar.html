@@ -119,8 +119,9 @@
             class="wc-slot-label"
             [style.height.px]="settings().displayHeight"
             [class.wc-slot-label--lunch]="slotInfo.isLunch"
+            [class.wc-slot-label--full-hour]="slotInfo.isFullHour"
           >
-            {{ slotInfo.time }}
+            {{ slotInfo.hourLabel }}
           </div>
         }
       </div>
@@ -140,6 +141,7 @@
               class="wc-slot"
               [style.height.px]="settings().displayHeight"
               [class.wc-slot--lunch]="slotInfo.isLunch"
+              [class.wc-slot--full-hour]="slotInfo.isFullHour"
               role="presentation"
             ></div>
           }

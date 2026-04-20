@@ -77,7 +77,12 @@ export class AgendaPage {
 
   async onSelectedOfficeChange(value: string): Promise<void> {
     const parsed = Number(value);
-    this.selectedOfficeId.set(Number.isInteger(parsed) && parsed > 0 ? parsed : null);
+    const nextOfficeId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+    this.selectedOfficeId.set(nextOfficeId);
+    if (nextOfficeId !== null) {
+      this.authService.setActiveOfficeId(nextOfficeId);
+    }
+    this.selectedCalendarIds.set([]);
     await this.load();
   }
 
@@ -86,7 +91,7 @@ export class AgendaPage {
     const offices = Array.isArray(me.offices) ? me.offices : [];
     this.officeOptions.set(offices);
 
-    const hasCurrentOffice = offices.some((office) => office.id === this.selectedOfficeId());
+    const hasCurrentOffice = this.selectedOfficeId() === null || offices.some((office) => office.id === this.selectedOfficeId());
     if (!hasCurrentOffice) {
       const activeOfficeId = this.authService.activeOfficeId();
       const hasActiveOffice = Number.isInteger(activeOfficeId) && offices.some((office) => office.id === activeOfficeId);
@@ -113,9 +118,17 @@ export class AgendaPage {
 
     const calendars = Array.isArray(dashboardPayload.localCalendars) ? dashboardPayload.localCalendars : [];
     this.localCalendars.set(calendars);
-    // Initialize selection with all calendars (only if not already set)
-    if (this.selectedCalendarIds().length === 0) {
-      this.selectedCalendarIds.set(calendars.map((c) => c.id as number).filter((id) => id !== null));
+    const availableCalendarIds = new Set(
+      calendars
+        .map((c) => c.id)
+        .filter((id): id is number => typeof id === 'number' && Number.isInteger(id) && id > 0)
+    );
+
+    const preservedSelection = this.selectedCalendarIds().filter((id) => availableCalendarIds.has(id));
+    if (preservedSelection.length > 0) {
+      this.selectedCalendarIds.set(preservedSelection);
+    } else {
+      this.selectedCalendarIds.set(Array.from(availableCalendarIds));
     }
   }
 
@@ -123,18 +136,6 @@ export class AgendaPage {
     this.visibleEvents.set(events);
   }
 
-  toggleCalendar(id: number): void {
-    const current = this.selectedCalendarIds();
-    if (current.includes(id)) {
-      this.selectedCalendarIds.set(current.filter((cid) => cid !== id));
-    } else {
-      this.selectedCalendarIds.set([...current, id]);
-    }
-  }
-
-  isCalendarSelected(id: number): boolean {
-    return this.selectedCalendarIds().includes(id);
-  }
 
   openExportModal(): void {
     this.exportAgendaError.set('');

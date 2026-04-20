@@ -187,6 +187,39 @@
                 }
               </div>
               <div class="mb-3">
+                <label for="setup-admin-password" class="form-label">Mot de passe admin <span class="text-danger">*</span></label>
+                <input
+                  id="setup-admin-password"
+                  type="password"
+                  class="form-control"
+                  [class.is-invalid]="officeForm.controls.adminPassword.invalid && officeForm.controls.adminPassword.touched"
+                  autocomplete="new-password"
+                  formControlName="adminPassword"
+                />
+                <div class="form-text">Au moins 12 caracteres avec majuscule, minuscule, chiffre et caractere special.</div>
+                <ul class="small mt-2 mb-0 ps-3">
+                  <li [class.text-success]="adminPasswordHasMinLength()">12 caracteres minimum</li>
+                  <li [class.text-success]="adminPasswordHasUppercase()">Au moins une majuscule</li>
+                  <li [class.text-success]="adminPasswordHasLowercase()">Au moins une minuscule</li>
+                  <li [class.text-success]="adminPasswordHasDigit()">Au moins un chiffre</li>
+                  <li [class.text-success]="adminPasswordHasSpecialCharacter()">Au moins un caractere special</li>
+                </ul>
+              </div>
+              <div class="mb-3">
+                <label for="setup-admin-password-confirmation" class="form-label">Confirmation du mot de passe admin <span class="text-danger">*</span></label>
+                <input
+                  id="setup-admin-password-confirmation"
+                  type="password"
+                  class="form-control"
+                  [class.is-invalid]="!adminPasswordMatchesConfirmation() && officeForm.controls.adminPasswordConfirmation.touched"
+                  autocomplete="new-password"
+                  formControlName="adminPasswordConfirmation"
+                />
+                @if (!adminPasswordMatchesConfirmation() && officeForm.controls.adminPasswordConfirmation.touched) {
+                  <div class="invalid-feedback">La confirmation du mot de passe ne correspond pas.</div>
+                }
+              </div>
+              <div class="mb-3">
                 <label for="setup-duration" class="form-label">
                   Durée par défaut des séances : {{ officeForm.controls.defaultSessionDurationMinutes.value }} min
                 </label>
@@ -385,8 +418,8 @@
                     <div class="col-12">
                       <label for="setup-invoice-format" class="form-label">Format numérotation</label>
                       <select id="setup-invoice-format" class="form-select" formControlName="invoiceNumberFormat">
-                        @for (option of invoiceNumberFormatOptions; track option) {
-                          <option [value]="option">{{ option }}</option>
+                        @for (option of invoiceNumberFormatOptions; track option.value) {
+                          <option [value]="option.value">{{ option.label }}</option>
                         }
                       </select>
                     </div>

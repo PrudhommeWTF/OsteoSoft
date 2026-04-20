@@ -126,6 +126,7 @@
   &--lunch {
     background: rgba(255, 193, 7, 0.08);
   }
+
 }
 
 // ── Colonnes jours ────────────────────────────────────────────────────────────
@@ -153,6 +154,12 @@
   &--lunch {
     background: rgba(255, 193, 7, 0.08);
   }
+
+}
+
+.wc-slot-label--full-hour,
+.wc-slot--full-hour {
+  border-top: 2px solid var(--wc-border);
 }
 
 // ── Événements ────────────────────────────────────────────────────────────────

@@ -132,8 +132,11 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   private pendingFocusedConsultationId: number | null = null;
   private relatedSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
   private relatedSearchRequestId = 0;
+  private patientAutosaveTimer: ReturnType<typeof setInterval> | null = null;
   private consultationAutosaveTimer: ReturnType<typeof setInterval> | null = null;
   private consultationAutosaveStatusTimer: ReturnType<typeof setInterval> | null = null;
+  private autosaveToastHideTimer: ReturnType<typeof setTimeout> | null = null;
+  private autosaveToastLastShownAt = 0;
 
   readonly isLoading = signal(true);
   readonly patient = signal<PatientDetail | null>(null);
@@ -145,6 +148,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   readonly saveError = signal('');
   readonly isLoadingDocuments = signal(false);
   readonly documentActionError = signal('');
+  readonly isAutoSavingPatient = signal(false);
+  readonly isUploadingPatientDocuments = signal(false);
+  readonly isPatientDocumentDragOver = signal(false);
   readonly isUploadingConsultationDocuments = signal(false);
   readonly documentSavingRefs = signal<Record<string, boolean>>({});
   readonly showAuditModal = signal(false);
@@ -183,6 +189,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   readonly consultationBillingStates = signal<Record<number, ConsultationBillingState>>({});
   readonly isConsultationPaymentModalOpen = signal(false);
   readonly editingConsultationPaymentId = signal<string | null>(null);
+  readonly autosaveToastVisible = signal(false);
+  readonly autosaveToastMessage = signal('');
 
   readonly showRelatedPicker = signal(false);
   readonly relatedSearch = signal('');
@@ -194,6 +202,23 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   readonly citySuggestions = signal<string[]>([]);
   readonly showPostalCodeSuggestions = signal(false);
   readonly showCitySuggestions = signal(false);
+  readonly isAntecedentModalOpen = signal(false);
+  readonly antecedentError = signal('');
+  readonly antecedentDatePrecision = signal<AntecedentPrecision>('date');
+  readonly antecedentDateDisplay = signal('');
+  readonly antecedentCategory = signal('');
+  readonly antecedentDescription = signal('');
+  readonly antecedentImportant = signal(false);
+  readonly antecedentCategoryOptions = signal<string[]>([
+    'Cardiologie',
+    'Endocrinologie',
+    'Gastro-entérologie',
+    'Neurologie',
+    'Orthopédie',
+    'Psychologie',
+    'Pneumologie',
+    'Rhumatologie'
+  ]);
 
   private readonly birthDateIso = signal('');
   private readonly editSex = signal<PatientDetail['sex']>('Non renseigne');
@@ -649,7 +674,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.topbar.clear();
+    this.stopPatientAutosave();
     this.stopConsultationAutosave();
+    this.clearAutosaveToastTimer();
 
     const input = this.birthDateInputRef()?.nativeElement;
     if (input) {
@@ -717,6 +744,88 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
+  openAntecedentModal(): void {
+    this.isAntecedentModalOpen.set(true);
+    this.antecedentError.set('');
+    this.antecedentDatePrecision.set('date');
+    this.antecedentDateDisplay.set('');
+    this.antecedentCategory.set('');
+    this.antecedentDescription.set('');
+    this.antecedentImportant.set(false);
+  }
+
+  closeAntecedentModal(): void {
+    this.isAntecedentModalOpen.set(false);
+    this.antecedentError.set('');
+  }
+
+  setAntecedentPrecision(precision: AntecedentPrecision): void {
+    this.antecedentDatePrecision.set(precision);
+    this.antecedentDateDisplay.set('');
+  }
+
+  setAntecedentCategory(value: string): void {
+    this.antecedentCategory.set(value);
+  }
+
+  setAntecedentDescription(value: string): void {
+    this.antecedentDescription.set(value);
+  }
+
+  setAntecedentImportant(value: boolean): void {
+    this.antecedentImportant.set(value);
+  }
+
+  addAntecedent(): void {
+    const dateDisplay = this.antecedentDateDisplay().trim();
+    const category = this.antecedentCategory().trim();
+    const description = this.antecedentDescription().trim();
+
+    if (!dateDisplay || !category) {
+      this.antecedentError.set('La date et le type d\'antécédent sont obligatoires.');
+      return;
+    }
+
+    const precision = this.antecedentDatePrecision();
+    const sortKey = this.buildAntecedentSortKey(precision, dateDisplay);
+    if (sortKey === null) {
+      this.antecedentError.set('Le format de date est invalide pour la précision choisie.');
+      return;
+    }
+
+    const items = [...this.antecedents(), {
+      id: this.createTempKey('antecedent'),
+      category,
+      description: description || 'Détail non renseigné',
+      dateDisplay,
+      precision,
+      sortKey,
+      important: this.antecedentImportant()
+    }].sort((left, right) => right.sortKey - left.sortKey);
+
+    this.syncMedicalHistoryFromAntecedents(items);
+    this.ensureAntecedentOption(category);
+    this.closeAntecedentModal();
+  }
+
+  removeAntecedent(id: string): void {
+    const next = this.antecedents().filter((item) => item.id !== id);
+    this.syncMedicalHistoryFromAntecedents(next);
+  }
+
+  getAntecedentDateLabel(item: AntecedentTimelineItem): string {
+    if (!item.dateDisplay) {
+      return 'Date non renseignée';
+    }
+    if (item.precision === 'month') {
+      return `Mois ${item.dateDisplay}`;
+    }
+    if (item.precision === 'year') {
+      return `Année ${item.dateDisplay}`;
+    }
+    return item.dateDisplay;
+  }
+
   toggleRelatedPicker(): void {
     this.showRelatedPicker.update((value) => !value);
     if (!this.showRelatedPicker()) {
@@ -772,8 +881,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     void this.router.navigate(['/patients', patientId]);
   }
 
-  async saveEdit(): Promise<void> {
-    if (this.editForm.invalid || this.isSaving()) {
+  async saveEdit(options?: { isAutoSave?: boolean }): Promise<void> {
+    const isAutoSave = options?.isAutoSave === true;
+    if (this.editForm.invalid || (isAutoSave ? this.isAutoSavingPatient() : this.isSaving())) {
       return;
     }
 
@@ -782,20 +892,38 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    this.isSaving.set(true);
-    this.saveError.set('');
+    if (isAutoSave) {
+      if (!this.editForm.dirty || this.isSaving()) {
+        return;
+      }
+      this.isAutoSavingPatient.set(true);
+    } else {
+      this.isSaving.set(true);
+      this.saveError.set('');
+    }
+
+    const payload = this.buildPatientUpdatePayload();
 
     try {
-      const { relatedPeople, ...rest } = this.editForm.getRawValue();
-      await this.api.updatePatient(patient.id, {
-        ...rest,
-        relatedPeople: this.editForm.controls.relatedPeople.value
-      });
-      await this.load(patient.id);
+      await this.api.updatePatient(patient.id, payload);
+      this.applyPatientSnapshot(payload);
+
+      if (isAutoSave) {
+        this.editForm.markAsPristine();
+        this.showAutosaveToast('Fiche patient sauvegardée automatiquement');
+      } else {
+        await this.load(patient.id);
+      }
     } catch {
-      this.saveError.set('Une erreur est survenue lors de la sauvegarde.');
+      if (!isAutoSave) {
+        this.saveError.set('Une erreur est survenue lors de la sauvegarde.');
+      }
     } finally {
-      this.isSaving.set(false);
+      if (isAutoSave) {
+        this.isAutoSavingPatient.set(false);
+      } else {
+        this.isSaving.set(false);
+      }
     }
   }
 
@@ -866,6 +994,40 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     }
 
     input.value = '';
+  }
+
+  async onPatientDocumentFileSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement | null;
+    const files = input?.files;
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    this.isPatientDocumentDragOver.set(false);
+    await this.uploadPatientDocuments(Array.from(files));
+    input.value = '';
+  }
+
+  onPatientDocumentDragOver(event: DragEvent): void {
+    event.preventDefault();
+    this.isPatientDocumentDragOver.set(true);
+  }
+
+  onPatientDocumentDragLeave(event: DragEvent): void {
+    event.preventDefault();
+    this.isPatientDocumentDragOver.set(false);
+  }
+
+  async onPatientDocumentDrop(event: DragEvent): Promise<void> {
+    event.preventDefault();
+    this.isPatientDocumentDragOver.set(false);
+
+    const files = event.dataTransfer?.files;
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    await this.uploadPatientDocuments(Array.from(files));
   }
 
   onConsultationDocumentDragOver(event: DragEvent): void {
@@ -1261,6 +1423,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       this.activeConsultation.set(updated);
       this.consultationLastSavedAt.set(Date.now());
       this.consultationAutosaveState.set('saved');
+      if (isAutoSave) {
+        this.showAutosaveToast('Consultation sauvegardée automatiquement');
+      }
 
       if (closeOnSuccess) {
         this.closeConsultationModal();
@@ -1826,6 +1991,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       this.patientDocuments.set(documents);
       this.preferences.set(preferences);
       this.startEdit();
+      this.startPatientAutosave();
 
       queueMicrotask(() => {
         if (this.pendingFocusedConsultationId != null) {
@@ -1836,6 +2002,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       this.patient.set(null);
       this.consultations.set([]);
       this.patientDocuments.set([]);
+      this.stopPatientAutosave();
     } finally {
       this.isLoading.set(false);
       this.isLoadingDocuments.set(false);
@@ -1907,6 +2074,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
         lastVisit: '',
         sex: 'Non renseigne',
         age: null,
+        city: '',
         consultationCount: 0
       }))
     );
@@ -2121,6 +2289,84 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       .sort((left, right) => right.sortKey - left.sortKey);
   }
 
+  private buildAntecedentSortKey(precision: AntecedentPrecision, display: string): number | null {
+    if (precision === 'year') {
+      const year = Number(display);
+      if (!Number.isInteger(year)) {
+        return null;
+      }
+      return year * 10000 + 1231;
+    }
+
+    if (precision === 'month') {
+      const [monthStr, yearStr] = display.split('/');
+      const month = Number(monthStr);
+      const year = Number(yearStr);
+      if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+        return null;
+      }
+      return year * 10000 + month * 100 + 31;
+    }
+
+    const [dayStr, monthStr, yearStr] = display.split('/');
+    const day = Number(dayStr);
+    const month = Number(monthStr);
+    const year = Number(yearStr);
+    if (
+      !Number.isInteger(year) ||
+      !Number.isInteger(month) ||
+      !Number.isInteger(day) ||
+      month < 1 ||
+      month > 12 ||
+      day < 1 ||
+      day > 31
+    ) {
+      return null;
+    }
+
+    return year * 10000 + month * 100 + day;
+  }
+
+  private syncMedicalHistoryFromAntecedents(items: AntecedentTimelineItem[]): void {
+    const serialized = items.map((item) => ({
+      id: item.id,
+      datePrecision: item.precision,
+      date: item.dateDisplay,
+      category: item.category,
+      description: item.description,
+      important: item.important,
+      sortKey: item.sortKey
+    }));
+
+    const value = JSON.stringify(serialized);
+    this.editForm.controls.medicalHistory.setValue(value);
+    this.editForm.controls.medicalHistory.markAsDirty();
+
+    this.patient.update((current) => {
+      if (!current) {
+        return current;
+      }
+      return {
+        ...current,
+        medicalHistory: value
+      };
+    });
+  }
+
+  private ensureAntecedentOption(category: string): void {
+    const normalized = String(category ?? '').trim();
+    if (!normalized) {
+      return;
+    }
+
+    this.antecedentCategoryOptions.update((items) => {
+      if (items.includes(normalized)) {
+        return items;
+      }
+      return [...items, normalized].sort((left, right) => left.localeCompare(right, 'fr'));
+    });
+  }
+
   private focusConsultationById(consultationId: number): void {
     const consultation = this.consultationRecords().find((entry) => entry.id === consultationId);
     if (!consultation) {
@@ -2170,6 +2416,46 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       this.documentActionError.set('Impossible d\'ajouter le document.');
     } finally {
       this.isUploadingConsultationDocuments.set(false);
+    }
+  }
+
+  private async uploadPatientDocuments(files: File[]): Promise<void> {
+    if (this.isUploadingPatientDocuments()) {
+      return;
+    }
+
+    const patientId = this.patient()?.id;
+    if (!patientId) {
+      return;
+    }
+
+    this.documentActionError.set('');
+    this.isUploadingPatientDocuments.set(true);
+
+    try {
+      const createdDocuments: PatientDocumentSummary[] = [];
+
+      for (const file of files) {
+        const contentBase64 = await this.fileToBase64(file);
+        const created = await this.api.createPatientDocument(patientId, {
+          consultationId: null,
+          officeId: this.consultationOfficeId(),
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          sizeBytes: file.size,
+          title: file.name,
+          comment: '',
+          contentBase64
+        });
+
+        createdDocuments.push(created);
+      }
+
+      this.patientDocuments.update((items) => [...createdDocuments, ...items]);
+    } catch {
+      this.documentActionError.set('Impossible d\'ajouter le document patient.');
+    } finally {
+      this.isUploadingPatientDocuments.set(false);
     }
   }
 
@@ -2483,6 +2769,25 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     }, intervalMs);
   }
 
+  private startPatientAutosave(): void {
+    this.stopPatientAutosave();
+    const intervalMs = this.getAutoSaveIntervalMs();
+    if (intervalMs === null) {
+      return;
+    }
+
+    this.patientAutosaveTimer = setInterval(() => {
+      void this.saveEdit({ isAutoSave: true });
+    }, intervalMs);
+  }
+
+  private stopPatientAutosave(): void {
+    if (this.patientAutosaveTimer !== null) {
+      clearInterval(this.patientAutosaveTimer);
+      this.patientAutosaveTimer = null;
+    }
+  }
+
   private stopConsultationAutosave(): void {
     if (this.consultationAutosaveTimer !== null) {
       clearInterval(this.consultationAutosaveTimer);
@@ -2496,6 +2801,10 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private getConsultationAutosaveIntervalMs(): number | null {
+    return this.getAutoSaveIntervalMs();
+  }
+
+  private getAutoSaveIntervalMs(): number | null {
     const frequency = this.preferences()?.patientAutoSaveFrequency ?? 'Jamais';
     if (frequency === 'Toutes les 2 minutes') {
       return 2 * 60 * 1000;
@@ -2507,6 +2816,56 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       return 10 * 60 * 1000;
     }
     return null;
+  }
+
+  private buildPatientUpdatePayload(): ReturnType<typeof this.editForm.getRawValue> {
+    const { relatedPeople, ...rest } = this.editForm.getRawValue();
+    return {
+      ...rest,
+      relatedPeople: this.editForm.controls.relatedPeople.value
+    };
+  }
+
+  private applyPatientSnapshot(payload: ReturnType<typeof this.editForm.getRawValue>): void {
+    this.patient.update((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const fullName = [payload.firstName, payload.lastName].map((item) => item.trim()).filter(Boolean).join(' ');
+      const phone = String(payload.mobilePhone ?? '').trim() || String(payload.landlinePhone ?? '').trim();
+
+      return {
+        ...current,
+        ...payload,
+        fullName: fullName || current.fullName,
+        phone
+      };
+    });
+  }
+
+  private showAutosaveToast(message: string): void {
+    const now = Date.now();
+    if (now - this.autosaveToastLastShownAt < 15000) {
+      return;
+    }
+
+    this.autosaveToastLastShownAt = now;
+    this.autosaveToastMessage.set(message);
+    this.autosaveToastVisible.set(true);
+
+    this.clearAutosaveToastTimer();
+    this.autosaveToastHideTimer = setTimeout(() => {
+      this.autosaveToastVisible.set(false);
+      this.autosaveToastHideTimer = null;
+    }, 2600);
+  }
+
+  private clearAutosaveToastTimer(): void {
+    if (this.autosaveToastHideTimer !== null) {
+      clearTimeout(this.autosaveToastHideTimer);
+      this.autosaveToastHideTimer = null;
+    }
   }
 
   private interpolateColor(startHex: string, endHex: string, ratio: number): string {

@@ -10,6 +10,14 @@
     <a routerLink="/patients" class="alert-link ms-2">Retour à la liste</a>
   </div>
 } @else {
+  @if (autosaveToastVisible()) {
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1400; max-width: min(92vw, 420px);" aria-live="polite" aria-atomic="true">
+      <div class="alert alert-success shadow-sm mb-0 py-2 px-3" role="status">
+        <i class="fa-solid fa-floppy-disk me-2"></i>{{ autosaveToastMessage() }}
+      </div>
+    </div>
+  }
+
   <section class="page-head d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
     <div>
       <h1 class="h3 mb-1 d-flex flex-wrap align-items-center gap-2">
@@ -65,15 +73,15 @@
                   <div class="col-12">
                     <label class="form-label fw-semibold">Sexe</label>
                     <div class="sex-cards">
-                      <button type="button" class="sex-card" [class.active-indeterminate]="editSexValue() === 'Non renseigne'" (click)="setEditSex('Non renseigne')">
+                      <button type="button" class="sex-card" [class.active]="editSexValue() === 'Non renseigne'" (click)="setEditSex('Non renseigne')">
                         <i class="fa-solid fa-circle-question"></i>
                         <span>Indéterminé</span>
                       </button>
-                      <button type="button" class="sex-card" [class.active-femme]="editSexValue() === 'Femme'" (click)="setEditSex('Femme')">
+                      <button type="button" class="sex-card" [class.active]="editSexValue() === 'Femme'" (click)="setEditSex('Femme')">
                         <i class="fa-solid fa-venus"></i>
                         <span>Femme</span>
                       </button>
-                      <button type="button" class="sex-card" [class.active-homme]="editSexValue() === 'Homme'" (click)="setEditSex('Homme')">
+                      <button type="button" class="sex-card" [class.active]="editSexValue() === 'Homme'" (click)="setEditSex('Homme')">
                         <i class="fa-solid fa-mars"></i>
                         <span>Homme</span>
                       </button>
@@ -295,6 +303,12 @@
       </h2>
       <div id="patient-accordion-antecedents" class="accordion-collapse collapse" aria-labelledby="headingAntecedents" data-bs-parent="#patientDetailAccordion">
         <div class="accordion-body bg-body">
+          <div class="d-flex justify-content-end mb-3">
+            <button type="button" class="btn btn-primary btn-sm" (click)="openAntecedentModal()">
+              <i class="fa-solid fa-plus me-1"></i>Ajouter un antécédent
+            </button>
+          </div>
+
           @if (antecedents().length === 0) {
             <div class="empty-state">
               <i class="fa-solid fa-heart-pulse fa-2x text-secondary mb-3"></i>
@@ -313,9 +327,14 @@
                           <span class="badge text-bg-danger-subtle text-danger-emphasis rounded-pill">Important</span>
                         }
                       </div>
-                      @if (item.dateDisplay) {
-                        <span class="small text-muted">{{ item.dateDisplay }}</span>
-                      }
+                      <div class="d-flex align-items-start gap-2">
+                        @if (item.dateDisplay) {
+                          <span class="small text-muted">{{ getAntecedentDateLabel(item) }}</span>
+                        }
+                        <button type="button" class="btn btn-link text-danger p-0" (click)="removeAntecedent(item.id)" aria-label="Supprimer cet antécédent">
+                          <i class="fa-solid fa-trash"></i>
+                        </button>
+                      </div>
                     </div>
                     <p class="mb-0">{{ item.description }}</p>
                   </div>
@@ -341,6 +360,33 @@
           @if (documentActionError()) {
             <div class="alert alert-danger">{{ documentActionError() }}</div>
           }
+
+          <div class="mb-4">
+            <div
+              class="border rounded-3 p-4 text-center"
+              [class.bg-body-tertiary]="!isPatientDocumentDragOver()"
+              [class.bg-primary-subtle]="isPatientDocumentDragOver()"
+              (dragover)="onPatientDocumentDragOver($event)"
+              (dragleave)="onPatientDocumentDragLeave($event)"
+              (drop)="onPatientDocumentDrop($event)">
+              <i class="fa-regular fa-file-lines fs-2 text-secondary d-block mb-2"></i>
+              <p class="mb-2">Glissez-déposez vos documents ici</p>
+              <label class="btn btn-outline-primary btn-sm mb-0" for="patient-document-upload-input">
+                Ou cliquez pour choisir un fichier
+              </label>
+              <input
+                id="patient-document-upload-input"
+                type="file"
+                class="d-none"
+                multiple
+                (change)="onPatientDocumentFileSelected($event)" />
+              <p class="text-muted small mb-0 mt-2">Les documents sont chiffrés et liés uniquement au dossier patient.</p>
+              @if (isUploadingPatientDocuments()) {
+                <p class="small text-muted mt-2 mb-0">Téléversement en cours...</p>
+              }
+            </div>
+          </div>
+
           @if (isLoadingDocuments()) {
             <div class="d-flex justify-content-center py-4">
               <div class="spinner-border text-primary" role="status">
@@ -402,7 +448,7 @@
               @for (group of consultationTimelineGroups(); track group.key) {
                 <section class="timeline-group mb-3">
                   <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
-                    <button class="btn btn-light border btn-sm timeline-year-toggle" type="button" data-bs-toggle="collapse" [attr.data-bs-target]="'#' + group.collapseId" aria-expanded="true" [attr.aria-controls]="group.collapseId">
+                    <button class="btn btn-light border btn-sm timeline-year-toggle" type="button" data-bs-toggle="collapse" [attr.data-bs-target]="'#' + group.collapseId" [attr.aria-expanded]="group.initiallyOpen ? 'true' : 'false'" [attr.aria-controls]="group.collapseId">
                       <i class="fa-solid fa-calendar-days me-2"></i>{{ group.label }}
                       <span class="badge text-bg-secondary ms-2">{{ group.consultations.length }}</span>
                     </button>
@@ -426,6 +472,88 @@
       </div>
     </div>
   </div>
+
+  @if (isAntecedentModalOpen()) {
+    <div class="antecedent-modal-backdrop" (click)="closeAntecedentModal()"></div>
+    <div
+      class="antecedent-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="antecedentModalTitle"
+      (click)="$event.stopPropagation()">
+      <div class="antecedent-modal-header">
+        <h3 id="antecedentModalTitle" class="mb-0">Ajouter un antécédent</h3>
+        <button type="button" class="btn-close" aria-label="Fermer" (click)="closeAntecedentModal()"></button>
+      </div>
+      <div class="antecedent-modal-body">
+        <div class="mb-3">
+          <label class="form-label">Précision de date</label>
+          <div class="btn-group w-100" role="group">
+            <button type="button" class="btn" [class.btn-primary]="antecedentDatePrecision() === 'date'" [class.btn-outline-primary]="antecedentDatePrecision() !== 'date'" (click)="setAntecedentPrecision('date')">Date précise</button>
+            <button type="button" class="btn" [class.btn-primary]="antecedentDatePrecision() === 'month'" [class.btn-outline-primary]="antecedentDatePrecision() !== 'month'" (click)="setAntecedentPrecision('month')">Mois / année</button>
+            <button type="button" class="btn" [class.btn-primary]="antecedentDatePrecision() === 'year'" [class.btn-outline-primary]="antecedentDatePrecision() !== 'year'" (click)="setAntecedentPrecision('year')">Année</button>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" for="antecedentDateInput">Date</label>
+          <input
+            id="antecedentDateInput"
+            type="text"
+            class="form-control"
+            [placeholder]="antecedentDatePrecision() === 'date' ? 'jj/mm/aaaa' : antecedentDatePrecision() === 'month' ? 'mm/aaaa' : 'aaaa'"
+            [value]="antecedentDateDisplay()"
+            (input)="antecedentDateDisplay.set($any($event.target).value)" />
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" for="antecedentCategory">Type d'antécédent</label>
+          <input
+            id="antecedentCategory"
+            type="text"
+            class="form-control"
+            list="detailAntecedentCategoryOptions"
+            placeholder="Ex: Orthopédie"
+            [value]="antecedentCategory()"
+            (input)="setAntecedentCategory($any($event.target).value)" />
+          <datalist id="detailAntecedentCategoryOptions">
+            @for (option of antecedentCategoryOptions(); track option) {
+              <option [value]="option"></option>
+            }
+          </datalist>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" for="antecedentDescription">Description</label>
+          <textarea
+            id="antecedentDescription"
+            class="form-control"
+            rows="4"
+            placeholder="Détails de l'antécédent..."
+            [value]="antecedentDescription()"
+            (input)="setAntecedentDescription($any($event.target).value)"></textarea>
+        </div>
+
+        <div class="form-check">
+          <input
+            id="antecedentImportant"
+            class="form-check-input"
+            type="checkbox"
+            [checked]="antecedentImportant()"
+            (change)="setAntecedentImportant($any($event.target).checked)" />
+          <label class="form-check-label" for="antecedentImportant">Marquer comme important</label>
+        </div>
+
+        @if (antecedentError()) {
+          <div class="alert alert-danger mt-3 mb-0">{{ antecedentError() }}</div>
+        }
+      </div>
+      <div class="antecedent-modal-footer">
+        <button type="button" class="btn btn-outline-secondary" (click)="closeAntecedentModal()">Annuler</button>
+        <button type="button" class="btn btn-primary" (click)="addAntecedent()">Ajouter l'élément</button>
+      </div>
+    </div>
+  }
 
   @if (showAuditModal()) {
     <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">

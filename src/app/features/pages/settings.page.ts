@@ -338,6 +338,7 @@ export class SettingsPage implements OnDestroy {
   readonly isSavingCurrentUserProfile = signal(false);
   readonly isDownloadingBackup = signal(false);
   readonly isRestoringBackup = signal(false);
+  readonly isResettingDemo = signal(false);
   readonly isSearchingRgpdPatients = signal(false);
   readonly isExportingRgpdPatient = signal(false);
   readonly isAuditLogsLoading = signal(false);
@@ -441,13 +442,13 @@ export class SettingsPage implements OnDestroy {
   readonly auditLogLimitOptions = [50, 100, 200, 500];
   readonly generalDeviseOptions = ['EUR', 'USD', 'CHF', 'GBP', 'CAD'];
   readonly backupReminderOptions = ['Toutes les semaines', 'Tous les 15 jours', 'Tous les mois', 'Tous les 2 mois'] as const;
-  readonly invoiceNumberFormatOptions = [
-    'AAAA-XXXXXX',
-    'AAAAMM-XXXXXX',
-    'AAAAMMJJ-XXXXXX',
-    'AAAAMM-XXXX : RAZ mensuelle (déconseillé)',
-    'AAAA-XXXX : RAZ annuel'
-  ] as const;
+  readonly invoiceNumberFormatOptions: Array<{ value: CreateOfficePayload['invoiceNumberFormat']; label: string }> = [
+    { value: 'AAAA-XXXXXX', label: 'Compteur continu annuel (AAAA-XXXXXX)' },
+    { value: 'AAAAMM-XXXXXX', label: 'Compteur continu mensuel (AAAAMM-XXXXXX)' },
+    { value: 'AAAAMMJJ-XXXXXX', label: 'Compteur continu journalier (AAAAMMJJ-XXXXXX)' },
+    { value: 'AAAAMM-XXXX : RAZ mensuelle (déconseillé)', label: 'Remise a zero mensuelle (AAAAMM-XXXX)' },
+    { value: 'AAAA-XXXX : RAZ annuel', label: 'Remise a zero annuelle (AAAA-XXXX)' }
+  ];
   readonly numberingConfigurationOptions = ['Numérotation globale au cabinet', 'Numérotation par praticien'] as const;
   readonly vatRateOptions = [0, 5.5, 10, 20];
   readonly invoiceTemplateBlockOptions: Array<{ key: InvoiceTemplateBlockId; label: string }> = [
@@ -1476,6 +1477,32 @@ export class SettingsPage implements OnDestroy {
       this.dataManagementError.set('La restauration a échoué. Vérifiez le fichier de sauvegarde.');
     } finally {
       this.isRestoringBackup.set(false);
+    }
+  }
+
+  async resetDemoInstance(): Promise<void> {
+    const confirmation = globalThis.confirm(
+      'Cette operation remplacera les donnees actuelles par une instance de demonstration complete. Continuer ?'
+    );
+    if (!confirmation || this.isResettingDemo()) {
+      return;
+    }
+
+    this.dataManagementError.set('');
+    this.dataManagementSuccess.set('');
+    this.isResettingDemo.set(true);
+
+    try {
+      await this.api.resetDemoInstance();
+      this.dataManagementSuccess.set('Instance de demonstration reinitialisee avec succes.');
+      await this.loadOffices();
+      await this.loadUsers();
+      await this.loadAccessProfiles();
+      await this.loadCurrentUser();
+    } catch {
+      this.dataManagementError.set('Impossible de reinitialiser l\'instance de demonstration.');
+    } finally {
+      this.isResettingDemo.set(false);
     }
   }
 

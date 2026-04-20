@@ -30,6 +30,7 @@ import {
   CreateAppointmentPayload,
   CreatePatientPayload,
   CreateOfficePayload,
+  CreateSetupOfficePayload,
   DirectoryContact,
   DirectoryContactPayload,
   DirectoryContactsPayload,
@@ -96,12 +97,16 @@ export class ApiService {
     await firstValueFrom(this.http.post<void>(`${this.baseUrl}/setup/restore`, payload));
   }
 
-  async createSetupOffice(payload: CreateOfficePayload): Promise<void> {
+  async createSetupOffice(payload: CreateSetupOfficePayload): Promise<void> {
     await firstValueFrom(this.http.post<{ officeId: number }>(`${this.baseUrl}/setup/office`, payload));
   }
 
   async createSetupDemoInstance(): Promise<void> {
     await firstValueFrom(this.http.post<{ officeId: number }>(`${this.baseUrl}/setup/demo`, {}));
+  }
+
+  async resetDemoInstance(): Promise<void> {
+    await firstValueFrom(this.http.post<{ officeId: number }>(`${this.baseUrl}/data-management/reset-demo`, {}));
   }
 
   async me(): Promise<AuthUser> {
@@ -166,7 +171,6 @@ export class ApiService {
     search?: string;
     officeId?: number | null;
     kind?: 'person' | 'company' | 'all';
-    isActive?: boolean | null;
   }): Promise<DirectoryContactsPayload> {
     let params = new HttpParams();
     if (filters?.search?.trim()) {
@@ -177,9 +181,6 @@ export class ApiService {
     }
     if (filters?.kind === 'person' || filters?.kind === 'company') {
       params = params.set('kind', filters.kind);
-    }
-    if (filters?.isActive === true || filters?.isActive === false) {
-      params = params.set('isActive', String(filters.isActive));
     }
 
     return firstValueFrom(this.http.get<DirectoryContactsPayload>(`${this.baseUrl}/directory/contacts`, { params }));

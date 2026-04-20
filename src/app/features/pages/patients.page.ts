@@ -36,11 +36,63 @@ export class PatientsPage {
     return this.patients().filter((patient) => patient.fullName.toLowerCase().includes(query));
   });
 
+  readonly pageSize = signal(25);
+  readonly currentPage = signal(1);
+
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.filteredPatients().length / this.pageSize())));
+
+  readonly paginationInfo = computed(() => {
+    const total = this.filteredPatients().length;
+    const size = this.pageSize();
+    const page = this.currentPage();
+    const from = total === 0 ? 0 : (page - 1) * size + 1;
+    const to = Math.min(page * size, total);
+    return { from, to, total };
+  });
+
+  readonly pagedPatients = computed(() => {
+    const page = this.currentPage();
+    const size = this.pageSize();
+    return this.filteredPatients().slice((page - 1) * size, page * size);
+  });
+
+  readonly pageSizeOptions = [10, 25, 50, 100];
+
+  setPageSize(size: number): void {
+    this.pageSize.set(size);
+    this.currentPage.set(1);
+  }
+
+  goToPrevPage(): void {
+    if (this.currentPage() > 1) {
+      this.currentPage.update((p) => p - 1);
+    }
+  }
+
+  goToNextPage(): void {
+    if (this.currentPage() < this.totalPages()) {
+      this.currentPage.update((p) => p + 1);
+    }
+  }
+
   async onSearch(event: Event): Promise<void> {
     const target = event.target as HTMLInputElement | null;
     const query = target?.value ?? '';
     this.search.set(query);
+    this.currentPage.set(1);
     await this.load(query);
+  }
+
+  sexIcon(sex: Patient['sex']): string | null {
+    if (sex === 'Femme') return 'fa-solid fa-venus';
+    if (sex === 'Homme') return 'fa-solid fa-mars';
+    return null;
+  }
+
+  sexColorClass(sex: Patient['sex']): string {
+    if (sex === 'Femme') return 'text-danger';
+    if (sex === 'Homme') return 'text-primary';
+    return 'text-secondary';
   }
 
   openExportModal(): void {

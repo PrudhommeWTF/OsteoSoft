@@ -7,6 +7,7 @@ import { ApiService } from '../../core/api.service';
 import { SetupService } from '../../core/setup.service';
 import {
   CreateOfficePayload,
+  CreateSetupOfficePayload,
   OfficeConsultationProfile,
   OfficeOpeningHours,
   OfficeWeekDay,
@@ -40,8 +41,12 @@ export class InstallationPage {
   private readonly setupService = inject(SetupService);
   private readonly fb = inject(FormBuilder);
 
+  private readonly adminPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])\S{12,256}$/;
+
   readonly officeForm = this.fb.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(200)]],
+    adminPassword: ['', [Validators.required, Validators.minLength(12), Validators.maxLength(256)]],
+    adminPasswordConfirmation: ['', [Validators.required, Validators.maxLength(256)]],
     defaultSessionDurationMinutes: [60, [Validators.required, Validators.min(15), Validators.max(90)]],
     country: ['France', [Validators.required, Validators.maxLength(80)]],
     devise: ['EUR' as 'EUR' | 'USD' | 'CHF' | 'GBP' | 'CAD', [Validators.required]],
@@ -89,13 +94,13 @@ export class InstallationPage {
 
   readonly countryOptions = ['France', 'Belgique', 'Suisse', 'Luxembourg', 'Canada'];
   readonly generalDeviseOptions = ['EUR', 'USD', 'CHF', 'GBP', 'CAD'];
-  readonly invoiceNumberFormatOptions = [
-    'AAAA-XXXXXX',
-    'AAAAMM-XXXXXX',
-    'AAAAMMJJ-XXXXXX',
-    'AAAAMM-XXXX : RAZ mensuelle (déconseillé)',
-    'AAAA-XXXX : RAZ annuel'
-  ] as const;
+  readonly invoiceNumberFormatOptions: Array<{ value: CreateSetupOfficePayload['invoiceNumberFormat']; label: string }> = [
+    { value: 'AAAA-XXXXXX', label: 'Compteur continu annuel (AAAA-XXXXXX)' },
+    { value: 'AAAAMM-XXXXXX', label: 'Compteur continu mensuel (AAAAMM-XXXXXX)' },
+    { value: 'AAAAMMJJ-XXXXXX', label: 'Compteur continu journalier (AAAAMMJJ-XXXXXX)' },
+    { value: 'AAAAMM-XXXX : RAZ mensuelle (déconseillé)', label: 'Remise a zero mensuelle (AAAAMM-XXXX)' },
+    { value: 'AAAA-XXXX : RAZ annuel', label: 'Remise a zero annuelle (AAAA-XXXX)' }
+  ];
   readonly numberingConfigurationOptions = [
     'Numérotation globale au cabinet',
     'Numérotation par praticien'
@@ -163,7 +168,12 @@ export class InstallationPage {
   isStepValid(step: OfficeCreateStep): boolean {
     if (step === 1) {
       const raw = this.officeForm.getRawValue();
-      return raw.name.trim().length > 0 && Number(raw.defaultSessionDurationMinutes) > 0;
+      return (
+        raw.name.trim().length > 0
+        && Number(raw.defaultSessionDurationMinutes) > 0
+        && this.isAdminPasswordStrong(raw.adminPassword)
+        && raw.adminPassword.trim() === raw.adminPasswordConfirmation.trim()
+      );
     }
     if (step === 3) {
       const hasInvalidServiceType = this.serviceTypes().some((item) => !item.label.trim());
@@ -176,9 +186,35 @@ export class InstallationPage {
   markStepTouched(step: OfficeCreateStep): void {
     if (step === 1) {
       this.officeForm.controls.name.markAsTouched();
+      this.officeForm.controls.adminPassword.markAsTouched();
+      this.officeForm.controls.adminPasswordConfirmation.markAsTouched();
       this.officeForm.controls.defaultSessionDurationMinutes.markAsTouched();
-      this.error.set('Le nom du cabinet est obligatoire.');
+      this.error.set('Renseignez un mot de passe admin robuste et confirmez-le.');
     }
+  }
+
+  adminPasswordHasLowercase(): boolean {
+    return /[a-z]/.test(this.officeForm.controls.adminPassword.value);
+  }
+
+  adminPasswordHasUppercase(): boolean {
+    return /[A-Z]/.test(this.officeForm.controls.adminPassword.value);
+  }
+
+  adminPasswordHasDigit(): boolean {
+    return /\d/.test(this.officeForm.controls.adminPassword.value);
+  }
+
+  adminPasswordHasSpecialCharacter(): boolean {
+    return /[^A-Za-z0-9]/.test(this.officeForm.controls.adminPassword.value);
+  }
+
+  adminPasswordHasMinLength(): boolean {
+    return this.officeForm.controls.adminPassword.value.length >= 12;
+  }
+
+  adminPasswordMatchesConfirmation(): boolean {
+    return this.officeForm.controls.adminPassword.value === this.officeForm.controls.adminPasswordConfirmation.value;
   }
 
   onOfficeLogoSelected(event: Event): void {
@@ -422,7 +458,7 @@ export class InstallationPage {
 
   async createOffice(): Promise<void> {
     if (!this.isStepValid(6) || this.officeForm.controls.name.value.trim().length === 0) {
-      this.error.set('Le nom du cabinet est obligatoire.');
+      this.error.set('Renseignez les informations obligatoires, dont un mot de passe admin robuste.');
       return;
     }
 
@@ -538,10 +574,11 @@ export class InstallationPage {
     };
   }
 
-  private buildPayload(): CreateOfficePayload {
+  private buildPayload(): CreateSetupOfficePayload {
     const raw = this.officeForm.getRawValue();
     return {
       name: raw.name.trim(),
+      adminPassword: raw.adminPassword.trim(),
       defaultSessionDurationMinutes: Number(raw.defaultSessionDurationMinutes) || 60,
       country: raw.country.trim(),
       devise: raw.devise,
@@ -578,6 +615,10 @@ export class InstallationPage {
         displayOrder: index + 1
       }))
     };
+  }
+
+  private isAdminPasswordStrong(password: string): boolean {
+    return this.adminPasswordPattern.test(String(password ?? '').trim());
   }
 
   private toOfficeConsultationProfiles(): OfficeConsultationProfile[] {

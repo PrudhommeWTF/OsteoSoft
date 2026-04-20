@@ -211,6 +211,25 @@
               </div>
             </article>
           </div>
+
+          <div class="col-12">
+            <article class="settings-card border border-warning-subtle bg-warning-subtle bg-opacity-10">
+              <p class="settings-card-status mb-2">Démo interne</p>
+              <h3 class="settings-card-title">Réinitialiser l'instance de démonstration</h3>
+              <p class="settings-card-copy mb-3">
+                Remplace les données actuelles par une démo complète avec cabinets, utilisateurs, patients, consultations,
+                impayés, consultations non facturées et cas métier de validation.
+              </p>
+
+              <button type="button" class="btn btn-outline-warning" [disabled]="isResettingDemo()" (click)="resetDemoInstance()">
+                @if (isResettingDemo()) {
+                  <i class="fa-solid fa-circle-notch fa-spin me-1"></i>Réinitialisation de la démo...
+                } @else {
+                  <i class="fa-solid fa-flask me-1"></i>Réinitialiser l'instance de démonstration
+                }
+              </button>
+            </article>
+          </div>
         </section>
 
         @if (dataManagementError()) {
@@ -1367,8 +1386,8 @@
                                       <div class="col-12">
                                         <label for="office-invoice-number-format" class="form-label">Format numérotation</label>
                                         <select id="office-invoice-number-format" class="form-select" formControlName="invoiceNumberFormat">
-                                          @for (option of invoiceNumberFormatOptions; track option) {
-                                            <option [value]="option">{{ option }}</option>
+                                          @for (option of invoiceNumberFormatOptions; track option.value) {
+                                            <option [value]="option.value">{{ option.label }}</option>
                                           }
                                         </select>
                                       </div>
@@ -1852,8 +1871,8 @@
                                     <div class="col-12">
                                       <label for="office-invoice-number-format" class="form-label">Format numérotation</label>
                                       <select id="office-invoice-number-format" class="form-select" formControlName="invoiceNumberFormat">
-                                        @for (option of invoiceNumberFormatOptions; track option) {
-                                          <option [value]="option">{{ option }}</option>
+                                        @for (option of invoiceNumberFormatOptions; track option.value) {
+                                          <option [value]="option.value">{{ option.label }}</option>
                                         }
                                       </select>
                                     </div>

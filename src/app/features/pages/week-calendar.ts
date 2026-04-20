@@ -109,16 +109,19 @@ export class WeekCalendar {
   });
 
   readonly timeSlotsWithLunch = computed(
-    (): Array<{ time: string; isLunch: boolean }> => {
+    (): Array<{ time: string; isLunch: boolean; isFullHour: boolean; hourLabel: string }> => {
       const s = this.settings();
       const lunchStartMin = s.lunchStartHour * 60;
       const lunchEndMin = s.lunchEndHour * 60;
       return this.timeSlots().map((time) => {
         const [h, m] = time.split(':').map(Number);
         const timeMin = h * 60 + m;
+        const isFullHour = m === 0;
         return {
           time,
-          isLunch: timeMin >= lunchStartMin && timeMin < lunchEndMin
+          isLunch: timeMin >= lunchStartMin && timeMin < lunchEndMin,
+          isFullHour,
+          hourLabel: isFullHour ? `${h}h` : ''
         };
       });
     }

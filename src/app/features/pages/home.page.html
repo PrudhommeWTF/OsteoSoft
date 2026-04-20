@@ -115,7 +115,10 @@
               </thead>
               <tbody>
                 @for (payment of pendingPayments(); track payment.invoiceNumber) {
-                  <tr>
+                  <tr
+                    [routerLink]="['/patients', payment.patientId]"
+                    [queryParams]="payment.consultationId ? { consultationId: payment.consultationId } : null"
+                  >
                     <td>{{ payment.invoiceNumber }}</td>
                     <td>{{ payment.patientName }}</td>
                     <td>{{ payment.dueAt }}</td>
