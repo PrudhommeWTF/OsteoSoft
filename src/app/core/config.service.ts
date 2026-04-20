@@ -1,5 +1,4 @@
-import { Injectable, effect, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { Injectable, inject, signal } from '@angular/core';
 
 import { ApiService } from './api.service';
 import { AppConfig } from './api.types';
@@ -7,7 +6,6 @@ import { AppConfig } from './api.types';
 @Injectable({ providedIn: 'root' })
 export class ConfigService {
   private readonly apiService = inject(ApiService);
-  private readonly router = inject(Router);
 
   readonly config = signal<AppConfig | null>(null);
   readonly isLoaded = signal(false);

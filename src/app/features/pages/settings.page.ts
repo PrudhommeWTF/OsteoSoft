@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import JSZip from 'jszip';
 
 import { ApiService } from '../../core/api.service';
 import {
@@ -1516,6 +1515,7 @@ export class SettingsPage implements OnDestroy {
       throw new Error('Unsupported backup format');
     }
 
+    const { default: JSZip } = await import('jszip');
     const zip = await JSZip.loadAsync(await file.arrayBuffer());
     const manifestText = await zip.file('manifest.json')?.async('string');
     const dataText = await zip.file('data.json')?.async('string');

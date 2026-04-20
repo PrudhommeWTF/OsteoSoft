@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { jsPDF } from 'jspdf';
 
 import { ApiService } from '../../core/api.service';
 import {
@@ -386,7 +385,8 @@ export class BillingPage {
     try {
       const detail = await this.api.getBillingDepositDetail(depositId);
       const fileName = `bordereau-${detail.deposit.code || detail.deposit.id}.pdf`;
-      const pdf = this.buildDepositPdf(detail);
+      const JsPdf = await this.loadJsPdf();
+      const pdf = this.buildDepositPdf(detail, JsPdf);
       pdf.save(fileName);
     } catch {
       this.errorMessage.set('Impossible de generer le PDF du bordereau.');
@@ -434,8 +434,13 @@ export class BillingPage {
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   }
 
-  private buildDepositPdf(detail: BillingDepositDetail): jsPDF {
-    const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+  private async loadJsPdf(): Promise<typeof import('jspdf').jsPDF> {
+    const module = await import('jspdf');
+    return module.jsPDF;
+  }
+
+  private buildDepositPdf(detail: BillingDepositDetail, JsPdf: typeof import('jspdf').jsPDF) {
+    const pdf = new JsPdf({ unit: 'mm', format: 'a4' });
     const margin = 14;
     const pageWidth = pdf.internal.pageSize.getWidth();
     const contentWidth = pageWidth - margin * 2;
