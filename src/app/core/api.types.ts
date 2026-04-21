@@ -335,6 +335,55 @@ export type BillingOperationsPayload = {
   to: string;
 };
 
+export type BillingInsightsPayload = {
+  range: {
+    fromIso: string;
+    toIso: string;
+    previousFromIso: string;
+    previousToIso: string;
+  };
+  kpis: {
+    current: {
+      creditsCents: number;
+      debitsCents: number;
+      netCents: number;
+      operationCount: number;
+    };
+    previous: {
+      creditsCents: number;
+      debitsCents: number;
+      netCents: number;
+      operationCount: number;
+    };
+    trends: {
+      creditsPercent: number;
+      debitsPercent: number;
+      netPercent: number;
+      operationsPercent: number;
+    };
+  };
+  receivables: {
+    totalOutstandingCents: number;
+    totalOutstandingCount: number;
+    aging: {
+      current: { count: number; amountCents: number };
+      late1to30: { count: number; amountCents: number };
+      late31to60: { count: number; amountCents: number };
+      late61plus: { count: number; amountCents: number };
+    };
+    topDebtors: Array<{
+      patientName: string;
+      totalOutstandingCents: number;
+      invoiceCount: number;
+    }>;
+  };
+  paymentMethods: Array<{
+    label: string;
+    count: number;
+  }>;
+  summary: InvoiceSummaryTile[];
+};
+
 export type BillingExpensePayload = {
   occurredAt: string;
   officeId: number | null;

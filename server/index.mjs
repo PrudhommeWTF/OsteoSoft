@@ -10671,6 +10671,7 @@ function getStatisticsPaymentMethodDistribution({ fromIso, toIso, scopedOfficeId
        WHERE datetime(i.issued_at) >= datetime(?)
          AND datetime(i.issued_at) <= datetime(?)`
     )
+    .all(fromIso, toIso);
 
   const counters = new Map();
 
@@ -11375,6 +11376,184 @@ app.get('/api/billing/operations', authMiddleware, requirePermission('read-billi
     ...payload,
     from: range.fromIso,
     to: range.toIso
+  });
+});
+
+app.get('/api/billing/insights', authMiddleware, requirePermission('read-billing-kpis'), (req, res) => {
+  const range = buildBillingDateRange(req.query.from, req.query.to);
+  const availableOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+  const filterOfficeIds = getScopedBillingOfficeIds(req.userAccess, req.query.officeId);
+  const requestedOfficeId = Number(req.query.officeId);
+
+  if (Number.isInteger(requestedOfficeId) && requestedOfficeId > 0 && filterOfficeIds.length === 0) {
+    return res.status(403).json({ message: 'Cabinet inaccessible' });
+  }
+
+  const effectiveOfficeIds = filterOfficeIds.length > 0 ? filterOfficeIds : availableOfficeIds;
+  const currentPayload = getBillingOperationsData({
+    userId: req.user.sub,
+    access: req.userAccess,
+    fromIso: range.fromIso,
+    toIso: range.toIso,
+    availableOfficeIds,
+    filterOfficeIds,
+    ownerUserId: null
+  });
+
+  const durationMs = Math.max(24 * 60 * 60 * 1000, range.to.getTime() - range.from.getTime() + 1);
+  const previousFrom = new Date(range.from.getTime() - durationMs);
+  const previousTo = new Date(range.to.getTime() - durationMs);
+  const previousPayload = getBillingOperationsData({
+    userId: req.user.sub,
+    access: req.userAccess,
+    fromIso: previousFrom.toISOString(),
+    toIso: previousTo.toISOString(),
+    availableOfficeIds,
+    filterOfficeIds,
+    ownerUserId: null
+  });
+
+  const computeTrendPercent = (current, previous) => {
+    if (!Number.isFinite(previous) || previous <= 0) {
+      return current > 0 ? 100 : 0;
+    }
+    return Number((((current - previous) / previous) * 100).toFixed(2));
+  };
+
+  const paymentMethods = getStatisticsPaymentMethodDistribution({
+    fromIso: range.fromIso,
+    toIso: range.toIso,
+    scopedOfficeIds: effectiveOfficeIds,
+    ownerUserId: null
+  });
+
+  const buckets = {
+    current: { count: 0, amountCents: 0 },
+    late1to30: { count: 0, amountCents: 0 },
+    late31to60: { count: 0, amountCents: 0 },
+    late61plus: { count: 0, amountCents: 0 }
+  };
+  const topDebtorsMap = new Map();
+
+  if (effectiveOfficeIds.length > 0) {
+    const placeholders = effectiveOfficeIds.map(() => '?').join(', ');
+    const unpaidRows = db
+      .prepare(
+        `SELECT i.id, i.invoice_number, i.amount_cents, i.issued_at, i.due_at, i.office_id,
+                p.cipher_full_name,
+                COALESCE(pay.paid_cents, 0) AS paid_cents
+         FROM invoices i
+         INNER JOIN patients p ON p.id = i.patient_id
+         LEFT JOIN (
+           SELECT invoice_id, SUM(amount_cents) AS paid_cents
+           FROM invoice_payments
+           GROUP BY invoice_id
+         ) pay ON pay.invoice_id = i.id
+         WHERE i.office_id IN (${placeholders})
+           AND i.status <> 'payee'
+         ORDER BY datetime(COALESCE(i.due_at, i.issued_at)) ASC, i.id ASC`
+      )
+      .all(...effectiveOfficeIds);
+
+    const nowMs = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+
+    for (const row of unpaidRows) {
+      const remainingAmountCents = Math.max(
+        0,
+        Number(row.amount_cents ?? 0) - Number(row.paid_cents ?? 0)
+      );
+      if (remainingAmountCents <= 0) {
+        continue;
+      }
+
+      const dueAtValue = new Date(String(row.due_at ?? row.issued_at ?? '')).getTime();
+      const isDueDateValid = Number.isFinite(dueAtValue);
+      const daysLate = isDueDateValid ? Math.floor((nowMs - dueAtValue) / dayMs) : 0;
+
+      if (!isDueDateValid || daysLate <= 0) {
+        buckets.current.count += 1;
+        buckets.current.amountCents += remainingAmountCents;
+      } else if (daysLate <= 30) {
+        buckets.late1to30.count += 1;
+        buckets.late1to30.amountCents += remainingAmountCents;
+      } else if (daysLate <= 60) {
+        buckets.late31to60.count += 1;
+        buckets.late31to60.amountCents += remainingAmountCents;
+      } else {
+        buckets.late61plus.count += 1;
+        buckets.late61plus.amountCents += remainingAmountCents;
+      }
+
+      const patientName = decryptSensitiveField(row.cipher_full_name);
+      const currentDebtor = topDebtorsMap.get(patientName) ?? {
+        patientName,
+        totalOutstandingCents: 0,
+        invoiceCount: 0
+      };
+      currentDebtor.totalOutstandingCents += remainingAmountCents;
+      currentDebtor.invoiceCount += 1;
+      topDebtorsMap.set(patientName, currentDebtor);
+    }
+  }
+
+  const topDebtors = [...topDebtorsMap.values()]
+    .sort((left, right) => right.totalOutstandingCents - left.totalOutstandingCents || right.invoiceCount - left.invoiceCount)
+    .slice(0, 10);
+
+  const totalOutstandingCents =
+    buckets.current.amountCents
+    + buckets.late1to30.amountCents
+    + buckets.late31to60.amountCents
+    + buckets.late61plus.amountCents;
+  const totalOutstandingCount =
+    buckets.current.count
+    + buckets.late1to30.count
+    + buckets.late31to60.count
+    + buckets.late61plus.count;
+
+  writeAuditLog(req.user.sub, 'READ_DASHBOARD', 'billing-insights', null, {
+    from: range.fromIso,
+    to: range.toIso,
+    operationCount: currentPayload.stats.operationCount,
+    outstandingCount: totalOutstandingCount
+  });
+
+  return res.json({
+    range: {
+      fromIso: range.fromIso,
+      toIso: range.toIso,
+      previousFromIso: previousFrom.toISOString(),
+      previousToIso: previousTo.toISOString()
+    },
+    kpis: {
+      current: {
+        creditsCents: currentPayload.stats.creditCents,
+        debitsCents: currentPayload.stats.debitCents,
+        netCents: currentPayload.stats.netCents,
+        operationCount: currentPayload.stats.operationCount
+      },
+      previous: {
+        creditsCents: previousPayload.stats.creditCents,
+        debitsCents: previousPayload.stats.debitCents,
+        netCents: previousPayload.stats.netCents,
+        operationCount: previousPayload.stats.operationCount
+      },
+      trends: {
+        creditsPercent: computeTrendPercent(currentPayload.stats.creditCents, previousPayload.stats.creditCents),
+        debitsPercent: computeTrendPercent(currentPayload.stats.debitCents, previousPayload.stats.debitCents),
+        netPercent: computeTrendPercent(currentPayload.stats.netCents, previousPayload.stats.netCents),
+        operationsPercent: computeTrendPercent(currentPayload.stats.operationCount, previousPayload.stats.operationCount)
+      }
+    },
+    receivables: {
+      totalOutstandingCents,
+      totalOutstandingCount,
+      aging: buckets,
+      topDebtors
+    },
+    paymentMethods,
+    summary: currentPayload.summary
   });
 });
 

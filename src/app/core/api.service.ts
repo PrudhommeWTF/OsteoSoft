@@ -28,6 +28,7 @@ import {
   BillingExpensePayload,
   BillingInvoiceCreatePayload,
   BillingInvoiceDetail,
+  BillingInsightsPayload,
   BillingInvoicePaymentsUpdatePayload,
   BillingOperationsPayload,
   ConsultationMetaSummary,
@@ -279,6 +280,25 @@ export class ApiService {
     }
 
     return firstValueFrom(this.http.get<BillingOperationsPayload>(`${this.baseUrl}/billing/operations`, { params }));
+  }
+
+  async getBillingInsights(filters?: {
+    from?: string;
+    to?: string;
+    officeId?: number | null;
+  }): Promise<BillingInsightsPayload> {
+    let params = new HttpParams();
+    if (filters?.from?.trim()) {
+      params = params.set('from', filters.from.trim());
+    }
+    if (filters?.to?.trim()) {
+      params = params.set('to', filters.to.trim());
+    }
+    if (Number.isInteger(filters?.officeId) && Number(filters?.officeId) > 0) {
+      params = params.set('officeId', String(filters?.officeId));
+    }
+
+    return firstValueFrom(this.http.get<BillingInsightsPayload>(`${this.baseUrl}/billing/insights`, { params }));
   }
 
   async createBillingExpense(payload: BillingExpensePayload): Promise<number> {
