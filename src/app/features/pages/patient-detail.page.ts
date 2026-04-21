@@ -26,6 +26,7 @@ import {
   LocationPair,
   OfficeConsultationProfile,
   Patient,
+  PatientAntecedentRecord,
   PatientAuditLog,
   PatientDetail,
   PatientDocumentSummary,
@@ -211,6 +212,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   readonly antecedentCategory = signal('');
   readonly antecedentDescription = signal('');
   readonly antecedentImportant = signal(false);
+  readonly structuredAntecedents = signal<AntecedentTimelineItem[] | null>(null);
   readonly antecedentCategoryOptions = signal<string[]>([
     'Cardiologie',
     'Endocrinologie',
@@ -345,7 +347,13 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     return age >= 0 ? `${age} ans` : '';
   });
 
-  readonly antecedents = computed(() => this.parseAntecedents(this.patient()?.medicalHistory ?? ''));
+  readonly antecedents = computed(() => {
+    const structured = this.structuredAntecedents();
+    if (structured !== null) {
+      return structured;
+    }
+    return this.parseAntecedents(this.patient()?.medicalHistory ?? '');
+  });
 
   readonly consultationRecords = computed(() =>
     this.consultations().filter((item) => {
@@ -2126,19 +2134,26 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   private async load(id: number): Promise<void> {
     this.isLoading.set(true);
     this.isLoadingDocuments.set(true);
+    this.structuredAntecedents.set(null);
 
     try {
-      const [patient, consultations, documents, preferences] = await Promise.all([
+      const [patient, consultations, documents, preferences, antecedents] = await Promise.all([
         this.api.getPatientDetail(id),
         this.api.getPatientConsultations(id),
         this.api.getPatientDocuments(id),
-        this.api.getMyAgendaPreferences()
+        this.api.getMyAgendaPreferences(),
+        this.api.getPatientAntecedents(id).catch(() => [])
       ]);
 
       this.patient.set(patient);
       this.consultations.set(consultations);
       this.patientDocuments.set(documents);
       this.preferences.set(preferences);
+      this.structuredAntecedents.set(
+        antecedents.length > 0
+          ? this.mapStructuredAntecedentsToTimelineItems(antecedents)
+          : null
+      );
       this.startEdit();
       this.startPatientAutosave();
 
@@ -2151,6 +2166,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       this.patient.set(null);
       this.consultations.set([]);
       this.patientDocuments.set([]);
+      this.structuredAntecedents.set(null);
       this.stopPatientAutosave();
     } finally {
       this.isLoading.set(false);
@@ -2477,7 +2493,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private syncMedicalHistoryFromAntecedents(items: AntecedentTimelineItem[]): void {
-    const serialized = items.map((item) => ({
+    const sortedItems = [...items].sort((left, right) => right.sortKey - left.sortKey);
+    const serialized = sortedItems.map((item) => ({
       id: item.id,
       datePrecision: item.precision,
       date: item.dateDisplay,
@@ -2488,6 +2505,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     }));
 
     const value = JSON.stringify(serialized);
+    this.structuredAntecedents.set(sortedItems);
     this.editForm.controls.medicalHistory.setValue(value);
     this.editForm.controls.medicalHistory.markAsDirty();
 
@@ -2500,6 +2518,21 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
         medicalHistory: value
       };
     });
+  }
+
+  private mapStructuredAntecedentsToTimelineItems(records: PatientAntecedentRecord[]): AntecedentTimelineItem[] {
+    return records
+      .map((record) => ({
+        id: `db-${record.id}`,
+        category: String(record.category ?? '').trim() || 'Antécédent',
+        description: String(record.description ?? '').trim() || 'Détail non renseigné',
+        dateDisplay: String(record.date ?? '').trim(),
+        precision: record.datePrecision,
+        sortKey: Number(record.sortKey) || 0,
+        important: Boolean(record.important)
+      }))
+      .filter((item) => item.dateDisplay.length > 0 && item.category.length > 0)
+      .sort((left, right) => right.sortKey - left.sortKey);
   }
 
   private ensureAntecedentOption(category: string): void {

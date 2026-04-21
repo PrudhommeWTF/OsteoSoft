@@ -769,6 +769,20 @@ export type AntecedentTypesPayload = {
   types: string[];
 };
 
+export type PatientAntecedentRecord = {
+  id: number;
+  datePrecision: 'date' | 'month' | 'year';
+  date: string;
+  category: string;
+  description: string;
+  important: boolean;
+  sortKey: number;
+};
+
+export type PatientAntecedentsPayload = {
+  antecedents: PatientAntecedentRecord[];
+};
+
 export type NewPatientDraft = {
   step: number;
   payload: CreatePatientPayload;

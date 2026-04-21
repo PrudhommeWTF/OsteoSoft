@@ -460,15 +460,31 @@ db.exec(`
     eva_before INTEGER NOT NULL DEFAULT 0,
     eva_after INTEGER NOT NULL DEFAULT 0,
     profile TEXT NOT NULL DEFAULT 'Adulte',
-    reason_items_cipher TEXT,
-    motif_main_cipher TEXT,
-    tests_cipher TEXT,
-    schema_cipher TEXT,
-    treatments_cipher TEXT,
-    remarks_cipher TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(patient_id) REFERENCES patients(id),
     FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS consultation_reason_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    consultation_id INTEGER NOT NULL,
+    label TEXT NOT NULL,
+    value TEXT NOT NULL DEFAULT '',
+    important INTEGER NOT NULL DEFAULT 0,
+    display_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(consultation_id) REFERENCES consultations(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS consultation_sections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    consultation_id INTEGER NOT NULL,
+    section_key TEXT NOT NULL,
+    content_cipher TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(consultation_id) REFERENCES consultations(id) ON DELETE CASCADE,
+    UNIQUE(consultation_id, section_key)
   );
 
   CREATE TABLE IF NOT EXISTS patient_documents (
@@ -531,6 +547,8 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_consultations_patient_started_at ON consultations(patient_id, started_at);
   CREATE INDEX IF NOT EXISTS idx_consultations_office_started_at ON consultations(office_id, started_at);
+  CREATE INDEX IF NOT EXISTS idx_consultation_reason_items_consultation_order ON consultation_reason_items(consultation_id, display_order);
+  CREATE INDEX IF NOT EXISTS idx_consultation_sections_consultation_key ON consultation_sections(consultation_id, section_key);
 
   CREATE INDEX IF NOT EXISTS idx_invoices_patient_status ON invoices(patient_id, status);
   CREATE INDEX IF NOT EXISTS idx_invoices_status_due_at ON invoices(status, due_at);
@@ -1986,9 +2004,8 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
   const insertConsultation = db.prepare(
     `INSERT INTO consultations
       (patient_id, started_at, office_id, practitioner, title, important,
-       height_cm, weight_kg, eva_before, eva_after, profile, reason_items_cipher,
-       motif_main_cipher, tests_cipher, schema_cipher, treatments_cipher, remarks_cipher)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       height_cm, weight_kg, eva_before, eva_after, profile)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const insertAppointment = db.prepare(
     `INSERT INTO appointments (patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id)
@@ -2108,16 +2125,18 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
           null,
           5,
           2,
-          patientIndex % 3 === 0 ? 'Adulte' : patientIndex % 3 === 1 ? 'Enfant' : 'Senior',
-          null,
-          encryptSensitiveField(`<p>${consultationTitle}</p>`),
-          null,
-          null,
-          null,
-          encryptSensitiveField(`<p>Compte rendu de demonstration ${officeLabel} (${index + 1}).</p>`)
+          patientIndex % 3 === 0 ? 'Adulte' : patientIndex % 3 === 1 ? 'Enfant' : 'Senior'
         );
         const consultationId = Number(consultationResult.lastInsertRowid);
         consultationCount += 1;
+
+        replaceConsultationSections(consultationId, {
+          motifMainHtml: `<p>${consultationTitle}</p>`,
+          testsHtml: '',
+          schemaHtml: '',
+          treatmentsHtml: '',
+          remarksHtml: `<p>Compte rendu de demonstration ${officeLabel} (${index + 1}).</p>`
+        });
 
         insertAppointment.run(
           patientId,
@@ -2588,9 +2607,10 @@ function buildDataBackupSnapshot() {
        ORDER BY office_id ASC, user_id ASC`
     ).all(),
     patients: db.prepare(
-      `SELECT id, cipher_full_name, cipher_phone, cipher_medical_notes, sex,
-              birth_date, last_visit, consent_signed, retention_until,
-              is_deleted, created_at, updated_at
+      `SELECT id, cipher_full_name, cipher_phone, cipher_medical_notes,
+            sex, marital_status, children_count, office_id,
+            birth_date, last_visit, consent_signed, retention_until,
+            is_deleted, created_at, updated_at
        FROM patients
        ORDER BY id ASC`
     ).all(),
@@ -2607,11 +2627,19 @@ function buildDataBackupSnapshot() {
     ).all(),
     consultations: db.prepare(
       `SELECT id, patient_id, started_at, office_id, practitioner, title, important,
-        height_cm, weight_kg, eva_before, eva_after, profile, reason_items_cipher,
-              motif_main_cipher, tests_cipher, schema_cipher, treatments_cipher,
-              remarks_cipher, created_at
+              height_cm, weight_kg, eva_before, eva_after, profile, created_at
        FROM consultations
        ORDER BY id ASC`
+    ).all(),
+    consultationReasonItems: db.prepare(
+      `SELECT id, consultation_id, label, value, important, display_order, created_at
+       FROM consultation_reason_items
+       ORDER BY consultation_id ASC, display_order ASC, id ASC`
+    ).all(),
+    consultationSections: db.prepare(
+      `SELECT id, consultation_id, section_key, content_cipher, created_at, updated_at
+       FROM consultation_sections
+       ORDER BY consultation_id ASC, section_key ASC, id ASC`
     ).all(),
     patientDocuments: db.prepare(
       `SELECT id, document_ref, patient_id, consultation_id, office_id, created_by,
@@ -2696,6 +2724,8 @@ function restoreDataBackupSnapshot(backupPayload) {
     db.prepare('DELETE FROM audit_logs').run();
     db.prepare('DELETE FROM draft').run();
     db.prepare('DELETE FROM patient_documents').run();
+    db.prepare('DELETE FROM consultation_sections').run();
+    db.prepare('DELETE FROM consultation_reason_items').run();
     db.prepare('DELETE FROM consultations').run();
     db.prepare('DELETE FROM appointments').run();
     db.prepare('DELETE FROM invoices').run();
@@ -2753,10 +2783,16 @@ function restoreDataBackupSnapshot(backupPayload) {
     const insertConsultation = db.prepare(
       `INSERT INTO consultations (
          id, patient_id, started_at, office_id, practitioner, title, important,
-         height_cm, weight_kg, eva_before, eva_after, profile, reason_items_cipher,
-         motif_main_cipher, tests_cipher, schema_cipher, treatments_cipher,
-         remarks_cipher, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         height_cm, weight_kg, eva_before, eva_after, profile, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+     const insertConsultationReasonItem = db.prepare(
+      `INSERT INTO consultation_reason_items (id, consultation_id, label, value, important, display_order, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+     );
+    const insertConsultationSection = db.prepare(
+      `INSERT INTO consultation_sections (id, consultation_id, section_key, content_cipher, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
     );
     const insertPatientDocument = db.prepare(
       `INSERT INTO patient_documents (
@@ -3029,13 +3065,30 @@ function restoreDataBackupSnapshot(backupPayload) {
         Number(row.eva_before) || 0,
         Number(row.eva_after) || 0,
         row.profile ?? 'Adulte',
-        row.reason_items_cipher ?? null,
-        row.motif_main_cipher ?? null,
-        row.tests_cipher ?? null,
-        row.schema_cipher ?? null,
-        row.treatments_cipher ?? null,
-        row.remarks_cipher ?? null,
         row.created_at ?? new Date().toISOString()
+      );
+    }
+
+    for (const row of Array.isArray(backup.consultationReasonItems) ? backup.consultationReasonItems : []) {
+      insertConsultationReasonItem.run(
+        Number(row.id),
+        Number(row.consultation_id),
+        String(row.label ?? '').trim(),
+        String(row.value ?? '').trim(),
+        Number(row.important) ? 1 : 0,
+        Number(row.display_order) || 0,
+        row.created_at ?? new Date().toISOString()
+      );
+    }
+
+    for (const row of Array.isArray(backup.consultationSections) ? backup.consultationSections : []) {
+      insertConsultationSection.run(
+        Number(row.id),
+        Number(row.consultation_id),
+        String(row.section_key ?? '').trim(),
+        String(row.content_cipher ?? ''),
+        row.created_at ?? new Date().toISOString(),
+        row.updated_at ?? new Date().toISOString()
       );
     }
 
@@ -3538,7 +3591,6 @@ async function ensureSeedData() {
   ensureColumn('offices', 'opening_hours_json', `opening_hours_json TEXT NOT NULL DEFAULT '{"monday":[],"tuesday":[],"wednesday":[],"thursday":[],"friday":[],"saturday":[],"sunday":[]}'`);
   ensureColumn('offices', 'consultation_profiles_json', "consultation_profiles_json TEXT NOT NULL DEFAULT '[]'");
   ensureColumn('consultations', 'office_id', 'office_id INTEGER');
-  ensureColumn('consultations', 'reason_items_cipher', 'reason_items_cipher TEXT');
   ensureColumn('patients', 'marital_status', "marital_status TEXT NOT NULL DEFAULT 'Non renseigne'");
   ensureColumn('patients', 'children_count', 'children_count INTEGER NOT NULL DEFAULT 0');
   ensureColumn('service_types', 'office_id', 'office_id INTEGER');
@@ -4112,6 +4164,45 @@ function parsePatientAntecedentsFromMedicalHistory(medicalHistoryRaw) {
     .slice(0, 400);
 }
 
+function normalizeConsultationReasonItems(rawItems) {
+  return Array.isArray(rawItems)
+    ? rawItems
+      .map((item) => ({
+        label: String(item?.label ?? '').trim(),
+        value: String(item?.value ?? '').trim(),
+        important: Boolean(item?.important)
+      }))
+      .filter((item, index, all) => item.label && all.findIndex((candidate) => candidate.label === item.label) === index)
+    : [];
+}
+
+const CONSULTATION_SECTION_KEYS = ['motifMainHtml', 'testsHtml', 'schemaHtml', 'treatmentsHtml', 'remarksHtml'];
+
+function buildEmptyConsultationSections() {
+  return {
+    motifMainHtml: '',
+    testsHtml: '',
+    schemaHtml: '',
+    treatmentsHtml: '',
+    remarksHtml: ''
+  };
+}
+
+function normalizeConsultationSectionsPayload(rawSections) {
+  const source = rawSections && typeof rawSections === 'object' ? rawSections : {};
+  const normalized = buildEmptyConsultationSections();
+
+  for (const key of CONSULTATION_SECTION_KEYS) {
+    normalized[key] = String(source[key] ?? '');
+  }
+
+  return normalized;
+}
+
+function hasConsultationSectionsContent(sections) {
+  return CONSULTATION_SECTION_KEYS.some((key) => String(sections?.[key] ?? '').trim().length > 0);
+}
+
 function normalizePersonNameKey(name) {
   return String(name ?? '')
     .trim()
@@ -4371,15 +4462,7 @@ function resolveConsultationSchedulingContextFromRaw(consultationNoteRaw, option
     return null;
   }
 
-  const normalizedReasonItems = Array.isArray(data.reasonItems)
-    ? data.reasonItems
-      .map((item) => ({
-        label: String(item?.label ?? '').trim(),
-        value: String(item?.value ?? '').trim(),
-        important: Boolean(item?.important)
-      }))
-      .filter((item, index, all) => item.label && all.findIndex((candidate) => candidate.label === item.label) === index)
-    : [];
+  const normalizedReasonItems = normalizeConsultationReasonItems(data.reasonItems);
 
   const hasContent =
     String(data.title ?? '').trim() ||
@@ -4581,9 +4664,8 @@ function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}
     const createdConsultation = db.prepare(`
       INSERT INTO consultations
         (patient_id, started_at, office_id, practitioner, title, important, height_cm, weight_kg,
-         eva_before, eva_after, profile, reason_items_cipher,
-         motif_main_cipher, tests_cipher, schema_cipher, treatments_cipher, remarks_cipher)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         eva_before, eva_after, profile)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       patientId,
       alignedStartIso,
@@ -4595,16 +4677,18 @@ function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}
       typeof data.weightKg === 'number' ? data.weightKg : null,
       typeof data.evaBefore === 'number' ? data.evaBefore : 0,
       typeof data.evaAfter === 'number' ? data.evaAfter : 0,
-      String(data.profile ?? 'Adulte').trim() || 'Adulte',
-      normalizedReasonItems.length > 0 ? encryptSensitiveField(JSON.stringify(normalizedReasonItems)) : null,
-      data.motifMainHtml ? encryptSensitiveField(data.motifMainHtml) : null,
-      data.testsHtml ? encryptSensitiveField(data.testsHtml) : null,
-      data.schemaHtml ? encryptSensitiveField(data.schemaHtml) : null,
-      data.treatmentsHtml ? encryptSensitiveField(data.treatmentsHtml) : null,
-      data.remarksHtml ? encryptSensitiveField(data.remarksHtml) : null
+      String(data.profile ?? 'Adulte').trim() || 'Adulte'
     );
 
     const consultationId = Number(createdConsultation.lastInsertRowid);
+    replaceConsultationReasonItems(consultationId, normalizedReasonItems);
+    replaceConsultationSections(consultationId, {
+      motifMainHtml: data.motifMainHtml,
+      testsHtml: data.testsHtml,
+      schemaHtml: data.schemaHtml,
+      treatmentsHtml: data.treatmentsHtml,
+      remarksHtml: data.remarksHtml
+    });
     const title = String(data.title ?? '').trim();
     const reason = title || 'Consultation';
 
@@ -4776,6 +4860,311 @@ function replacePatientAntecedents(patientId, medicalHistoryRaw) {
   });
 
   replaceMany(patientId, antecedents);
+}
+
+function replaceConsultationReasonItems(consultationId, reasonItems) {
+  if (!Number.isInteger(consultationId) || consultationId <= 0) {
+    return;
+  }
+
+  const normalized = normalizeConsultationReasonItems(reasonItems);
+  const replaceMany = db.transaction((id, items) => {
+    db.prepare('DELETE FROM consultation_reason_items WHERE consultation_id = ?').run(id);
+
+    if (!items.length) {
+      return;
+    }
+
+    const insertItem = db.prepare(
+      `INSERT INTO consultation_reason_items (consultation_id, label, value, important, display_order)
+       VALUES (?, ?, ?, ?, ?)`
+    );
+
+    for (const [index, item] of items.entries()) {
+      insertItem.run(
+        id,
+        item.label,
+        item.value,
+        item.important ? 1 : 0,
+        index
+      );
+    }
+  });
+
+  replaceMany(consultationId, normalized);
+}
+
+function replaceConsultationSections(consultationId, sections) {
+  if (!Number.isInteger(consultationId) || consultationId <= 0) {
+    return;
+  }
+
+  const normalized = normalizeConsultationSectionsPayload(sections);
+  const replaceMany = db.transaction((id, nextSections) => {
+    db.prepare('DELETE FROM consultation_sections WHERE consultation_id = ?').run(id);
+
+    if (!hasConsultationSectionsContent(nextSections)) {
+      return;
+    }
+
+    const insertSection = db.prepare(
+      `INSERT INTO consultation_sections (consultation_id, section_key, content_cipher)
+       VALUES (?, ?, ?)`
+    );
+
+    for (const key of CONSULTATION_SECTION_KEYS) {
+      const content = String(nextSections[key] ?? '');
+      if (!content.trim()) {
+        continue;
+      }
+
+      insertSection.run(
+        id,
+        key,
+        encryptSensitiveField(content)
+      );
+    }
+  });
+
+  replaceMany(consultationId, normalized);
+}
+
+function getConsultationReasonItems(consultationId) {
+  if (!Number.isInteger(consultationId) || consultationId <= 0) {
+    return [];
+  }
+
+  const rows = db
+    .prepare(
+      `SELECT label, value, important
+       FROM consultation_reason_items
+       WHERE consultation_id = ?
+       ORDER BY display_order ASC, id ASC`
+    )
+    .all(consultationId);
+
+  if (rows.length > 0) {
+    return rows
+      .map((row) => ({
+        label: String(row.label ?? '').trim(),
+        value: String(row.value ?? '').trim(),
+        important: Boolean(row.important)
+      }))
+      .filter((item) => item.label.length > 0);
+  }
+
+  return [];
+}
+
+function getConsultationSections(consultationId) {
+  if (!Number.isInteger(consultationId) || consultationId <= 0) {
+    return buildEmptyConsultationSections();
+  }
+
+  const rows = db
+    .prepare(
+      `SELECT section_key, content_cipher
+       FROM consultation_sections
+       WHERE consultation_id = ?
+       ORDER BY id ASC`
+    )
+    .all(consultationId);
+
+  if (rows.length > 0) {
+    const sections = buildEmptyConsultationSections();
+    for (const row of rows) {
+      const key = String(row.section_key ?? '').trim();
+      if (!CONSULTATION_SECTION_KEYS.includes(key)) {
+        continue;
+      }
+
+      try {
+        sections[key] = decryptSensitiveField(row.content_cipher);
+      } catch {
+        sections[key] = '';
+      }
+    }
+    return sections;
+  }
+
+  return buildEmptyConsultationSections();
+}
+
+function getPatientAntecedentItems(patientId, medicalHistoryRaw = null) {
+  if (!Number.isInteger(patientId) || patientId <= 0) {
+    return [];
+  }
+
+  const rows = db
+    .prepare(
+      `SELECT category, description, important
+       FROM patient_antecedents
+       WHERE patient_id = ?
+       ORDER BY sort_key DESC, id DESC`
+    )
+    .all(patientId);
+
+  if (rows.length > 0) {
+    return rows
+      .map((row) => ({
+        category: String(row.category ?? '').trim(),
+        label: String(row.description ?? '').trim(),
+        important: Boolean(row.important)
+      }))
+      .filter((item) => item.category.length > 0 || item.label.length > 0);
+  }
+
+  const fallback = parseStatisticsAntecedents(medicalHistoryRaw);
+  if (fallback.length > 0) {
+    replacePatientAntecedents(patientId, medicalHistoryRaw);
+  }
+
+  return fallback;
+}
+
+function buildConsultationReasonItemsMap(rows) {
+  const consultationIds = [...new Set(
+    rows
+      .map((row) => Number(row?.id))
+      .filter((id) => Number.isInteger(id) && id > 0)
+  )];
+
+  const map = new Map();
+  if (consultationIds.length === 0) {
+    return map;
+  }
+
+  const placeholders = consultationIds.map(() => '?').join(', ');
+  const relationRows = db
+    .prepare(
+      `SELECT consultation_id, label, value, important
+       FROM consultation_reason_items
+       WHERE consultation_id IN (${placeholders})
+       ORDER BY consultation_id ASC, display_order ASC, id ASC`
+    )
+    .all(...consultationIds);
+
+  for (const row of relationRows) {
+    const consultationId = Number(row.consultation_id);
+    const items = map.get(consultationId) ?? [];
+    items.push({
+      label: String(row.label ?? '').trim(),
+      value: String(row.value ?? '').trim(),
+      important: Boolean(row.important)
+    });
+    map.set(consultationId, items.filter((item) => item.label.length > 0));
+  }
+
+  for (const row of rows) {
+    const consultationId = Number(row?.id);
+    if (!Number.isInteger(consultationId) || consultationId <= 0 || map.has(consultationId)) {
+      continue;
+    }
+
+    map.set(consultationId, []);
+  }
+
+  return map;
+}
+
+function buildConsultationSectionsMap(rows) {
+  const consultationIds = [...new Set(
+    rows
+      .map((row) => Number(row?.id))
+      .filter((id) => Number.isInteger(id) && id > 0)
+  )];
+
+  const map = new Map();
+  if (consultationIds.length === 0) {
+    return map;
+  }
+
+  const placeholders = consultationIds.map(() => '?').join(', ');
+  const relationRows = db
+    .prepare(
+      `SELECT consultation_id, section_key, content_cipher
+       FROM consultation_sections
+       WHERE consultation_id IN (${placeholders})
+       ORDER BY consultation_id ASC, id ASC`
+    )
+    .all(...consultationIds);
+
+  for (const row of relationRows) {
+    const consultationId = Number(row.consultation_id);
+    const key = String(row.section_key ?? '').trim();
+    if (!CONSULTATION_SECTION_KEYS.includes(key)) {
+      continue;
+    }
+
+    const sections = map.get(consultationId) ?? buildEmptyConsultationSections();
+    try {
+      sections[key] = decryptSensitiveField(row.content_cipher);
+    } catch {
+      sections[key] = '';
+    }
+    map.set(consultationId, sections);
+  }
+
+  for (const row of rows) {
+    const consultationId = Number(row?.id);
+    if (!Number.isInteger(consultationId) || consultationId <= 0 || map.has(consultationId)) {
+      continue;
+    }
+
+    map.set(consultationId, buildEmptyConsultationSections());
+  }
+
+  return map;
+}
+
+function buildPatientAntecedentsMap(rows) {
+  const patientIds = [...new Set(
+    rows
+      .map((row) => Number(row?.id))
+      .filter((id) => Number.isInteger(id) && id > 0)
+  )];
+
+  const map = new Map();
+  if (patientIds.length === 0) {
+    return map;
+  }
+
+  const placeholders = patientIds.map(() => '?').join(', ');
+  const relationRows = db
+    .prepare(
+      `SELECT patient_id, category, description, important
+       FROM patient_antecedents
+       WHERE patient_id IN (${placeholders})
+       ORDER BY patient_id ASC, sort_key DESC, id DESC`
+    )
+    .all(...patientIds);
+
+  for (const row of relationRows) {
+    const patientId = Number(row.patient_id);
+    const items = map.get(patientId) ?? [];
+    items.push({
+      category: String(row.category ?? '').trim(),
+      label: String(row.description ?? '').trim(),
+      important: Boolean(row.important)
+    });
+    map.set(patientId, items.filter((item) => item.category.length > 0 || item.label.length > 0));
+  }
+
+  for (const row of rows) {
+    const patientId = Number(row?.id);
+    if (!Number.isInteger(patientId) || patientId <= 0 || map.has(patientId)) {
+      continue;
+    }
+
+    const notes = parsePatientNotesFromCipher(row.cipher_medical_notes);
+    const fallback = parseStatisticsAntecedents(notes.medicalHistory);
+    if (fallback.length > 0) {
+      replacePatientAntecedents(patientId, String(notes.medicalHistory ?? ''));
+      map.set(patientId, fallback);
+    }
+  }
+
+  return map;
 }
 
 function normalizeAuditValue(value) {
@@ -5169,6 +5558,8 @@ const backupDataSchema = z.object({
   appointments: z.array(z.record(z.string(), z.unknown())).optional().default([]),
   invoices: z.array(z.record(z.string(), z.unknown())).optional().default([]),
   consultations: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  consultationReasonItems: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  consultationSections: z.array(z.record(z.string(), z.unknown())).optional().default([]),
   antecedentTypes: z.array(z.record(z.string(), z.unknown())).optional().default([]),
   patientAntecedents: z.array(z.record(z.string(), z.unknown())).optional().default([]),
   serviceTypes: z.array(z.record(z.string(), z.unknown())).optional().default([]),
@@ -6193,10 +6584,21 @@ app.get('/api/patients/:id/antecedents', authMiddleware, requirePermission('read
   }
 
   const patient = db
-    .prepare('SELECT id, cipher_medical_notes FROM patients WHERE id = ? AND is_deleted = 0')
+    .prepare('SELECT id, cipher_medical_notes, office_id FROM patients WHERE id = ? AND is_deleted = 0')
     .get(patientId);
   if (!patient) {
     return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
+  if (patientOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(patientOfficeId)) {
+        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
+      }
+    }
   }
 
   let rows = db
@@ -7476,8 +7878,6 @@ app.get('/api/people/search', authMiddleware, requirePermission('create-patient-
         .map((value) => String(value ?? '').toLowerCase())
         .some((value) => value.includes(query))
     );
-
-  const isAdmin = req.user.role === 'admin';
   const scopedOffices = getScopedOfficeOptions(req.userAccess, isAdmin);
   const allowedOfficeIds = scopedOffices
     .map((office) => Number(office.id))
@@ -7744,9 +8144,20 @@ app.get('/api/patients/:id/documents', authMiddleware, requirePermission('read-p
     return res.status(400).json({ message: 'Identifiant patient invalide' });
   }
 
-  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
+  const patient = db.prepare('SELECT id, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
   if (!patient) {
     return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
+  if (patientOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(patientOfficeId)) {
+        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
+      }
+    }
   }
 
   const rows = db.prepare(
@@ -7796,6 +8207,17 @@ app.get('/api/patient-documents/:documentRef', authMiddleware, requirePermission
     return res.status(404).json({ message: 'Patient introuvable' });
   }
 
+  const documentOfficeId = row.office_id != null ? Number(row.office_id) : null;
+  if (documentOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(documentOfficeId)) {
+        return res.status(403).json({ message: 'Accès refusé - document d\'un autre cabinet' });
+      }
+    }
+  }
+
   return res.json({
     document: {
       id: Number(row.id),
@@ -7820,9 +8242,20 @@ app.post('/api/patients/:id/documents', authMiddleware, requirePermission('creat
     return res.status(400).json({ message: 'Identifiant patient invalide' });
   }
 
-  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
+  const patient = db.prepare('SELECT id, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
   if (!patient) {
     return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
+  if (patientOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(patientOfficeId)) {
+        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
+      }
+    }
   }
 
   const fileName = String(req.body?.fileName ?? '').trim();
@@ -7903,6 +8336,17 @@ app.patch('/api/patient-documents/:documentRef', authMiddleware, requirePermissi
     return res.status(404).json({ message: 'Document introuvable' });
   }
 
+  const documentOfficeId = row.office_id != null ? Number(row.office_id) : null;
+  if (documentOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(documentOfficeId)) {
+        return res.status(403).json({ message: 'Accès refusé - document d\'un autre cabinet' });
+      }
+    }
+  }
+
   const title = String(req.body?.title ?? '').trim();
   const comment = String(req.body?.comment ?? '').trim();
 
@@ -7939,9 +8383,22 @@ app.delete('/api/patient-documents/:documentRef', authMiddleware, requirePermiss
     return res.status(400).json({ message: 'Reference document invalide' });
   }
 
-  const existing = db.prepare('SELECT id FROM patient_documents WHERE document_ref = ? LIMIT 1').get(documentRef);
+  const existing = db
+    .prepare('SELECT id, office_id FROM patient_documents WHERE document_ref = ? LIMIT 1')
+    .get(documentRef);
   if (!existing) {
     return res.status(404).json({ message: 'Document introuvable' });
+  }
+
+  const documentOfficeId = existing.office_id != null ? Number(existing.office_id) : null;
+  if (documentOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(documentOfficeId)) {
+        return res.status(403).json({ message: 'Accès refusé - document d\'un autre cabinet' });
+      }
+    }
   }
 
   db.prepare('DELETE FROM patient_documents WHERE document_ref = ?').run(documentRef);
@@ -7960,6 +8417,7 @@ app.get('/api/patients', authMiddleware, requirePermission('read-patient-list'),
               p.last_visit,
               p.sex,
               p.birth_date,
+              p.office_id,
               COALESCE(a.consultation_count, 0) AS consultation_count
        FROM patients p
        LEFT JOIN (
@@ -7971,8 +8429,16 @@ app.get('/api/patients', authMiddleware, requirePermission('read-patient-list'),
     )
     .all();
 
+  const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+  const accessibleOfficeIds = isAdmin ? null : getAccessibleBillingOfficeIds(req.userAccess);
+
   const patients = [];
   for (const row of rows) {
+    const patientOfficeId = row.office_id != null ? Number(row.office_id) : null;
+    if (patientOfficeId !== null && !isAdmin && !accessibleOfficeIds.includes(patientOfficeId)) {
+      continue;
+    }
+
     const fullName = decryptSensitiveField(row.cipher_full_name);
 
     // Short-circuit before additional expensive decryptions/parsing when searching.
@@ -8011,13 +8477,21 @@ app.get('/api/patients/locations', authMiddleware, requirePermission('search-pat
   const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(5000, Math.floor(requestedLimit))) : 100;
 
   const rows = db
-    .prepare('SELECT cipher_medical_notes FROM patients WHERE is_deleted = 0')
+    .prepare('SELECT cipher_medical_notes, office_id FROM patients WHERE is_deleted = 0')
     .all();
+
+  const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+  const accessibleOfficeIds = isAdmin ? null : getAccessibleBillingOfficeIds(req.userAccess);
 
   const seen = new Set();
   const locations = [];
 
   for (const row of rows) {
+    const patientOfficeId = row.office_id != null ? Number(row.office_id) : null;
+    if (patientOfficeId !== null && !isAdmin && !accessibleOfficeIds.includes(patientOfficeId)) {
+      continue;
+    }
+
     let notes;
     try {
       notes = JSON.parse(decryptSensitiveField(row.cipher_medical_notes));
@@ -8062,13 +8536,15 @@ app.get('/api/patients/locations', authMiddleware, requirePermission('search-pat
 });
 
 app.get('/api/patients/count', authMiddleware, requirePermission('read-patient-list'), (req, res) => {
-  const row = db.prepare('SELECT COUNT(*) AS total FROM patients WHERE is_deleted = 0').get();
-  return res.json({ count: row.total });
-});
+  const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+  const accessibleOfficeIds = isAdmin ? null : getAccessibleBillingOfficeIds(req.userAccess);
+  const rows = db.prepare('SELECT office_id FROM patients WHERE is_deleted = 0').all();
+  const count = rows.filter((row) => {
+    const patientOfficeId = row.office_id != null ? Number(row.office_id) : null;
+    return patientOfficeId === null || isAdmin || accessibleOfficeIds.includes(patientOfficeId);
+  }).length;
 
-app.get('/api/patients/count', authMiddleware, requirePermission('read-patient-list'), (req, res) => {
-  const row = db.prepare('SELECT COUNT(*) AS total FROM patients WHERE is_deleted = 0').get();
-  return res.json({ count: row.total });
+  return res.json({ count });
 });
 
 app.get('/api/patients/:id', authMiddleware, requirePermission('read-patient-record'), (req, res) => {
@@ -8078,7 +8554,7 @@ app.get('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
   const row = db
     .prepare(
       `SELECT p.id, p.cipher_full_name, p.cipher_phone, p.cipher_medical_notes,
-              p.sex, p.birth_date, p.marital_status, p.children_count, p.last_visit,
+              p.sex, p.birth_date, p.marital_status, p.children_count, p.last_visit, p.office_id,
               COALESCE(a.consultation_count, 0) AS consultation_count
        FROM patients p
        LEFT JOIN (
@@ -8091,6 +8567,17 @@ app.get('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
     .get(id);
 
   if (!row) return res.status(404).json({ message: 'Patient introuvable' });
+
+  const patientOfficeId = row.office_id != null ? Number(row.office_id) : null;
+  if (patientOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(patientOfficeId)) {
+        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
+      }
+    }
+  }
 
   const fullName = decryptSensitiveField(row.cipher_full_name);
   const phone = decryptSensitiveField(row.cipher_phone);
@@ -8145,16 +8632,26 @@ app.get('/api/patients/:id/consultations', authMiddleware, requirePermission('re
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: 'ID invalide' });
 
-  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(id);
+  const patient = db.prepare('SELECT id, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(id);
   if (!patient) return res.status(404).json({ message: 'Patient introuvable' });
+
+  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
+  if (patientOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(patientOfficeId)) {
+        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
+      }
+    }
+  }
 
   let consultationRows = [];
   try {
     consultationRows = db
       .prepare(
         `SELECT c.id, c.started_at, c.practitioner, c.title, c.important, c.height_cm, c.weight_kg,
-                eva_before, eva_after, profile, reason_items_cipher,
-                motif_main_cipher, tests_cipher, schema_cipher, treatments_cipher, remarks_cipher,
+                eva_before, eva_after, profile,
                 (
                   SELECT i.id
                   FROM invoices i
@@ -8172,47 +8669,34 @@ app.get('/api/patients/:id/consultations', authMiddleware, requirePermission('re
   const appointmentRows = db
     .prepare('SELECT id, starts_at, reason_cipher, status FROM appointments WHERE patient_id = ? ORDER BY starts_at DESC')
     .all(id);
+  const consultationReasonItemsById = buildConsultationReasonItemsMap(consultationRows);
+  const consultationSectionsById = buildConsultationSectionsMap(consultationRows);
 
-  const consultations = consultationRows.map((row) => ({
-    reasonItems: (() => {
-      if (!row.reason_items_cipher) {
-        return [];
-      }
-      try {
-        const parsed = JSON.parse(decryptSensitiveField(row.reason_items_cipher));
-        if (!Array.isArray(parsed)) {
-          return [];
-        }
-        return parsed
-          .map((item) => ({
-            label: String(item?.label ?? '').trim(),
-            value: String(item?.value ?? '').trim(),
-            important: Boolean(item?.important)
-          }))
-          .filter((item) => item.label.length > 0);
-      } catch {
-        return [];
-      }
-    })(),
-    id: row.id,
-    type: 'consultation',
-    startedAt: row.started_at,
-    practitioner: row.practitioner ?? '',
-    title: row.title ?? '',
-    important: Boolean(row.important),
-    heightCm: row.height_cm ?? null,
-    weightKg: row.weight_kg ?? null,
-    evaBefore: row.eva_before ?? 0,
-    evaAfter: row.eva_after ?? 0,
-    profile: row.profile ?? 'Adulte',
-    motifMainHtml: row.motif_main_cipher ? decryptSensitiveField(row.motif_main_cipher) : '',
-    testsHtml: row.tests_cipher ? decryptSensitiveField(row.tests_cipher) : '',
-    schemaHtml: row.schema_cipher ? decryptSensitiveField(row.schema_cipher) : '',
-    treatmentsHtml: row.treatments_cipher ? decryptSensitiveField(row.treatments_cipher) : '',
-    remarksHtml: row.remarks_cipher ? decryptSensitiveField(row.remarks_cipher) : '',
-    status: 'Termine',
-    billingInvoiceId: row.billing_invoice_id != null ? Number(row.billing_invoice_id) : null
-  }));
+  const consultations = consultationRows.map((row) => {
+    const sections = consultationSectionsById.get(Number(row.id)) ?? buildEmptyConsultationSections();
+
+    return {
+      reasonItems: consultationReasonItemsById.get(Number(row.id)) ?? [],
+      id: row.id,
+      type: 'consultation',
+      startedAt: row.started_at,
+      practitioner: row.practitioner ?? '',
+      title: row.title ?? '',
+      important: Boolean(row.important),
+      heightCm: row.height_cm ?? null,
+      weightKg: row.weight_kg ?? null,
+      evaBefore: row.eva_before ?? 0,
+      evaAfter: row.eva_after ?? 0,
+      profile: row.profile ?? 'Adulte',
+      motifMainHtml: sections.motifMainHtml,
+      testsHtml: sections.testsHtml,
+      schemaHtml: sections.schemaHtml,
+      treatmentsHtml: sections.treatmentsHtml,
+      remarksHtml: sections.remarksHtml,
+      status: 'Termine',
+      billingInvoiceId: row.billing_invoice_id != null ? Number(row.billing_invoice_id) : null
+    };
+  });
 
   const consultationDates = new Set(consultations.map((c) => c.startedAt.slice(0, 10)));
   const appointments = appointmentRows
@@ -8269,15 +8753,7 @@ app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-pa
   }
 
   const payload = parsed.data;
-  const normalizedReasonItems = Array.isArray(payload.reasonItems)
-    ? payload.reasonItems
-      .map((item) => ({
-        label: String(item?.label ?? '').trim(),
-        value: String(item?.value ?? '').trim(),
-        important: Boolean(item?.important)
-      }))
-      .filter((item, index, all) => item.label && all.findIndex((candidate) => candidate.label === item.label) === index)
-    : [];
+  const normalizedReasonItems = normalizeConsultationReasonItems(payload.reasonItems);
 
   db.prepare(
     `UPDATE consultations
@@ -8289,13 +8765,7 @@ app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-pa
          weight_kg = ?,
          eva_before = ?,
          eva_after = ?,
-         profile = ?,
-         reason_items_cipher = ?,
-         motif_main_cipher = ?,
-         tests_cipher = ?,
-         schema_cipher = ?,
-         treatments_cipher = ?,
-         remarks_cipher = ?
+         profile = ?
      WHERE id = ?`
   ).run(
     payload.startedAt,
@@ -8307,14 +8777,16 @@ app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-pa
     payload.evaBefore,
     payload.evaAfter,
     payload.profile.trim() || 'Adulte',
-    normalizedReasonItems.length > 0 ? encryptSensitiveField(JSON.stringify(normalizedReasonItems)) : null,
-    payload.motifMainHtml.trim() ? encryptSensitiveField(payload.motifMainHtml) : null,
-    payload.testsHtml.trim() ? encryptSensitiveField(payload.testsHtml) : null,
-    payload.schemaHtml.trim() ? encryptSensitiveField(payload.schemaHtml) : null,
-    payload.treatmentsHtml.trim() ? encryptSensitiveField(payload.treatmentsHtml) : null,
-    payload.remarksHtml.trim() ? encryptSensitiveField(payload.remarksHtml) : null,
     consultationId
   );
+  replaceConsultationReasonItems(consultationId, normalizedReasonItems);
+  replaceConsultationSections(consultationId, {
+    motifMainHtml: payload.motifMainHtml,
+    testsHtml: payload.testsHtml,
+    schemaHtml: payload.schemaHtml,
+    treatmentsHtml: payload.treatmentsHtml,
+    remarksHtml: payload.remarksHtml
+  });
 
   writeAuditLog(req.user.sub, 'UPDATE', 'consultations', String(consultationId), {
     patientId: Number(consultation.patient_id)
@@ -8362,15 +8834,7 @@ app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('c
   }
 
   const payload = parsed.data;
-  const normalizedReasonItems = Array.isArray(payload.reasonItems)
-    ? payload.reasonItems
-      .map((item) => ({
-        label: String(item?.label ?? '').trim(),
-        value: String(item?.value ?? '').trim(),
-        important: Boolean(item?.important)
-      }))
-      .filter((item, index, all) => item.label && all.findIndex((candidate) => candidate.label === item.label) === index)
-    : [];
+  const normalizedReasonItems = normalizeConsultationReasonItems(payload.reasonItems);
 
   const officeId = Number.isInteger(payload.officeId) && Number(payload.officeId) > 0
     ? Number(payload.officeId)
@@ -8379,9 +8843,8 @@ app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('c
   const inserted = db.prepare(
     `INSERT INTO consultations
       (patient_id, started_at, office_id, practitioner, title, important,
-       height_cm, weight_kg, eva_before, eva_after, profile, reason_items_cipher,
-       motif_main_cipher, tests_cipher, schema_cipher, treatments_cipher, remarks_cipher)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       height_cm, weight_kg, eva_before, eva_after, profile)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     patientId,
     payload.startedAt,
@@ -8393,16 +8856,18 @@ app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('c
     payload.weightKg,
     payload.evaBefore,
     payload.evaAfter,
-    payload.profile.trim() || 'Adulte',
-    normalizedReasonItems.length > 0 ? encryptSensitiveField(JSON.stringify(normalizedReasonItems)) : null,
-    payload.motifMainHtml.trim() ? encryptSensitiveField(payload.motifMainHtml) : null,
-    payload.testsHtml.trim() ? encryptSensitiveField(payload.testsHtml) : null,
-    payload.schemaHtml.trim() ? encryptSensitiveField(payload.schemaHtml) : null,
-    payload.treatmentsHtml.trim() ? encryptSensitiveField(payload.treatmentsHtml) : null,
-    payload.remarksHtml.trim() ? encryptSensitiveField(payload.remarksHtml) : null
+    payload.profile.trim() || 'Adulte'
   );
 
   const consultationId = Number(inserted.lastInsertRowid);
+  replaceConsultationReasonItems(consultationId, normalizedReasonItems);
+  replaceConsultationSections(consultationId, {
+    motifMainHtml: payload.motifMainHtml,
+    testsHtml: payload.testsHtml,
+    schemaHtml: payload.schemaHtml,
+    treatmentsHtml: payload.treatmentsHtml,
+    remarksHtml: payload.remarksHtml
+  });
 
   storeConsultationDocuments(
     patientId,
@@ -8445,8 +8910,19 @@ app.get('/api/patients/:id/audit-logs', authMiddleware, requirePermission('read-
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: 'ID invalide' });
 
-  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(id);
+  const patient = db.prepare('SELECT id, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(id);
   if (!patient) return res.status(404).json({ message: 'Patient introuvable' });
+
+  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
+  if (patientOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(patientOfficeId)) {
+        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
+      }
+    }
+  }
 
   const rows = db
     .prepare(
@@ -8497,9 +8973,20 @@ app.put('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
   if (!parsed.success) return res.status(400).json({ message: 'Payload invalide' });
 
   const existing = db
-    .prepare('SELECT cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count FROM patients WHERE id = ? AND is_deleted = 0')
+    .prepare('SELECT cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count, office_id FROM patients WHERE id = ? AND is_deleted = 0')
     .get(id);
   if (!existing) return res.status(404).json({ message: 'Patient introuvable' });
+
+  const patientOfficeId = existing.office_id != null ? Number(existing.office_id) : null;
+  if (patientOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(patientOfficeId)) {
+        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
+      }
+    }
+  }
 
   const existingFullName = decryptSensitiveField(existing.cipher_full_name);
   const existingPhone = decryptSensitiveField(existing.cipher_phone);
@@ -8665,13 +9152,24 @@ app.get('/api/patients/:id/export', authMiddleware, requirePermission('export-pa
     .prepare(
       `SELECT id, cipher_full_name, cipher_phone, cipher_medical_notes,
               sex, birth_date, last_visit, consent_signed, retention_until,
-              created_at, updated_at
+              created_at, updated_at, office_id
        FROM patients WHERE id = ? AND is_deleted = 0`
     )
     .get(id);
 
   if (!row) {
     return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  const patientOfficeId = row.office_id != null ? Number(row.office_id) : null;
+  if (patientOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(patientOfficeId)) {
+        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
+      }
+    }
   }
 
   const fullName = decryptSensitiveField(row.cipher_full_name);
@@ -8689,8 +9187,7 @@ app.get('/api/patients/:id/export', authMiddleware, requirePermission('export-pa
     consultationRows = db
       .prepare(
         `SELECT id, started_at, practitioner, title, important, height_cm, weight_kg,
-                eva_before, eva_after, profile,
-                motif_main_cipher, tests_cipher, schema_cipher, treatments_cipher, remarks_cipher
+                eva_before, eva_after, profile
          FROM consultations WHERE patient_id = ? ORDER BY started_at DESC`
       )
       .all(id);
@@ -8702,23 +9199,29 @@ app.get('/api/patients/:id/export', authMiddleware, requirePermission('export-pa
     .prepare('SELECT id, starts_at, reason_cipher, status, created_at FROM appointments WHERE patient_id = ? ORDER BY starts_at DESC')
     .all(id);
 
-  const consultations = consultationRows.map((consultation) => ({
-    id: consultation.id,
-    startedAt: consultation.started_at,
-    practitioner: consultation.practitioner ?? '',
-    title: consultation.title ?? '',
-    important: Boolean(consultation.important),
-    heightCm: consultation.height_cm ?? null,
-    weightKg: consultation.weight_kg ?? null,
-    evaBefore: consultation.eva_before ?? 0,
-    evaAfter: consultation.eva_after ?? 0,
-    profile: consultation.profile ?? 'Adulte',
-    motifMain: consultation.motif_main_cipher ? decryptSensitiveField(consultation.motif_main_cipher) : '',
-    tests: consultation.tests_cipher ? decryptSensitiveField(consultation.tests_cipher) : '',
-    schema: consultation.schema_cipher ? decryptSensitiveField(consultation.schema_cipher) : '',
-    treatments: consultation.treatments_cipher ? decryptSensitiveField(consultation.treatments_cipher) : '',
-    remarks: consultation.remarks_cipher ? decryptSensitiveField(consultation.remarks_cipher) : ''
-  }));
+  const consultationSectionsById = buildConsultationSectionsMap(consultationRows);
+
+  const consultations = consultationRows.map((consultation) => {
+    const sections = consultationSectionsById.get(Number(consultation.id)) ?? buildEmptyConsultationSections();
+
+    return {
+      id: consultation.id,
+      startedAt: consultation.started_at,
+      practitioner: consultation.practitioner ?? '',
+      title: consultation.title ?? '',
+      important: Boolean(consultation.important),
+      heightCm: consultation.height_cm ?? null,
+      weightKg: consultation.weight_kg ?? null,
+      evaBefore: consultation.eva_before ?? 0,
+      evaAfter: consultation.eva_after ?? 0,
+      profile: consultation.profile ?? 'Adulte',
+      motifMain: sections.motifMainHtml,
+      tests: sections.testsHtml,
+      schema: sections.schemaHtml,
+      treatments: sections.treatmentsHtml,
+      remarks: sections.remarksHtml
+    };
+  });
 
   const appointments = appointmentRows.map((appointment) => ({
     id: appointment.id,
@@ -9218,11 +9721,21 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
     .all()
     .filter((row) => {
       const rowOfficeId = row.office_id != null ? Number(row.office_id) : null;
+      
+      // Admins and super-admins see all invoices
+      if (req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID) {
+        return true;
+      }
+      
+      // If a specific office is requested, only show invoices from that office
       if (officeIdFilter !== null) {
         return rowOfficeId === officeIdFilter;
       }
 
-      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      // Get user's accessible offices with defensive null checking
+      const userAccess = req.userAccess;
+      const accessibleOfficeIds = userAccess ? getAccessibleBillingOfficeIds(userAccess) : [];
+      
       if (!Array.isArray(accessibleOfficeIds) || accessibleOfficeIds.length === 0) {
         return true;
       }
@@ -9260,11 +9773,21 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
     .all()
     .filter((row) => {
       const rowOfficeId = row.office_id != null ? Number(row.office_id) : null;
+      
+      // Admins and super-admins see all consultations
+      if (req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID) {
+        return true;
+      }
+      
+      // If a specific office is requested, only show consultations from that office
       if (officeIdFilter !== null) {
         return rowOfficeId === officeIdFilter;
       }
 
-      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      // Get user's accessible offices with defensive null checking
+      const userAccess = req.userAccess;
+      const accessibleOfficeIds = userAccess ? getAccessibleBillingOfficeIds(userAccess) : [];
+      
       if (!Array.isArray(accessibleOfficeIds) || accessibleOfficeIds.length === 0) {
         return true;
       }
@@ -9314,9 +9837,20 @@ app.get('/api/appointments/:id/patient', authMiddleware, requirePermission('read
     return res.status(400).json({ message: 'ID de rendez-vous invalide' });
   }
 
-  const row = db.prepare('SELECT patient_id FROM appointments WHERE id = ?').get(id);
+  const row = db.prepare('SELECT patient_id, office_id FROM appointments WHERE id = ?').get(id);
   if (!row) {
     return res.status(404).json({ message: 'Rendez-vous introuvable' });
+  }
+
+  const appointmentOfficeId = row.office_id != null ? Number(row.office_id) : null;
+  if (appointmentOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(appointmentOfficeId)) {
+        return res.status(403).json({ message: 'Accès refusé - rendez-vous d\'un autre cabinet' });
+      }
+    }
   }
 
   return res.json({ patientId: Number(row.patient_id) });
@@ -9341,11 +9875,22 @@ app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePerm
   }
 
   const appointment = db
-    .prepare('SELECT id, patient_id, starts_at, consultation_id FROM appointments WHERE id = ?')
+    .prepare('SELECT id, patient_id, starts_at, consultation_id, office_id FROM appointments WHERE id = ?')
     .get(id);
 
   if (!appointment) {
     return res.status(404).json({ message: 'Rendez-vous introuvable' });
+  }
+
+  const appointmentOfficeId = appointment.office_id != null ? Number(appointment.office_id) : null;
+  if (appointmentOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(appointmentOfficeId)) {
+        return res.status(403).json({ message: 'Accès refusé - rendez-vous d\'un autre cabinet' });
+      }
+    }
   }
 
   const title = String(parsed.data.title ?? '').trim();
@@ -9399,11 +9944,11 @@ app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePerm
     const created = db
       .prepare(
         `INSERT INTO consultations (
-           patient_id, started_at, practitioner, title, important,
+           patient_id, started_at, office_id, practitioner, title, important,
            eva_before, eva_after, profile
-         ) VALUES (?, ?, ?, ?, 0, 0, 0, 'Adulte')`
+         ) VALUES (?, ?, ?, ?, ?, 0, 0, 0, 'Adulte')`
       )
-      .run(appointment.patient_id, appointment.starts_at, practitioner, title);
+      .run(appointment.patient_id, appointment.starts_at, appointmentOfficeId, practitioner, title);
     consultationId = Number(created.lastInsertRowid);
   }
 
@@ -9878,33 +10423,27 @@ function stripStatisticsHtml(rawValue) {
   return normalizeStatisticsText(String(rawValue ?? '').replace(/<[^>]*>/g, ' '));
 }
 
-function parseStatisticsConsultationReasons(row) {
+function parseStatisticsConsultationReasons(structuredItems = [], structuredSections = null) {
   const seen = new Set();
   const labels = [];
 
-  if (row?.reason_items_cipher) {
-    try {
-      const parsed = JSON.parse(decryptSensitiveField(row.reason_items_cipher));
-      if (Array.isArray(parsed)) {
-        for (const item of parsed) {
-          const label = normalizeStatisticsText(item?.label);
-          const value = normalizeStatisticsText(item?.value);
-          const combined = value ? `${label} - ${value}` : label;
-          const key = normalizePersonNameKey(combined);
-          if (!combined || seen.has(key)) {
-            continue;
-          }
-          seen.add(key);
-          labels.push(combined);
-        }
-      }
-    } catch {
-      // Ignore malformed reason payloads and fall back to motif main.
+  const reasonItems = Array.isArray(structuredItems) ? structuredItems : [];
+
+  for (const item of reasonItems) {
+    const label = normalizeStatisticsText(item?.label);
+    const value = normalizeStatisticsText(item?.value);
+    const combined = value ? `${label} - ${value}` : label;
+    const key = normalizePersonNameKey(combined);
+    if (!combined || seen.has(key)) {
+      continue;
     }
+    seen.add(key);
+    labels.push(combined);
   }
 
-  if (labels.length === 0 && row?.motif_main_cipher) {
-    const fallback = stripStatisticsHtml(decryptSensitiveField(row.motif_main_cipher));
+  if (labels.length === 0) {
+    const fallbackRaw = String(structuredSections?.motifMainHtml ?? '').trim();
+    const fallback = fallbackRaw ? stripStatisticsHtml(fallbackRaw) : '';
     if (fallback) {
       labels.push(fallback);
     }
@@ -10132,7 +10671,6 @@ function getStatisticsPaymentMethodDistribution({ fromIso, toIso, scopedOfficeId
        WHERE datetime(i.issued_at) >= datetime(?)
          AND datetime(i.issued_at) <= datetime(?)`
     )
-    .all(fromIso, toIso);
 
   const counters = new Map();
 
@@ -10223,7 +10761,7 @@ function buildStatisticsPayload({ requestingUserId, access, scopeMode, requested
     .all();
   const consultationRows = db
     .prepare(
-      `SELECT id, patient_id, started_at, office_id, practitioner, profile, reason_items_cipher, motif_main_cipher
+      `SELECT id, patient_id, started_at, office_id, practitioner, profile
        FROM consultations`
     )
     .all();
@@ -10250,6 +10788,9 @@ function buildStatisticsPayload({ requestingUserId, access, scopeMode, requested
 
   const patientsInScope = patientRows.filter((row) => patientIdsInScope.has(Number(row.id)));
   const patientRowById = new Map(patientsInScope.map((row) => [Number(row.id), row]));
+  const consultationReasonItemsById = buildConsultationReasonItemsMap(scopedConsultationRows);
+  const consultationSectionsById = buildConsultationSectionsMap(scopedConsultationRows);
+  const patientAntecedentsById = buildPatientAntecedentsMap(patientsInScope);
 
   const patientSexCounters = new Map([
     ['Femme', 0],
@@ -10313,7 +10854,9 @@ function buildStatisticsPayload({ requestingUserId, access, scopeMode, requested
   const consultationReasonCounters = new Map();
   for (const row of scopedConsultationRows) {
     const profile = normalizeStatisticsText(row.profile) || 'Non renseigne';
-    for (const reason of parseStatisticsConsultationReasons(row)) {
+    const reasonItems = consultationReasonItemsById.get(Number(row.id)) ?? [];
+    const sections = consultationSectionsById.get(Number(row.id)) ?? buildEmptyConsultationSections();
+    for (const reason of parseStatisticsConsultationReasons(reasonItems, sections)) {
       const key = `${profile}||${reason}`;
       const current = consultationReasonCounters.get(key) ?? { profile, reason, consultationCount: 0 };
       current.consultationCount += 1;
@@ -10344,7 +10887,7 @@ function buildStatisticsPayload({ requestingUserId, access, scopeMode, requested
       referralCounters.set(referral, Number(referralCounters.get(referral) ?? 0) + 1);
     }
 
-    const antecedents = parseStatisticsAntecedents(notes.medicalHistory);
+    const antecedents = patientAntecedentsById.get(Number(row.id)) ?? parseStatisticsAntecedents(notes.medicalHistory);
     const seenAntecedents = new Set();
     for (const antecedent of antecedents) {
       const key = `${normalizePersonNameKey(antecedent.category)}||${normalizePersonNameKey(antecedent.label)}`;
@@ -10846,6 +11389,17 @@ app.get('/api/billing/invoices/:id', authMiddleware, requirePermission('read-bil
     return res.status(404).json({ message: 'Facture introuvable' });
   }
 
+  const invoiceOfficeId = invoice.officeId;
+  if (invoiceOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(invoiceOfficeId)) {
+        return res.status(403).json({ message: 'Acces refuse - facture d\'un autre cabinet' });
+      }
+    }
+  }
+
   writeAuditLog(req.user.sub, 'READ', 'invoices', String(id), {});
 
   return res.json({ invoice });
@@ -10875,9 +11429,20 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('create-pati
     return res.status(400).json({ message: 'Montant invalide' });
   }
 
-  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
+  const patient = db.prepare('SELECT id, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
   if (!patient) {
     return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
+  if (patientOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(patientOfficeId)) {
+        return res.status(403).json({ message: 'Acces refuse - patient d\'un autre cabinet' });
+      }
+    }
   }
 
   const existing = db.prepare('SELECT id FROM invoices WHERE invoice_number = ?').get(invoiceNumber);
@@ -10885,7 +11450,15 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('create-pati
     return res.status(200).json({ invoiceId: Number(existing.id) });
   }
 
-  const effectiveOfficeId = Number.isInteger(officeId) && officeId > 0 ? officeId : null;
+  const requestedOfficeId = Number.isInteger(officeId) && officeId > 0 ? officeId : null;
+  if (requestedOfficeId !== null) {
+    const scopedOfficeIds = getScopedBillingOfficeIds(req.userAccess, requestedOfficeId);
+    if (!scopedOfficeIds.length) {
+      return res.status(403).json({ message: 'Cabinet inaccessible' });
+    }
+  }
+
+  const effectiveOfficeId = requestedOfficeId ?? patientOfficeId;
   const effectiveConsultationId = Number.isInteger(consultationId) && consultationId > 0 ? consultationId : null;
   const effectiveStatus = computeInvoiceStatusFromPayments(amountCents, payments, status);
   const dueAt = issuedAt;
@@ -10965,9 +11538,20 @@ app.delete('/api/billing/invoices/:id', authMiddleware, requirePermission('mark-
     return res.status(400).json({ message: 'ID invalide' });
   }
 
-  const row = db.prepare('SELECT id FROM invoices WHERE id = ?').get(id);
+  const row = db.prepare('SELECT id, office_id FROM invoices WHERE id = ?').get(id);
   if (!row) {
     return res.status(404).json({ message: 'Facture introuvable' });
+  }
+
+  const invoiceOfficeId = row.office_id != null ? Number(row.office_id) : null;
+  if (invoiceOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(invoiceOfficeId)) {
+        return res.status(403).json({ message: 'Acces refuse - facture d\'un autre cabinet' });
+      }
+    }
   }
 
   db.prepare('DELETE FROM invoices WHERE id = ?').run(id);
@@ -10983,13 +11567,24 @@ app.put('/api/billing/invoices/:id/payments', authMiddleware, requirePermission(
   }
 
   const invoice = db.prepare(
-    `SELECT id, amount_cents, status
+    `SELECT id, amount_cents, status, office_id
      FROM invoices
      WHERE id = ?`
   ).get(invoiceId);
 
   if (!invoice) {
     return res.status(404).json({ message: 'Facture introuvable' });
+  }
+
+  const invoiceOfficeId = invoice.office_id != null ? Number(invoice.office_id) : null;
+  if (invoiceOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(invoiceOfficeId)) {
+        return res.status(403).json({ message: 'Acces refuse - facture d\'un autre cabinet' });
+      }
+    }
   }
 
   const payments = normalizeInvoicePayments(
@@ -11132,8 +11727,15 @@ app.post('/api/billing/deposits', authMiddleware, requirePermission('mark-paymen
     if (invoiceIds.length > 0) {
       const placeholders = invoiceIds.map(() => '?').join(', ');
       const invoiceRows = db
-        .prepare(`SELECT amount_cents FROM invoices WHERE id IN (${placeholders})`)
+        .prepare(`SELECT id, amount_cents, office_id FROM invoices WHERE id IN (${placeholders})`)
         .all(...invoiceIds);
+      if (invoiceRows.length !== invoiceIds.length) {
+        return res.status(400).json({ message: 'Operations de remise invalides' });
+      }
+      const hasForeignOffice = invoiceRows.some((row) => Number(row.office_id) !== Number(effectiveOfficeId));
+      if (hasForeignOffice) {
+        return res.status(403).json({ message: 'Cabinet inaccessible' });
+      }
       computedAmountCents += invoiceRows.reduce((sum, row) => sum + Number(row.amount_cents ?? 0), 0);
     }
   }
@@ -11415,7 +12017,6 @@ app.get('/api/billing/deposits/:id/detail', authMiddleware, requirePermission('r
         address2: String(row.address_line2 ?? '').trim(),
         postalCode: String(row.postal_code ?? '').trim(),
         city: String(row.city ?? '').trim(),
-        country: String(row.country ?? '').trim(),
         phone: String(row.phone_landline ?? '').trim(),
         email: String(row.email ?? '').trim()
       },
@@ -11459,7 +12060,28 @@ app.patch('/api/billing/operations/bulk', authMiddleware, requirePermission('mar
   );
 
   const tx = db.transaction(() => {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    const accessibleOfficeIds = isAdmin ? null : getAccessibleBillingOfficeIds(req.userAccess);
+
     for (const item of parsed) {
+      let row = null;
+      if (item.sourceType === 'invoice') {
+        row = db.prepare('SELECT office_id FROM invoices WHERE id = ?').get(item.sourceId);
+      } else if (item.sourceType === 'expense') {
+        row = db.prepare('SELECT office_id FROM accounting_expenses WHERE id = ?').get(item.sourceId);
+      } else {
+        row = db.prepare('SELECT office_id FROM accounting_deposits WHERE id = ?').get(item.sourceId);
+      }
+
+      if (!row) {
+        throw new Error('Operation introuvable');
+      }
+
+      const officeId = row.office_id != null ? Number(row.office_id) : null;
+      if (!isAdmin && (officeId == null || !accessibleOfficeIds.includes(officeId))) {
+        throw new Error('Cabinet inaccessible');
+      }
+
       if (item.sourceType === 'invoice') {
         upsertMeta.run(
           item.sourceType,
@@ -11501,7 +12123,18 @@ app.patch('/api/billing/operations/bulk', authMiddleware, requirePermission('mar
     }
   });
 
-  tx();
+  try {
+    tx();
+  } catch (error) {
+    const message = String(error?.message ?? '');
+    if (message === 'Operation introuvable') {
+      return res.status(404).json({ message: 'Operation introuvable' });
+    }
+    if (message === 'Cabinet inaccessible') {
+      return res.status(403).json({ message: 'Cabinet inaccessible' });
+    }
+    throw error;
+  }
 
   writeAuditLog(req.user.sub, 'UPDATE', 'billing-operations', null, {
     count: parsed.length,

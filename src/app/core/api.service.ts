@@ -10,6 +10,8 @@ import {
   AccessProfilesPayload,
   AppConfig,
   AntecedentTypesPayload,
+  PatientAntecedentRecord,
+  PatientAntecedentsPayload,
   Appointment,
   AppointmentsPayload,
   AuthUser,
@@ -440,6 +442,14 @@ export class ApiService {
     );
 
     return response.types;
+  }
+
+  async getPatientAntecedents(id: number): Promise<PatientAntecedentRecord[]> {
+    const response = await firstValueFrom(
+      this.http.get<PatientAntecedentsPayload>(`${this.baseUrl}/patients/${id}/antecedents`)
+    );
+
+    return Array.isArray(response.antecedents) ? response.antecedents : [];
   }
 
   async getNewPatientDraft(): Promise<NewPatientDraft | null> {
