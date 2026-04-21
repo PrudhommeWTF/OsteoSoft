@@ -251,16 +251,32 @@
           </div>
 
           <div class="modal-footer">
-            <button type="button" class="btn btn-outline-primary" (click)="openPatientRecord()">
-              Voir la fiche patient
+            <button
+              type="button"
+              class="btn btn-outline-primary"
+              (click)="openPatientRecord()"
+              aria-label="Voir la fiche patient"
+              title="Voir la fiche patient">
+              <i class="fa-solid fa-user"></i>
             </button>
             @if (event.consultationId) {
-              <button type="button" class="btn btn-outline-success" (click)="openConsultationRecord()">
-                Voir la consultation
+              <button
+                type="button"
+                class="btn btn-outline-success"
+                (click)="openConsultationRecord()"
+                aria-label="Voir la consultation"
+                title="Voir la consultation">
+                <i class="fa-solid fa-notes-medical"></i>
               </button>
             }
-            <button type="button" class="btn btn-success" [disabled]="isSavingConsultationMeta()" (click)="saveConsultationMeta()">
-              Enregistrer
+            <button
+              type="button"
+              class="btn btn-success"
+              [disabled]="isSavingConsultationMeta()"
+              (click)="saveConsultationMeta()"
+              aria-label="Enregistrer"
+              title="Enregistrer">
+              <i class="fa-solid fa-floppy-disk"></i>
             </button>
             <button type="button" class="btn btn-outline-secondary" (click)="closeAppointmentModal()">Fermer</button>
           </div>
