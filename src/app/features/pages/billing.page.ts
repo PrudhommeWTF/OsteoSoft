@@ -107,6 +107,7 @@ export class BillingPage implements OnDestroy {
 
   readonly depositOccurredAt = signal(this.defaultNowDateTimeLocal());
   readonly depositType = signal<'cheque' | 'especes'>('cheque');
+  readonly depositWizardStep = signal<1 | 2 | 3>(1);
   readonly depositTitle = signal('');
   readonly depositAmount = signal('');
   readonly depositNotes = signal('');
@@ -121,6 +122,7 @@ export class BillingPage implements OnDestroy {
   readonly editingDepositId = signal<number | null>(null);
   readonly deposits = signal<BillingDepositListItem[]>([]);
   readonly depositCandidates = signal<BillingDepositCandidate[]>([]);
+  readonly depositCandidateSearch = signal('');
   readonly isLoadingDeposits = signal(false);
   readonly isLoadingDepositCandidates = signal(false);
   readonly isDepositMenuOpen = signal(false);
@@ -142,6 +144,54 @@ export class BillingPage implements OnDestroy {
   readonly selectedDepositCandidates = computed(() => {
     const selected = new Set(this.depositEditorCandidateIds());
     return this.depositCandidates().filter((item) => selected.has(item.operationId));
+  });
+
+  readonly compatibleDepositCandidates = computed(() => {
+    const type = this.depositType();
+    return this.depositCandidates().filter((item) => this.isCandidateCompatibleWithDepositType(item.paymentMethod, type));
+  });
+
+  readonly filteredDepositCandidates = computed(() => {
+    const query = this.depositCandidateSearch().trim().toLowerCase();
+    const rows = this.compatibleDepositCandidates();
+    if (!query) {
+      return rows;
+    }
+
+    return rows.filter((item) => {
+      const patient = String(item.patientName ?? '').toLowerCase();
+      const invoice = String(item.invoiceNumber ?? '').toLowerCase();
+      const method = String(item.paymentMethod ?? '').toLowerCase();
+      return patient.includes(query) || invoice.includes(query) || method.includes(query);
+    });
+  });
+
+  readonly selectedDepositCandidateCount = computed(() => this.selectedDepositCandidates().length);
+
+  readonly incompatibleSelectedDepositCandidates = computed(() => {
+    const type = this.depositType();
+    return this.selectedDepositCandidates().filter((item) => !this.isCandidateCompatibleWithDepositType(item.paymentMethod, type));
+  });
+
+  readonly hasIncompatibleSelectedDepositCandidates = computed(() => {
+    return this.incompatibleSelectedDepositCandidates().length > 0;
+  });
+
+  readonly canProceedToDepositPointage = computed(() => {
+    return this.depositOccurredAt().trim().length > 0 && this.depositTitle().trim().length > 0;
+  });
+
+  readonly canProceedToDepositRecap = computed(() => {
+    return this.selectedDepositCandidateCount() > 0 && Number(this.depositAmount()) > 0;
+  });
+
+  readonly isAllFilteredDepositCandidatesSelected = computed(() => {
+    const filtered = this.filteredDepositCandidates();
+    if (filtered.length === 0) {
+      return false;
+    }
+    const selected = new Set(this.depositEditorCandidateIds());
+    return filtered.every((item) => selected.has(item.operationId));
   });
 
   readonly selectedDepositCandidateAmountCents = computed(() => {
@@ -577,23 +627,28 @@ export class BillingPage implements OnDestroy {
     const now = this.defaultNowDateTimeLocal();
     this.depositOccurredAt.set(mode === 'edit' ? this.toDateTimeLocalValue(deposit?.occurredAt ?? '') || now : now);
     this.depositType.set(type);
+    this.depositWizardStep.set(1);
     this.depositTitle.set(mode === 'edit' ? String(deposit?.title ?? '') : (type === 'especes' ? 'Bordereau de remise d\'especes' : 'Bordereau de remise de cheques'));
     this.depositCode.set(mode === 'edit' ? String(deposit?.code ?? '') : '');
-    this.depositBankName.set(mode === 'edit' ? String(deposit?.bankName ?? '') : '');
-    this.depositAccountLabel.set(mode === 'edit' ? String(deposit?.accountLabel ?? '') : '');
+    this.depositBankName.set(mode === 'edit' ? String(deposit?.bankName ?? '') : 'Banque principale');
+    this.depositAccountLabel.set(mode === 'edit' ? String(deposit?.accountLabel ?? '') : (type === 'especes' ? 'Caisse especes' : 'Compte cheques')); 
     this.depositNotes.set(mode === 'edit' ? String(deposit?.notes ?? '') : '');
-    this.depositAmount.set(mode === 'edit' ? (Number(deposit?.amountCents ?? 0) / 100).toFixed(2) : '');
+    this.depositAmount.set(mode === 'edit' ? (Number(deposit?.amountCents ?? 0) / 100).toFixed(2) : '0.00');
     this.depositEditorCandidateIds.set(mode === 'edit' ? [...(deposit?.operationIds ?? [])] : []);
+    this.depositCandidateSearch.set('');
 
     this.isDepositEditorModalOpen.set(true);
     if (mode === 'create') {
       await this.loadDepositCandidates(type);
+      const eligibleIds = new Set(this.depositCandidates().map((candidate) => candidate.operationId));
       const preselected = this.selectedOperations()
-        .filter((operation) => operation.sourceType === 'invoice')
+        .filter((operation) => operation.sourceType === 'invoice' && eligibleIds.has(operation.id))
         .map((operation) => operation.id);
       if (preselected.length > 0) {
         this.depositEditorCandidateIds.update((current) => [...new Set([...current, ...preselected])]);
       }
+      this.pruneIncompatibleDepositSelections();
+      this.syncDepositAmountFromCandidates();
     } else {
       await this.loadDepositCandidates(type);
     }
@@ -601,21 +656,127 @@ export class BillingPage implements OnDestroy {
 
   closeDepositEditorModal(): void {
     this.isDepositEditorModalOpen.set(false);
+    this.depositWizardStep.set(1);
+  }
+
+  goToDepositWizardStep(step: 1 | 2 | 3): void {
+    if (this.editingDepositId() != null) {
+      return;
+    }
+    if (step === 2 && !this.canProceedToDepositPointage()) {
+      this.errorMessage.set('Renseignez la configuration du bordereau avant le pointage.');
+      return;
+    }
+    if (step === 3 && !this.canProceedToDepositRecap()) {
+      this.errorMessage.set('Selectionnez au moins un paiement avant le recapitulatif.');
+      return;
+    }
+    this.depositWizardStep.set(step);
+    this.errorMessage.set('');
+  }
+
+  goToNextDepositWizardStep(): void {
+    const current = this.depositWizardStep();
+    if (current === 1) {
+      this.goToDepositWizardStep(2);
+      return;
+    }
+    if (current === 2) {
+      this.goToDepositWizardStep(3);
+    }
+  }
+
+  goToPreviousDepositWizardStep(): void {
+    const current = this.depositWizardStep();
+    if (current === 3) {
+      this.depositWizardStep.set(2);
+      return;
+    }
+    if (current === 2) {
+      this.depositWizardStep.set(1);
+    }
+  }
+
+  applyDepositTemplate(type: 'cheque' | 'especes'): void {
+    this.depositType.set(type);
+    if (type === 'especes') {
+      this.depositTitle.set('Bordereau de remise d\'especes');
+      if (!this.depositAccountLabel().trim()) {
+        this.depositAccountLabel.set('Caisse especes');
+      }
+      if (!this.depositBankName().trim()) {
+        this.depositBankName.set('Banque principale');
+      }
+      this.pruneIncompatibleDepositSelections();
+      this.syncDepositAmountFromCandidates();
+      return;
+    }
+
+    this.depositTitle.set('Bordereau de remise de cheques');
+    if (!this.depositAccountLabel().trim()) {
+      this.depositAccountLabel.set('Compte cheques');
+    }
+    if (!this.depositBankName().trim()) {
+      this.depositBankName.set('Banque principale');
+    }
+    this.pruneIncompatibleDepositSelections();
+    this.syncDepositAmountFromCandidates();
   }
 
   toggleDepositCandidate(operationId: string, checked: boolean): void {
+    const candidate = this.depositCandidates().find((item) => item.operationId === operationId);
+    if (checked && candidate && !this.isCandidateCompatibleWithDepositType(candidate.paymentMethod, this.depositType())) {
+      this.showExportToast('Moyen de paiement incompatible avec ce type de remise.', 'error');
+      return;
+    }
+
     const current = this.depositEditorCandidateIds();
     if (checked) {
       if (!current.includes(operationId)) {
         this.depositEditorCandidateIds.set([...current, operationId]);
       }
+      this.syncDepositAmountFromCandidates();
       return;
     }
     this.depositEditorCandidateIds.set(current.filter((id) => id !== operationId));
+    this.syncDepositAmountFromCandidates();
+  }
+
+  toggleSelectAllFilteredDepositCandidates(checked: boolean): void {
+    const ids = this.filteredDepositCandidates().map((item) => item.operationId);
+    const current = new Set(this.depositEditorCandidateIds());
+    if (checked) {
+      ids.forEach((id) => current.add(id));
+    } else {
+      ids.forEach((id) => current.delete(id));
+    }
+    this.depositEditorCandidateIds.set(Array.from(current));
+    this.syncDepositAmountFromCandidates();
+  }
+
+  onDepositCandidateSearchInput(value: string): void {
+    this.depositCandidateSearch.set(String(value ?? ''));
   }
 
   async saveDepositEditor(): Promise<void> {
-    const amount = Number(this.depositAmount());
+    const isEditing = this.editingDepositId() != null;
+    if (!isEditing && this.depositWizardStep() !== 3) {
+      this.errorMessage.set('Finalisez le recapitulatif avant de creer le bordereau.');
+      return;
+    }
+    if (!isEditing && this.depositEditorCandidateIds().length === 0) {
+      this.errorMessage.set('Selectionnez au moins un paiement a pointer.');
+      return;
+    }
+    if (!isEditing && this.hasIncompatibleSelectedDepositCandidates()) {
+      this.errorMessage.set('La selection contient des paiements incompatibles avec le type de remise.');
+      return;
+    }
+
+    const amount = isEditing
+      ? Number(this.depositAmount())
+      : Number((this.selectedDepositCandidateAmountCents() / 100).toFixed(2));
+
     if (!Number.isFinite(amount) || amount <= 0) {
       this.errorMessage.set('Saisissez un montant de remise valide.');
       return;
@@ -720,6 +881,51 @@ export class BillingPage implements OnDestroy {
     } finally {
       this.isLoadingDepositCandidates.set(false);
     }
+  }
+
+  private syncDepositAmountFromCandidates(): void {
+    if (this.editingDepositId() != null) {
+      return;
+    }
+    const amount = this.selectedDepositCandidateAmountCents() / 100;
+    this.depositAmount.set(amount.toFixed(2));
+  }
+
+  private pruneIncompatibleDepositSelections(): void {
+    const type = this.depositType();
+    const allowedIds = new Set(
+      this.depositCandidates()
+        .filter((item) => this.isCandidateCompatibleWithDepositType(item.paymentMethod, type))
+        .map((item) => item.operationId)
+    );
+
+    const next = this.depositEditorCandidateIds().filter((id) => allowedIds.has(id));
+    if (next.length !== this.depositEditorCandidateIds().length) {
+      this.depositEditorCandidateIds.set(next);
+    }
+  }
+
+  private isCandidateCompatibleWithDepositType(paymentMethod: string, type: 'cheque' | 'especes'): boolean {
+    const normalized = this.normalizePaymentMethod(paymentMethod);
+    if (!normalized) {
+      return false;
+    }
+
+    if (type === 'cheque') {
+      return normalized.includes('cheque') || normalized.includes('chq') || normalized.includes('check');
+    }
+
+    return normalized.includes('espece') || normalized.includes('cash') || normalized.includes('liquide');
+  }
+
+  private normalizePaymentMethod(value: string): string {
+    const source = String(value ?? '').toLowerCase().trim();
+    if (!source) {
+      return '';
+    }
+    return source
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
   }
 
   private toDateTimeLocalValue(value: string): string {

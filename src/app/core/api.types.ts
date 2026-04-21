@@ -561,6 +561,8 @@ export type BillingDepositListItem = {
 export type BillingDepositCandidate = {
   operationId: string;
   sourceId: number;
+  patientId: number | null;
+  consultationId: number | null;
   occurredAt: string;
   patientName: string;
   invoiceNumber: string;

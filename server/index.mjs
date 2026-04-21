@@ -3591,6 +3591,7 @@ async function ensureSeedData() {
   ensureColumn('offices', 'opening_hours_json', `opening_hours_json TEXT NOT NULL DEFAULT '{"monday":[],"tuesday":[],"wednesday":[],"thursday":[],"friday":[],"saturday":[],"sunday":[]}'`);
   ensureColumn('offices', 'consultation_profiles_json', "consultation_profiles_json TEXT NOT NULL DEFAULT '[]'");
   ensureColumn('consultations', 'office_id', 'office_id INTEGER');
+  ensureColumn('patients', 'office_id', 'office_id INTEGER');
   ensureColumn('patients', 'marital_status', "marital_status TEXT NOT NULL DEFAULT 'Non renseigne'");
   ensureColumn('patients', 'children_count', 'children_count INTEGER NOT NULL DEFAULT 0');
   ensureColumn('service_types', 'office_id', 'office_id INTEGER');
@@ -12559,7 +12560,7 @@ app.get('/api/billing/deposit-candidates', authMiddleware, requirePermission('re
 
   const placeholders = scopedOfficeIds.map(() => '?').join(', ');
   const rows = db.prepare(
-    `SELECT i.id, i.invoice_number, i.issued_at, i.amount_cents, i.status, i.payment_method, i.office_id,
+    `SELECT i.id, i.patient_id, i.consultation_id, i.invoice_number, i.issued_at, i.amount_cents, i.status, i.payment_method, i.office_id,
             p.cipher_full_name
      FROM invoices i
      INNER JOIN patients p ON p.id = i.patient_id
@@ -12581,6 +12582,8 @@ app.get('/api/billing/deposit-candidates', authMiddleware, requirePermission('re
     .map((row) => ({
       operationId: `invoice:${Number(row.id)}`,
       sourceId: Number(row.id),
+      patientId: row.patient_id != null ? Number(row.patient_id) : null,
+      consultationId: row.consultation_id != null ? Number(row.consultation_id) : null,
       occurredAt: String(row.issued_at),
       patientName: decryptSensitiveField(row.cipher_full_name),
       invoiceNumber: String(row.invoice_number ?? '').trim(),

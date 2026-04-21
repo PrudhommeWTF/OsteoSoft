@@ -118,6 +118,40 @@ describe('BillingPage export history alignments', () => {
     expect(trends.trashCount).toBe(1);
     expect(['CSV', 'JSON', 'Mixte']).toContain(trends.dominantFormat);
   });
+
+  it('keeps only compatible deposit candidates for current deposit type', () => {
+    component.depositType.set('cheque');
+    component.depositCandidates.set([
+      buildDepositCandidate('op1', 'Cheque'),
+      buildDepositCandidate('op2', 'Especes')
+    ]);
+
+    expect(component.compatibleDepositCandidates().map((item) => item.operationId)).toEqual(['op1']);
+  });
+
+  it('blocks save in creation mode when wizard is not at recap step', async () => {
+    component.editingDepositId.set(null);
+    component.depositWizardStep.set(2);
+    component.depositEditorCandidateIds.set(['op1']);
+    component.depositCandidates.set([buildDepositCandidate('op1', 'Cheque')]);
+    component.depositAmount.set('10');
+
+    await component.saveDepositEditor();
+
+    expect(component.errorMessage()).toContain('Finalisez le recapitulatif');
+  });
+
+  it('prunes incompatible selections when switching template type', () => {
+    component.depositCandidates.set([
+      buildDepositCandidate('op1', 'Cheque'),
+      buildDepositCandidate('op2', 'Especes')
+    ]);
+    component.depositEditorCandidateIds.set(['op1', 'op2']);
+
+    component.applyDepositTemplate('cheque');
+
+    expect(component.depositEditorCandidateIds()).toEqual(['op1']);
+  });
 });
 
 function buildOperationsPayload(): BillingOperationsPayload {
@@ -177,5 +211,33 @@ function buildExportItem(
     alertsFormat,
     status,
     createdAt: new Date().toISOString()
+  };
+}
+
+function buildDepositCandidate(operationId: string, paymentMethod: string): {
+  operationId: string;
+  sourceId: number;
+  patientId: number | null;
+  consultationId: number | null;
+  occurredAt: string;
+  patientName: string;
+  invoiceNumber: string;
+  amountCents: number;
+  currency: string;
+  paymentMethod: string;
+  officeId: number | null;
+} {
+  return {
+    operationId,
+    sourceId: 1,
+    patientId: 1,
+    consultationId: 1,
+    occurredAt: new Date().toISOString(),
+    patientName: 'Patient Test',
+    invoiceNumber: 'F-001',
+    amountCents: 1000,
+    currency: 'EUR',
+    paymentMethod,
+    officeId: null
   };
 }

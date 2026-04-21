@@ -821,21 +821,21 @@
 
 @if (isDepositListModalOpen()) {
   <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="billing-deposit-list-title">
-    <div class="modal-dialog modal-fullscreen">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">
           <h5 id="billing-deposit-list-title" class="modal-title">
             {{ depositModalType() === 'especes' ? "Remises d'especes" : 'Remises de cheques' }}
           </h5>
-          <div class="d-flex align-items-center gap-2">
+          <button type="button" class="btn-close" (click)="closeDepositListModal()" aria-label="Fermer"></button>
+        </div>
+        <div class="modal-body">
+          <div class="d-flex justify-content-end mb-3">
             <button type="button" class="btn btn-primary btn-sm" (click)="openDepositEditorModal('create')">
               <i class="fa-solid fa-plus me-1"></i>
               Ajouter un bordereau de remise {{ depositModalType() === 'especes' ? "d'especes" : 'de cheques' }}
             </button>
-            <button type="button" class="btn-close" (click)="closeDepositListModal()" aria-label="Fermer"></button>
           </div>
-        </div>
-        <div class="modal-body">
           <div class="table-responsive">
             <table class="table table-hover align-middle">
               <thead>
@@ -889,7 +889,7 @@
 
 @if (isDepositEditorModalOpen()) {
   <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="billing-deposit-editor-title">
-    <div class="modal-dialog modal-fullscreen">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">
           <h5 id="billing-deposit-editor-title" class="modal-title">
@@ -898,6 +898,32 @@
           <button type="button" class="btn-close" (click)="closeDepositEditorModal()" aria-label="Fermer"></button>
         </div>
         <div class="modal-body">
+          @if (!editingDepositId()) {
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+              <button
+                type="button"
+                class="btn btn-sm"
+                [class]="depositWizardStep() === 1 ? 'btn-primary btn-sm' : 'btn-outline-primary btn-sm'"
+                (click)="goToDepositWizardStep(1)">
+                1. Configuration
+              </button>
+              <button
+                type="button"
+                class="btn btn-sm"
+                [class]="depositWizardStep() === 2 ? 'btn-primary btn-sm' : 'btn-outline-primary btn-sm'"
+                (click)="goToDepositWizardStep(2)">
+                2. Pointage
+              </button>
+              <button
+                type="button"
+                class="btn btn-sm"
+                [class]="depositWizardStep() === 3 ? 'btn-primary btn-sm' : 'btn-outline-primary btn-sm'"
+                (click)="goToDepositWizardStep(3)">
+                3. Recapitulatif
+              </button>
+            </div>
+          }
+
           <div class="row g-3 mb-3">
             <div class="col-12 col-lg-2">
               <label class="form-label">Code</label>
@@ -917,7 +943,17 @@
             </div>
             <div class="col-12 col-lg-2">
               <label class="form-label">Montant</label>
-              <input type="number" min="0" step="0.01" class="form-control" [value]="depositAmount()" (input)="depositAmount.set($any($event.target).value || '')" />
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                class="form-control"
+                [readonly]="!editingDepositId()"
+                [value]="depositAmount()"
+                (input)="depositAmount.set($any($event.target).value || '')" />
+              @if (!editingDepositId()) {
+                <small class="text-secondary">Auto-calcule depuis la selection</small>
+              }
             </div>
             <div class="col-12 col-lg-6">
               <label class="form-label">Intitule</label>
@@ -929,8 +965,33 @@
             </div>
           </div>
 
-          @if (!editingDepositId()) {
+          @if (!editingDepositId() && depositWizardStep() === 2) {
             <h6 class="fw-semibold mb-2">Consultations/paiements eligibles ({{ depositModalType() === 'especes' ? 'especes' : 'cheques' }})</h6>
+            <div class="small text-secondary mb-2">
+              {{ filteredDepositCandidates().length }} resultat(s) compatible(s) sur {{ depositCandidates().length }} paiement(s) charge(s)
+            </div>
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+              <div class="d-flex align-items-center gap-2">
+                <input
+                  type="checkbox"
+                  class="form-check-input"
+                  [checked]="isAllFilteredDepositCandidatesSelected()"
+                  (change)="toggleSelectAllFilteredDepositCandidates(!!$any($event.target).checked)" />
+                <span class="small text-secondary">Tout selectionner (resultats filtres)</span>
+              </div>
+              <input
+                type="search"
+                class="form-control form-control-sm"
+                style="max-width: 280px"
+                placeholder="Rechercher patient/facture/moyen"
+                [value]="depositCandidateSearch()"
+                (input)="onDepositCandidateSearchInput($any($event.target).value || '')" />
+            </div>
+            @if (hasIncompatibleSelectedDepositCandidates()) {
+              <div class="alert alert-warning py-2 small" role="alert">
+                Certains paiements selectionnes ne correspondent pas au type de remise courant.
+              </div>
+            }
             <div class="table-responsive">
               <table class="table table-sm align-middle">
                 <thead class="table-light">
@@ -939,17 +1000,18 @@
                     <th>Date</th>
                     <th>Facture</th>
                     <th>Patient</th>
+                    <th>Consultation</th>
                     <th>Moyen de paiement</th>
                     <th class="text-end">Montant</th>
                   </tr>
                 </thead>
                 <tbody>
                   @if (isLoadingDepositCandidates()) {
-                    <tr><td colspan="6" class="text-center text-secondary py-3">Chargement...</td></tr>
-                  } @else if (depositCandidates().length === 0) {
-                    <tr><td colspan="6" class="text-center text-secondary py-3">Aucun paiement eligible.</td></tr>
+                    <tr><td colspan="7" class="text-center text-secondary py-3">Chargement...</td></tr>
+                  } @else if (filteredDepositCandidates().length === 0) {
+                    <tr><td colspan="7" class="text-center text-secondary py-3">Aucun paiement eligible.</td></tr>
                   } @else {
-                    @for (candidate of depositCandidates(); track candidate.operationId) {
+                    @for (candidate of filteredDepositCandidates(); track candidate.operationId) {
                       <tr>
                         <td>
                           <input
@@ -960,6 +1022,19 @@
                         <td>{{ formatDateTime(candidate.occurredAt) }}</td>
                         <td>{{ candidate.invoiceNumber || '-' }}</td>
                         <td>{{ candidate.patientName }}</td>
+                        <td>
+                          @if (candidate.patientId) {
+                            <a
+                              class="btn btn-link btn-sm p-0"
+                              [attr.href]="'/patients/' + candidate.patientId + (candidate.consultationId ? '?consultationId=' + candidate.consultationId : '')"
+                              target="_blank"
+                              rel="noopener noreferrer">
+                              Ouvrir
+                            </a>
+                          } @else {
+                            <span class="text-secondary">-</span>
+                          }
+                        </td>
                         <td>{{ candidate.paymentMethod || '-' }}</td>
                         <td class="text-end">{{ formatCurrency(candidate.amountCents, candidate.currency) }}</td>
                       </tr>
@@ -968,14 +1043,67 @@
                 </tbody>
               </table>
             </div>
-            <div class="text-end fw-semibold">
-              Total selectionne: {{ formatCurrency(selectedDepositCandidateAmountCents(), 'EUR') }}
+            <div class="d-flex justify-content-between align-items-center mt-2">
+              <span class="small text-secondary">{{ selectedDepositCandidateCount() }} paiement(s) selectionne(s)</span>
+              <div class="text-end fw-semibold">
+                Total selectionne: {{ formatCurrency(selectedDepositCandidateAmountCents(), 'EUR') }}
+              </div>
+            </div>
+          }
+
+          @if (!editingDepositId() && depositWizardStep() === 3) {
+            <div class="card border-0 bg-light">
+              <div class="card-body">
+                <h6 class="fw-semibold mb-3">Validation finale du bordereau</h6>
+                <div class="row g-2 small mb-3">
+                  <div class="col-12 col-md-6"><strong>Type:</strong> {{ depositType() === 'especes' ? "Especes" : "Cheques" }}</div>
+                  <div class="col-12 col-md-6"><strong>Date:</strong> {{ depositOccurredAt() || '-' }}</div>
+                  <div class="col-12 col-md-6"><strong>Banque:</strong> {{ depositBankName() || '-' }}</div>
+                  <div class="col-12 col-md-6"><strong>Compte:</strong> {{ depositAccountLabel() || '-' }}</div>
+                  <div class="col-12 col-md-6"><strong>Paiements pointes:</strong> {{ selectedDepositCandidateCount() }}</div>
+                  <div class="col-12 col-md-6"><strong>Montant:</strong> {{ formatCurrency(selectedDepositCandidateAmountCents(), 'EUR') }}</div>
+                </div>
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Date</th>
+                        <th>Facture</th>
+                        <th>Patient</th>
+                        <th>Moyen</th>
+                        <th class="text-end">Montant</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (candidate of selectedDepositCandidates(); track candidate.operationId) {
+                        <tr>
+                          <td>{{ formatDateTime(candidate.occurredAt) }}</td>
+                          <td>{{ candidate.invoiceNumber || '-' }}</td>
+                          <td>{{ candidate.patientName }}</td>
+                          <td>{{ candidate.paymentMethod || '-' }}</td>
+                          <td class="text-end">{{ formatCurrency(candidate.amountCents, candidate.currency) }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           }
         </div>
         <div class="modal-footer">
+          @if (!editingDepositId()) {
+            <button type="button" class="btn btn-outline-secondary" [disabled]="depositWizardStep() === 1" (click)="goToPreviousDepositWizardStep()">Etape precedente</button>
+            <button type="button" class="btn btn-outline-primary" [disabled]="depositWizardStep() === 3" (click)="goToNextDepositWizardStep()">Etape suivante</button>
+          }
           <button type="button" class="btn btn-outline-secondary" (click)="closeDepositEditorModal()">Annuler</button>
-          <button type="button" class="btn btn-primary" [disabled]="isSaving()" (click)="saveDepositEditor()">Enregistrer</button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            [disabled]="isSaving() || (!editingDepositId() && depositWizardStep() !== 3)"
+            (click)="saveDepositEditor()">
+            {{ editingDepositId() ? 'Enregistrer' : 'Generer le bordereau' }}
+          </button>
         </div>
       </div>
     </div>
