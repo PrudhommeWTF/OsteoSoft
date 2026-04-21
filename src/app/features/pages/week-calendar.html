@@ -82,7 +82,14 @@
                   }
 
                   @if (day.events.length > 3) {
-                    <div class="wc-month-more">+{{ day.events.length - 3 }} autres</div>
+                    <button
+                      type="button"
+                      class="wc-month-more"
+                      (click)="openMonthDayModal(day)"
+                      [attr.aria-label]="'Afficher les ' + (day.events.length - 3) + ' rendez-vous supplémentaires du ' + day.longLabel + ' ' + day.dayNum"
+                    >
+                      +{{ day.events.length - 3 }} autres
+                    </button>
                   }
                 </div>
               </div>
@@ -175,6 +182,55 @@
       }
     </div>
   </div>
+  }
+
+  @if (selectedMonthDay(); as day) {
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="month-day-modal-title">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3 id="month-day-modal-title" class="modal-title h5 mb-0">
+              Rendez-vous du {{ getMonthDayModalTitle(day) }}
+            </h3>
+            <button type="button" class="btn-close" aria-label="Fermer" (click)="closeMonthDayModal()"></button>
+          </div>
+
+          <div class="modal-body">
+            @if (day.events.length === 0) {
+              <p class="text-secondary mb-0">Aucun rendez-vous pour cette journée.</p>
+            } @else {
+              <div class="list-group">
+                @for (ev of day.events; track ev.event.id) {
+                  <button
+                    type="button"
+                    class="list-group-item list-group-item-action wc-day-modal-item"
+                    (click)="openAppointmentFromMonthDay(ev.event)"
+                  >
+                    <div class="d-flex align-items-center justify-content-between gap-3">
+                      <div class="d-flex align-items-center gap-2 min-w-0">
+                        <span class="wc-day-modal-dot" [style.background-color]="ev.borderColor"></span>
+                        <span class="fw-semibold">{{ ev.timeLabel }}</span>
+                        @if (ev.sexIconClass) {
+                          <i [class]="ev.sexIconClass + ' ' + (ev.sexColorClass || '')"></i>
+                        }
+                        <span class="text-truncate" [class]="ev.patientColorClass || ''">{{ ev.patientLabel }}</span>
+                      </div>
+                      <span class="text-secondary small text-truncate">{{ ev.event.reason }}</span>
+                    </div>
+                  </button>
+                }
+              </div>
+            }
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" (click)="closeMonthDayModal()">Fermer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop fade show" (click)="closeMonthDayModal()"></div>
   }
 
   @if (selectedEvent(); as event) {

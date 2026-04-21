@@ -78,6 +78,7 @@ export class WeekCalendar {
   readonly referenceDate = signal<Date>(new Date());
   readonly selectedEvent = signal<DashboardEvent | null>(null);
   readonly selectedEventColor = signal<string>('#4d92d1');
+  readonly selectedMonthDay = signal<MonthDayCell | null>(null);
   readonly practitioners = signal<Practitioner[]>([]);
   readonly isPractitionersLoading = signal(false);
   readonly isSavingConsultationMeta = signal(false);
@@ -274,11 +275,34 @@ export class WeekCalendar {
     void this.ensurePractitionersLoaded();
   }
 
+  openMonthDayModal(day: MonthDayCell): void {
+    this.selectedMonthDay.set(day);
+  }
+
+  closeMonthDayModal(): void {
+    this.selectedMonthDay.set(null);
+  }
+
+  openAppointmentFromMonthDay(event: DashboardEvent): void {
+    this.closeMonthDayModal();
+    this.openAppointmentModal(event);
+  }
+
   closeAppointmentModal(): void {
     this.selectedEvent.set(null);
     this.consultationMetaError.set('');
     this.consultationMetaSuccess.set('');
     this.closeConsultationConflictModal();
+  }
+
+  getMonthDayModalTitle(day: MonthDayCell): string {
+    const title = new Intl.DateTimeFormat('fr-FR', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    }).format(day.date);
+    return title.charAt(0).toUpperCase() + title.slice(1);
   }
 
   closeConsultationConflictModal(): void {

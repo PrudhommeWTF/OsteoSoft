@@ -335,9 +335,41 @@
 }
 
 .wc-month-more {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  padding: 0;
   font-size: 0.68rem;
   color: var(--bs-secondary, #6c757d);
   margin-top: 2px;
+  cursor: pointer;
+  text-decoration: underline;
+
+  &:hover {
+    color: var(--bs-primary, #0d6efd);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--bs-primary, #0d6efd);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+.wc-day-modal-item {
+  .text-truncate {
+    min-width: 0;
+    max-width: 20rem;
+  }
+}
+
+.wc-day-modal-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  flex-shrink: 0;
 }
 
 // ── Modal RDV ────────────────────────────────────────────────────────────────
