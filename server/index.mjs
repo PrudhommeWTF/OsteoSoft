@@ -2684,6 +2684,29 @@ function parseMajorVersion(version) {
 }
 
 function computeBackupDataSha256(data) {
+  const normalizeForStableHash = (value) => {
+    if (Array.isArray(value)) {
+      return value.map((item) => normalizeForStableHash(item));
+    }
+
+    if (value && typeof value === 'object') {
+      const sortedEntries = Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, nestedValue]) => [key, normalizeForStableHash(nestedValue)]);
+      return Object.fromEntries(sortedEntries);
+    }
+
+    return value;
+  };
+
+  const stableData = normalizeForStableHash(data);
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(stableData))
+    .digest('hex');
+}
+
+function computeBackupDataSha256Legacy(data) {
   return crypto
     .createHash('sha256')
     .update(JSON.stringify(data))
@@ -2711,7 +2734,11 @@ function normalizeBackupEnvelope(backupPayload) {
 
     const expectedChecksum = String(manifest.dataSha256 ?? '').toLowerCase();
     const actualChecksum = computeBackupDataSha256(data);
-    if (!expectedChecksum || expectedChecksum !== actualChecksum) {
+    const legacyChecksum = computeBackupDataSha256Legacy(data);
+    const isChecksumValid = expectedChecksum
+      && (expectedChecksum === actualChecksum || expectedChecksum === legacyChecksum);
+
+    if (!isChecksumValid) {
       throw new Error('Integrite de la sauvegarde invalide (checksum)');
     }
 
@@ -2792,9 +2819,45 @@ function buildDataBackupSnapshot() {
     ).all(),
     invoices: db.prepare(
       `SELECT id, patient_id, invoice_number, amount_cents, status,
-              issued_at, due_at, notes_cipher, created_at
+              issued_at, due_at, notes_cipher, office_id, consultation_id,
+              payment_method, created_at
        FROM invoices
        ORDER BY id ASC`
+    ).all(),
+    invoiceLineItems: db.prepare(
+      `SELECT id, invoice_id, label, quantity, unit_amount_ht_cents, vat_rate, display_order, created_at
+       FROM invoice_line_items
+       ORDER BY invoice_id ASC, display_order ASC, id ASC`
+    ).all(),
+    invoicePayments: db.prepare(
+      `SELECT id, invoice_id, paid_at, amount_cents, currency, payment_method, reference, notes, created_by, created_at
+       FROM invoice_payments
+       ORDER BY invoice_id ASC, paid_at ASC, id ASC`
+    ).all(),
+    accountingExpenses: db.prepare(
+      `SELECT id, occurred_at, office_id, owner_user_id, title, amount_cents, currency,
+              payment_method, notes, retrocession_percent, retrocession_recipient,
+              is_deleted, created_by, created_at
+       FROM accounting_expenses
+       ORDER BY id ASC`
+    ).all(),
+    accountingDeposits: db.prepare(
+      `SELECT id, occurred_at, office_id, owner_user_id, type, deposit_code, bank_name,
+              account_label, title, amount_cents, currency, notes,
+              retrocession_percent, retrocession_recipient, is_deleted, created_by, created_at
+       FROM accounting_deposits
+       ORDER BY id ASC`
+    ).all(),
+    accountingDepositItems: db.prepare(
+      `SELECT id, deposit_id, source_type, source_id, created_at
+       FROM accounting_deposit_items
+       ORDER BY deposit_id ASC, id ASC`
+    ).all(),
+    accountingOperationMeta: db.prepare(
+      `SELECT id, source_type, source_id, owner_user_id, retrocession_percent,
+              retrocession_recipient, is_deleted, updated_at
+       FROM accounting_operation_meta
+       ORDER BY source_type ASC, source_id ASC, id ASC`
     ).all(),
     consultations: db.prepare(
       `SELECT id, patient_id, started_at, office_id, practitioner, title, important,
@@ -2899,6 +2962,12 @@ function restoreDataBackupSnapshot(backupPayload) {
     db.prepare('DELETE FROM consultation_reason_items').run();
     db.prepare('DELETE FROM consultations').run();
     db.prepare('DELETE FROM appointments').run();
+    db.prepare('DELETE FROM accounting_deposit_items').run();
+    db.prepare('DELETE FROM accounting_deposits').run();
+    db.prepare('DELETE FROM accounting_operation_meta').run();
+    db.prepare('DELETE FROM accounting_expenses').run();
+    db.prepare('DELETE FROM invoice_payments').run();
+    db.prepare('DELETE FROM invoice_line_items').run();
     db.prepare('DELETE FROM invoices').run();
     db.prepare('DELETE FROM patients').run();
     db.prepare('DELETE FROM office_user_delegations').run();
@@ -2931,9 +3000,10 @@ function restoreDataBackupSnapshot(backupPayload) {
     const insertPatient = db.prepare(
       `INSERT INTO patients (
          id, cipher_full_name, cipher_phone, cipher_medical_notes, sex,
-         birth_date, last_visit, consent_signed, retention_until,
+         birth_date, marital_status, children_count, office_id,
+         last_visit, consent_signed, retention_until,
          is_deleted, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const insertUserOffice = db.prepare(
       `INSERT INTO user_offices (user_id, office_id, created_at)
@@ -2948,9 +3018,44 @@ function restoreDataBackupSnapshot(backupPayload) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const insertInvoice = db.prepare(
-      `INSERT INTO invoices (id, patient_id, invoice_number, amount_cents, status, issued_at, due_at, notes_cipher, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO invoices (
+        id, patient_id, invoice_number, amount_cents, status,
+        issued_at, due_at, notes_cipher, office_id, consultation_id,
+        payment_method, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
+     const insertInvoiceLineItem = db.prepare(
+      `INSERT INTO invoice_line_items (id, invoice_id, label, quantity, unit_amount_ht_cents, vat_rate, display_order, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+     );
+     const insertInvoicePayment = db.prepare(
+      `INSERT INTO invoice_payments (id, invoice_id, paid_at, amount_cents, currency, payment_method, reference, notes, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     );
+     const insertAccountingExpense = db.prepare(
+      `INSERT INTO accounting_expenses (
+        id, occurred_at, office_id, owner_user_id, title, amount_cents, currency,
+        payment_method, notes, retrocession_percent, retrocession_recipient,
+        is_deleted, created_by, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     );
+     const insertAccountingDeposit = db.prepare(
+      `INSERT INTO accounting_deposits (
+        id, occurred_at, office_id, owner_user_id, type, deposit_code, bank_name,
+        account_label, title, amount_cents, currency, notes,
+        retrocession_percent, retrocession_recipient, is_deleted, created_by, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     );
+     const insertAccountingDepositItem = db.prepare(
+      `INSERT INTO accounting_deposit_items (id, deposit_id, source_type, source_id, created_at)
+       VALUES (?, ?, ?, ?, ?)`
+     );
+     const insertAccountingOperationMeta = db.prepare(
+      `INSERT INTO accounting_operation_meta (
+        id, source_type, source_id, owner_user_id, retrocession_percent,
+        retrocession_recipient, is_deleted, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+     );
     const insertConsultation = db.prepare(
       `INSERT INTO consultations (
          id, patient_id, started_at, office_id, practitioner, title, important,
@@ -2987,8 +3092,8 @@ function restoreDataBackupSnapshot(backupPayload) {
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     );
     const insertPaymentMethod = db.prepare(
-      `INSERT INTO payment_methods (id, office_id, label, is_active, display_order, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO payment_methods (id, office_id, system_key, label, is_active, display_order, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     );
     const insertLocalCalendar = db.prepare(
       `INSERT INTO local_calendars (id, name, description, color_hex, is_visible_to_all, visible_user_ids, office_id, display_order, created_at, updated_at)
@@ -2999,8 +3104,8 @@ function restoreDataBackupSnapshot(backupPayload) {
          id, office_id, kind, first_name, last_name, organization, role,
          email, mobile_phone, landline_phone,
          address_line1, address_line2, postal_code, city, country,
-         notes, created_by, updated_by, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         notes, is_active, created_by, updated_by, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const insertConfig = db.prepare(
       'INSERT INTO config (key, value) VALUES (?, ?)'
@@ -3115,6 +3220,7 @@ function restoreDataBackupSnapshot(backupPayload) {
       insertPaymentMethod.run(
         Number(row.id),
         row.office_id != null ? Number(row.office_id) : null,
+        String(row.system_key ?? '').trim(),
         String(row.label ?? ''),
         Number(row.is_active) ? 1 : 0,
         Number(row.display_order) || 0,
@@ -3155,6 +3261,7 @@ function restoreDataBackupSnapshot(backupPayload) {
         String(row.city ?? ''),
         String(row.country ?? 'France'),
         String(row.notes ?? ''),
+        Number(row.is_active) ? 1 : 0,
         row.created_by != null ? Number(row.created_by) : null,
         row.updated_by != null ? Number(row.updated_by) : null,
         row.created_at ?? new Date().toISOString(),
@@ -3170,6 +3277,9 @@ function restoreDataBackupSnapshot(backupPayload) {
         row.cipher_medical_notes,
         row.sex ?? 'Non renseigne',
         row.birth_date ?? null,
+        String(row.marital_status ?? 'Non renseigne'),
+        Number(row.children_count) || 0,
+        row.office_id != null ? Number(row.office_id) : null,
         row.last_visit ?? null,
         Number(row.consent_signed) ? 1 : 0,
         row.retention_until ?? null,
@@ -3218,7 +3328,102 @@ function restoreDataBackupSnapshot(backupPayload) {
         row.issued_at,
         row.due_at,
         row.notes_cipher,
+        row.office_id != null ? Number(row.office_id) : null,
+        row.consultation_id != null ? Number(row.consultation_id) : null,
+        String(row.payment_method ?? ''),
         row.created_at ?? new Date().toISOString()
+      );
+    }
+
+    for (const row of Array.isArray(backup.invoiceLineItems) ? backup.invoiceLineItems : []) {
+      insertInvoiceLineItem.run(
+        Number(row.id),
+        Number(row.invoice_id),
+        String(row.label ?? ''),
+        Number(row.quantity) || 1,
+        Number(row.unit_amount_ht_cents) || 0,
+        Number(row.vat_rate) || 0,
+        Number(row.display_order) || 0,
+        row.created_at ?? new Date().toISOString()
+      );
+    }
+
+    for (const row of Array.isArray(backup.invoicePayments) ? backup.invoicePayments : []) {
+      insertInvoicePayment.run(
+        Number(row.id),
+        Number(row.invoice_id),
+        String(row.paid_at ?? new Date().toISOString()),
+        Number(row.amount_cents) || 0,
+        String(row.currency ?? 'EUR'),
+        String(row.payment_method ?? ''),
+        String(row.reference ?? ''),
+        String(row.notes ?? ''),
+        row.created_by != null ? Number(row.created_by) : null,
+        row.created_at ?? new Date().toISOString()
+      );
+    }
+
+    for (const row of Array.isArray(backup.accountingExpenses) ? backup.accountingExpenses : []) {
+      insertAccountingExpense.run(
+        Number(row.id),
+        String(row.occurred_at ?? new Date().toISOString()),
+        row.office_id != null ? Number(row.office_id) : null,
+        row.owner_user_id != null ? Number(row.owner_user_id) : null,
+        String(row.title ?? ''),
+        Number(row.amount_cents) || 0,
+        String(row.currency ?? 'EUR'),
+        String(row.payment_method ?? ''),
+        String(row.notes ?? ''),
+        Number(row.retrocession_percent) || 0,
+        String(row.retrocession_recipient ?? ''),
+        Number(row.is_deleted) ? 1 : 0,
+        row.created_by != null ? Number(row.created_by) : null,
+        row.created_at ?? new Date().toISOString()
+      );
+    }
+
+    for (const row of Array.isArray(backup.accountingDeposits) ? backup.accountingDeposits : []) {
+      insertAccountingDeposit.run(
+        Number(row.id),
+        String(row.occurred_at ?? new Date().toISOString()),
+        row.office_id != null ? Number(row.office_id) : null,
+        row.owner_user_id != null ? Number(row.owner_user_id) : null,
+        row.type === 'especes' ? 'especes' : 'cheque',
+        String(row.deposit_code ?? ''),
+        String(row.bank_name ?? ''),
+        String(row.account_label ?? ''),
+        String(row.title ?? ''),
+        Number(row.amount_cents) || 0,
+        String(row.currency ?? 'EUR'),
+        String(row.notes ?? ''),
+        Number(row.retrocession_percent) || 0,
+        String(row.retrocession_recipient ?? ''),
+        Number(row.is_deleted) ? 1 : 0,
+        row.created_by != null ? Number(row.created_by) : null,
+        row.created_at ?? new Date().toISOString()
+      );
+    }
+
+    for (const row of Array.isArray(backup.accountingDepositItems) ? backup.accountingDepositItems : []) {
+      insertAccountingDepositItem.run(
+        Number(row.id),
+        Number(row.deposit_id),
+        String(row.source_type ?? ''),
+        Number(row.source_id) || 0,
+        row.created_at ?? new Date().toISOString()
+      );
+    }
+
+    for (const row of Array.isArray(backup.accountingOperationMeta) ? backup.accountingOperationMeta : []) {
+      insertAccountingOperationMeta.run(
+        Number(row.id),
+        String(row.source_type ?? ''),
+        Number(row.source_id) || 0,
+        row.owner_user_id != null ? Number(row.owner_user_id) : null,
+        Number(row.retrocession_percent) || 0,
+        String(row.retrocession_recipient ?? ''),
+        Number(row.is_deleted) ? 1 : 0,
+        row.updated_at ?? new Date().toISOString()
       );
     }
 
@@ -5729,6 +5934,12 @@ const backupDataSchema = z.object({
   patients: z.array(z.record(z.string(), z.unknown())).optional().default([]),
   appointments: z.array(z.record(z.string(), z.unknown())).optional().default([]),
   invoices: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  invoiceLineItems: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  invoicePayments: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  accountingExpenses: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  accountingDeposits: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  accountingDepositItems: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+  accountingOperationMeta: z.array(z.record(z.string(), z.unknown())).optional().default([]),
   consultations: z.array(z.record(z.string(), z.unknown())).optional().default([]),
   consultationReasonItems: z.array(z.record(z.string(), z.unknown())).optional().default([]),
   consultationSections: z.array(z.record(z.string(), z.unknown())).optional().default([]),
