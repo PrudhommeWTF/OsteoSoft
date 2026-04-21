@@ -10,7 +10,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
-import { AgendaSettings, Appointment, DashboardEvent, LocalAgendaCalendar, OfficeOption, Patient, Practitioner } from '../../core/api.types';
+import { AgendaSettings, Appointment, DashboardEvent, LocalAgendaCalendar, OfficeOpeningHours, OfficeOption, Patient, Practitioner } from '../../core/api.types';
 import { WeekCalendar } from './week-calendar';
 
 @Component({
@@ -28,14 +28,15 @@ export class AgendaPage {
 
   readonly stats = signal([
     { label: 'Consultations du jour', value: '0' },
-    { label: 'Nouveaux patients', value: '0' },
-    { label: 'Taux de remplissage', value: '0%' }
+    { label: 'Nouveaux patients dans le mois', value: '0' },
+    { label: 'Taux de remplissage (30 jours glissants)', value: '0%' }
   ]);
 
   readonly appointments = signal<Appointment[]>([]);
   readonly officeOptions = signal<OfficeOption[]>([]);
   readonly selectedOfficeId = signal<number | null>(null);
   readonly events = signal<DashboardEvent[]>([]);
+  readonly officeOpeningHoursById = signal<Record<number, OfficeOpeningHours>>({});
   readonly agendaSettings = signal<AgendaSettings | null>(null);
   readonly visibleEvents = signal<DashboardEvent[]>([]);
   readonly localCalendars = signal<LocalAgendaCalendar[]>([]);
@@ -118,12 +119,13 @@ export class AgendaPage {
     this.appointments.set(appointmentsPayload.appointments);
     this.stats.set([
       { label: 'Consultations du jour', value: String(appointmentsPayload.stats.consultationsToday) },
-      { label: 'Nouveaux patients', value: String(appointmentsPayload.stats.newPatients) },
-      { label: 'Taux de remplissage', value: appointmentsPayload.stats.occupancyRate }
+      { label: 'Nouveaux patients dans le mois', value: String(appointmentsPayload.stats.newPatients) },
+      { label: 'Taux de remplissage (30 jours glissants)', value: appointmentsPayload.stats.occupancyRate }
     ]);
 
     // Update calendar state
     this.events.set(dashboardPayload.events);
+    this.officeOpeningHoursById.set(dashboardPayload.officeOpeningHoursById ?? {});
     this.visibleEvents.set(dashboardPayload.events);
     this.agendaSettings.set(dashboardPayload.agendaSettings);
 

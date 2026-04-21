@@ -614,6 +614,7 @@ export type DashboardEvent = {
   title: string;
   start: string;
   patient: string;
+  isNewPatient?: boolean;
   isPrivate?: boolean;
   privateReason?: string;
   reason: string;
@@ -742,6 +743,7 @@ export type DashboardPayload = {
   pendingPayments: PendingPayment[];
   agendaSettings: AgendaSettings;
   localCalendars: LocalAgendaCalendar[];
+  officeOpeningHoursById?: Record<number, OfficeOpeningHours>;
 };
 
 export type StatisticsScopeMode = 'active-office' | 'consolidated';

@@ -1,9 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, output, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 
 import { ApiService } from '../../core/api.service';
-import { AgendaSettings, DashboardEvent, LocalAgendaCalendar, Practitioner } from '../../core/api.types';
+import { AgendaSettings, DashboardEvent, LocalAgendaCalendar, OfficeOpeningHours, OfficeWeekDay, Practitioner } from '../../core/api.types';
 
 type ConsultationConflictCandidate = {
   id: number;
@@ -39,6 +39,8 @@ interface PositionedEvent {
 
 interface CalendarDayData extends CalendarDay {
   positionedEvents: PositionedEvent[];
+  closedIntervals: Array<{ top: number; height: number }>;
+  nowIndicatorTop: number | null;
 }
 
 interface MonthEventChip {
@@ -68,11 +70,14 @@ interface MonthDayCell extends CalendarDay {
 export class WeekCalendar {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly events = input<DashboardEvent[]>([]);
   readonly settings = input.required<AgendaSettings>();
   readonly selectedCalendars = input<LocalAgendaCalendar[]>([]);
+  readonly officeOpeningHoursById = input<Record<number, OfficeOpeningHours>>({});
   readonly visibleEventsChange = output<DashboardEvent[]>();
+  readonly now = signal(new Date());
 
   readonly viewMode = signal<'month' | 'week' | 'three-days' | 'day'>('week');
   readonly referenceDate = signal<Date>(new Date());
@@ -136,16 +141,18 @@ export class WeekCalendar {
     const s = this.settings();
     const ref = this.referenceDate();
     const mode = this.viewMode();
+    this.now();
     const todayStr = this.toDateStr(new Date());
     const events = this.events();
-    const slots = this.timeSlots();
     const totalH = this.totalHeight();
 
     const selectedCals = this.selectedCalendars();
     const days = this.buildVisibleDays(ref, mode, s, todayStr);
     return days.map((day) => ({
       ...day,
-      positionedEvents: this.buildTimedEvents(day, events, s, totalH, selectedCals)
+      positionedEvents: this.buildTimedEvents(day, events, s, totalH, selectedCals),
+      closedIntervals: this.getClosedIntervals(day, s, totalH),
+      nowIndicatorTop: this.getNowIndicatorTop(day, s, totalH)
     }));
   });
 
@@ -234,6 +241,11 @@ export class WeekCalendar {
   });
 
   constructor() {
+    const timer = setInterval(() => {
+      this.now.set(new Date());
+    }, 30_000);
+    this.destroyRef.onDestroy(() => clearInterval(timer));
+
     effect(() => {
       this.visibleEventsChange.emit(this.visibleEvents());
     });
@@ -708,6 +720,127 @@ export class WeekCalendar {
 
   private buildTitle(e: DashboardEvent): string {
     return e.patient;
+  }
+
+  private getClosedIntervals(day: CalendarDay, s: AgendaSettings, totalHeight: number): Array<{ top: number; height: number }> {
+    const startMin = (s.dayStartHour ?? 8) * 60;
+    const endMin = (s.dayEndHour ?? 20) * 60;
+    const daySpan = Math.max(1, endMin - startMin);
+    const dayKey = this.getOfficeWeekDay(day.date);
+    const officeHoursById = this.officeOpeningHoursById();
+
+    const officeIds = Array.from(
+      new Set(
+        this.selectedCalendars()
+          .map((calendar) => (calendar?.officeId != null ? Number(calendar.officeId) : null))
+          .filter((officeId): officeId is number => typeof officeId === 'number' && Number.isInteger(officeId) && officeId > 0)
+      )
+    );
+
+    if (officeIds.length === 0) {
+      return [];
+    }
+
+    const openIntervals: Array<{ start: number; end: number }> = [];
+    for (const officeId of officeIds) {
+      const dayRanges = officeHoursById?.[officeId]?.[dayKey] ?? [];
+      for (const range of dayRanges) {
+        const start = this.timeStringToMinutes(range.start);
+        const end = this.timeStringToMinutes(range.end);
+        if (start === null || end === null || end <= start) {
+          continue;
+        }
+
+        const clampedStart = Math.max(startMin, start);
+        const clampedEnd = Math.min(endMin, end);
+        if (clampedEnd <= clampedStart) {
+          continue;
+        }
+        openIntervals.push({ start: clampedStart, end: clampedEnd });
+      }
+    }
+
+    if (openIntervals.length === 0) {
+      return [{ top: 0, height: totalHeight }];
+    }
+
+    openIntervals.sort((a, b) => a.start - b.start || a.end - b.end);
+    const merged: Array<{ start: number; end: number }> = [];
+    for (const interval of openIntervals) {
+      const last = merged[merged.length - 1];
+      if (!last || interval.start > last.end) {
+        merged.push({ ...interval });
+      } else {
+        last.end = Math.max(last.end, interval.end);
+      }
+    }
+
+    const closed: Array<{ top: number; height: number }> = [];
+    let cursor = startMin;
+    for (const interval of merged) {
+      if (interval.start > cursor) {
+        const top = ((cursor - startMin) / daySpan) * totalHeight;
+        const height = ((interval.start - cursor) / daySpan) * totalHeight;
+        if (height > 0) {
+          closed.push({ top, height });
+        }
+      }
+      cursor = Math.max(cursor, interval.end);
+    }
+
+    if (cursor < endMin) {
+      const top = ((cursor - startMin) / daySpan) * totalHeight;
+      const height = ((endMin - cursor) / daySpan) * totalHeight;
+      if (height > 0) {
+        closed.push({ top, height });
+      }
+    }
+
+    return closed;
+  }
+
+  private getNowIndicatorTop(day: CalendarDay, s: AgendaSettings, totalHeight: number): number | null {
+    if (!day.isToday) {
+      return null;
+    }
+
+    const now = this.now();
+    const startMin = (s.dayStartHour ?? 8) * 60;
+    const endMin = (s.dayEndHour ?? 20) * 60;
+    const nowMin = now.getHours() * 60 + now.getMinutes() + (now.getSeconds() / 60);
+    if (nowMin < startMin || nowMin > endMin) {
+      return null;
+    }
+
+    const span = Math.max(1, endMin - startMin);
+    return ((nowMin - startMin) / span) * totalHeight;
+  }
+
+  private getOfficeWeekDay(date: Date): OfficeWeekDay {
+    const day = date.getDay();
+    if (day === 1) return 'monday';
+    if (day === 2) return 'tuesday';
+    if (day === 3) return 'wednesday';
+    if (day === 4) return 'thursday';
+    if (day === 5) return 'friday';
+    if (day === 6) return 'saturday';
+    return 'sunday';
+  }
+
+  private timeStringToMinutes(value: string): number | null {
+    const text = String(value ?? '').trim();
+    const match = /^(\d{2}):(\d{2})$/.exec(text);
+    if (!match) {
+      return null;
+    }
+
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+      return null;
+    }
+
+    return (hours * 60) + minutes;
   }
 
   private async ensurePractitionersLoaded(): Promise<void> {

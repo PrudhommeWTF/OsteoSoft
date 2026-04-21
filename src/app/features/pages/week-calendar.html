@@ -75,9 +75,12 @@
                     >
                       <span class="wc-month-event-time">{{ ev.timeLabel }}</span>
                       @if (ev.sexIconClass) {
-                        <i class="wc-month-event-sex" [class]="ev.sexIconClass + ' ' + (ev.sexColorClass || '')"></i>
+                        <i class="wc-month-event-sex" [class]="ev.sexIconClass + ' ' + (ev.sexColorClass || '')" [class.fw-bold]="ev.event.isNewPatient"></i>
                       }
-                      <span class="wc-month-event-label" [class]="ev.patientColorClass || ''">{{ ev.patientLabel }}</span>
+                      <span class="wc-month-event-label" [class]="ev.patientColorClass || ''" [class.fw-bold]="ev.event.isNewPatient">{{ ev.patientLabel }}</span>
+                      @if (ev.event.isNewPatient) {
+                        <i class="fa-solid fa-asterisk wc-new-patient-asterisk fw-bold" aria-hidden="true"></i>
+                      }
                     </div>
                   }
 
@@ -153,6 +156,19 @@
             ></div>
           }
 
+          @for (interval of day.closedIntervals; track $index) {
+            <div
+              class="wc-closed-zone"
+              [style.top.px]="interval.top"
+              [style.height.px]="interval.height"
+              aria-hidden="true"
+            ></div>
+          }
+
+          @if (day.nowIndicatorTop !== null) {
+            <div class="wc-now-line" [style.top.px]="day.nowIndicatorTop" aria-hidden="true"></div>
+          }
+
           <!-- Rendez-vous -->
           @for (ev of day.positionedEvents; track ev.event.id) {
             <div
@@ -172,9 +188,12 @@
               <span class="wc-event-time">{{ ev.timeLabel }}</span>
               <span class="wc-event-label wc-event-label--patient">
                 @if (ev.sexIconClass) {
-                  <i class="wc-event-sex" [class]="ev.sexIconClass + ' ' + (ev.sexColorClass || '')"></i>
+                  <i class="wc-event-sex" [class]="ev.sexIconClass + ' ' + (ev.sexColorClass || '')" [class.fw-bold]="ev.event.isNewPatient"></i>
                 }
-                <span [class]="ev.patientColorClass || ''">{{ ev.patientLabel }}</span>
+                <span [class]="ev.patientColorClass || ''" [class.fw-bold]="ev.event.isNewPatient">{{ ev.patientLabel }}</span>
+                @if (ev.event.isNewPatient) {
+                  <i class="fa-solid fa-asterisk wc-new-patient-asterisk fw-bold" aria-hidden="true"></i>
+                }
               </span>
             </div>
           }
@@ -211,9 +230,12 @@
                         <span class="wc-day-modal-dot" [style.background-color]="ev.borderColor"></span>
                         <span class="fw-semibold">{{ ev.timeLabel }}</span>
                         @if (ev.sexIconClass) {
-                          <i [class]="ev.sexIconClass + ' ' + (ev.sexColorClass || '')"></i>
+                          <i [class]="ev.sexIconClass + ' ' + (ev.sexColorClass || '')" [class.fw-bold]="ev.event.isNewPatient"></i>
                         }
-                        <span class="text-truncate" [class]="ev.patientColorClass || ''">{{ ev.patientLabel }}</span>
+                        <span class="text-truncate" [class]="ev.patientColorClass || ''" [class.fw-bold]="ev.event.isNewPatient">{{ ev.patientLabel }}</span>
+                        @if (ev.event.isNewPatient) {
+                          <i class="fa-solid fa-asterisk wc-new-patient-asterisk fw-bold" aria-hidden="true"></i>
+                        }
                       </div>
                       <span class="text-secondary small text-truncate">{{ ev.event.reason }}</span>
                     </div>
@@ -248,9 +270,12 @@
             <div class="wc-modal-patient mb-3" [style.border-left-color]="selectedEventColor()">
               <p class="wc-modal-patient-name mb-1">
                 @if (settings().showPatientSex && getSexIcon(event.patientSex)) {
-                  <i [class]="(getSexIcon(event.patientSex) || '') + ' ' + (getSexColorClass(event.patientSex) || '')"></i>
+                  <i [class]="(getSexIcon(event.patientSex) || '') + ' ' + (getSexColorClass(event.patientSex) || '')" [class.fw-bold]="event.isNewPatient"></i>
                 }
-                <span [class]="getSexColorClass(event.patientSex) || ''">{{ event.patient }}</span>
+                <span [class]="getSexColorClass(event.patientSex) || ''" [class.fw-bold]="event.isNewPatient">{{ event.patient }}</span>
+                @if (event.isNewPatient) {
+                  <i class="fa-solid fa-asterisk wc-new-patient-asterisk fw-bold" aria-hidden="true"></i>
+                }
               </p>
               <p class="text-secondary mb-0">{{ formatEventDateTime(event.start) }}</p>
               @if (event.isPrivate && event.privateReason) {

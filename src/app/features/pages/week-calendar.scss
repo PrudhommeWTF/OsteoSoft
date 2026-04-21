@@ -157,6 +157,26 @@
 
 }
 
+.wc-closed-zone {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: rgba(108, 117, 125, 0.18);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.wc-now-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #dc3545;
+  box-shadow: 0 0 0 1px rgba(220, 53, 69, 0.12);
+  pointer-events: none;
+  z-index: 4;
+}
+
 .wc-slot-label--full-hour,
 .wc-slot--full-hour {
   border-top: 2px solid var(--wc-border);
@@ -221,6 +241,12 @@
 .wc-month-event-sex {
   margin-right: 4px;
   font-size: 0.7rem;
+}
+
+.wc-new-patient-asterisk {
+  margin-left: 3px;
+  font-size: 0.56rem;
+  line-height: 1;
 }
 
 // ── Vue mois ─────────────────────────────────────────────────────────────────

@@ -9944,6 +9944,13 @@ app.get('/api/appointments', authMiddleware, requirePermission('read-agenda'), (
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
   const currentDay = now.getDate();
+  const monthStart = new Date(currentYear, currentMonth, 1);
+  const nextMonthStart = new Date(currentYear, currentMonth + 1, 1);
+  const monthStartIso = monthStart.toISOString();
+  const nextMonthStartIso = nextMonthStart.toISOString();
+
+  const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+  const accessibleOfficeIds = isAdmin ? [] : getAccessibleBillingOfficeIds(req.userAccess);
 
   const consultationsToday = rows
     .filter((row) => {
@@ -9964,10 +9971,205 @@ app.get('/api/appointments', authMiddleware, requirePermission('read-agenda'), (
     })
     .length;
 
+  let newPatients = 0;
+
+  if (officeIdFilter !== null) {
+    newPatients = Number(
+      db
+        .prepare(
+          `SELECT COUNT(*) AS count
+           FROM patients
+           WHERE is_deleted = 0
+             AND office_id = ?
+             AND created_at >= ?
+             AND created_at < ?`
+        )
+        .get(officeIdFilter, monthStartIso, nextMonthStartIso)?.count ?? 0
+    );
+  } else if (isAdmin) {
+    newPatients = Number(
+      db
+        .prepare(
+          `SELECT COUNT(*) AS count
+           FROM patients
+           WHERE is_deleted = 0
+             AND created_at >= ?
+             AND created_at < ?`
+        )
+        .get(monthStartIso, nextMonthStartIso)?.count ?? 0
+    );
+  } else if (accessibleOfficeIds.length > 0) {
+    const placeholders = accessibleOfficeIds.map(() => '?').join(', ');
+    newPatients = Number(
+      db
+        .prepare(
+          `SELECT COUNT(*) AS count
+           FROM patients
+           WHERE is_deleted = 0
+             AND created_at >= ?
+             AND created_at < ?
+             AND (office_id IN (${placeholders}) OR office_id IS NULL)`
+        )
+        .get(monthStartIso, nextMonthStartIso, ...accessibleOfficeIds)?.count ?? 0
+    );
+  }
+
+  const rollingWindowEnd = new Date();
+  const rollingWindowStart = new Date(rollingWindowEnd);
+  rollingWindowStart.setDate(rollingWindowStart.getDate() - 30);
+
+  const calendarsById = new Map(agendaConfig.localCalendars.map((calendar) => [Number(calendar.id), calendar]));
+  const scopedOfficeIds = Array.from(
+    new Set(
+      agendaConfig.localCalendars
+        .filter((calendar) => accessibleCalendarIds.has(Number(calendar.id)))
+        .map((calendar) => (calendar.officeId != null ? Number(calendar.officeId) : null))
+        .filter((officeId) => Number.isInteger(officeId) && officeId > 0)
+    )
+  );
+
+  const officeOpeningHoursById = new Map();
+  if (scopedOfficeIds.length > 0) {
+    const placeholders = scopedOfficeIds.map(() => '?').join(', ');
+    const officeRows = db
+      .prepare(`SELECT id, opening_hours_json FROM offices WHERE id IN (${placeholders})`)
+      .all(...scopedOfficeIds);
+
+    for (const officeRow of officeRows) {
+      const officeId = Number(officeRow.id);
+      if (!Number.isInteger(officeId) || officeId <= 0) {
+        continue;
+      }
+      officeOpeningHoursById.set(officeId, parseOfficeOpeningHours(officeRow.opening_hours_json));
+    }
+  }
+
+  const parseTimeToMinutes = (value) => {
+    const match = /^(\d{2}):(\d{2})$/.exec(String(value ?? '').trim());
+    if (!match) {
+      return null;
+    }
+
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+      return null;
+    }
+
+    return (hours * 60) + minutes;
+  };
+
+  const getDayOpenIntervals = (date) => {
+    const dayKey = OFFICE_OPENING_DAY_KEYS[(date.getDay() + 6) % 7];
+    const startBound = (agendaConfig.settings.dayStartHour ?? 8) * 60;
+    const endBound = (agendaConfig.settings.dayEndHour ?? 20) * 60;
+
+    const intervals = [];
+    for (const officeId of scopedOfficeIds) {
+      const openingHours = officeOpeningHoursById.get(officeId);
+      const ranges = Array.isArray(openingHours?.[dayKey]) ? openingHours[dayKey] : [];
+      for (const range of ranges) {
+        const start = parseTimeToMinutes(range.start);
+        const end = parseTimeToMinutes(range.end);
+        if (start == null || end == null || end <= start) {
+          continue;
+        }
+
+        const clampedStart = Math.max(startBound, start);
+        const clampedEnd = Math.min(endBound, end);
+        if (clampedEnd <= clampedStart) {
+          continue;
+        }
+
+        intervals.push({ start: clampedStart, end: clampedEnd });
+      }
+    }
+
+    if (intervals.length === 0) {
+      return [];
+    }
+
+    intervals.sort((a, b) => a.start - b.start || a.end - b.end);
+    const merged = [];
+    for (const interval of intervals) {
+      const last = merged[merged.length - 1];
+      if (!last || interval.start > last.end) {
+        merged.push({ ...interval });
+      } else {
+        last.end = Math.max(last.end, interval.end);
+      }
+    }
+
+    return merged;
+  };
+
+  let consultationsRollingMonth = 0;
+  for (const row of rows) {
+    const rowCalendarId = row.local_calendar_id != null ? Number(row.local_calendar_id) : null;
+    const effectiveCalendarId = rowCalendarId ?? (fallbackCalendar?.id ?? null);
+    if (effectiveCalendarId == null || !accessibleCalendarIds.has(effectiveCalendarId)) {
+      continue;
+    }
+
+    const startsAt = new Date(row.starts_at);
+    if (Number.isNaN(startsAt.getTime())) {
+      continue;
+    }
+
+    if (startsAt >= rollingWindowStart && startsAt <= rollingWindowEnd) {
+      consultationsRollingMonth += 1;
+    }
+  }
+
+  let openMinutesRollingMonth = 0;
+  if (scopedOfficeIds.length > 0) {
+    const dayCursor = new Date(rollingWindowStart);
+    dayCursor.setHours(0, 0, 0, 0);
+    const endDay = new Date(rollingWindowEnd);
+    endDay.setHours(0, 0, 0, 0);
+
+    while (dayCursor <= endDay) {
+      const dayStart = new Date(dayCursor);
+      const dayEnd = new Date(dayCursor);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+
+      const sliceStart = new Date(Math.max(dayStart.getTime(), rollingWindowStart.getTime()));
+      const sliceEnd = new Date(Math.min(dayEnd.getTime(), rollingWindowEnd.getTime()));
+
+      if (sliceEnd > sliceStart) {
+        const intervals = getDayOpenIntervals(dayCursor);
+        for (const interval of intervals) {
+          const intervalStart = new Date(dayCursor);
+          intervalStart.setHours(0, 0, 0, 0);
+          intervalStart.setMinutes(interval.start);
+
+          const intervalEnd = new Date(dayCursor);
+          intervalEnd.setHours(0, 0, 0, 0);
+          intervalEnd.setMinutes(interval.end);
+
+          const effectiveStart = new Date(Math.max(intervalStart.getTime(), sliceStart.getTime()));
+          const effectiveEnd = new Date(Math.min(intervalEnd.getTime(), sliceEnd.getTime()));
+          if (effectiveEnd > effectiveStart) {
+            openMinutesRollingMonth += (effectiveEnd.getTime() - effectiveStart.getTime()) / 60000;
+          }
+        }
+      }
+
+      dayCursor.setDate(dayCursor.getDate() + 1);
+    }
+  }
+
+  const defaultSessionDurationMinutes = Math.max(5, Number(agendaConfig.settings.defaultSessionDurationMinutes ?? 30));
+  const theoreticalCapacity = openMinutesRollingMonth / defaultSessionDurationMinutes;
+  const occupancyPercent = theoreticalCapacity > 0
+    ? Math.max(0, Math.min(100, (consultationsRollingMonth / theoreticalCapacity) * 100))
+    : 0;
+  const occupancyRate = `${occupancyPercent.toFixed(1).replace('.', ',')}%`;
+
   const stats = {
     consultationsToday,
-    newPatients: 1,
-    occupancyRate: '87%'
+    newPatients,
+    occupancyRate
   };
 
   writeAuditLog(req.user.sub, 'READ_LIST', 'appointments', null, { count: appointments.length });
@@ -10148,6 +10350,30 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
   const agendaConfig = readAgendaSettings(req.user.sub, officeIdFilter);
   const accessibleCalendarIds = new Set(getAccessibleCalendarIdsForUser(req.user.sub, officeIdFilter));
 
+  const officeIds = Array.from(
+    new Set(
+      agendaConfig.localCalendars
+        .map((calendar) => (calendar?.officeId != null ? Number(calendar.officeId) : null))
+        .filter((officeId) => Number.isInteger(officeId) && officeId > 0)
+    )
+  );
+
+  const officeOpeningHoursById = {};
+  if (officeIds.length > 0) {
+    const placeholders = officeIds.map(() => '?').join(', ');
+    const officeRows = db
+      .prepare(`SELECT id, opening_hours_json FROM offices WHERE id IN (${placeholders})`)
+      .all(...officeIds);
+
+    for (const row of officeRows) {
+      const officeId = Number(row.id);
+      if (!Number.isInteger(officeId) || officeId <= 0) {
+        continue;
+      }
+      officeOpeningHoursById[officeId] = parseOfficeOpeningHours(row.opening_hours_json);
+    }
+  }
+
   const appointmentRows = db
     .prepare(
       `SELECT a.id, a.starts_at, a.reason_cipher, a.status, a.local_calendar_id,
@@ -10168,7 +10394,7 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
          )
        )
        WHERE a.is_private = 1 OR (p.id IS NOT NULL AND p.is_deleted = 0)
-       ORDER BY a.starts_at ASC`
+       ORDER BY a.starts_at ASC, a.id ASC`
     )
     .all();
 
@@ -10184,6 +10410,21 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
     }
     return accessibleCalendarIds.has(effectiveCalendarId);
   });
+
+  const firstAppointmentIdByPatient = new Map();
+  for (const row of appointmentRows) {
+    const isPrivate = Number(row.is_private) === 1;
+    if (isPrivate) {
+      continue;
+    }
+
+    const patientId = Number(row.patient_id);
+    if (!Number.isInteger(patientId) || patientId <= 0 || firstAppointmentIdByPatient.has(patientId)) {
+      continue;
+    }
+
+    firstAppointmentIdByPatient.set(patientId, Number(row.id));
+  }
 
   const events = filteredAppointmentRows
     .map((row) => {
@@ -10201,13 +10442,19 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
       const rowCalendarId = row.local_calendar_id != null ? Number(row.local_calendar_id) : null;
       const calendar = rowCalendarId != null ? (calendarById.get(rowCalendarId) ?? fallbackCalendar) : fallbackCalendar;
       const effectiveCalendarId = calendar?.id ?? null;
+      const patientId = Number(row.patient_id);
+      const isNewPatient = !isPrivate
+        && Number.isInteger(patientId)
+        && patientId > 0
+        && Number(firstAppointmentIdByPatient.get(patientId)) === Number(row.id);
 
       return {
         id: Number(row.id),
-        patientId: Number(row.patient_id),
+        patientId,
         title: reason,
         start: row.starts_at,
         patient,
+        isNewPatient,
         isPrivate,
         privateReason,
         reason,
@@ -10418,7 +10665,8 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
     recentPatients,
     pendingPayments: allPendingPayments,
     agendaSettings: agendaConfig.settings,
-    localCalendars: agendaConfig.localCalendars
+    localCalendars: agendaConfig.localCalendars,
+    officeOpeningHoursById
   });
 });
 
