@@ -1944,6 +1944,37 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
   const normalizedCreatedByUserId = Number.isInteger(createdByUserId) && createdByUserId > 0 ? createdByUserId : null;
   const officeLabel = String(options.officeLabel ?? '').trim() || practitionerName;
 
+  const randomInt = (min, max) => {
+    const normalizedMin = Math.floor(Number(min));
+    const normalizedMax = Math.floor(Number(max));
+    if (!Number.isFinite(normalizedMin) || !Number.isFinite(normalizedMax)) {
+      return 0;
+    }
+    if (normalizedMax <= normalizedMin) {
+      return normalizedMin;
+    }
+    return normalizedMin + Math.floor(Math.random() * ((normalizedMax - normalizedMin) + 1));
+  };
+
+  const generateBirthDateIso = () => {
+    const year = randomInt(1938, 2023);
+    const month = randomInt(1, 12);
+    const day = randomInt(1, 28);
+    return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  };
+
+  const generateFrenchMobile = () => {
+    const prefix = randomInt(0, 1) === 0 ? '06' : '07';
+    return `${prefix} ${String(randomInt(10, 99)).padStart(2, '0')} ${String(randomInt(10, 99)).padStart(2, '0')} ${String(randomInt(10, 99)).padStart(2, '0')} ${String(randomInt(10, 99)).padStart(2, '0')}`;
+  };
+
+  const minPatientsOption = Number(options.minPatients);
+  const maxPatientsOption = Number(options.maxPatients);
+  const minPatients = Number.isInteger(minPatientsOption) && minPatientsOption > 0 ? minPatientsOption : 600;
+  const maxPatientsCandidate = Number.isInteger(maxPatientsOption) && maxPatientsOption > 0 ? maxPatientsOption : 1000;
+  const maxPatients = Math.max(maxPatientsCandidate, minPatients);
+  const targetPatientCount = randomInt(minPatients, maxPatients);
+
   const calendarId = Number(
     db.prepare('SELECT id FROM local_calendars WHERE office_id = ? ORDER BY id ASC LIMIT 1').get(normalizedOfficeId)?.id ?? 0
   ) || null;
@@ -1979,15 +2010,105 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
     ]
   };
 
-  const demoPatients = demoPatientsBySet[patientSetKey] ?? demoPatientsBySet.nantes;
+  const baseDemoPatients = demoPatientsBySet[patientSetKey] ?? demoPatientsBySet.nantes;
+  const availableCities = [...new Set(baseDemoPatients.map((entry) => String(entry.city ?? '').trim()).filter(Boolean))];
+  const cityToPostalCode = new Map();
+  for (const entry of baseDemoPatients) {
+    const city = String(entry.city ?? '').trim();
+    const postalCode = String(entry.postalCode ?? '').trim();
+    if (city && postalCode && !cityToPostalCode.has(city)) {
+      cityToPostalCode.set(city, postalCode);
+    }
+  }
+
+  const notePool = [
+    ...baseDemoPatients.map((entry) => String(entry.notes ?? '').trim()).filter(Boolean),
+    'Suivi de prevention sur contraintes posturales professionnelles.',
+    'Recurrence de douleurs lombaires apres charge repetitive.',
+    'Gene cervicale liee au travail prolonge sur ecran.',
+    'Programme de suivi sportif avec objectif de mobilite.',
+    'Fatigue chronique avec tensions dorsales diffuses.',
+    'Suivi adolescent pour asymetrie posturale legere.',
+    'Accompagnement post-partum avec douleurs sacro-iliaques intermittentes.'
+  ];
+
+  const maleFirstNames = ['Lucas', 'Nathan', 'Hugo', 'Theo', 'Mathis', 'Jules', 'Leo', 'Noe', 'Sacha', 'Tom', 'Axel', 'Gabin', 'Ethan', 'Liam', 'Nolan'];
+  const femaleFirstNames = ['Emma', 'Lea', 'Chloe', 'Ines', 'Lina', 'Maya', 'Jeanne', 'Alice', 'Clara', 'Iris', 'Maelle', 'Louise', 'Nina', 'Salome', 'Camille'];
+  const lastNamePool = [
+    ...new Set([
+      ...baseDemoPatients.map((entry) => String(entry.lastName ?? '').trim()).filter(Boolean),
+      'MOREL', 'GARNIER', 'DUPONT', 'MARCHAND', 'BARBIER', 'BLANCHARD', 'POTIER', 'COLIN', 'PICARD', 'LEFEBVRE',
+      'RENARD', 'GERARD', 'MASSON', 'LECLERC', 'ROBIN', 'MEUNIER', 'CARON', 'GIRARD', 'BOYER', 'MARTEL'
+    ])
+  ];
+
+  const pickArrayValue = (items) => {
+    if (!Array.isArray(items) || items.length === 0) {
+      return '';
+    }
+    return items[randomInt(0, items.length - 1)] ?? '';
+  };
+
+  const demoPatients = Array.from({ length: targetPatientCount }, (_, patientIndex) => {
+    const isFemale = randomInt(0, 1) === 0;
+    const firstName = isFemale ? pickArrayValue(femaleFirstNames) : pickArrayValue(maleFirstNames);
+    const sex = isFemale ? 'F' : 'M';
+    const lastName = pickArrayValue(lastNamePool);
+    const city = pickArrayValue(availableCities) || String(baseDemoPatients[0]?.city ?? 'Nantes');
+    const postalCode = cityToPostalCode.get(city) || String(baseDemoPatients[0]?.postalCode ?? '44000');
+    const relatedPeople = randomInt(0, 100) < 12
+      ? `${pickArrayValue(lastNamePool)} ${pickArrayValue([...maleFirstNames, ...femaleFirstNames])}`
+      : '';
+
+    return {
+      lastName,
+      firstName,
+      sex,
+      birthDate: generateBirthDateIso(),
+      mobilePhone: generateFrenchMobile(),
+      city,
+      postalCode,
+      relatedPeople,
+      notes: pickArrayValue(notePool) || 'Suivi osteopathique regulier.'
+    };
+  });
 
   const consultationTemplates = [
-    { offsetYears: 4, month: 2, day: 14, hour: 9, minute: 0, status: 'Termine', title: 'Bilan osteopathique annuel', amountCents: 7000, paid: true },
-    { offsetYears: 3, month: 5, day: 6, hour: 11, minute: 15, status: 'Termine', title: 'Suivi fonctionnel', amountCents: 6500, paid: true },
-    { offsetYears: 2, month: 8, day: 21, hour: 15, minute: 45, status: 'Termine', title: 'Controle postural', amountCents: 6800, paid: true },
-    { offsetYears: 1, month: 11, day: 4, hour: 10, minute: 30, status: 'En attente', title: 'Consultation douleur aigue', amountCents: 7200, paid: false },
-    { offsetYears: 0, month: 3, day: 18, hour: 14, minute: 0, status: 'A confirmer', title: 'Suivi trimestriel', amountCents: 6900, paid: false }
+    { minDaysAgo: 1180, maxDaysAgo: 1540, hour: 9, minute: 0, title: 'Bilan osteopathique annuel', amountCents: 7000 },
+    { minDaysAgo: 780, maxDaysAgo: 1090, hour: 11, minute: 15, title: 'Suivi fonctionnel', amountCents: 6500 },
+    { minDaysAgo: 420, maxDaysAgo: 720, hour: 15, minute: 45, title: 'Controle postural', amountCents: 6800 },
+    { minDaysAgo: 120, maxDaysAgo: 360, hour: 10, minute: 30, title: 'Consultation douleur aigue', amountCents: 7200 },
+    { minDaysAgo: 20, maxDaysAgo: 110, hour: 14, minute: 0, title: 'Suivi trimestriel', amountCents: 6900 }
   ];
+
+  const consultationProfiles = ['Adulte', 'Enfant', 'Senior', 'Perinatalite', 'Sportif'];
+  const occupations = ['Cadre', 'Etudiant', 'Profession liberale', 'Artisan', 'Infirmier', 'Retraite'];
+  const hobbies = ['Running, yoga', 'Natation, randonnee', 'Escalade, mobilite', 'Musculation, pilates', 'Marche active'];
+  const maritalStatuses = ['Non renseigne', 'Celibataire', 'Marie(e)', 'Pacs(e)', 'Divorce(e)'];
+  const pastAppointmentStatuses = ['Termine', 'En attente'];
+  const futureAppointmentStatuses = ['A confirmer', 'En attente'];
+  const futureAppointmentReasons = [
+    'Controle de suivi',
+    'Douleur cervicale recente',
+    'Gene lombaire apres effort',
+    'Suivi sportif preventif',
+    'Point postural'
+  ];
+  const paidMethods = ['cb', 'especes', 'virement', 'cheque'];
+  const unpaidMethods = ['cheque', 'virement'];
+
+  const seededUnit = (seed) => {
+    const value = Math.sin(seed) * 10000;
+    return value - Math.floor(value);
+  };
+
+  const pickFrom = (items, seed) => {
+    if (!Array.isArray(items) || items.length === 0) {
+      return null;
+    }
+    const index = Math.floor(seededUnit(seed) * items.length) % items.length;
+    return items[index];
+  };
 
   const directoryContacts = [
     { kind: 'person', firstName: 'Camille', lastName: 'Roux', organization: '', role: 'Kinesitherapeute', email: 'camille.roux@example.test', mobilePhone: '06 30 10 20 30', landlinePhone: '', address1: '12 rue des Acacias', address2: '', postalCode: '44000', city: 'Nantes', country: 'France', notes: 'Partenaire reeducation sportive.' },
@@ -2044,7 +2165,10 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
       const landlinePhone = '';
       const mainPhone = mobilePhone || landlinePhone || 'Non renseigne';
       const normalizedRelatedPeople = formatRelatedPeople(parseRelatedPeople(patient.relatedPeople));
-      const lastVisit = new Date(now.getFullYear(), 2 + (patientIndex % 4), 10 + patientIndex).toISOString().slice(0, 10);
+      const lastVisit = new Date(now.getTime() - ((30 + (patientIndex * 6)) * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10);
+      const patientSeedBase = (normalizedOfficeId * 1009) + ((patientIndex + 1) * 313);
+      const maritalStatus = pickFrom(maritalStatuses, patientSeedBase + 11) || 'Non renseigne';
+      const childrenCount = Math.floor(seededUnit(patientSeedBase + 17) * 4);
 
       const medicalRecord = {
         generalRemarks: patient.notes,
@@ -2059,10 +2183,10 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
         postalCode: patient.postalCode,
         city: patient.city,
         country: 'France',
-        maritalStatus: 'Non renseigne',
-        childrenCount: 0,
-        occupationOrSchool: patientIndex % 3 === 0 ? 'Cadre' : patientIndex % 3 === 1 ? 'Etudiant' : 'Profession liberale',
-        hobbies: patientIndex % 2 === 0 ? 'Running, yoga' : 'Natation, randonnee',
+        maritalStatus,
+        childrenCount,
+        occupationOrSchool: pickFrom(occupations, patientSeedBase + 23) || 'Cadre',
+        hobbies: pickFrom(hobbies, patientSeedBase + 29) || 'Running, yoga',
         primaryDoctor: patientIndex % 4 === 0 ? 'Dr Perrin' : '',
         socialSecurityNumber: '',
         referredBy: patientIndex % 5 === 0 ? 'Recommande par un patient du cabinet' : '',
@@ -2070,7 +2194,7 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
         isDeceased: false
       };
 
-      const consentSigned = patientIndex % 7 === 0 ? 0 : 1;
+      const consentSigned = seededUnit(patientSeedBase + 31) < 0.14 ? 0 : 1;
 
       const patientResult = insertPatient.run(
         encryptSensitiveField(fullName),
@@ -2078,8 +2202,8 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
         encryptSensitiveField(JSON.stringify(medicalRecord)),
         patient.sex,
         patient.birthDate,
-        'Non renseigne',
-        0,
+        maritalStatus,
+        childrenCount,
         lastVisit,
         consentSigned,
         retentionUntil
@@ -2089,9 +2213,13 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
       patientCount += 1;
 
       for (const [index, template] of consultationTemplates.entries()) {
-        const jitterSeed = (normalizedOfficeId * 97) + ((patientIndex + 1) * 53) + ((index + 1) * 17);
+        const jitterSeed = patientSeedBase + ((index + 1) * 71);
         const hourJitter = ((jitterSeed * 13) % 3) - 1;
         const minuteJitter = ((jitterSeed * 37) % 41) - 20;
+        const minDaysAgo = Number(template.minDaysAgo);
+        const maxDaysAgo = Number(template.maxDaysAgo);
+        const daySpread = Math.max(maxDaysAgo - minDaysAgo, 1);
+        const daysAgo = minDaysAgo + Math.floor(seededUnit(jitterSeed + 3) * daySpread);
         const baseMinutes = (template.hour * 60) + template.minute;
         const jitteredMinutes = baseMinutes + (hourJitter * 60) + minuteJitter;
         const boundedMinutes = Math.min(Math.max(jitteredMinutes, 8 * 60), (19 * 60) + 30);
@@ -2099,21 +2227,34 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
         const startHour = Math.floor(roundedMinutes / 60);
         const startMinute = roundedMinutes % 60;
 
-        const startedAt = new Date(
-          now.getFullYear() - template.offsetYears,
-          template.month,
-          template.day + patientIndex,
-          startHour,
-          startMinute,
-          0,
-          0
-        ).toISOString();
+        const startedAtDate = new Date(now.getTime() - (Math.max(daysAgo, 2) * 24 * 60 * 60 * 1000));
+        startedAtDate.setHours(startHour, startMinute, 0, 0);
+
+        if (startedAtDate.getTime() >= now.getTime()) {
+          startedAtDate.setTime(now.getTime() - (2 * 24 * 60 * 60 * 1000));
+          startedAtDate.setHours(startHour, startMinute, 0, 0);
+        }
+
+        const startedAt = startedAtDate.toISOString();
 
         const consultationTitle = `${template.title} - ${patient.firstName}`;
         const isFreeConsultation = patientIndex % 9 === 0 && index === 2;
-        const shouldSkipInvoice = patientIndex % 8 === 0 && index === consultationTemplates.length - 1;
+        const shouldSkipInvoice = seededUnit(jitterSeed + 37) < 0.08;
         const invoiceAmountCents = isFreeConsultation ? 0 : template.amountCents;
-        const invoiceStatus = isFreeConsultation ? 'payee' : (template.paid ? 'payee' : 'impayee');
+        let invoiceStatus = 'payee';
+        if (!isFreeConsultation) {
+          const statusRoll = seededUnit(jitterSeed + 41);
+          if (statusRoll < 0.52) {
+            invoiceStatus = 'payee';
+          } else if (statusRoll < 0.76) {
+            invoiceStatus = 'impayee';
+          } else if (statusRoll < 0.9) {
+            invoiceStatus = 'partiellement_payee';
+          } else {
+            invoiceStatus = 'annulee';
+          }
+        }
+        const appointmentStatus = pickFrom(pastAppointmentStatuses, jitterSeed + 43) || 'Termine';
         const consultationResult = insertConsultation.run(
           patientId,
           startedAt,
@@ -2123,9 +2264,9 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
           0,
           null,
           null,
-          5,
-          2,
-          patientIndex % 3 === 0 ? 'Adulte' : patientIndex % 3 === 1 ? 'Enfant' : 'Senior'
+          3 + Math.floor(seededUnit(jitterSeed + 47) * 7),
+          Math.max(0, 1 + Math.floor(seededUnit(jitterSeed + 53) * 7)),
+          pickFrom(consultationProfiles, jitterSeed + 59) || 'Adulte'
         );
         const consultationId = Number(consultationResult.lastInsertRowid);
         consultationCount += 1;
@@ -2142,7 +2283,7 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
           patientId,
           startedAt,
           encryptSensitiveField(consultationTitle),
-          template.status,
+          appointmentStatus,
           calendarId,
           consultationId,
           normalizedOfficeId
@@ -2151,8 +2292,12 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
 
         if (!shouldSkipInvoice) {
           const issuedAt = startedAt.slice(0, 10);
-          const dueAt = new Date(new Date(startedAt).getTime() + (invoiceStatus === 'impayee' ? 14 : 7) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+          const dueDelayDays = invoiceStatus === 'impayee' ? 21 : invoiceStatus === 'partiellement_payee' ? 10 : 7;
+          const dueAt = new Date(new Date(startedAt).getTime() + (dueDelayDays * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10);
           const invoiceNumber = `DEMO-${now.getFullYear()}-O${String(normalizedOfficeId).padStart(2, '0')}-${String(patientIndex + 1).padStart(2, '0')}${String(index + 1).padStart(2, '0')}`;
+          const paymentMethod = invoiceStatus === 'impayee'
+            ? (pickFrom(unpaidMethods, jitterSeed + 61) || 'cheque')
+            : (pickFrom(paidMethods, jitterSeed + 67) || 'cb');
 
           insertInvoice.run(
             patientId,
@@ -2168,10 +2313,36 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
             ),
             normalizedOfficeId,
             consultationId,
-            invoiceStatus === 'payee' ? 'cb' : 'cheque'
+            paymentMethod
           );
           invoiceCount += 1;
         }
+      }
+
+      const futureAppointmentCount = seededUnit(patientSeedBase + 79) < 0.45 ? 1 : 2;
+      for (let futureIndex = 0; futureIndex < futureAppointmentCount; futureIndex += 1) {
+        const futureSeed = patientSeedBase + 200 + (futureIndex * 19);
+        const daysAhead = 3 + Math.floor(seededUnit(futureSeed + 3) * 110);
+        const futureStartDate = new Date(now.getTime() + (daysAhead * 24 * 60 * 60 * 1000));
+        const futureMinutes = (8 * 60) + Math.round((seededUnit(futureSeed + 7) * ((19 * 60) - (8 * 60))) / 5) * 5;
+        const futureHour = Math.floor(futureMinutes / 60);
+        const futureMinute = futureMinutes % 60;
+        futureStartDate.setHours(futureHour, futureMinute, 0, 0);
+
+        const futureReasonBase = pickFrom(futureAppointmentReasons, futureSeed + 11) || 'Controle de suivi';
+        const futureReason = `${futureReasonBase} - ${patient.firstName}`;
+        const futureStatus = pickFrom(futureAppointmentStatuses, futureSeed + 13) || 'A confirmer';
+
+        insertAppointment.run(
+          patientId,
+          futureStartDate.toISOString(),
+          encryptSensitiveField(futureReason),
+          futureStatus,
+          calendarId,
+          null,
+          normalizedOfficeId
+        );
+        appointmentCount += 1;
       }
     }
 
