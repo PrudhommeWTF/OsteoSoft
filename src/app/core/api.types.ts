@@ -384,6 +384,65 @@ export type BillingInsightsPayload = {
   summary: InvoiceSummaryTile[];
 };
 
+export type BillingForecastPayload = {
+  generatedAt: string;
+  officeIds: number[];
+  trailing90Days: {
+    creditsCents: number;
+    debitsCents: number;
+    netCents: number;
+    averageDailyNetCents: number;
+  };
+  overdueOutstandingCents: number;
+  horizons: Record<string, {
+    expectedReceiptsCents: number;
+    projectedNetRunRateCents: number;
+    horizonEndIso: string;
+  }>;
+};
+
+export type BillingAlertsPayload = {
+  generatedAt: string;
+  summary: {
+    overdueCriticalCount: number;
+    dueSoonCount: number;
+    highExpensesCount: number;
+    unassignedOwnerCount: number;
+  };
+  overdueCritical: Array<{
+    invoiceId: number;
+    invoiceNumber: string;
+    patientName: string;
+    dueAt: string;
+    daysLate: number;
+    remainingAmountCents: number;
+    officeId: number | null;
+  }>;
+  dueSoon: Array<{
+    invoiceId: number;
+    invoiceNumber: string;
+    patientName: string;
+    dueAt: string;
+    remainingAmountCents: number;
+    officeId: number | null;
+  }>;
+  highExpenses: Array<{
+    expenseId: number;
+    occurredAt: string;
+    title: string;
+    amountCents: number;
+    currency: string;
+    officeId: number | null;
+  }>;
+  unassignedOwnerOperations: Array<{
+    id: string;
+    sourceType: 'invoice' | 'expense' | 'deposit';
+    occurredAt: string;
+    title: string;
+    officeId: number | null;
+  }>;
+};
+
 export type BillingExpensePayload = {
   occurredAt: string;
   officeId: number | null;

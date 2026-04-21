@@ -11557,6 +11557,526 @@ app.get('/api/billing/insights', authMiddleware, requirePermission('read-billing
   });
 });
 
+app.get('/api/billing/forecast', authMiddleware, requirePermission('read-billing-kpis'), (req, res) => {
+  const availableOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+  const filterOfficeIds = getScopedBillingOfficeIds(req.userAccess, req.query.officeId);
+  const requestedOfficeId = Number(req.query.officeId);
+
+  if (Number.isInteger(requestedOfficeId) && requestedOfficeId > 0 && filterOfficeIds.length === 0) {
+    return res.status(403).json({ message: 'Cabinet inaccessible' });
+  }
+
+  const effectiveOfficeIds = filterOfficeIds.length > 0 ? filterOfficeIds : availableOfficeIds;
+  const now = new Date();
+  const horizons = [30, 60, 90];
+
+  const historicalFrom = new Date(now.getTime() - (90 * 24 * 60 * 60 * 1000)).toISOString();
+  const historicalPayload = getBillingOperationsData({
+    userId: req.user.sub,
+    access: req.userAccess,
+    fromIso: historicalFrom,
+    toIso: now.toISOString(),
+    availableOfficeIds,
+    filterOfficeIds,
+    ownerUserId: null
+  });
+
+  const dailyNetCents = historicalPayload.stats.netCents / 90;
+  const dayMs = 24 * 60 * 60 * 1000;
+  const perHorizon = {};
+
+  let unpaidRows = [];
+  if (effectiveOfficeIds.length > 0) {
+    unpaidRows = db
+      .prepare(
+        `SELECT i.id, i.amount_cents, i.issued_at, i.due_at, i.office_id,
+                COALESCE(pay.paid_cents, 0) AS paid_cents
+         FROM invoices i
+         LEFT JOIN (
+           SELECT invoice_id, SUM(amount_cents) AS paid_cents
+           FROM invoice_payments
+           GROUP BY invoice_id
+         ) pay ON pay.invoice_id = i.id
+         WHERE i.status <> 'payee'
+         ORDER BY datetime(COALESCE(i.due_at, i.issued_at)) ASC, i.id ASC`
+      )
+      .all()
+      .filter((row) => {
+        const officeId = row.office_id != null ? Number(row.office_id) : null;
+        return officeId != null && effectiveOfficeIds.includes(officeId);
+      });
+  }
+
+  const overdueOutstandingCents = unpaidRows.reduce((sum, row) => {
+    const remaining = Math.max(0, Number(row.amount_cents ?? 0) - Number(row.paid_cents ?? 0));
+    if (remaining <= 0) {
+      return sum;
+    }
+
+    const dueAtMs = new Date(String(row.due_at ?? row.issued_at ?? '')).getTime();
+    if (!Number.isFinite(dueAtMs) || dueAtMs > now.getTime()) {
+      return sum;
+    }
+
+    return sum + remaining;
+  }, 0);
+
+  for (const horizon of horizons) {
+    const horizonEnd = new Date(now.getTime() + (horizon * dayMs));
+    const expectedReceiptsCents = unpaidRows.reduce((sum, row) => {
+      const remaining = Math.max(0, Number(row.amount_cents ?? 0) - Number(row.paid_cents ?? 0));
+      if (remaining <= 0) {
+        return sum;
+      }
+
+      const dueAtMs = new Date(String(row.due_at ?? row.issued_at ?? '')).getTime();
+      if (!Number.isFinite(dueAtMs) || dueAtMs > horizonEnd.getTime()) {
+        return sum;
+      }
+
+      return sum + remaining;
+    }, 0);
+
+    perHorizon[String(horizon)] = {
+      expectedReceiptsCents,
+      projectedNetRunRateCents: Math.round(dailyNetCents * horizon),
+      horizonEndIso: horizonEnd.toISOString()
+    };
+  }
+
+  writeAuditLog(req.user.sub, 'READ_DASHBOARD', 'billing-forecast', null, {
+    officeCount: effectiveOfficeIds.length,
+    overdueOutstandingCents
+  });
+
+  return res.json({
+    generatedAt: now.toISOString(),
+    officeIds: effectiveOfficeIds,
+    trailing90Days: {
+      creditsCents: historicalPayload.stats.creditCents,
+      debitsCents: historicalPayload.stats.debitCents,
+      netCents: historicalPayload.stats.netCents,
+      averageDailyNetCents: Math.round(dailyNetCents)
+    },
+    overdueOutstandingCents,
+    horizons: perHorizon
+  });
+});
+
+app.get('/api/billing/alerts', authMiddleware, requirePermission('read-billing-kpis'), (req, res) => {
+  const requestedCategories = String(req.query.categories ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const allowedCategories = new Set(['overdue', 'dueSoon', 'highExpenses', 'unassigned']);
+  if (requestedCategories.some((category) => !allowedCategories.has(category))) {
+    return res.status(400).json({ message: 'Categorie d\'alerte invalide' });
+  }
+  const includeAllCategories = requestedCategories.length === 0;
+  const includeOverdue = includeAllCategories || requestedCategories.includes('overdue');
+  const includeDueSoon = includeAllCategories || requestedCategories.includes('dueSoon');
+  const includeHighExpenses = includeAllCategories || requestedCategories.includes('highExpenses');
+  const includeUnassigned = includeAllCategories || requestedCategories.includes('unassigned');
+
+  const availableOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+  const filterOfficeIds = getScopedBillingOfficeIds(req.userAccess, req.query.officeId);
+  const requestedOfficeId = Number(req.query.officeId);
+
+  if (Number.isInteger(requestedOfficeId) && requestedOfficeId > 0 && filterOfficeIds.length === 0) {
+    return res.status(403).json({ message: 'Cabinet inaccessible' });
+  }
+
+  const effectiveOfficeIds = filterOfficeIds.length > 0 ? filterOfficeIds : availableOfficeIds;
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  let overdueCritical = [];
+  let dueSoon = [];
+  let highExpenses = [];
+
+  if (effectiveOfficeIds.length > 0) {
+    const unpaidRows = db
+      .prepare(
+        `SELECT i.id, i.invoice_number, i.amount_cents, i.issued_at, i.due_at, i.office_id,
+                p.cipher_full_name,
+                COALESCE(pay.paid_cents, 0) AS paid_cents
+         FROM invoices i
+         INNER JOIN patients p ON p.id = i.patient_id
+         LEFT JOIN (
+           SELECT invoice_id, SUM(amount_cents) AS paid_cents
+           FROM invoice_payments
+           GROUP BY invoice_id
+         ) pay ON pay.invoice_id = i.id
+         WHERE i.status <> 'payee'
+         ORDER BY datetime(COALESCE(i.due_at, i.issued_at)) ASC, i.id ASC`
+      )
+      .all()
+      .filter((row) => {
+        const officeId = row.office_id != null ? Number(row.office_id) : null;
+        return officeId != null && effectiveOfficeIds.includes(officeId);
+      });
+
+    for (const row of unpaidRows) {
+      const remainingAmountCents = Math.max(0, Number(row.amount_cents ?? 0) - Number(row.paid_cents ?? 0));
+      if (remainingAmountCents <= 0) {
+        continue;
+      }
+
+      const dueAtMs = new Date(String(row.due_at ?? row.issued_at ?? '')).getTime();
+      if (!Number.isFinite(dueAtMs)) {
+        continue;
+      }
+
+      const daysLate = Math.floor((now - dueAtMs) / dayMs);
+      if (daysLate > 60) {
+        overdueCritical.push({
+          invoiceId: Number(row.id),
+          invoiceNumber: String(row.invoice_number ?? '').trim(),
+          patientName: decryptSensitiveField(row.cipher_full_name),
+          dueAt: String(row.due_at ?? row.issued_at ?? ''),
+          daysLate,
+          remainingAmountCents,
+          officeId: row.office_id != null ? Number(row.office_id) : null
+        });
+      } else if (daysLate <= 0 && dueAtMs <= now + (7 * dayMs)) {
+        dueSoon.push({
+          invoiceId: Number(row.id),
+          invoiceNumber: String(row.invoice_number ?? '').trim(),
+          patientName: decryptSensitiveField(row.cipher_full_name),
+          dueAt: String(row.due_at ?? row.issued_at ?? ''),
+          remainingAmountCents,
+          officeId: row.office_id != null ? Number(row.office_id) : null
+        });
+      }
+    }
+
+    overdueCritical = overdueCritical
+      .sort((left, right) => right.daysLate - left.daysLate || right.remainingAmountCents - left.remainingAmountCents)
+      .slice(0, 20);
+    dueSoon = dueSoon
+      .sort((left, right) => new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime() || right.remainingAmountCents - left.remainingAmountCents)
+      .slice(0, 20);
+
+    const expensesRows = db
+      .prepare(
+        `SELECT id, occurred_at, office_id, title, amount_cents, currency
+         FROM accounting_expenses
+         WHERE is_deleted = 0
+           AND datetime(occurred_at) >= datetime(?)
+         ORDER BY datetime(occurred_at) DESC, id DESC`
+      )
+      .all(new Date(now - (30 * dayMs)).toISOString())
+      .filter((row) => {
+        const officeId = row.office_id != null ? Number(row.office_id) : null;
+        return officeId != null && effectiveOfficeIds.includes(officeId);
+      });
+
+    const avgExpenseCents = expensesRows.length > 0
+      ? Math.round(expensesRows.reduce((sum, row) => sum + Number(row.amount_cents ?? 0), 0) / expensesRows.length)
+      : 0;
+    const thresholdCents = avgExpenseCents > 0 ? Math.max(avgExpenseCents * 2, 50000) : 50000;
+
+    highExpenses = expensesRows
+      .filter((row) => Number(row.amount_cents ?? 0) >= thresholdCents)
+      .slice(0, 20)
+      .map((row) => ({
+        expenseId: Number(row.id),
+        occurredAt: String(row.occurred_at ?? ''),
+        title: String(row.title ?? '').trim() || 'Depense',
+        amountCents: Number(row.amount_cents ?? 0),
+        currency: String(row.currency ?? 'EUR').trim() || 'EUR',
+        officeId: row.office_id != null ? Number(row.office_id) : null
+      }));
+  }
+
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  const monthEnd = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
+  const operationsPayload = getBillingOperationsData({
+    userId: req.user.sub,
+    access: req.userAccess,
+    fromIso: monthStart,
+    toIso: monthEnd,
+    availableOfficeIds,
+    filterOfficeIds,
+    ownerUserId: null
+  });
+  const unassignedOwnerOperations = operationsPayload.operations
+    .filter((operation) => operation.ownerUserId == null)
+    .slice(0, 30)
+    .map((operation) => ({
+      id: operation.id,
+      sourceType: operation.sourceType,
+      occurredAt: operation.occurredAt,
+      title: operation.title,
+      officeId: operation.officeId
+    }));
+
+  writeAuditLog(req.user.sub, 'READ_DASHBOARD', 'billing-alerts', null, {
+    overdueCriticalCount: includeOverdue ? overdueCritical.length : 0,
+    dueSoonCount: includeDueSoon ? dueSoon.length : 0,
+    highExpensesCount: includeHighExpenses ? highExpenses.length : 0,
+    unassignedOwnerCount: includeUnassigned ? unassignedOwnerOperations.length : 0
+  });
+
+  return res.json({
+    generatedAt: new Date().toISOString(),
+    summary: {
+      overdueCriticalCount: includeOverdue ? overdueCritical.length : 0,
+      dueSoonCount: includeDueSoon ? dueSoon.length : 0,
+      highExpensesCount: includeHighExpenses ? highExpenses.length : 0,
+      unassignedOwnerCount: includeUnassigned ? unassignedOwnerOperations.length : 0
+    },
+    overdueCritical: includeOverdue ? overdueCritical : [],
+    dueSoon: includeDueSoon ? dueSoon : [],
+    highExpenses: includeHighExpenses ? highExpenses : [],
+    unassignedOwnerOperations: includeUnassigned ? unassignedOwnerOperations : []
+  });
+});
+
+app.get('/api/billing/alerts/export', authMiddleware, requirePermission('export-billing'), (req, res) => {
+  const format = String(req.query.format ?? 'excel').trim().toLowerCase();
+  if (!['json', 'excel'].includes(format)) {
+    return res.status(400).json({ message: 'Format invalide' });
+  }
+  const requestedCategories = String(req.query.categories ?? '')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+  const allowedCategories = new Set(['overdue', 'dueSoon', 'highExpenses', 'unassigned']);
+  if (requestedCategories.some((category) => !allowedCategories.has(category))) {
+    return res.status(400).json({ message: 'Categorie d\'alerte invalide' });
+  }
+  const includeAllCategories = requestedCategories.length === 0;
+  const includeOverdue = includeAllCategories || requestedCategories.includes('overdue');
+  const includeDueSoon = includeAllCategories || requestedCategories.includes('dueSoon');
+  const includeHighExpenses = includeAllCategories || requestedCategories.includes('highExpenses');
+  const includeUnassigned = includeAllCategories || requestedCategories.includes('unassigned');
+
+  const availableOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+  const filterOfficeIds = getScopedBillingOfficeIds(req.userAccess, req.query.officeId);
+  const requestedOfficeId = Number(req.query.officeId);
+
+  if (Number.isInteger(requestedOfficeId) && requestedOfficeId > 0 && filterOfficeIds.length === 0) {
+    return res.status(403).json({ message: 'Cabinet inaccessible' });
+  }
+
+  const effectiveOfficeIds = filterOfficeIds.length > 0 ? filterOfficeIds : availableOfficeIds;
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  let overdueCritical = [];
+  let dueSoon = [];
+  let highExpenses = [];
+
+  if (effectiveOfficeIds.length > 0) {
+    const unpaidRows = db
+      .prepare(
+        `SELECT i.id, i.invoice_number, i.amount_cents, i.issued_at, i.due_at, i.office_id,
+                p.cipher_full_name,
+                COALESCE(pay.paid_cents, 0) AS paid_cents
+         FROM invoices i
+         INNER JOIN patients p ON p.id = i.patient_id
+         LEFT JOIN (
+           SELECT invoice_id, SUM(amount_cents) AS paid_cents
+           FROM invoice_payments
+           GROUP BY invoice_id
+         ) pay ON pay.invoice_id = i.id
+         WHERE i.status <> 'payee'
+         ORDER BY datetime(COALESCE(i.due_at, i.issued_at)) ASC, i.id ASC`
+      )
+      .all()
+      .filter((row) => {
+        const officeId = row.office_id != null ? Number(row.office_id) : null;
+        return officeId != null && effectiveOfficeIds.includes(officeId);
+      });
+
+    for (const row of unpaidRows) {
+      const remainingAmountCents = Math.max(0, Number(row.amount_cents ?? 0) - Number(row.paid_cents ?? 0));
+      if (remainingAmountCents <= 0) {
+        continue;
+      }
+
+      const dueAtMs = new Date(String(row.due_at ?? row.issued_at ?? '')).getTime();
+      if (!Number.isFinite(dueAtMs)) {
+        continue;
+      }
+
+      const daysLate = Math.floor((now - dueAtMs) / dayMs);
+      if (daysLate > 60) {
+        overdueCritical.push({
+          invoiceId: Number(row.id),
+          invoiceNumber: String(row.invoice_number ?? '').trim(),
+          patientName: decryptSensitiveField(row.cipher_full_name),
+          dueAt: String(row.due_at ?? row.issued_at ?? ''),
+          daysLate,
+          remainingAmountCents,
+          officeId: row.office_id != null ? Number(row.office_id) : null
+        });
+      } else if (daysLate <= 0 && dueAtMs <= now + (7 * dayMs)) {
+        dueSoon.push({
+          invoiceId: Number(row.id),
+          invoiceNumber: String(row.invoice_number ?? '').trim(),
+          patientName: decryptSensitiveField(row.cipher_full_name),
+          dueAt: String(row.due_at ?? row.issued_at ?? ''),
+          remainingAmountCents,
+          officeId: row.office_id != null ? Number(row.office_id) : null
+        });
+      }
+    }
+
+    overdueCritical = overdueCritical
+      .sort((left, right) => right.daysLate - left.daysLate || right.remainingAmountCents - left.remainingAmountCents)
+      .slice(0, 20);
+    dueSoon = dueSoon
+      .sort((left, right) => new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime() || right.remainingAmountCents - left.remainingAmountCents)
+      .slice(0, 20);
+
+    const expensesRows = db
+      .prepare(
+        `SELECT id, occurred_at, office_id, title, amount_cents, currency
+         FROM accounting_expenses
+         WHERE is_deleted = 0
+           AND datetime(occurred_at) >= datetime(?)
+         ORDER BY datetime(occurred_at) DESC, id DESC`
+      )
+      .all(new Date(now - (30 * dayMs)).toISOString())
+      .filter((row) => {
+        const officeId = row.office_id != null ? Number(row.office_id) : null;
+        return officeId != null && effectiveOfficeIds.includes(officeId);
+      });
+
+    const avgExpenseCents = expensesRows.length > 0
+      ? Math.round(expensesRows.reduce((sum, row) => sum + Number(row.amount_cents ?? 0), 0) / expensesRows.length)
+      : 0;
+    const thresholdCents = avgExpenseCents > 0 ? Math.max(avgExpenseCents * 2, 50000) : 50000;
+
+    highExpenses = expensesRows
+      .filter((row) => Number(row.amount_cents ?? 0) >= thresholdCents)
+      .slice(0, 20)
+      .map((row) => ({
+        expenseId: Number(row.id),
+        occurredAt: String(row.occurred_at ?? ''),
+        title: String(row.title ?? '').trim() || 'Depense',
+        amountCents: Number(row.amount_cents ?? 0),
+        currency: String(row.currency ?? 'EUR').trim() || 'EUR',
+        officeId: row.office_id != null ? Number(row.office_id) : null
+      }));
+  }
+
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  const monthEnd = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
+  const operationsPayload = getBillingOperationsData({
+    userId: req.user.sub,
+    access: req.userAccess,
+    fromIso: monthStart,
+    toIso: monthEnd,
+    availableOfficeIds,
+    filterOfficeIds,
+    ownerUserId: null
+  });
+  const unassignedOwnerOperations = operationsPayload.operations
+    .filter((operation) => operation.ownerUserId == null)
+    .slice(0, 30)
+    .map((operation) => ({
+      id: operation.id,
+      sourceType: operation.sourceType,
+      occurredAt: operation.occurredAt,
+      title: operation.title,
+      officeId: operation.officeId
+    }));
+
+  const payload = {
+    generatedAt: new Date().toISOString(),
+    summary: {
+      overdueCriticalCount: includeOverdue ? overdueCritical.length : 0,
+      dueSoonCount: includeDueSoon ? dueSoon.length : 0,
+      highExpensesCount: includeHighExpenses ? highExpenses.length : 0,
+      unassignedOwnerCount: includeUnassigned ? unassignedOwnerOperations.length : 0
+    },
+    overdueCritical: includeOverdue ? overdueCritical : [],
+    dueSoon: includeDueSoon ? dueSoon : [],
+    highExpenses: includeHighExpenses ? highExpenses : [],
+    unassignedOwnerOperations: includeUnassigned ? unassignedOwnerOperations : []
+  };
+
+  writeAuditLog(req.user.sub, 'EXPORT', 'billing-alerts', null, {
+    format,
+    overdueCriticalCount: overdueCritical.length,
+    dueSoonCount: dueSoon.length,
+    highExpensesCount: highExpenses.length,
+    unassignedOwnerCount: unassignedOwnerOperations.length
+  });
+
+  const datePart = new Date().toISOString().slice(0, 10);
+  if (format === 'json') {
+    const fileName = `billing-alerts-${datePart}.json`;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    return res.status(200).send(JSON.stringify(payload, null, 2));
+  }
+
+  const header = ['Category', 'Id', 'Reference', 'Patient', 'Date', 'MetricA', 'AmountCents', 'OfficeId'];
+  const rows = [];
+
+  for (const item of payload.overdueCritical) {
+    rows.push([
+      'overdue-critical',
+      String(item.invoiceId),
+      item.invoiceNumber,
+      item.patientName,
+      item.dueAt,
+      String(item.daysLate),
+      String(item.remainingAmountCents),
+      item.officeId != null ? String(item.officeId) : ''
+    ]);
+  }
+  for (const item of payload.dueSoon) {
+    rows.push([
+      'due-soon',
+      String(item.invoiceId),
+      item.invoiceNumber,
+      item.patientName,
+      item.dueAt,
+      '',
+      String(item.remainingAmountCents),
+      item.officeId != null ? String(item.officeId) : ''
+    ]);
+  }
+  for (const item of payload.highExpenses) {
+    rows.push([
+      'high-expense',
+      String(item.expenseId),
+      '',
+      '',
+      item.occurredAt,
+      item.title,
+      String(item.amountCents),
+      item.officeId != null ? String(item.officeId) : ''
+    ]);
+  }
+  for (const item of payload.unassignedOwnerOperations) {
+    rows.push([
+      'unassigned-owner',
+      String(item.id),
+      item.sourceType,
+      '',
+      item.occurredAt,
+      item.title,
+      '',
+      item.officeId != null ? String(item.officeId) : ''
+    ]);
+  }
+
+  const csv = [header, ...rows]
+    .map((line) => line.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(';'))
+    .join('\n');
+
+  const fileName = `billing-alerts-${datePart}.csv`;
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  return res.status(200).send(`\ufeff${csv}`);
+});
+
 app.get('/api/billing/invoices/:id', authMiddleware, requirePermission('read-billing-kpis'), (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
@@ -12329,6 +12849,11 @@ app.get('/api/billing/export', authMiddleware, requirePermission('export-billing
     return res.status(400).json({ message: 'Format invalide' });
   }
 
+  const mode = String(req.query.mode ?? 'standard').trim().toLowerCase();
+  if (!['standard', 'analytical'].includes(mode)) {
+    return res.status(400).json({ message: 'Mode d\'export invalide' });
+  }
+
   const range = buildBillingDateRange(req.query.from, req.query.to);
   const availableOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
   const filterOfficeIds = getScopedBillingOfficeIds(req.userAccess, req.query.officeId);
@@ -12346,7 +12871,17 @@ app.get('/api/billing/export', authMiddleware, requirePermission('export-billing
 
   const datePart = new Date().toISOString().slice(0, 10);
   if (format === 'json') {
-    const fileName = `comptabilite-${datePart}.json`;
+    const fileName = `comptabilite-${mode}-${datePart}.json`;
+    const officeNameById = new Map((payload.offices ?? []).map((office) => [Number(office.id), String(office.name ?? '').trim()]));
+    const ownerNameById = new Map((payload.users ?? []).map((user) => [Number(user.id), String(user.displayName ?? '').trim()]));
+    const operations = mode === 'analytical'
+      ? payload.operations.map((row) => ({
+        ...row,
+        officeName: row.officeId != null ? String(officeNameById.get(Number(row.officeId)) ?? '') : '',
+        ownerDisplayName: row.ownerUserId != null ? String(ownerNameById.get(Number(row.ownerUserId)) ?? '') : ''
+      }))
+      : payload.operations;
+
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     return res.status(200).send(JSON.stringify({
@@ -12354,15 +12889,22 @@ app.get('/api/billing/export', authMiddleware, requirePermission('export-billing
         exportedAt: new Date().toISOString(),
         from: range.fromIso,
         to: range.toIso,
-        count: payload.operations.length
+        count: payload.operations.length,
+        mode
       },
       summary: payload.summary,
-      operations: payload.operations
+      operations
     }, null, 2));
   }
 
-  const fileName = `comptabilite-${datePart}.csv`;
-  const header = ['Date', 'Titre', 'Debit', 'Credit', 'Devise', 'Retrocession', 'Facture', 'Type'];
+  const fileName = `comptabilite-${mode}-${datePart}.csv`;
+  const officeNameById = new Map((payload.offices ?? []).map((office) => [Number(office.id), String(office.name ?? '').trim()]));
+  const ownerNameById = new Map((payload.users ?? []).map((user) => [Number(user.id), String(user.displayName ?? '').trim()]));
+
+  const header = mode === 'analytical'
+    ? ['Date', 'Titre', 'Debit', 'Credit', 'Devise', 'Retrocession', 'Facture', 'Type', 'SourceId', 'Cabinet', 'CabinetId', 'Praticien', 'PraticienId']
+    : ['Date', 'Titre', 'Debit', 'Credit', 'Devise', 'Retrocession', 'Facture', 'Type'];
+
   const rows = payload.operations.map((row) => [
     row.occurredAt,
     row.title,
@@ -12371,7 +12913,16 @@ app.get('/api/billing/export', authMiddleware, requirePermission('export-billing
     row.currency,
     `${Number(row.retrocessionPercent ?? 0).toFixed(2)}% ${String(row.retrocessionRecipient ?? '').trim()}`.trim(),
     row.invoiceNumber,
-    row.sourceType
+    row.sourceType,
+    ...(mode === 'analytical'
+      ? [
+        String(row.sourceId),
+        row.officeId != null ? String(officeNameById.get(Number(row.officeId)) ?? '') : '',
+        row.officeId != null ? String(row.officeId) : '',
+        row.ownerUserId != null ? String(ownerNameById.get(Number(row.ownerUserId)) ?? '') : '',
+        row.ownerUserId != null ? String(row.ownerUserId) : ''
+      ]
+      : [])
   ]);
   const csv = [header, ...rows]
     .map((line) => line.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(';'))

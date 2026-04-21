@@ -1,12 +1,15 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
 import { ApiService } from '../../core/api.service';
 import {
+  BillingAlertsPayload,
   BillingDepositCandidate,
   BillingDepositDetail,
   BillingDepositListItem,
+  BillingForecastPayload,
+  BillingInsightsPayload,
   BillingOperation,
   BillingOperationsPayload,
   BillingUserOption,
@@ -14,6 +17,16 @@ import {
   OfficeOption
 } from '../../core/api.types';
 import { AuthService } from '../../core/auth.service';
+
+type ExportHistoryItem = {
+  id: string;
+  sessionId: string;
+  label: string;
+  operationsFormat: 'json' | 'excel';
+  alertsFormat: 'json' | 'excel';
+  status: 'success' | 'error';
+  createdAt: string;
+};
 
 @Component({
   selector: 'app-billing-page',
@@ -25,7 +38,12 @@ import { AuthService } from '../../core/auth.service';
   },
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class BillingPage {
+export class BillingPage implements OnDestroy {
+  private static readonly ALERT_FILTERS_STORAGE_KEY = 'billing-alert-filters-v1';
+  private static readonly EXPORT_HISTORY_STORAGE_KEY = 'billing-export-history-v1';
+  private alertsReloadTimeout: ReturnType<typeof setTimeout> | null = null;
+  private exportToastTimeout: ReturnType<typeof setTimeout> | null = null;
+
   private readonly api = inject(ApiService);
   private readonly authService = inject(AuthService);
 
@@ -33,6 +51,16 @@ export class BillingPage {
   readonly operations = signal<BillingOperation[]>([]);
   readonly offices = signal<OfficeOption[]>([]);
   readonly users = signal<BillingUserOption[]>([]);
+  readonly billingInsights = signal<BillingInsightsPayload | null>(null);
+  readonly billingForecast = signal<BillingForecastPayload | null>(null);
+  readonly billingAlerts = signal<BillingAlertsPayload | null>(null);
+  readonly debtorSearch = signal('');
+  readonly debtorSort = signal<'name' | 'invoices' | 'outstanding'>('outstanding');
+  readonly debtorSortDirection = signal<'asc' | 'desc'>('desc');
+  readonly debtorPage = signal(1);
+  readonly debtorPageSize = signal(5);
+  readonly exportHistoryPage = signal(1);
+  readonly exportHistoryPageSize = signal(10);
 
   readonly fromDate = signal('');
   readonly toDate = signal('');
@@ -42,8 +70,17 @@ export class BillingPage {
   readonly selectedOperationIds = signal<string[]>([]);
   readonly isLoading = signal(false);
   readonly isSaving = signal(false);
+  readonly isAlertsLoading = signal(false);
+  readonly isSnapshotExporting = signal(false);
   readonly errorMessage = signal('');
   readonly successMessage = signal('');
+  readonly exportHistory = signal<ExportHistoryItem[]>([]);
+  readonly exportHistoryFilter = signal<'all' | 'success' | 'error'>('all');
+  readonly exportHistorySort = signal<'date-desc' | 'date-asc' | 'status'>('date-desc');
+  readonly exportHistorySearch = signal('');
+  readonly exportToastMessage = signal('');
+  readonly exportToastType = signal<'success' | 'error'>('success');
+  readonly isExportToastVisible = signal(false);
 
   readonly expenseOccurredAt = signal(this.defaultNowDateTimeLocal());
   readonly expenseTitle = signal('');
@@ -73,6 +110,11 @@ export class BillingPage {
   readonly isDepositMenuOpen = signal(false);
   readonly isExportMenuOpen = signal(false);
 
+  readonly alertCategoryOverdue = signal(true);
+  readonly alertCategoryDueSoon = signal(true);
+  readonly alertCategoryHighExpenses = signal(true);
+  readonly alertCategoryUnassigned = signal(true);
+
   readonly bulkOwnerUserId = signal<number | null>(null);
   readonly bulkRetrocessionPercent = signal('');
   readonly bulkRetrocessionRecipient = signal('');
@@ -95,11 +137,133 @@ export class BillingPage {
     return this.operations().filter((operation) => selected.has(operation.id));
   });
 
+  readonly filteredTopDebtors = computed(() => {
+    const topDebtors = this.billingInsights()?.receivables?.topDebtors ?? [];
+    const query = this.debtorSearch().trim().toLowerCase();
+    if (!query) {
+      return topDebtors;
+    }
+
+    return topDebtors.filter((item) => String(item.patientName ?? '').toLowerCase().includes(query));
+  });
+
+  readonly sortedTopDebtors = computed(() => {
+    const rows = [...this.filteredTopDebtors()];
+    const direction = this.debtorSortDirection() === 'asc' ? 1 : -1;
+    const sortBy = this.debtorSort();
+
+    rows.sort((left, right) => {
+      if (sortBy === 'name') {
+        return direction * String(left.patientName ?? '').localeCompare(String(right.patientName ?? ''), 'fr');
+      }
+      if (sortBy === 'invoices') {
+        return direction * ((Number(left.invoiceCount ?? 0) - Number(right.invoiceCount ?? 0)) || String(left.patientName ?? '').localeCompare(String(right.patientName ?? ''), 'fr'));
+      }
+      return direction * ((Number(left.totalOutstandingCents ?? 0) - Number(right.totalOutstandingCents ?? 0)) || String(left.patientName ?? '').localeCompare(String(right.patientName ?? ''), 'fr'));
+    });
+
+    return rows;
+  });
+
+  readonly debtorTotalPages = computed(() => {
+    const pageSize = Math.max(1, Number(this.debtorPageSize() ?? 5));
+    return Math.max(1, Math.ceil(this.sortedTopDebtors().length / pageSize));
+  });
+
+  readonly pagedTopDebtors = computed(() => {
+    const pageSize = Math.max(1, Number(this.debtorPageSize() ?? 5));
+    const page = Math.min(Math.max(1, this.debtorPage()), this.debtorTotalPages());
+    const start = (page - 1) * pageSize;
+    return this.sortedTopDebtors().slice(start, start + pageSize);
+  });
+
+  readonly selectedAlertCategories = computed<Array<'overdue' | 'dueSoon' | 'highExpenses' | 'unassigned'>>(() => {
+    const categories: Array<'overdue' | 'dueSoon' | 'highExpenses' | 'unassigned'> = [];
+    if (this.alertCategoryOverdue()) {
+      categories.push('overdue');
+    }
+    if (this.alertCategoryDueSoon()) {
+      categories.push('dueSoon');
+    }
+    if (this.alertCategoryHighExpenses()) {
+      categories.push('highExpenses');
+    }
+    if (this.alertCategoryUnassigned()) {
+      categories.push('unassigned');
+    }
+    return categories;
+  });
+
+  readonly hasAnyAlertCategorySelected = computed(() => this.selectedAlertCategories().length > 0);
+  readonly activeAlertCategoryCount = computed(() => this.selectedAlertCategories().length);
+  readonly filteredExportHistory = computed(() => {
+    const filter = this.exportHistoryFilter();
+    if (filter === 'all') {
+      return this.exportHistory();
+    }
+    return this.exportHistory().filter((item) => item.status === filter);
+  });
+
+  readonly searchedExportHistory = computed(() => {
+    const query = this.exportHistorySearch().trim().toLowerCase();
+    const searched = query.length === 0
+      ? this.filteredExportHistory()
+      : this.filteredExportHistory().filter((item) => {
+        const label = String(item.label ?? '').toLowerCase();
+        const sessionId = String(item.sessionId ?? '').toLowerCase();
+        return label.includes(query) || sessionId.includes(query);
+      });
+
+    const rows = [...searched];
+    const sort = this.exportHistorySort();
+    if (sort === 'date-asc') {
+      return rows.sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime());
+    }
+    if (sort === 'status') {
+      return rows.sort((left, right) => {
+        if (left.status === right.status) {
+          return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+        }
+        return left.status === 'error' ? -1 : 1;
+      });
+    }
+    return rows.sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
+  });
+
+  readonly totalExportHistoryPages = computed(() => {
+    const total = this.searchedExportHistory().length;
+    const pageSize = this.exportHistoryPageSize();
+    return Math.max(1, Math.ceil(total / pageSize));
+  });
+
+  readonly displayedExportHistory = computed(() => {
+    const searched = this.searchedExportHistory();
+    const page = this.exportHistoryPage();
+    const pageSize = this.exportHistoryPageSize();
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    return searched.slice(start, end);
+  });
+
   constructor() {
+    this.restoreAlertCategories();
+    this.restoreExportHistory();
+
     const now = new Date();
     this.fromDate.set(this.toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)));
     this.toDate.set(this.toDateInputValue(new Date(now.getFullYear(), now.getMonth() + 1, 0)));
     void this.load();
+  }
+
+  ngOnDestroy(): void {
+    if (this.alertsReloadTimeout != null) {
+      clearTimeout(this.alertsReloadTimeout);
+      this.alertsReloadTimeout = null;
+    }
+    if (this.exportToastTimeout != null) {
+      clearTimeout(this.exportToastTimeout);
+      this.exportToastTimeout = null;
+    }
   }
 
   async applyPreset(preset: 'today' | 'yesterday' | 'month' | 'lastMonth' | 'year' | 'lastYear'): Promise<void> {
@@ -539,7 +703,7 @@ export class BillingPage {
     }
   }
 
-  async exportOperations(format: 'json' | 'excel'): Promise<void> {
+  async exportOperations(format: 'json' | 'excel', mode: 'standard' | 'analytical' = 'standard'): Promise<void> {
     this.closeActionMenus();
     if (!this.canExportBilling()) {
       this.errorMessage.set('Vous n\'avez pas le droit d\'exporter la comptabilite.');
@@ -550,9 +714,12 @@ export class BillingPage {
     this.errorMessage.set('');
     this.successMessage.set('');
     try {
-      const blob = await this.api.exportBillingOperations(format, this.buildFilters());
+      const blob = await this.api.exportBillingOperations(format, {
+        ...this.buildFilters(),
+        mode
+      });
       const extension = format === 'json' ? 'json' : 'csv';
-      const fileName = `comptabilite-${new Date().toISOString().slice(0, 10)}.${extension}`;
+      const fileName = `comptabilite-${mode}-${new Date().toISOString().slice(0, 10)}.${extension}`;
       this.downloadBlob(blob, fileName);
       this.successMessage.set('Export termine.');
     } catch {
@@ -560,6 +727,256 @@ export class BillingPage {
     } finally {
       this.isSaving.set(false);
     }
+  }
+
+  async exportAlertsCsv(): Promise<void> {
+    await this.exportAlerts('excel');
+  }
+
+  async exportAlertsJson(): Promise<void> {
+    await this.exportAlerts('json');
+  }
+
+  async exportSnapshotPack(format: 'json' | 'excel'): Promise<void> {
+    await this.exportSnapshotPackInternal(format, format);
+  }
+
+  async exportSnapshotPackMixed(): Promise<void> {
+    await this.exportSnapshotPackInternal('excel', 'json');
+  }
+
+  private async exportSnapshotPackInternal(
+    operationsFormat: 'json' | 'excel',
+    alertsFormat: 'json' | 'excel'
+  ): Promise<void> {
+    this.closeActionMenus();
+    if (!this.canExportBilling()) {
+      this.errorMessage.set('Vous n\'avez pas le droit d\'exporter la comptabilite.');
+      this.showExportToast('Export non autorise.', 'error');
+      return;
+    }
+    if (this.isSnapshotExporting()) {
+      this.errorMessage.set('Un pack export est deja en cours.');
+      this.showExportToast('Un pack est deja en cours.', 'error');
+      return;
+    }
+
+    const categories = this.selectedAlertCategories();
+    if (categories.length === 0) {
+      this.errorMessage.set('Selectionnez au moins une categorie d\'alerte.');
+      this.showExportToast('Selectionnez une categorie d\'alerte.', 'error');
+      return;
+    }
+
+    const createdAt = new Date().toISOString();
+    const sessionId = this.buildExportSessionId();
+    const label = operationsFormat === alertsFormat
+      ? `Pack ${operationsFormat === 'json' ? 'JSON' : 'CSV'}`
+      : 'Pack mixte (compta CSV + alertes JSON)';
+
+    this.isSnapshotExporting.set(true);
+    this.isSaving.set(true);
+    this.errorMessage.set('');
+    this.successMessage.set('');
+    try {
+      const [operationsBlob, alertsBlob] = await Promise.all([
+        this.api.exportBillingOperations(operationsFormat, {
+          ...this.buildFilters(),
+          mode: 'analytical'
+        }),
+        this.api.exportBillingAlerts(alertsFormat, this.selectedOfficeId(), categories)
+      ]);
+
+      const operationsExtension = operationsFormat === 'json' ? 'json' : 'csv';
+      const alertsExtension = alertsFormat === 'json' ? 'json' : 'csv';
+      const datePart = new Date().toISOString().slice(0, 10);
+      this.downloadBlob(operationsBlob, `snapshot-comptabilite-analytical-${datePart}-${sessionId}.${operationsExtension}`);
+      this.downloadBlob(alertsBlob, `snapshot-alertes-${datePart}-${sessionId}.${alertsExtension}`);
+      this.successMessage.set(`Pack export telecharge (${label.toLowerCase()}).`);
+      this.showExportToast('Pack export termine.', 'success');
+      this.pushExportHistory({
+        id: `${createdAt}-success-${Math.random().toString(36).slice(2, 8)}`,
+        sessionId,
+        label,
+        operationsFormat,
+        alertsFormat,
+        status: 'success',
+        createdAt
+      });
+    } catch {
+      this.errorMessage.set('Impossible d\'exporter le pack.');
+      this.showExportToast('Echec du pack export.', 'error');
+      this.pushExportHistory({
+        id: `${createdAt}-error-${Math.random().toString(36).slice(2, 8)}`,
+        sessionId,
+        label,
+        operationsFormat,
+        alertsFormat,
+        status: 'error',
+        createdAt
+      });
+    } finally {
+      this.isSnapshotExporting.set(false);
+      this.isSaving.set(false);
+    }
+  }
+
+  onDebtorSearchInput(value: string): void {
+    this.debtorSearch.set(String(value ?? ''));
+    this.debtorPage.set(1);
+  }
+
+  setDebtorSort(sortBy: 'name' | 'invoices' | 'outstanding'): void {
+    if (this.debtorSort() === sortBy) {
+      this.debtorSortDirection.set(this.debtorSortDirection() === 'asc' ? 'desc' : 'asc');
+    } else {
+      this.debtorSort.set(sortBy);
+      this.debtorSortDirection.set(sortBy === 'name' ? 'asc' : 'desc');
+    }
+    this.debtorPage.set(1);
+  }
+
+  previousDebtorPage(): void {
+    this.debtorPage.set(Math.max(1, this.debtorPage() - 1));
+  }
+
+  nextDebtorPage(): void {
+    this.debtorPage.set(Math.min(this.debtorTotalPages(), this.debtorPage() + 1));
+  }
+
+  debtorSortIcon(sortBy: 'name' | 'invoices' | 'outstanding'): string {
+    if (this.debtorSort() !== sortBy) {
+      return 'fa-sort';
+    }
+    return this.debtorSortDirection() === 'asc' ? 'fa-sort-up' : 'fa-sort-down';
+  }
+
+  toggleAlertCategory(category: 'overdue' | 'dueSoon' | 'highExpenses' | 'unassigned', checked: boolean): void {
+    if (category === 'overdue') {
+      this.alertCategoryOverdue.set(checked);
+      this.persistAlertCategories();
+      this.scheduleAlertsReload();
+      return;
+    }
+    if (category === 'dueSoon') {
+      this.alertCategoryDueSoon.set(checked);
+      this.persistAlertCategories();
+      this.scheduleAlertsReload();
+      return;
+    }
+    if (category === 'highExpenses') {
+      this.alertCategoryHighExpenses.set(checked);
+      this.persistAlertCategories();
+      this.scheduleAlertsReload();
+      return;
+    }
+    this.alertCategoryUnassigned.set(checked);
+    this.persistAlertCategories();
+    this.scheduleAlertsReload();
+  }
+
+  resetAlertCategories(): void {
+    this.alertCategoryOverdue.set(true);
+    this.alertCategoryDueSoon.set(true);
+    this.alertCategoryHighExpenses.set(true);
+    this.alertCategoryUnassigned.set(true);
+    this.persistAlertCategories();
+    this.scheduleAlertsReload();
+  }
+
+  selectAllAlertCategories(): void {
+    this.alertCategoryOverdue.set(true);
+    this.alertCategoryDueSoon.set(true);
+    this.alertCategoryHighExpenses.set(true);
+    this.alertCategoryUnassigned.set(true);
+    this.persistAlertCategories();
+    this.scheduleAlertsReload();
+  }
+
+  clearAlertCategories(): void {
+    this.alertCategoryOverdue.set(false);
+    this.alertCategoryDueSoon.set(false);
+    this.alertCategoryHighExpenses.set(false);
+    this.alertCategoryUnassigned.set(false);
+    this.persistAlertCategories();
+    this.scheduleAlertsReload();
+  }
+
+  private async exportAlerts(format: 'json' | 'excel'): Promise<void> {
+    this.closeActionMenus();
+    if (!this.canExportBilling()) {
+      this.errorMessage.set('Vous n\'avez pas le droit d\'exporter la comptabilite.');
+      return;
+    }
+
+    this.isSaving.set(true);
+    this.errorMessage.set('');
+    this.successMessage.set('');
+    try {
+      const categories = this.selectedAlertCategories();
+      if (categories.length === 0) {
+        this.errorMessage.set('Selectionnez au moins une categorie d\'alerte.');
+        return;
+      }
+
+      const blob = await this.api.exportBillingAlerts(format, this.selectedOfficeId(), categories);
+      const extension = format === 'json' ? 'json' : 'csv';
+      const fileName = `billing-alerts-${new Date().toISOString().slice(0, 10)}.${extension}`;
+      this.downloadBlob(blob, fileName);
+      this.successMessage.set(`Export ${format === 'json' ? 'JSON' : 'CSV'} des alertes termine.`);
+    } catch {
+      this.errorMessage.set('Impossible d\'exporter les alertes.');
+    } finally {
+      this.isSaving.set(false);
+    }
+  }
+
+  private async reloadAlerts(): Promise<void> {
+    const filters = this.buildFilters();
+    const categories = this.selectedAlertCategories();
+    if (categories.length === 0) {
+      this.billingAlerts.set(this.emptyAlertsPayload());
+      return;
+    }
+
+    this.isAlertsLoading.set(true);
+    try {
+      const alerts = await this.api.getBillingAlerts(filters.officeId, categories);
+      this.billingAlerts.set(alerts);
+    } catch {
+      this.billingAlerts.set(null);
+    } finally {
+      this.isAlertsLoading.set(false);
+    }
+  }
+
+  private scheduleAlertsReload(): void {
+    if (this.alertsReloadTimeout != null) {
+      clearTimeout(this.alertsReloadTimeout);
+      this.alertsReloadTimeout = null;
+    }
+
+    this.isAlertsLoading.set(true);
+    this.alertsReloadTimeout = setTimeout(() => {
+      this.alertsReloadTimeout = null;
+      void this.reloadAlerts();
+    }, 180);
+  }
+
+  private emptyAlertsPayload(): BillingAlertsPayload {
+    return {
+      generatedAt: new Date().toISOString(),
+      summary: {
+        overdueCriticalCount: 0,
+        dueSoonCount: 0,
+        highExpensesCount: 0,
+        unassignedOwnerCount: 0
+      },
+      overdueCritical: [],
+      dueSoon: [],
+      highExpenses: [],
+      unassignedOwnerOperations: []
+    };
   }
 
   formatDateTime(value: string): string {
@@ -581,6 +998,11 @@ export class BillingPage {
     return `${(Number(cents ?? 0) / 100).toFixed(2)} ${currency}`;
   }
 
+  formatPercent(value: number): string {
+    const normalized = Number.isFinite(value) ? value : 0;
+    return `${normalized >= 0 ? '+' : ''}${normalized.toFixed(2)}%`;
+  }
+
   operationPaymentLabel(operation: BillingOperation): string {
     if (operation.paymentRef.type === 'patient') {
       return 'Fiche patient';
@@ -593,15 +1015,222 @@ export class BillingPage {
 
   private async load(): Promise<void> {
     this.isLoading.set(true);
+    this.isAlertsLoading.set(true);
     this.errorMessage.set('');
     try {
-      const payload = await this.api.getBillingOperations(this.buildFilters());
-      this.applyPayload(payload);
+      const filters = this.buildFilters();
+      const categories = this.selectedAlertCategories();
+      const [operationsResult, insightsResult, forecastResult, alertsResult] = await Promise.allSettled([
+        this.api.getBillingOperations(filters),
+        this.api.getBillingInsights({
+          from: filters.from,
+          to: filters.to,
+          officeId: filters.officeId
+        }),
+        this.api.getBillingForecast(filters.officeId),
+        categories.length > 0
+          ? this.api.getBillingAlerts(filters.officeId, categories)
+          : Promise.resolve(this.emptyAlertsPayload())
+      ]);
+
+      if (operationsResult.status === 'fulfilled') {
+        this.applyPayload(operationsResult.value);
+      } else {
+        throw operationsResult.reason;
+      }
+
+      this.billingInsights.set(insightsResult.status === 'fulfilled' ? insightsResult.value : null);
+      this.billingForecast.set(forecastResult.status === 'fulfilled' ? forecastResult.value : null);
+      this.billingAlerts.set(alertsResult.status === 'fulfilled' ? alertsResult.value : null);
     } catch {
       this.errorMessage.set('Impossible de charger les operations comptables.');
     } finally {
       this.isLoading.set(false);
+      this.isAlertsLoading.set(false);
     }
+  }
+
+  private persistAlertCategories(): void {
+    try {
+      const payload = {
+        overdue: this.alertCategoryOverdue(),
+        dueSoon: this.alertCategoryDueSoon(),
+        highExpenses: this.alertCategoryHighExpenses(),
+        unassigned: this.alertCategoryUnassigned()
+      };
+      localStorage.setItem(BillingPage.ALERT_FILTERS_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // Storage may be unavailable (private mode / tests), keep runtime state only.
+    }
+  }
+
+  private restoreAlertCategories(): void {
+    try {
+      const raw = localStorage.getItem(BillingPage.ALERT_FILTERS_STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+      const parsed = JSON.parse(raw) as {
+        overdue?: boolean;
+        dueSoon?: boolean;
+        highExpenses?: boolean;
+        unassigned?: boolean;
+      };
+
+      this.alertCategoryOverdue.set(parsed.overdue !== false);
+      this.alertCategoryDueSoon.set(parsed.dueSoon !== false);
+      this.alertCategoryHighExpenses.set(parsed.highExpenses !== false);
+      this.alertCategoryUnassigned.set(parsed.unassigned !== false);
+    } catch {
+      this.alertCategoryOverdue.set(true);
+      this.alertCategoryDueSoon.set(true);
+      this.alertCategoryHighExpenses.set(true);
+      this.alertCategoryUnassigned.set(true);
+    }
+  }
+
+  private pushExportHistory(item: ExportHistoryItem): void {
+    const next = [item, ...this.exportHistory()].slice(0, 100);
+    this.exportHistory.set(next);
+    this.persistExportHistory(next);
+  }
+
+  setExportHistoryFilter(filter: 'all' | 'success' | 'error'): void {
+    this.exportHistoryFilter.set(filter);
+    this.exportHistoryPage.set(1);
+  }
+
+  setExportHistorySort(sort: 'date-desc' | 'date-asc' | 'status'): void {
+    this.exportHistorySort.set(sort);
+    this.exportHistoryPage.set(1);
+  }
+
+  onExportHistorySearchInput(value: string): void {
+    this.exportHistorySearch.set(String(value ?? ''));
+    this.exportHistoryPage.set(1);
+  }
+
+  goToExportHistoryPage(page: number): void {
+    const total = this.totalExportHistoryPages();
+    if (page >= 1 && page <= total) {
+      this.exportHistoryPage.set(page);
+    }
+  }
+
+  nextExportHistoryPage(): void {
+    const current = this.exportHistoryPage();
+    const total = this.totalExportHistoryPages();
+    if (current < total) {
+      this.exportHistoryPage.set(current + 1);
+    }
+  }
+
+  prevExportHistoryPage(): void {
+    const current = this.exportHistoryPage();
+    if (current > 1) {
+      this.exportHistoryPage.set(current - 1);
+    }
+  }
+
+  clearExportHistory(): void {
+    this.exportHistory.set([]);
+    this.persistExportHistory([]);
+  }
+
+  async copyExportSessionId(sessionId: string): Promise<void> {
+    const normalized = String(sessionId ?? '').trim();
+    if (!normalized) {
+      this.showExportToast('Session invalide.', 'error');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(normalized);
+      this.showExportToast(`Session ${normalized} copiee.`, 'success');
+    } catch {
+      this.showExportToast('Impossible de copier la session.', 'error');
+    }
+  }
+
+  exportHistoryCsv(): void {
+    const rows = this.displayedExportHistory();
+    if (rows.length === 0) {
+      this.showExportToast('Aucun element a exporter.', 'error');
+      return;
+    }
+
+    const header = ['Date', 'SessionId', 'Label', 'OperationsFormat', 'AlertsFormat', 'Status'];
+    const csvRows = rows.map((item) => [
+      item.createdAt,
+      item.sessionId,
+      item.label,
+      item.operationsFormat,
+      item.alertsFormat,
+      item.status
+    ]);
+    const csv = [header, ...csvRows]
+      .map((line) => line.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(';'))
+      .join('\n');
+
+    const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
+    this.downloadBlob(blob, `export-history-${new Date().toISOString().slice(0, 10)}.csv`);
+    this.showExportToast('Historique exporte en CSV.', 'success');
+  }
+
+  private showExportToast(message: string, type: 'success' | 'error'): void {
+    this.exportToastMessage.set(message);
+    this.exportToastType.set(type);
+    this.isExportToastVisible.set(true);
+
+    if (this.exportToastTimeout != null) {
+      clearTimeout(this.exportToastTimeout);
+      this.exportToastTimeout = null;
+    }
+
+    this.exportToastTimeout = setTimeout(() => {
+      this.isExportToastVisible.set(false);
+      this.exportToastTimeout = null;
+    }, 3000);
+  }
+
+  private persistExportHistory(items: ExportHistoryItem[]): void {
+    try {
+      localStorage.setItem(BillingPage.EXPORT_HISTORY_STORAGE_KEY, JSON.stringify(items));
+    } catch {
+      // Ignore storage failures.
+    }
+  }
+
+  private restoreExportHistory(): void {
+    try {
+      const raw = localStorage.getItem(BillingPage.EXPORT_HISTORY_STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+      const parsed = JSON.parse(raw) as ExportHistoryItem[];
+      if (!Array.isArray(parsed)) {
+        return;
+      }
+      const sanitized: ExportHistoryItem[] = parsed
+        .filter((item) => item && typeof item === 'object')
+        .slice(0, 12)
+        .map((item) => ({
+          id: String(item.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+          sessionId: String(item.sessionId ?? this.buildExportSessionId()),
+          label: String(item.label ?? 'Pack export'),
+          operationsFormat: item.operationsFormat === 'json' ? 'json' as const : 'excel' as const,
+          alertsFormat: item.alertsFormat === 'excel' ? 'excel' as const : 'json' as const,
+          status: item.status === 'error' ? 'error' as const : 'success' as const,
+          createdAt: String(item.createdAt ?? new Date().toISOString())
+        }));
+      this.exportHistory.set(sanitized);
+    } catch {
+      this.exportHistory.set([]);
+    }
+  }
+
+  private buildExportSessionId(): string {
+    return Math.random().toString(36).slice(2, 8).toUpperCase();
   }
 
   private applyPayload(payload: BillingOperationsPayload): void {

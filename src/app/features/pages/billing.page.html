@@ -36,21 +36,49 @@
         <button
           type="button"
           class="btn btn-outline-secondary btn-sm dropdown-toggle"
+          data-bs-toggle="dropdown"
           [class.show]="isExportMenuOpen()"
           [attr.aria-expanded]="isExportMenuOpen()"
           aria-label="Ouvrir le menu des exports"
           (click)="toggleExportMenu()">
           <i class="fa-solid fa-file-export me-1"></i>Exports
         </button>
-        <ul class="dropdown-menu" [class.show]="isExportMenuOpen()">
+        <ul class="dropdown-menu dropdown-menu-end" [class.show]="isExportMenuOpen()">
           <li>
-            <button type="button" class="dropdown-item" (click)="exportOperations('excel')">
+            <button type="button" class="dropdown-item" (click)="exportOperations('excel', 'standard')">
               <i class="fa-solid fa-file-excel me-2"></i>Export Excel
             </button>
           </li>
           <li>
-            <button type="button" class="dropdown-item" (click)="exportOperations('json')">
+            <button type="button" class="dropdown-item" (click)="exportOperations('json', 'standard')">
               <i class="fa-solid fa-file-code me-2"></i>Export JSON
+            </button>
+          </li>
+          <li><hr class="dropdown-divider" /></li>
+          <li>
+            <button type="button" class="dropdown-item" (click)="exportOperations('excel', 'analytical')">
+              <i class="fa-solid fa-chart-line me-2"></i>Export Excel analytique
+            </button>
+          </li>
+          <li>
+            <button type="button" class="dropdown-item" (click)="exportOperations('json', 'analytical')">
+              <i class="fa-solid fa-database me-2"></i>Export JSON analytique
+            </button>
+          </li>
+          <li><hr class="dropdown-divider" /></li>
+          <li>
+            <button type="button" class="dropdown-item" [disabled]="isSnapshotExporting() || isSaving()" (click)="exportSnapshotPack('excel')">
+              <i class="fa-solid fa-box-archive me-2"></i>Pack export CSV
+            </button>
+          </li>
+          <li>
+            <button type="button" class="dropdown-item" [disabled]="isSnapshotExporting() || isSaving()" (click)="exportSnapshotPack('json')">
+              <i class="fa-solid fa-box-open me-2"></i>Pack export JSON
+            </button>
+          </li>
+          <li>
+            <button type="button" class="dropdown-item" [disabled]="isSnapshotExporting() || isSaving()" (click)="exportSnapshotPackMixed()">
+              <i class="fa-solid fa-layer-group me-2"></i>Pack export mixte
             </button>
           </li>
         </ul>
@@ -58,6 +86,90 @@
     }
   </div>
 </section>
+
+@if (isExportToastVisible()) {
+  <section class="mb-3" aria-label="Notification export">
+    <div [class]="exportToastType() === 'success' ? 'alert alert-success py-2 mb-0' : 'alert alert-danger py-2 mb-0'">
+      {{ exportToastMessage() }}
+    </div>
+  </section>
+}
+
+@if (exportHistory().length > 0) {
+  <section class="card mb-3" aria-label="Historique exports">
+    <div class="card-body py-2">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="mb-0">Historique exports</h6>
+        <div class="d-flex align-items-center gap-2">
+          <input
+            type="search"
+            class="form-control form-control-sm"
+            style="max-width: 220px"
+            placeholder="Rechercher session/label"
+            [value]="exportHistorySearch()"
+            (input)="onExportHistorySearchInput($any($event.target).value || '')" />
+          <div class="btn-group btn-group-sm">
+            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistoryFilter() === 'all'" (click)="setExportHistoryFilter('all')">Tous</button>
+            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistoryFilter() === 'success'" (click)="setExportHistoryFilter('success')">OK</button>
+            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistoryFilter() === 'error'" (click)="setExportHistoryFilter('error')">Erreurs</button>
+          </div>
+          <div class="btn-group btn-group-sm">
+            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistorySort() === 'date-desc'" (click)="setExportHistorySort('date-desc')">Date ↓</button>
+            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistorySort() === 'date-asc'" (click)="setExportHistorySort('date-asc')">Date ↑</button>
+            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistorySort() === 'status'" (click)="setExportHistorySort('status')">Statut</button>
+          </div>
+          <button type="button" class="btn btn-outline-primary btn-sm" (click)="exportHistoryCsv()">CSV</button>
+          <button type="button" class="btn btn-outline-danger btn-sm" (click)="clearExportHistory()">Vider</button>
+          @if (isSnapshotExporting()) {
+            <span class="small text-secondary">
+              <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+              Pack en cours...
+            </span>
+          }
+        </div>
+      </div>
+      <ul class="list-group list-group-flush small">
+        @if (displayedExportHistory().length === 0) {
+          <li class="list-group-item px-0 text-secondary">Aucun export sur ce filtre.</li>
+        } @else {
+          @for (item of displayedExportHistory(); track item.id) {
+            <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
+              <span>
+                {{ item.label }}
+                <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" (click)="copyExportSessionId(item.sessionId)">
+                  #{{ item.sessionId }}
+                </button>
+                <span class="text-secondary">({{ item.operationsFormat.toUpperCase() }} / {{ item.alertsFormat.toUpperCase() }})</span>
+              </span>
+              <span class="d-flex align-items-center gap-2">
+                <span [class]="item.status === 'success' ? 'badge text-bg-success' : 'badge text-bg-danger'">
+                  {{ item.status === 'success' ? 'OK' : 'Erreur' }}
+                </span>
+                <span class="text-secondary">{{ formatDateTime(item.createdAt) }}</span>
+              </span>
+            </li>
+          }
+        }
+      </ul>
+      @if (searchedExportHistory().length > 0) {
+        <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top small">
+          <div>
+            <span class="text-secondary">
+              Page {{ exportHistoryPage() }} de {{ totalExportHistoryPages() }}
+              @if (searchedExportHistory().length > 0) {
+                <span class="ms-2">({{ searchedExportHistory().length }} export<@if (searchedExportHistory().length > 1) {s})</span>
+              }
+            </span>
+          </div>
+          <div class="btn-group btn-group-sm">
+            <button type="button" class="btn btn-outline-secondary" [disabled]="exportHistoryPage() === 1" (click)="prevExportHistoryPage()">← Prec</button>
+            <button type="button" class="btn btn-outline-secondary" [disabled]="exportHistoryPage() === totalExportHistoryPages()" (click)="nextExportHistoryPage()">Suiv →</button>
+          </div>
+        </div>
+      }
+    </div>
+  </section>
+}
 
 <section class="card mb-3">
   <div class="card-body">
@@ -114,6 +226,310 @@
     </article>
   }
 </section>
+
+@if (billingInsights(); as insights) {
+  <section class="row g-3 mt-1" aria-label="Tendances comptables">
+    <article class="col-12 col-md-6 col-xl-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <p class="text-secondary text-uppercase small mb-1">Evolution credits</p>
+          <p class="fs-5 fw-bold mb-1">{{ formatPercent(insights.kpis.trends.creditsPercent) }}</p>
+          <p class="text-secondary mb-0">vs periode precedente</p>
+        </div>
+      </div>
+    </article>
+    <article class="col-12 col-md-6 col-xl-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <p class="text-secondary text-uppercase small mb-1">Evolution resultat</p>
+          <p class="fs-5 fw-bold mb-1">{{ formatPercent(insights.kpis.trends.netPercent) }}</p>
+          <p class="text-secondary mb-0">net periodique</p>
+        </div>
+      </div>
+    </article>
+    <article class="col-12 col-md-6 col-xl-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <p class="text-secondary text-uppercase small mb-1">Encours total</p>
+          <p class="fs-5 fw-bold mb-1">{{ formatCurrency(insights.receivables.totalOutstandingCents, 'EUR') }}</p>
+          <p class="text-secondary mb-0">{{ insights.receivables.totalOutstandingCount }} facture(s)</p>
+        </div>
+      </div>
+    </article>
+    <article class="col-12 col-md-6 col-xl-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <p class="text-secondary text-uppercase small mb-1">Retard critique (+60j)</p>
+          <p class="fs-5 fw-bold mb-1">{{ formatCurrency(insights.receivables.aging.late61plus.amountCents, 'EUR') }}</p>
+          <p class="text-secondary mb-0">{{ insights.receivables.aging.late61plus.count }} facture(s)</p>
+        </div>
+      </div>
+    </article>
+  </section>
+}
+
+<section class="row g-3 mt-1" aria-label="Forecast et alertes">
+  <article class="col-12 col-xl-6">
+    <div class="card h-100">
+      <div class="card-body">
+        <h6 class="mb-3">Forecast tresorerie</h6>
+        @if (billingForecast(); as forecast) {
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Horizon</th>
+                  <th class="text-end">Recouvrements attendus</th>
+                  <th class="text-end">Projection net run-rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (horizon of ['30', '60', '90']; track horizon) {
+                  <tr>
+                    <td>{{ horizon }} jours</td>
+                    <td class="text-end">{{ formatCurrency(forecast.horizons[horizon]?.expectedReceiptsCents ?? 0, 'EUR') }}</td>
+                    <td class="text-end">{{ formatCurrency(forecast.horizons[horizon]?.projectedNetRunRateCents ?? 0, 'EUR') }}</td>
+                  </tr>
+                }
+                <tr>
+                  <th>Encours en retard</th>
+                  <th class="text-end" colspan="2">{{ formatCurrency(forecast.overdueOutstandingCents, 'EUR') }}</th>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <p class="text-secondary mb-0">Forecast indisponible pour le moment.</p>
+        }
+      </div>
+    </div>
+  </article>
+
+  <article class="col-12 col-xl-6">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="mb-0">Alertes operationnelles</h6>
+          <div class="btn-group btn-group-sm">
+            <button
+              type="button"
+              class="btn btn-outline-secondary"
+              [disabled]="isSaving() || !canExportBilling() || !hasAnyAlertCategorySelected()"
+              (click)="exportAlertsCsv()">
+              <i class="fa-solid fa-file-csv me-1"></i>CSV
+            </button>
+            <button
+              type="button"
+              class="btn btn-outline-secondary"
+              [disabled]="isSaving() || !canExportBilling() || !hasAnyAlertCategorySelected()"
+              (click)="exportAlertsJson()">
+              <i class="fa-solid fa-file-code me-1"></i>JSON
+            </button>
+          </div>
+        </div>
+        @if (billingAlerts(); as alerts) {
+          <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <span class="badge text-bg-light border">Filtres actifs: {{ activeAlertCategoryCount() }}/4</span>
+            <button
+              type="button"
+              class="btn btn-outline-secondary btn-sm py-0 px-2"
+              [disabled]="isAlertsLoading()"
+              (click)="selectAllAlertCategories()">
+              Tout cocher
+            </button>
+            <button
+              type="button"
+              class="btn btn-outline-secondary btn-sm py-0 px-2"
+              [disabled]="isAlertsLoading()"
+              (click)="clearAlertCategories()">
+              Tout decocher
+            </button>
+          </div>
+
+          <div class="d-flex flex-wrap gap-3 mb-3 small">
+            <div class="form-check">
+              <input
+                id="alert-filter-overdue"
+                type="checkbox"
+                class="form-check-input"
+                [checked]="alertCategoryOverdue()"
+                (change)="toggleAlertCategory('overdue', !!$any($event.target).checked)" />
+              <label class="form-check-label" for="alert-filter-overdue">Retards critiques</label>
+            </div>
+            <div class="form-check">
+              <input
+                id="alert-filter-due-soon"
+                type="checkbox"
+                class="form-check-input"
+                [checked]="alertCategoryDueSoon()"
+                (change)="toggleAlertCategory('dueSoon', !!$any($event.target).checked)" />
+              <label class="form-check-label" for="alert-filter-due-soon">Echeances 7j</label>
+            </div>
+            <div class="form-check">
+              <input
+                id="alert-filter-high-expenses"
+                type="checkbox"
+                class="form-check-input"
+                [checked]="alertCategoryHighExpenses()"
+                (change)="toggleAlertCategory('highExpenses', !!$any($event.target).checked)" />
+              <label class="form-check-label" for="alert-filter-high-expenses">Depenses elevees</label>
+            </div>
+            <div class="form-check">
+              <input
+                id="alert-filter-unassigned"
+                type="checkbox"
+                class="form-check-input"
+                [checked]="alertCategoryUnassigned()"
+                (change)="toggleAlertCategory('unassigned', !!$any($event.target).checked)" />
+              <label class="form-check-label" for="alert-filter-unassigned">Sans proprietaire</label>
+            </div>
+            <button
+              type="button"
+              class="btn btn-outline-secondary btn-sm py-0 px-2"
+              [disabled]="isAlertsLoading()"
+              (click)="resetAlertCategories()">
+              Reinitialiser
+            </button>
+          </div>
+
+          @if (isAlertsLoading()) {
+            <p class="small text-secondary mb-2">
+              <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+              Mise a jour des alertes...
+            </p>
+          }
+
+          <div class="d-flex flex-wrap gap-2 mb-3">
+            @if (alertCategoryOverdue()) {
+              <span class="badge text-bg-danger">Retards critiques: {{ alerts.summary.overdueCriticalCount }}</span>
+            }
+            @if (alertCategoryDueSoon()) {
+              <span class="badge text-bg-warning">Echeances 7j: {{ alerts.summary.dueSoonCount }}</span>
+            }
+            @if (alertCategoryHighExpenses()) {
+              <span class="badge text-bg-info">Depenses elevees: {{ alerts.summary.highExpensesCount }}</span>
+            }
+            @if (alertCategoryUnassigned()) {
+              <span class="badge text-bg-secondary">Sans proprietaire: {{ alerts.summary.unassignedOwnerCount }}</span>
+            }
+          </div>
+
+          @if (!hasAnyAlertCategorySelected()) {
+            <p class="text-secondary mb-0">Selectionnez au moins une categorie d'alerte.</p>
+          } @else if (alertCategoryOverdue() && alerts.overdueCritical.length > 0) {
+            <p class="small fw-semibold mb-1">Top retards critiques</p>
+            <ul class="list-group list-group-flush small">
+              @for (item of alerts.overdueCritical.slice(0, 5); track item.invoiceId) {
+                <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                  <span>#{{ item.invoiceNumber || item.invoiceId }} - {{ item.patientName }}</span>
+                  <span class="text-danger fw-semibold">{{ item.daysLate }}j / {{ formatCurrency(item.remainingAmountCents, 'EUR') }}</span>
+                </li>
+              }
+            </ul>
+          } @else if (alertCategoryDueSoon() && alerts.dueSoon.length > 0) {
+            <p class="small fw-semibold mb-1">Factures a echeance proche</p>
+            <ul class="list-group list-group-flush small">
+              @for (item of alerts.dueSoon.slice(0, 5); track item.invoiceId) {
+                <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                  <span>#{{ item.invoiceNumber || item.invoiceId }} - {{ item.patientName }}</span>
+                  <span class="text-warning fw-semibold">{{ formatCurrency(item.remainingAmountCents, 'EUR') }}</span>
+                </li>
+              }
+            </ul>
+          } @else if (alertCategoryHighExpenses() && alerts.highExpenses.length > 0) {
+            <p class="small fw-semibold mb-1">Depenses elevees recentes</p>
+            <ul class="list-group list-group-flush small">
+              @for (item of alerts.highExpenses.slice(0, 5); track item.expenseId) {
+                <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                  <span>{{ item.title }}</span>
+                  <span class="text-info fw-semibold">{{ formatCurrency(item.amountCents, item.currency) }}</span>
+                </li>
+              }
+            </ul>
+          } @else if (alertCategoryUnassigned() && alerts.unassignedOwnerOperations.length > 0) {
+            <p class="small fw-semibold mb-1">Operations sans proprietaire</p>
+            <ul class="list-group list-group-flush small">
+              @for (item of alerts.unassignedOwnerOperations.slice(0, 5); track item.id) {
+                <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                  <span>{{ item.title }}</span>
+                  <span class="text-secondary fw-semibold">{{ formatDateTime(item.occurredAt) }}</span>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="text-secondary mb-0">Aucune alerte sur les categories selectionnees.</p>
+          }
+        } @else {
+          <p class="text-secondary mb-0">Alertes indisponibles pour le moment.</p>
+        }
+      </div>
+    </div>
+  </article>
+</section>
+
+@if (billingInsights(); as insights) {
+  <section class="card mt-3" aria-label="Top debiteurs">
+    <div class="card-body">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h6 class="mb-0">Top debiteurs</h6>
+        <input
+          type="search"
+          class="form-control form-control-sm"
+          style="max-width: 320px"
+          placeholder="Rechercher un patient..."
+          [value]="debtorSearch()"
+          (input)="onDebtorSearchInput($any($event.target).value || '')" />
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>
+                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" (click)="setDebtorSort('name')">
+                  Patient <i class="fa-solid" [class]="'fa-solid ms-1 ' + debtorSortIcon('name')"></i>
+                </button>
+              </th>
+              <th class="text-end">
+                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" (click)="setDebtorSort('invoices')">
+                  Factures <i class="fa-solid" [class]="'fa-solid ms-1 ' + debtorSortIcon('invoices')"></i>
+                </button>
+              </th>
+              <th class="text-end">
+                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" (click)="setDebtorSort('outstanding')">
+                  Encours <i class="fa-solid" [class]="'fa-solid ms-1 ' + debtorSortIcon('outstanding')"></i>
+                </button>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (pagedTopDebtors().length === 0) {
+              <tr>
+                <td colspan="3" class="text-center text-secondary py-3">Aucun debiteur sur les filtres actuels.</td>
+              </tr>
+            } @else {
+              @for (debtor of pagedTopDebtors(); track debtor.patientName) {
+                <tr>
+                  <td>{{ debtor.patientName }}</td>
+                  <td class="text-end">{{ debtor.invoiceCount }}</td>
+                  <td class="text-end fw-semibold">{{ formatCurrency(debtor.totalOutstandingCents, 'EUR') }}</td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center mt-3">
+        <small class="text-secondary">Page {{ debtorPage() }} / {{ debtorTotalPages() }}</small>
+        <div class="btn-group btn-group-sm">
+          <button type="button" class="btn btn-outline-secondary" [disabled]="debtorPage() <= 1" (click)="previousDebtorPage()">Precedent</button>
+          <button type="button" class="btn btn-outline-secondary" [disabled]="debtorPage() >= debtorTotalPages()" (click)="nextDebtorPage()">Suivant</button>
+        </div>
+      </div>
+    </div>
+  </section>
+}
 
 <section class="card mt-3">
   <div class="card-body">

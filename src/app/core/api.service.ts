@@ -25,9 +25,11 @@ import {
   BillingDepositDetail,
   BillingDepositListItem,
   BillingDepositPayload,
+  BillingForecastPayload,
   BillingExpensePayload,
   BillingInvoiceCreatePayload,
   BillingInvoiceDetail,
+  BillingAlertsPayload,
   BillingInsightsPayload,
   BillingInvoicePaymentsUpdatePayload,
   BillingOperationsPayload,
@@ -301,6 +303,51 @@ export class ApiService {
     return firstValueFrom(this.http.get<BillingInsightsPayload>(`${this.baseUrl}/billing/insights`, { params }));
   }
 
+  async getBillingForecast(officeId?: number | null): Promise<BillingForecastPayload> {
+    let params = new HttpParams();
+    if (Number.isInteger(officeId) && Number(officeId) > 0) {
+      params = params.set('officeId', String(officeId));
+    }
+
+    return firstValueFrom(this.http.get<BillingForecastPayload>(`${this.baseUrl}/billing/forecast`, { params }));
+  }
+
+  async getBillingAlerts(
+    officeId?: number | null,
+    categories?: Array<'overdue' | 'dueSoon' | 'highExpenses' | 'unassigned'>
+  ): Promise<BillingAlertsPayload> {
+    let params = new HttpParams();
+    if (Number.isInteger(officeId) && Number(officeId) > 0) {
+      params = params.set('officeId', String(officeId));
+    }
+    if (Array.isArray(categories) && categories.length > 0) {
+      params = params.set('categories', categories.join(','));
+    }
+
+    return firstValueFrom(this.http.get<BillingAlertsPayload>(`${this.baseUrl}/billing/alerts`, { params }));
+  }
+
+  async exportBillingAlerts(
+    format: 'json' | 'excel',
+    officeId?: number | null,
+    categories?: Array<'overdue' | 'dueSoon' | 'highExpenses' | 'unassigned'>
+  ): Promise<Blob> {
+    let params = new HttpParams().set('format', format);
+    if (Number.isInteger(officeId) && Number(officeId) > 0) {
+      params = params.set('officeId', String(officeId));
+    }
+    if (Array.isArray(categories) && categories.length > 0) {
+      params = params.set('categories', categories.join(','));
+    }
+
+    return firstValueFrom(
+      this.http.get(`${this.baseUrl}/billing/alerts/export`, {
+        params,
+        responseType: 'blob'
+      })
+    );
+  }
+
   async createBillingExpense(payload: BillingExpensePayload): Promise<number> {
     const response = await firstValueFrom(
       this.http.post<{ expenseId: number }>(`${this.baseUrl}/billing/expenses`, payload)
@@ -380,6 +427,7 @@ export class ApiService {
     to?: string;
     officeId?: number | null;
     userId?: number | null;
+    mode?: 'standard' | 'analytical';
   }): Promise<Blob> {
     let params = new HttpParams().set('format', format);
     if (filters?.from?.trim()) {
@@ -393,6 +441,9 @@ export class ApiService {
     }
     if (Number.isInteger(filters?.userId) && Number(filters?.userId) > 0) {
       params = params.set('userId', String(filters?.userId));
+    }
+    if (filters?.mode === 'analytical') {
+      params = params.set('mode', 'analytical');
     }
 
     return firstValueFrom(
