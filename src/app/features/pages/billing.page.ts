@@ -28,6 +28,10 @@ type ExportHistoryItem = {
   createdAt: string;
 };
 
+type TrashExportItem = ExportHistoryItem & {
+  deletedAt: string;
+};
+
 @Component({
   selector: 'app-billing-page',
   imports: [CommonModule, RouterLink],
@@ -41,6 +45,7 @@ type ExportHistoryItem = {
 export class BillingPage implements OnDestroy {
   private static readonly ALERT_FILTERS_STORAGE_KEY = 'billing-alert-filters-v1';
   private static readonly EXPORT_HISTORY_STORAGE_KEY = 'billing-export-history-v1';
+  private static readonly EXPORT_HISTORY_EXPIRATION_DAYS = 30;
   private alertsReloadTimeout: ReturnType<typeof setTimeout> | null = null;
   private exportToastTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -76,11 +81,22 @@ export class BillingPage implements OnDestroy {
   readonly successMessage = signal('');
   readonly exportHistory = signal<ExportHistoryItem[]>([]);
   readonly exportHistoryFilter = signal<'all' | 'success' | 'error'>('all');
-  readonly exportHistorySort = signal<'date-desc' | 'date-asc' | 'status'>('date-desc');
+  readonly exportHistoryFormatFilter = signal<'all' | 'json' | 'excel'>('all');
+  readonly exportHistorySort = signal<'date-desc' | 'date-asc' | 'status' | 'relevance'>('date-desc');
   readonly exportHistorySearch = signal('');
+  readonly selectedExportIds = signal<Set<string>>(new Set());
   readonly exportToastMessage = signal('');
   readonly exportToastType = signal<'success' | 'error'>('success');
   readonly isExportToastVisible = signal(false);
+  readonly isDeleteExportConfirmVisible = signal(false);
+  readonly deleteExportConfirmCount = signal(0);
+  readonly exportTrash = signal<TrashExportItem[]>([]);
+  readonly showExportTrash = signal(false);
+  readonly isTrashActionConfirmVisible = signal(false);
+  readonly trashActionType = signal<'restore-all' | 'empty' | null>(null);
+
+  private readonly EXPORT_TRASH_STORAGE_KEY = 'osteo_export_trash';
+  private readonly EXPORT_TRASH_EXPIRATION_DAYS = 7;
 
   readonly expenseOccurredAt = signal(this.defaultNowDateTimeLocal());
   readonly expenseTitle = signal('');
@@ -197,11 +213,20 @@ export class BillingPage implements OnDestroy {
   readonly hasAnyAlertCategorySelected = computed(() => this.selectedAlertCategories().length > 0);
   readonly activeAlertCategoryCount = computed(() => this.selectedAlertCategories().length);
   readonly filteredExportHistory = computed(() => {
-    const filter = this.exportHistoryFilter();
-    if (filter === 'all') {
-      return this.exportHistory();
+    const statusFilter = this.exportHistoryFilter();
+    const formatFilter = this.exportHistoryFormatFilter();
+
+    const statusFiltered = statusFilter === 'all'
+      ? this.exportHistory()
+      : this.exportHistory().filter((item) => item.status === statusFilter);
+
+    if (formatFilter === 'all') {
+      return statusFiltered;
     }
-    return this.exportHistory().filter((item) => item.status === filter);
+
+    return statusFiltered.filter((item) =>
+      item.operationsFormat === formatFilter || item.alertsFormat === formatFilter
+    );
   });
 
   readonly searchedExportHistory = computed(() => {
@@ -216,6 +241,18 @@ export class BillingPage implements OnDestroy {
 
     const rows = [...searched];
     const sort = this.exportHistorySort();
+    
+    if (sort === 'relevance' && query.length > 0) {
+      return rows.sort((left, right) => {
+        const leftScore = this.calculateRelevanceScore(left, query);
+        const rightScore = this.calculateRelevanceScore(right, query);
+        if (leftScore !== rightScore) {
+          return rightScore - leftScore;
+        }
+        return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+      });
+    }
+    
     if (sort === 'date-asc') {
       return rows.sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime());
     }
@@ -245,9 +282,109 @@ export class BillingPage implements OnDestroy {
     return searched.slice(start, end);
   });
 
+  readonly visibleExportIds = computed(() => {
+    return new Set(this.displayedExportHistory().map((item) => item.id));
+  });
+
+  readonly isAllVisibleSelected = computed(() => {
+    const visible = this.visibleExportIds();
+    if (visible.size === 0) {
+      return false;
+    }
+    const selected = this.selectedExportIds();
+    return Array.from(visible).every((id) => selected.has(id));
+  });
+
+  readonly hasAnyVisibleSelected = computed(() => {
+    const visible = this.visibleExportIds();
+    const selected = this.selectedExportIds();
+    return Array.from(visible).some((id) => selected.has(id));
+  });
+
+  readonly selectedExportCount = computed(() => {
+    return this.selectedExportIds().size;
+  });
+
+  readonly hasActiveExportSearch = computed(() => {
+    return this.exportHistorySearch().trim().length > 0;
+  });
+
+  readonly exportHistoryStats = computed(() => {
+    const items = this.exportHistory();
+    const total = items.length;
+    const successful = items.filter((item) => item.status === 'success').length;
+    const failed = items.filter((item) => item.status === 'error').length;
+    const successRate = total === 0 ? 0 : Math.round((successful / total) * 100);
+
+    const excelCount = items.filter((item) =>
+      item.operationsFormat === 'excel' || item.alertsFormat === 'excel'
+    ).length;
+    const jsonCount = items.filter((item) =>
+      item.operationsFormat === 'json' || item.alertsFormat === 'json'
+    ).length;
+
+    return {
+      total,
+      successful,
+      failed,
+      successRate,
+      excelCount,
+      jsonCount,
+    };
+  });
+
+  readonly exportHistoryTrends = computed(() => {
+    const rows = this.exportHistory();
+    const now = new Date();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const weekStart = todayStart - (6 * dayMs);
+
+    let todayCount = 0;
+    let last7DaysCount = 0;
+
+    for (const item of rows) {
+      const createdAt = new Date(item.createdAt).getTime();
+      if (Number.isNaN(createdAt)) {
+        continue;
+      }
+      if (createdAt >= todayStart) {
+        todayCount += 1;
+      }
+      if (createdAt >= weekStart) {
+        last7DaysCount += 1;
+      }
+    }
+
+    const stats = this.exportHistoryStats();
+    const dominantFormat = stats.excelCount === stats.jsonCount
+      ? 'Mixte'
+      : (stats.excelCount > stats.jsonCount ? 'CSV' : 'JSON');
+
+    return {
+      todayCount,
+      last7DaysCount,
+      trashCount: this.activeExportTrash().length,
+      dominantFormat
+    };
+  });
+
+  readonly activeExportTrash = computed(() => {
+    const trash = this.exportTrash();
+    const now = new Date();
+    const expirationMs = this.EXPORT_TRASH_EXPIRATION_DAYS * 24 * 60 * 60 * 1000;
+
+    return trash.filter((item) => {
+      const deletedTime = new Date(item.deletedAt).getTime();
+      const ageMs = now.getTime() - deletedTime;
+      return ageMs < expirationMs;
+    });
+  });
+
   constructor() {
     this.restoreAlertCategories();
     this.restoreExportHistory();
+    this.restoreExportTrash();
 
     const now = new Date();
     this.fromDate.set(this.toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)));
@@ -1100,7 +1237,12 @@ export class BillingPage implements OnDestroy {
     this.exportHistoryPage.set(1);
   }
 
-  setExportHistorySort(sort: 'date-desc' | 'date-asc' | 'status'): void {
+  setExportHistoryFormatFilter(format: 'all' | 'json' | 'excel'): void {
+    this.exportHistoryFormatFilter.set(format);
+    this.exportHistoryPage.set(1);
+  }
+
+  setExportHistorySort(sort: 'date-desc' | 'date-asc' | 'status' | 'relevance'): void {
     this.exportHistorySort.set(sort);
     this.exportHistoryPage.set(1);
   }
@@ -1137,6 +1279,20 @@ export class BillingPage implements OnDestroy {
     this.persistExportHistory([]);
   }
 
+  cleanupOldExportHistory(): void {
+    const current = this.exportHistory();
+    const cleaned = this.cleanupExpiredExportHistory(current);
+    const removed = current.length - cleaned.length;
+    
+    if (removed > 0) {
+      this.exportHistory.set(cleaned);
+      this.persistExportHistory(cleaned);
+      this.showExportToast(`${removed} ancien(s) export(s) supprime(s).`, 'success');
+    } else {
+      this.showExportToast('Aucun export ancien a nettoyer.', 'success');
+    }
+  }
+
   async copyExportSessionId(sessionId: string): Promise<void> {
     const normalized = String(sessionId ?? '').trim();
     if (!normalized) {
@@ -1152,8 +1308,219 @@ export class BillingPage implements OnDestroy {
     }
   }
 
+  toggleExportIdSelection(id: string): void {
+    const next = new Set(this.selectedExportIds());
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    this.selectedExportIds.set(next);
+  }
+
+  selectAllVisibleExportIds(): void {
+    const visible = this.visibleExportIds();
+    const next = new Set(this.selectedExportIds());
+    visible.forEach((id) => next.add(id));
+    this.selectedExportIds.set(next);
+  }
+
+  deselectAllVisibleExportIds(): void {
+    const visible = this.visibleExportIds();
+    const next = new Set(this.selectedExportIds());
+    visible.forEach((id) => next.delete(id));
+    this.selectedExportIds.set(next);
+  }
+
+  async copySelectedExportSessionIds(): Promise<void> {
+    const selected = this.selectedExportIds();
+    if (selected.size === 0) {
+      this.showExportToast('Aucun export selectione.', 'error');
+      return;
+    }
+
+    const allExports = this.exportHistory();
+    const sessionIds = Array.from(selected)
+      .map((id) => allExports.find((item) => item.id === id))
+      .filter((item) => item != null)
+      .map((item) => item!.sessionId)
+      .join('\n');
+
+    try {
+      await navigator.clipboard.writeText(sessionIds);
+      this.showExportToast(`${selected.size} session(s) copiee(s).`, 'success');
+    } catch {
+      this.showExportToast('Impossible de copier les sessions.', 'error');
+    }
+  }
+
+  showDeleteExportConfirm(): void {
+    const count = this.selectedExportIds().size;
+    if (count === 0) {
+      this.showExportToast('Aucun export selectione.', 'error');
+      return;
+    }
+    this.deleteExportConfirmCount.set(count);
+    this.isDeleteExportConfirmVisible.set(true);
+  }
+
+  cancelDeleteExportConfirm(): void {
+    this.isDeleteExportConfirmVisible.set(false);
+    this.deleteExportConfirmCount.set(0);
+  }
+
+  confirmDeleteSelectedExports(): void {
+    const selected = this.selectedExportIds();
+    if (selected.size === 0) {
+      this.cancelDeleteExportConfirm();
+      return;
+    }
+
+    const allExports = this.exportHistory();
+    const toDelete = allExports.filter((item) => selected.has(item.id));
+    const remaining = allExports.filter((item) => !selected.has(item.id));
+    const removed = toDelete.length;
+
+    const now = new Date().toISOString();
+    const trashItems = toDelete.map((item) => ({
+      ...item,
+      deletedAt: now
+    }));
+    const currentTrash = this.exportTrash();
+    this.exportTrash.set([...trashItems, ...currentTrash]);
+    this.persistExportTrash([...trashItems, ...currentTrash]);
+
+    this.exportHistory.set(remaining);
+    this.persistExportHistory(remaining);
+    this.selectedExportIds.set(new Set());
+    this.cancelDeleteExportConfirm();
+    this.showExportToast(`${removed} export(s) dans la corbeille. Recuperables pendant 7 jours.`, 'success');
+  }
+
+  toggleExportTrash(): void {
+    this.showExportTrash.set(!this.showExportTrash());
+  }
+
+  showTrashActionConfirm(action: 'restore-all' | 'empty'): void {
+    if (this.activeExportTrash().length === 0) {
+      this.showExportToast('Aucun export dans la corbeille.', 'error');
+      return;
+    }
+    this.trashActionType.set(action);
+    this.isTrashActionConfirmVisible.set(true);
+  }
+
+  cancelTrashActionConfirm(): void {
+    this.isTrashActionConfirmVisible.set(false);
+    this.trashActionType.set(null);
+  }
+
+  confirmTrashAction(): void {
+    const action = this.trashActionType();
+    this.cancelTrashActionConfirm();
+    if (action === 'restore-all') {
+      this.restoreAllFromTrashNow();
+      return;
+    }
+    if (action === 'empty') {
+      this.emptyTrashNow();
+    }
+  }
+
+  restoreFromTrash(trashItem: TrashExportItem): void {
+    const restored: ExportHistoryItem = {
+      id: trashItem.id,
+      sessionId: trashItem.sessionId,
+      label: trashItem.label,
+      operationsFormat: trashItem.operationsFormat,
+      alertsFormat: trashItem.alertsFormat,
+      status: trashItem.status,
+      createdAt: trashItem.createdAt
+    };
+
+    const currentHistory = this.exportHistory();
+    this.exportHistory.set([restored, ...currentHistory]);
+    this.persistExportHistory([restored, ...currentHistory]);
+
+    const currentTrash = this.exportTrash();
+    const filtered = currentTrash.filter((item) => item.id !== trashItem.id);
+    this.exportTrash.set(filtered);
+    this.persistExportTrash(filtered);
+
+    this.showExportToast('1 export restaure de la corbeille.', 'success');
+  }
+
+  restoreAllFromTrash(): void {
+    this.showTrashActionConfirm('restore-all');
+  }
+
+  emptyTrash(): void {
+    this.showTrashActionConfirm('empty');
+  }
+
+  private restoreAllFromTrashNow(): void {
+    const trash = this.activeExportTrash();
+    if (trash.length === 0) {
+      this.showExportToast('Aucun export dans la corbeille.', 'error');
+      return;
+    }
+
+    const restored = trash.map((item) => ({
+      id: item.id,
+      sessionId: item.sessionId,
+      label: item.label,
+      operationsFormat: item.operationsFormat,
+      alertsFormat: item.alertsFormat,
+      status: item.status,
+      createdAt: item.createdAt
+    }));
+
+    const currentHistory = this.exportHistory();
+    this.exportHistory.set([...restored, ...currentHistory]);
+    this.persistExportHistory([...restored, ...currentHistory]);
+
+    this.exportTrash.set([]);
+    this.persistExportTrash([]);
+
+    this.showExportToast(`${trash.length} export(s) restaure(s) de la corbeille.`, 'success');
+  }
+
+  private emptyTrashNow(): void {
+    this.exportTrash.set([]);
+    this.persistExportTrash([]);
+    this.showExportToast('Corbeille videe definitivement.', 'success');
+  }
+
+  private calculateRelevanceScore(item: ExportHistoryItem, query: string): number {
+    const label = String(item.label ?? '').toLowerCase();
+    const sessionId = String(item.sessionId ?? '').toLowerCase();
+
+    if (sessionId.startsWith(query)) {
+      return 50;
+    }
+    if (label.startsWith(query)) {
+      return 40;
+    }
+
+    const labelWords = label.split(/\s+/);
+    for (const word of labelWords) {
+      if (word.startsWith(query)) {
+        return 30;
+      }
+    }
+
+    if (sessionId.includes(query)) {
+      return 20;
+    }
+    if (label.includes(query)) {
+      return 10;
+    }
+
+    return 0;
+  }
+
   exportHistoryCsv(): void {
-    const rows = this.displayedExportHistory();
+    const rows = this.searchedExportHistory();
     if (rows.length === 0) {
       this.showExportToast('Aucun element a exporter.', 'error');
       return;
@@ -1174,7 +1541,88 @@ export class BillingPage implements OnDestroy {
 
     const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
     this.downloadBlob(blob, `export-history-${new Date().toISOString().slice(0, 10)}.csv`);
-    this.showExportToast('Historique exporte en CSV.', 'success');
+    this.showExportToast(`${rows.length} export(s) en CSV.`, 'success');
+  }
+
+  exportHistoryJson(): void {
+    const rows = this.searchedExportHistory();
+    if (rows.length === 0) {
+      this.showExportToast('Aucun element a exporter.', 'error');
+      return;
+    }
+
+    const payload = rows.map((item) => ({
+      createdAt: item.createdAt,
+      sessionId: item.sessionId,
+      label: item.label,
+      operationsFormat: item.operationsFormat,
+      alertsFormat: item.alertsFormat,
+      status: item.status
+    }));
+
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+    this.downloadBlob(blob, `export-history-${new Date().toISOString().slice(0, 10)}.json`);
+    this.showExportToast(`${rows.length} export(s) en JSON.`, 'success');
+  }
+
+  exportSelectedHistoryCsv(): void {
+    const selected = this.selectedExportIds();
+    if (selected.size === 0) {
+      this.showExportToast('Aucun element selectione.', 'error');
+      return;
+    }
+
+    const rows = this.searchedExportHistory().filter((item) => selected.has(item.id));
+    if (rows.length === 0) {
+      this.showExportToast('Aucun element a exporter.', 'error');
+      return;
+    }
+
+    const header = ['Date', 'SessionId', 'Label', 'OperationsFormat', 'AlertsFormat', 'Status'];
+    const csvRows = rows.map((item) => [
+      item.createdAt,
+      item.sessionId,
+      item.label,
+      item.operationsFormat,
+      item.alertsFormat,
+      item.status
+    ]);
+    const csv = [header, ...csvRows]
+      .map((line) => line.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(';'))
+      .join('\n');
+
+    const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
+    this.downloadBlob(blob, `export-history-selected-${new Date().toISOString().slice(0, 10)}.csv`);
+    this.showExportToast(`${rows.length} export(s) selectione(s) en CSV.`, 'success');
+  }
+
+  exportSelectedHistoryJson(): void {
+    const selected = this.selectedExportIds();
+    if (selected.size === 0) {
+      this.showExportToast('Aucun element selectione.', 'error');
+      return;
+    }
+
+    const rows = this.searchedExportHistory().filter((item) => selected.has(item.id));
+    if (rows.length === 0) {
+      this.showExportToast('Aucun element a exporter.', 'error');
+      return;
+    }
+
+    const payload = rows.map((item) => ({
+      createdAt: item.createdAt,
+      sessionId: item.sessionId,
+      label: item.label,
+      operationsFormat: item.operationsFormat,
+      alertsFormat: item.alertsFormat,
+      status: item.status
+    }));
+
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+    this.downloadBlob(blob, `export-history-selected-${new Date().toISOString().slice(0, 10)}.json`);
+    this.showExportToast(`${rows.length} export(s) selectione(s) en JSON.`, 'success');
   }
 
   private showExportToast(message: string, type: 'success' | 'error'): void {
@@ -1213,7 +1661,7 @@ export class BillingPage implements OnDestroy {
       }
       const sanitized: ExportHistoryItem[] = parsed
         .filter((item) => item && typeof item === 'object')
-        .slice(0, 12)
+        .slice(0, 100)
         .map((item) => ({
           id: String(item.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
           sessionId: String(item.sessionId ?? this.buildExportSessionId()),
@@ -1223,7 +1671,9 @@ export class BillingPage implements OnDestroy {
           status: item.status === 'error' ? 'error' as const : 'success' as const,
           createdAt: String(item.createdAt ?? new Date().toISOString())
         }));
-      this.exportHistory.set(sanitized);
+      
+      const cleaned = this.cleanupExpiredExportHistory(sanitized);
+      this.exportHistory.set(cleaned);
     } catch {
       this.exportHistory.set([]);
     }
@@ -1233,6 +1683,68 @@ export class BillingPage implements OnDestroy {
     return Math.random().toString(36).slice(2, 8).toUpperCase();
   }
 
+  private cleanupExpiredExportHistory(items: ExportHistoryItem[]): ExportHistoryItem[] {
+    const now = new Date();
+    const expirationMs = BillingPage.EXPORT_HISTORY_EXPIRATION_DAYS * 24 * 60 * 60 * 1000;
+    
+    return items.filter((item) => {
+      try {
+        const createdTime = new Date(item.createdAt).getTime();
+        return now.getTime() - createdTime < expirationMs;
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  private persistExportTrash(items: TrashExportItem[]): void {
+    try {
+      localStorage.setItem(this.EXPORT_TRASH_STORAGE_KEY, JSON.stringify(items));
+    } catch {
+      // Ignore storage failures.
+    }
+  }
+
+  private restoreExportTrash(): void {
+    try {
+      const raw = localStorage.getItem(this.EXPORT_TRASH_STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+      const parsed = JSON.parse(raw) as TrashExportItem[];
+      if (!Array.isArray(parsed)) {
+        return;
+      }
+      const sanitized: TrashExportItem[] = parsed
+        .filter((item) => item && typeof item === 'object')
+        .map((item) => ({
+          id: String(item.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+          sessionId: String(item.sessionId ?? this.buildExportSessionId()),
+          label: String(item.label ?? 'Pack export'),
+          operationsFormat: item.operationsFormat === 'json' ? 'json' as const : 'excel' as const,
+          alertsFormat: item.alertsFormat === 'excel' ? 'excel' as const : 'json' as const,
+          status: item.status === 'error' ? 'error' as const : 'success' as const,
+          createdAt: String(item.createdAt ?? new Date().toISOString()),
+          deletedAt: String(item.deletedAt ?? new Date().toISOString())
+        }));
+
+      const now = new Date();
+      const expirationMs = this.EXPORT_TRASH_EXPIRATION_DAYS * 24 * 60 * 60 * 1000;
+      const active = sanitized.filter((item) => {
+        try {
+          const deletedTime = new Date(item.deletedAt).getTime();
+          return now.getTime() - deletedTime < expirationMs;
+        } catch {
+          return false;
+        }
+      });
+
+      this.exportTrash.set(active);
+    } catch {
+      this.exportTrash.set([]);
+    }
+  }
+
   private applyPayload(payload: BillingOperationsPayload): void {
     this.closeActionMenus();
     this.tiles.set(payload.summary ?? []);
@@ -1240,15 +1752,15 @@ export class BillingPage implements OnDestroy {
     this.offices.set(payload.offices ?? []);
     this.users.set(payload.users ?? []);
 
-     const officeIds = new Set((payload.offices ?? []).map((office) => office.id));
-     if (this.selectedOfficeId() != null && !officeIds.has(this.selectedOfficeId()!)) {
-       this.selectedOfficeId.set(null);
-     }
+    const officeIds = new Set((payload.offices ?? []).map((office) => office.id));
+    if (this.selectedOfficeId() != null && !officeIds.has(this.selectedOfficeId()!)) {
+      this.selectedOfficeId.set(null);
+    }
 
-     const userIds = new Set((payload.users ?? []).map((user) => user.id));
-     if (this.selectedUserId() != null && !userIds.has(this.selectedUserId()!)) {
-       this.selectedUserId.set(null);
-     }
+    const userIds = new Set((payload.users ?? []).map((user) => user.id));
+    if (this.selectedUserId() != null && !userIds.has(this.selectedUserId()!)) {
+      this.selectedUserId.set(null);
+    }
 
     this.selectedOperationIds.set([]);
   }
