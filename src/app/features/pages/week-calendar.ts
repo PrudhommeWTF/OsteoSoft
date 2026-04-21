@@ -316,6 +316,11 @@ export class WeekCalendar {
       return;
     }
 
+    if (event.isPrivate) {
+      this.consultationMetaError.set('Ce rendez-vous prive n\'est pas lie a une fiche patient.');
+      return;
+    }
+
     let patientId = Number(event.patientId);
     if (!Number.isInteger(patientId) || patientId <= 0) {
       try {

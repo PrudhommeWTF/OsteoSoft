@@ -142,7 +142,12 @@ export type AppointmentsPayload = {
 };
 
 export type CreateAppointmentPayload = {
-  patientId: number;
+  patientId?: number | null;
+  patientFirstName?: string;
+  patientLastName?: string;
+  isPrivate?: boolean;
+  privateReason?: string;
+  practitioner?: string;
   startsAt: string;
   reason: string;
   status: 'A confirmer' | 'En attente' | 'Termine';
@@ -609,6 +614,8 @@ export type DashboardEvent = {
   title: string;
   start: string;
   patient: string;
+  isPrivate?: boolean;
+  privateReason?: string;
   reason: string;
   status: string;
   calendarId: number | null;

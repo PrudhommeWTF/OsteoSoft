@@ -177,6 +177,9 @@ db.exec(`
     office_id INTEGER,
     local_calendar_id INTEGER,
     consultation_id INTEGER,
+    practitioner TEXT NOT NULL DEFAULT '',
+    is_private INTEGER NOT NULL DEFAULT 0,
+    private_label_cipher TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(patient_id) REFERENCES patients(id),
     FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE SET NULL,
@@ -2813,7 +2816,8 @@ function buildDataBackupSnapshot() {
        ORDER BY id ASC`
     ).all(),
     appointments: db.prepare(
-      `SELECT id, patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id, created_at
+      `SELECT id, patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id,
+              practitioner, is_private, private_label_cipher, created_at
        FROM appointments
        ORDER BY id ASC`
     ).all(),
@@ -3014,8 +3018,11 @@ function restoreDataBackupSnapshot(backupPayload) {
        VALUES (?, ?, ?, ?)`
     );
     const insertAppointment = db.prepare(
-      `INSERT INTO appointments (id, patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO appointments (
+        id, patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id,
+        practitioner, is_private, private_label_cipher, created_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const insertInvoice = db.prepare(
       `INSERT INTO invoices (
@@ -3314,6 +3321,9 @@ function restoreDataBackupSnapshot(backupPayload) {
         row.local_calendar_id != null ? Number(row.local_calendar_id) : null,
         row.consultation_id != null ? Number(row.consultation_id) : null,
         row.office_id != null ? Number(row.office_id) : null,
+        String(row.practitioner ?? ''),
+        Number(row.is_private) ? 1 : 0,
+        String(row.private_label_cipher ?? ''),
         row.created_at ?? new Date().toISOString()
       );
     }
@@ -3949,6 +3959,9 @@ async function ensureSeedData() {
   ensureColumn('appointments', 'local_calendar_id', 'local_calendar_id INTEGER');
   ensureColumn('appointments', 'office_id', 'office_id INTEGER');
   ensureColumn('appointments', 'consultation_id', 'consultation_id INTEGER');
+  ensureColumn('appointments', 'practitioner', "practitioner TEXT NOT NULL DEFAULT ''");
+  ensureColumn('appointments', 'is_private', 'is_private INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('appointments', 'private_label_cipher', "private_label_cipher TEXT NOT NULL DEFAULT ''");
   ensureColumn('local_calendars', 'description', "description TEXT NOT NULL DEFAULT ''");
   ensureColumn('local_calendars', 'color_hex', "color_hex TEXT NOT NULL DEFAULT '#4d92d1'");
   ensureColumn('local_calendars', 'is_visible_to_all', 'is_visible_to_all INTEGER NOT NULL DEFAULT 1');
@@ -9742,6 +9755,132 @@ function parsePatientNotesFromCipher(cipherMedicalNotes) {
   }
 }
 
+function computePatientRetentionDateIso() {
+  const retentionDate = new Date();
+  retentionDate.setFullYear(retentionDate.getFullYear() + 10);
+  return retentionDate.toISOString().slice(0, 10);
+}
+
+function buildDefaultPatientNotes() {
+  return {
+    generalRemarks: '',
+    medicalHistory: '',
+    consultationNote: '',
+    relatedPeople: '',
+    mobilePhone: '',
+    landlinePhone: '',
+    email: '',
+    address1: '',
+    address2: '',
+    postalCode: '',
+    city: '',
+    country: 'France',
+    maritalStatus: 'Non renseigne',
+    childrenCount: 0,
+    occupationOrSchool: '',
+    hobbies: '',
+    primaryDoctor: '',
+    socialSecurityNumber: '',
+    referredBy: '',
+    manualPreference: 'Non renseigne',
+    isDeceased: false
+  };
+}
+
+function findOrCreateQuickPatientForAppointment(lastName, firstName, officeId) {
+  const normalizedLastName = String(lastName ?? '').trim();
+  const normalizedFirstName = String(firstName ?? '').trim();
+  const fullName = `${normalizedLastName} ${normalizedFirstName}`.trim().replace(/\s+/g, ' ');
+
+  if (!fullName) {
+    return null;
+  }
+
+  const fullNameKey = normalizePersonNameKey(fullName);
+  const normalizedOfficeId = Number.isInteger(Number(officeId)) && Number(officeId) > 0 ? Number(officeId) : null;
+  const rows = normalizedOfficeId === null
+    ? db.prepare('SELECT id, cipher_full_name FROM patients WHERE is_deleted = 0').all()
+    : db.prepare('SELECT id, cipher_full_name FROM patients WHERE is_deleted = 0 AND office_id = ?').all(normalizedOfficeId);
+
+  for (const row of rows) {
+    let rowName = '';
+    try {
+      rowName = decryptSensitiveField(row.cipher_full_name);
+    } catch {
+      rowName = '';
+    }
+
+    if (normalizePersonNameKey(rowName) === fullNameKey) {
+      return Number(row.id);
+    }
+  }
+
+  const notes = buildDefaultPatientNotes();
+  const inserted = db
+    .prepare(
+      `INSERT INTO patients
+       (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count, last_visit, consent_signed, retention_until, office_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      encryptSensitiveField(fullName),
+      encryptSensitiveField('Non renseigne'),
+      encryptSensitiveField(JSON.stringify(notes)),
+      'Non renseigne',
+      null,
+      'Non renseigne',
+      0,
+      null,
+      1,
+      computePatientRetentionDateIso(),
+      normalizedOfficeId
+    );
+
+  return Number(inserted.lastInsertRowid);
+}
+
+function findOrCreatePrivatePlaceholderPatient(officeId) {
+  const normalizedOfficeId = Number.isInteger(Number(officeId)) && Number(officeId) > 0 ? Number(officeId) : null;
+  const rows = normalizedOfficeId === null
+    ? db.prepare('SELECT id, cipher_medical_notes FROM patients WHERE is_deleted = 1').all()
+    : db.prepare('SELECT id, cipher_medical_notes FROM patients WHERE is_deleted = 1 AND office_id = ?').all(normalizedOfficeId);
+
+  for (const row of rows) {
+    const notes = parsePatientNotesFromCipher(row.cipher_medical_notes);
+    if (String(notes.systemPlaceholder ?? '').trim() === 'private-appointment') {
+      return Number(row.id);
+    }
+  }
+
+  const notes = {
+    ...buildDefaultPatientNotes(),
+    systemPlaceholder: 'private-appointment'
+  };
+
+  const inserted = db
+    .prepare(
+      `INSERT INTO patients
+       (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count, last_visit, consent_signed, retention_until, is_deleted, office_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      encryptSensitiveField('Rendez-vous prive'),
+      encryptSensitiveField('Non renseigne'),
+      encryptSensitiveField(JSON.stringify(notes)),
+      'Non renseigne',
+      null,
+      'Non renseigne',
+      0,
+      null,
+      1,
+      computePatientRetentionDateIso(),
+      1,
+      normalizedOfficeId
+    );
+
+  return Number(inserted.lastInsertRowid);
+}
+
 function inferConsultationType(reason) {
   const normalized = String(reason ?? '').toLowerCase();
   if (normalized.includes('urgence') || normalized.includes('aigu')) {
@@ -9767,10 +9906,11 @@ app.get('/api/appointments', authMiddleware, requirePermission('read-agenda'), (
   const rows = db
     .prepare(
       `SELECT a.id, a.starts_at, a.reason_cipher, a.status, a.local_calendar_id,
-              p.cipher_full_name, p.cipher_phone, p.cipher_medical_notes, p.sex
+              a.is_private, a.private_label_cipher,
+              p.cipher_full_name
        FROM appointments a
-       INNER JOIN patients p ON p.id = a.patient_id
-       WHERE p.is_deleted = 0
+       LEFT JOIN patients p ON p.id = a.patient_id
+       WHERE a.is_private = 1 OR (p.id IS NOT NULL AND p.is_deleted = 0)
        ORDER BY a.starts_at ASC`
     )
     .all();
@@ -9788,13 +9928,14 @@ app.get('/api/appointments', authMiddleware, requirePermission('read-agenda'), (
       return accessibleCalendarIds.has(effectiveCalendarId);
     })
     .map((row) => ({
+      isPrivate: Number(row.is_private) === 1,
       id: Number(row.id),
       time: new Intl.DateTimeFormat('fr-FR', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false
       }).format(new Date(row.starts_at)),
-      patient: decryptSensitiveField(row.cipher_full_name),
+      patient: Number(row.is_private) === 1 ? 'Prive' : decryptSensitiveField(row.cipher_full_name),
       reason: decryptSensitiveField(row.reason_cipher),
       status: row.status
     }));
@@ -9818,13 +9959,22 @@ app.get('/api/appointments', authMiddleware, requirePermission('read-agenda'), (
 });
 
 app.post('/api/appointments', authMiddleware, requirePermission('write-agenda'), (req, res) => {
-  const { patientId, startsAt, reason, status, localCalendarId, consultationId, officeId } = req.body;
+  const {
+    patientId,
+    patientFirstName,
+    patientLastName,
+    isPrivate,
+    privateReason,
+    practitioner,
+    startsAt,
+    reason,
+    status,
+    localCalendarId,
+    consultationId,
+    officeId
+  } = req.body;
 
   // Validate required fields
-  if (!Number.isInteger(Number(patientId)) || Number(patientId) <= 0) {
-    return res.status(400).json({ error: 'Invalid patientId' });
-  }
-
   if (typeof startsAt !== 'string' || !startsAt.trim()) {
     return res.status(400).json({ error: 'Invalid startsAt' });
   }
@@ -9838,11 +9988,13 @@ app.post('/api/appointments', authMiddleware, requirePermission('write-agenda'),
     return res.status(400).json({ error: 'Invalid status' });
   }
 
-  // Verify patient exists
-  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
-  if (!patient) {
-    return res.status(404).json({ error: 'Patient not found' });
+  const isPrivateAppointment = isPrivate === true || isPrivate === 1 || isPrivate === '1';
+  const trimmedPrivateReason = String(privateReason ?? '').trim();
+  if (isPrivateAppointment && !trimmedPrivateReason) {
+    return res.status(400).json({ error: 'Invalid privateReason' });
   }
+
+  const trimmedPractitioner = String(practitioner ?? '').trim().slice(0, 120);
 
   const userOfficeIds = new Set(Array.isArray(req.userAccess?.officeIds) ? req.userAccess.officeIds : []);
   let effectiveOfficeId = Number.isInteger(Number(officeId)) && Number(officeId) > 0 ? Number(officeId) : null;
@@ -9881,14 +10033,35 @@ app.post('/api/appointments', authMiddleware, requirePermission('write-agenda'),
 
   const effectiveConsultationId = Number.isInteger(Number(consultationId)) && Number(consultationId) > 0 ? Number(consultationId) : null;
 
+  let effectivePatientId = null;
+  if (isPrivateAppointment) {
+    effectivePatientId = findOrCreatePrivatePlaceholderPatient(effectiveOfficeId);
+  } else if (Number.isInteger(Number(patientId)) && Number(patientId) > 0) {
+    const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(Number(patientId));
+    if (!patient) {
+      return res.status(404).json({ error: 'Patient not found' });
+    }
+    effectivePatientId = Number(patientId);
+  } else {
+    const quickPatientId = findOrCreateQuickPatientForAppointment(patientLastName, patientFirstName, effectiveOfficeId);
+    if (!Number.isInteger(quickPatientId) || quickPatientId <= 0) {
+      return res.status(400).json({ error: 'Patient information required' });
+    }
+    effectivePatientId = quickPatientId;
+  }
+
   if (effectiveConsultationId !== null) {
+    if (isPrivateAppointment) {
+      return res.status(400).json({ error: 'Private appointment cannot link consultation' });
+    }
+
     const consultation = db
       .prepare('SELECT id, patient_id FROM consultations WHERE id = ?')
       .get(effectiveConsultationId);
     if (!consultation) {
       return res.status(404).json({ error: 'Consultation not found' });
     }
-    if (Number(consultation.patient_id) !== Number(patientId)) {
+    if (Number(consultation.patient_id) !== Number(effectivePatientId)) {
       return res.status(400).json({ error: 'Consultation does not belong to patient' });
     }
   }
@@ -9896,25 +10069,31 @@ app.post('/api/appointments', authMiddleware, requirePermission('write-agenda'),
   try {
     const result = db
       .prepare(
-        `INSERT INTO appointments (patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO appointments (
+           patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id,
+           practitioner, is_private, private_label_cipher
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
-        patientId,
+        effectivePatientId,
         startsAt,
         encryptSensitiveField(reason.trim()),
         status,
         effectiveCalendarId,
         effectiveConsultationId,
-        effectiveOfficeId
+        effectiveOfficeId,
+        trimmedPractitioner,
+        isPrivateAppointment ? 1 : 0,
+        isPrivateAppointment ? encryptSensitiveField(trimmedPrivateReason) : encryptSensitiveField('')
       );
 
     const newAppointment = db
       .prepare(
-        `SELECT a.id, a.starts_at, a.reason_cipher, a.status, a.local_calendar_id,
-                p.cipher_full_name, p.sex
+        `SELECT a.id, a.starts_at, a.reason_cipher, a.status, a.local_calendar_id, a.is_private,
+                p.cipher_full_name
          FROM appointments a
-         INNER JOIN patients p ON p.id = a.patient_id
+         LEFT JOIN patients p ON p.id = a.patient_id
          WHERE a.id = ?`
       )
       .get(result.lastInsertRowid);
@@ -9927,7 +10106,7 @@ app.post('/api/appointments', authMiddleware, requirePermission('write-agenda'),
           minute: '2-digit',
           hour12: false
         }).format(new Date(newAppointment.starts_at)),
-        patient: decryptSensitiveField(newAppointment.cipher_full_name),
+        patient: Number(newAppointment.is_private) === 1 ? 'Prive' : decryptSensitiveField(newAppointment.cipher_full_name),
         reason: decryptSensitiveField(newAppointment.reason_cipher),
         status: newAppointment.status
       }
@@ -9948,11 +10127,12 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
   const appointmentRows = db
     .prepare(
       `SELECT a.id, a.starts_at, a.reason_cipher, a.status, a.local_calendar_id,
+              a.is_private, a.private_label_cipher, a.practitioner,
               a.patient_id,
               p.cipher_full_name, p.cipher_phone, p.cipher_medical_notes, p.sex,
               c.id AS consultation_id, c.title AS consultation_title, c.practitioner AS consultation_practitioner
        FROM appointments a
-       INNER JOIN patients p ON p.id = a.patient_id
+       LEFT JOIN patients p ON p.id = a.patient_id
        LEFT JOIN consultations c ON c.id = COALESCE(
          a.consultation_id,
          (
@@ -9963,7 +10143,7 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
            LIMIT 1
          )
        )
-       WHERE p.is_deleted = 0
+       WHERE a.is_private = 1 OR (p.id IS NOT NULL AND p.is_deleted = 0)
        ORDER BY a.starts_at ASC`
     )
     .all();
@@ -9983,11 +10163,13 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
 
   const events = filteredAppointmentRows
     .map((row) => {
+      const isPrivate = Number(row.is_private) === 1;
       const reason = decryptSensitiveField(row.reason_cipher);
-      const patient = decryptSensitiveField(row.cipher_full_name);
-      const patientPhone = decryptSensitiveField(row.cipher_phone);
-      const notes = parsePatientNotesFromCipher(row.cipher_medical_notes);
-      const patientSex = normalizePatientSexLabel(row.sex);
+      const privateReason = isPrivate ? decryptSensitiveField(row.private_label_cipher) : '';
+      const patient = isPrivate ? 'Prive' : decryptSensitiveField(row.cipher_full_name);
+      const patientPhone = !isPrivate && row.cipher_phone ? decryptSensitiveField(row.cipher_phone) : '';
+      const notes = !isPrivate ? parsePatientNotesFromCipher(row.cipher_medical_notes) : {};
+      const patientSex = isPrivate ? 'Non renseigne' : normalizePatientSexLabel(row.sex);
       const patientMobilePhone = String(notes.mobilePhone ?? patientPhone ?? '').trim();
       const patientLandlinePhone = String(notes.landlinePhone ?? '').trim();
       const patientRemarks = String(notes.generalRemarks ?? '').trim();
@@ -10002,6 +10184,8 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
         title: reason,
         start: row.starts_at,
         patient,
+        isPrivate,
+        privateReason,
         reason,
         status: row.status,
         calendarId: effectiveCalendarId,
@@ -10010,12 +10194,12 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
         patientSex,
         patientMobilePhone,
         patientLandlinePhone,
-        appointmentComment: reason,
+        appointmentComment: isPrivate ? privateReason : reason,
         patientRemarks,
         consultationType,
         consultationId: row.consultation_id != null ? Number(row.consultation_id) : null,
         consultationTitle: String(row.consultation_title ?? '').trim(),
-        consultationPractitioner: String(row.consultation_practitioner ?? '').trim()
+        consultationPractitioner: String(row.consultation_practitioner ?? '').trim() || String(row.practitioner ?? '').trim()
       };
     });
 
@@ -10220,9 +10404,13 @@ app.get('/api/appointments/:id/patient', authMiddleware, requirePermission('read
     return res.status(400).json({ message: 'ID de rendez-vous invalide' });
   }
 
-  const row = db.prepare('SELECT patient_id, office_id FROM appointments WHERE id = ?').get(id);
+  const row = db.prepare('SELECT patient_id, office_id, is_private FROM appointments WHERE id = ?').get(id);
   if (!row) {
     return res.status(404).json({ message: 'Rendez-vous introuvable' });
+  }
+
+  if (Number(row.is_private) === 1) {
+    return res.status(404).json({ message: 'Ce rendez-vous prive n\'est pas lie a une fiche patient.' });
   }
 
   const appointmentOfficeId = row.office_id != null ? Number(row.office_id) : null;

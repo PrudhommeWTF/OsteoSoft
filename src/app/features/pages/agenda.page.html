@@ -121,23 +121,110 @@
 
           <form [formGroup]="createAppointmentForm" (ngSubmit)="createAppointment()" novalidate>
             <div class="mb-3">
-              <label class="form-label fw-semibold" for="create-patient">Patient</label>
-              @if (isLoadingPatients()) {
-                <div class="small text-secondary">Chargement des patients...</div>
-              } @else {
-                <select
-                  id="create-patient"
-                  class="form-select"
-                  formControlName="patientId"
-                  [disabled]="isCreatingAppointment()"
-                >
-                  <option [value]="0" disabled selected>Sélectionner un patient</option>
-                  @for (patient of patients(); track patient.id) {
-                    <option [value]="patient.id">{{ patient.fullName }}</option>
-                  }
-                </select>
-              }
+              <label class="form-label fw-semibold" for="create-office">Cabinet</label>
+              <select
+                id="create-office"
+                class="form-select"
+                [value]="selectedOfficeId() ?? ''"
+                [disabled]="isCreatingAppointment()"
+                (change)="onCreateOfficeChange($any($event.target).value)"
+              >
+                @for (office of officeOptions(); track office.id) {
+                  <option [value]="office.id">{{ office.name }}</option>
+                }
+              </select>
             </div>
+
+            <div class="mb-3 form-check">
+              <input
+                id="create-private"
+                class="form-check-input"
+                type="checkbox"
+                [checked]="createAppointmentForm.controls.isPrivate.value"
+                [disabled]="isCreatingAppointment()"
+                (change)="onCreatePrivateToggle($any($event.target).checked)"
+              />
+              <label class="form-check-label" for="create-private">Rendez-vous privé</label>
+            </div>
+
+            @if (!createAppointmentForm.controls.isPrivate.value) {
+              <div class="mb-3">
+                <label class="form-label fw-semibold" for="create-patient-search">Patient</label>
+                <input
+                  id="create-patient-search"
+                  type="search"
+                  class="form-control"
+                  placeholder="Tapez nom ou prenom du patient"
+                  [value]="createPatientSearch()"
+                  [disabled]="isCreatingAppointment()"
+                  (input)="onCreatePatientSearchChange($any($event.target).value || '')"
+                />
+
+                @if (isSearchingCreatePatient()) {
+                  <div class="small text-secondary mt-1">Recherche en cours...</div>
+                } @else if (createPatientSearch().trim().length >= 2 && createPatientResults().length === 0 && !selectedCreatePatient()) {
+                  <div class="small text-secondary mt-1">Aucun patient trouve. Vous pouvez saisir un nouveau patient ci-dessous.</div>
+                }
+
+                @if (createPatientResults().length > 0) {
+                  <div class="list-group mt-2">
+                    @for (result of createPatientResults(); track result.id) {
+                      <button
+                        type="button"
+                        class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                        (click)="selectCreatePatient(result)"
+                      >
+                        <span>{{ result.fullName }}</span>
+                        <small class="text-muted">{{ result.phone || 'Tel. non renseigne' }}</small>
+                      </button>
+                    }
+                  </div>
+                }
+
+                @if (selectedCreatePatient(); as selectedPatient) {
+                  <div class="form-text text-success d-flex justify-content-between align-items-center mt-1">
+                    <span>Patient selectionne: {{ selectedPatient.fullName }}</span>
+                    <button type="button" class="btn btn-link btn-sm p-0" (click)="clearSelectedCreatePatient()">Changer</button>
+                  </div>
+                }
+              </div>
+
+              <div class="row g-2 mb-3">
+                <div class="col-12 col-md-6">
+                  <label class="form-label fw-semibold" for="create-patient-lastname">Nom</label>
+                  <input
+                    id="create-patient-lastname"
+                    type="text"
+                    class="form-control"
+                    formControlName="patientLastName"
+                    [disabled]="isCreatingAppointment()"
+                  />
+                </div>
+
+                <div class="col-12 col-md-6">
+                  <label class="form-label fw-semibold" for="create-patient-firstname">Prenom</label>
+                  <input
+                    id="create-patient-firstname"
+                    type="text"
+                    class="form-control"
+                    formControlName="patientFirstName"
+                    [disabled]="isCreatingAppointment()"
+                  />
+                </div>
+              </div>
+            } @else {
+              <div class="mb-3">
+                <label class="form-label fw-semibold" for="create-private-reason">Raison du rendez-vous prive</label>
+                <input
+                  id="create-private-reason"
+                  type="text"
+                  class="form-control"
+                  formControlName="privateReason"
+                  placeholder="Ex: Administration, pause, deplacement"
+                  [disabled]="isCreatingAppointment()"
+                />
+              </div>
+            }
 
             <div class="mb-3">
               <label class="form-label fw-semibold" for="create-start">Date et heure</label>
@@ -160,6 +247,24 @@
                 placeholder="Ex: Suivi, bilan, traitement..."
                 [disabled]="isCreatingAppointment()"
               />
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold" for="create-practitioner">Praticien (facultatif)</label>
+              <input
+                id="create-practitioner"
+                type="text"
+                class="form-control"
+                list="create-practitioner-options"
+                formControlName="practitioner"
+                placeholder="Selectionner un praticien"
+                [disabled]="isCreatingAppointment()"
+              />
+              <datalist id="create-practitioner-options">
+                @for (practitioner of practitioners(); track practitioner.id) {
+                  <option [value]="practitioner.displayName || practitioner.username"></option>
+                }
+              </datalist>
             </div>
 
             <div class="mb-3">

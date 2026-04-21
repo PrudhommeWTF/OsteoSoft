@@ -253,6 +253,9 @@
                 <span [class]="getSexColorClass(event.patientSex) || ''">{{ event.patient }}</span>
               </p>
               <p class="text-secondary mb-0">{{ formatEventDateTime(event.start) }}</p>
+              @if (event.isPrivate && event.privateReason) {
+                <p class="text-secondary mb-0 mt-1">Raison privee: {{ event.privateReason }}</p>
+              }
             </div>
 
             <div class="mb-3">
@@ -307,15 +310,17 @@
           </div>
 
           <div class="modal-footer">
-            <button
-              type="button"
-              class="btn btn-outline-primary"
-              (click)="openPatientRecord()"
-              aria-label="Voir la fiche patient"
-              title="Voir la fiche patient">
-              <i class="fa-solid fa-user"></i>
-            </button>
-            @if (event.consultationId) {
+            @if (!event.isPrivate) {
+              <button
+                type="button"
+                class="btn btn-outline-primary"
+                (click)="openPatientRecord()"
+                aria-label="Voir la fiche patient"
+                title="Voir la fiche patient">
+                <i class="fa-solid fa-user"></i>
+              </button>
+            }
+            @if (!event.isPrivate && event.consultationId) {
               <button
                 type="button"
                 class="btn btn-outline-success"

@@ -10,7 +10,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
-import { AgendaSettings, Appointment, DashboardEvent, LocalAgendaCalendar, OfficeOption, Patient } from '../../core/api.types';
+import { AgendaSettings, Appointment, DashboardEvent, LocalAgendaCalendar, OfficeOption, Patient, Practitioner } from '../../core/api.types';
 import { WeekCalendar } from './week-calendar';
 
 @Component({
@@ -58,14 +58,25 @@ export class AgendaPage {
   readonly isExportModalOpen = signal(false);
   readonly isExportingAgenda = signal(false);
   readonly exportAgendaError = signal('');
-  readonly patients = signal<Patient[]>([]);
-  readonly isLoadingPatients = signal(false);
+  readonly practitioners = signal<Practitioner[]>([]);
+  readonly createPatientSearch = signal('');
+  readonly createPatientResults = signal<Patient[]>([]);
+  readonly isSearchingCreatePatient = signal(false);
+  readonly selectedCreatePatient = signal<Patient | null>(null);
   readonly isCreatingAppointment = signal(false);
   readonly createAppointmentError = signal('');
   readonly createAppointmentSuccess = signal('');
 
+  private createPatientSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
+  private createPatientSearchRequestId = 0;
+
   readonly createAppointmentForm = this.fb.nonNullable.group({
-    patientId: [0, [Validators.required, Validators.min(1)]],
+    patientId: [0],
+    patientFirstName: ['', [Validators.maxLength(120)]],
+    patientLastName: ['', [Validators.maxLength(120)]],
+    isPrivate: [false],
+    privateReason: ['', [Validators.maxLength(180)]],
+    practitioner: ['', [Validators.maxLength(120)]],
     startsAt: ['', [Validators.required]],
     reason: ['', [Validators.required]],
     status: ['A confirmer' as const, [Validators.required]]
@@ -91,7 +102,7 @@ export class AgendaPage {
     const offices = Array.isArray(me.offices) ? me.offices : [];
     this.officeOptions.set(offices);
 
-    const hasCurrentOffice = this.selectedOfficeId() === null || offices.some((office) => office.id === this.selectedOfficeId());
+    const hasCurrentOffice = offices.some((office) => office.id === this.selectedOfficeId());
     if (!hasCurrentOffice) {
       const activeOfficeId = this.authService.activeOfficeId();
       const hasActiveOffice = Number.isInteger(activeOfficeId) && offices.some((office) => office.id === activeOfficeId);
@@ -151,30 +162,129 @@ export class AgendaPage {
   openCreateModal(): void {
     this.createAppointmentError.set('');
     this.createAppointmentSuccess.set('');
-    this.createAppointmentForm.reset({ patientId: 0, startsAt: '', reason: '', status: 'A confirmer' });
+    this.createPatientSearch.set('');
+    this.createPatientResults.set([]);
+    this.selectedCreatePatient.set(null);
+    this.createAppointmentForm.reset({
+      patientId: 0,
+      patientFirstName: '',
+      patientLastName: '',
+      isPrivate: false,
+      privateReason: '',
+      practitioner: '',
+      startsAt: '',
+      reason: '',
+      status: 'A confirmer'
+    });
     this.isCreateModalOpen.set(true);
-    void this.ensurePatientsLoaded();
+    void this.ensurePractitionersLoaded();
   }
 
   closeCreateModal(): void {
     this.isCreateModalOpen.set(false);
     this.createAppointmentError.set('');
     this.createAppointmentSuccess.set('');
+    this.createPatientSearch.set('');
+    this.createPatientResults.set([]);
+    this.selectedCreatePatient.set(null);
+
+    if (this.createPatientSearchDebounceId !== null) {
+      clearTimeout(this.createPatientSearchDebounceId);
+      this.createPatientSearchDebounceId = null;
+    }
   }
 
-  private async ensurePatientsLoaded(): Promise<void> {
-    if (this.patients().length > 0) {
+  onCreatePatientSearchChange(value: string): void {
+    const term = value.trim();
+    this.createPatientSearch.set(value);
+    this.selectedCreatePatient.set(null);
+    this.createAppointmentForm.controls.patientId.setValue(0);
+
+    if (this.createPatientSearchDebounceId !== null) {
+      clearTimeout(this.createPatientSearchDebounceId);
+      this.createPatientSearchDebounceId = null;
+    }
+
+    if (term.length < 2) {
+      this.createPatientResults.set([]);
+      this.isSearchingCreatePatient.set(false);
       return;
     }
 
-    this.isLoadingPatients.set(true);
+    this.isSearchingCreatePatient.set(true);
+    this.createPatientSearchDebounceId = setTimeout(() => {
+      void this.searchCreatePatient(term);
+    }, 220);
+  }
+
+  selectCreatePatient(patient: Patient): void {
+    this.selectedCreatePatient.set(patient);
+    this.createPatientResults.set([]);
+    this.createPatientSearch.set(patient.fullName);
+    this.createAppointmentForm.controls.patientId.setValue(patient.id);
+
+    const parts = patient.fullName.trim().split(/\s+/);
+    const lastName = parts.length > 0 ? parts[0] : '';
+    const firstName = parts.length > 1 ? parts.slice(1).join(' ') : '';
+    this.createAppointmentForm.controls.patientLastName.setValue(lastName);
+    this.createAppointmentForm.controls.patientFirstName.setValue(firstName);
+  }
+
+  clearSelectedCreatePatient(): void {
+    this.selectedCreatePatient.set(null);
+    this.createPatientSearch.set('');
+    this.createPatientResults.set([]);
+    this.createAppointmentForm.controls.patientId.setValue(0);
+  }
+
+  onCreatePrivateToggle(value: boolean): void {
+    this.createAppointmentForm.controls.isPrivate.setValue(value);
+    if (value) {
+      this.clearSelectedCreatePatient();
+      this.createAppointmentForm.controls.patientFirstName.setValue('');
+      this.createAppointmentForm.controls.patientLastName.setValue('');
+    } else {
+      this.createAppointmentForm.controls.privateReason.setValue('');
+    }
+  }
+
+  async onCreateOfficeChange(value: string): Promise<void> {
+    await this.onSelectedOfficeChange(value);
+  }
+
+  private async ensurePractitionersLoaded(): Promise<void> {
+    if (this.practitioners().length > 0) {
+      return;
+    }
+
     try {
-      const patients = await this.api.getPatients('');
-      this.patients.set(patients);
-    } catch (error) {
-      this.createAppointmentError.set('Impossible de charger la liste des patients.');
+      const practitioners = await this.api.getPractitioners();
+      this.practitioners.set(practitioners);
+    } catch {
+      this.practitioners.set([]);
     } finally {
-      this.isLoadingPatients.set(false);
+      // no-op
+    }
+  }
+
+  private async searchCreatePatient(term: string): Promise<void> {
+    const requestId = ++this.createPatientSearchRequestId;
+
+    try {
+      const patients = await this.api.getPatients(term);
+      if (requestId !== this.createPatientSearchRequestId) {
+        return;
+      }
+
+      this.createPatientResults.set(patients.slice(0, 8));
+    } catch {
+      if (requestId === this.createPatientSearchRequestId) {
+        this.createPatientResults.set([]);
+      }
+    } finally {
+      if (requestId === this.createPatientSearchRequestId) {
+        this.isSearchingCreatePatient.set(false);
+      }
     }
   }
 
@@ -184,18 +294,40 @@ export class AgendaPage {
       return;
     }
 
+    const raw = this.createAppointmentForm.getRawValue();
+    const isPrivate = Boolean(raw.isPrivate);
+
+    if (isPrivate) {
+      if (!raw.privateReason.trim()) {
+        this.createAppointmentError.set('Veuillez saisir une raison pour le rendez-vous prive.');
+        return;
+      }
+    } else {
+      const hasSelectedPatient = Number.isInteger(Number(raw.patientId)) && Number(raw.patientId) > 0;
+      if (!hasSelectedPatient) {
+        if (!raw.patientLastName.trim() || !raw.patientFirstName.trim()) {
+          this.createAppointmentError.set('Veuillez selectionner un patient existant ou saisir son nom et son prenom.');
+          return;
+        }
+      }
+    }
+
     this.isCreatingAppointment.set(true);
     this.createAppointmentError.set('');
     this.createAppointmentSuccess.set('');
 
     try {
-      const raw = this.createAppointmentForm.getRawValue();
       const activeOfficeId = this.selectedOfficeId();
       const calendarForOffice = this.localCalendars().find(
         (c) => c.officeId !== null && c.officeId === activeOfficeId
       ) ?? null;
       await this.api.createAppointment({
-        patientId: Number(raw.patientId),
+        patientId: Number(raw.patientId) > 0 ? Number(raw.patientId) : null,
+        patientFirstName: raw.patientFirstName.trim(),
+        patientLastName: raw.patientLastName.trim(),
+        isPrivate,
+        privateReason: raw.privateReason.trim(),
+        practitioner: raw.practitioner.trim(),
         startsAt: raw.startsAt,
         reason: raw.reason,
         status: raw.status,
