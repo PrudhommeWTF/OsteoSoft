@@ -9940,8 +9940,32 @@ app.get('/api/appointments', authMiddleware, requirePermission('read-agenda'), (
       status: row.status
     }));
 
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+  const currentDay = now.getDate();
+
+  const consultationsToday = rows
+    .filter((row) => {
+      const rowCalendarId = row.local_calendar_id != null ? Number(row.local_calendar_id) : null;
+      const effectiveCalendarId = rowCalendarId ?? (fallbackCalendar?.id ?? null);
+      if (effectiveCalendarId == null || !accessibleCalendarIds.has(effectiveCalendarId)) {
+        return false;
+      }
+
+      const startsAt = new Date(row.starts_at);
+      if (Number.isNaN(startsAt.getTime())) {
+        return false;
+      }
+
+      return startsAt.getFullYear() === currentYear
+        && startsAt.getMonth() === currentMonth
+        && startsAt.getDate() === currentDay;
+    })
+    .length;
+
   const stats = {
-    consultationsToday: appointments.length,
+    consultationsToday,
     newPatients: 1,
     occupancyRate: '87%'
   };

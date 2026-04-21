@@ -121,34 +121,7 @@ export class ShellPage implements OnInit, OnDestroy {
       );
     });
 
-    this.api.getAppointments().then((payload) => {
-      const value = Number(payload?.stats?.consultationsToday ?? 0);
-      this.navItems.update((items) =>
-        items.map((item) => {
-          if (item.label !== 'Agenda') {
-            return item;
-          }
-
-          if (value > 0) {
-            return { ...item, badge: String(value) };
-          }
-
-          const { badge: _badge, ...withoutBadge } = item;
-          return withoutBadge;
-        })
-      );
-    }).catch(() => {
-      this.navItems.update((items) =>
-        items.map((item) => {
-          if (item.label !== 'Agenda') {
-            return item;
-          }
-
-          const { badge: _badge, ...withoutBadge } = item;
-          return withoutBadge;
-        })
-      );
-    });
+    void this.refreshAgendaBadge();
 
     this.api.getDirectoryContactCount().then((count) => {
       this.navItems.update((items) =>
@@ -247,6 +220,7 @@ export class ShellPage implements OnInit, OnDestroy {
     const parsed = Number(value);
     const nextOfficeId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
     this.authService.setActiveOfficeId(nextOfficeId);
+    void this.refreshAgendaBadge();
     void this.refreshBillingBadge();
   }
 
@@ -384,6 +358,25 @@ export class ShellPage implements OnInit, OnDestroy {
       this.navItems.update((items) =>
         items.map((item) =>
           item.label === 'Comptabilite' ? { ...item, badge: '?' } : item
+        )
+      );
+    }
+  }
+
+  private async refreshAgendaBadge(): Promise<void> {
+    try {
+      const payload = await this.api.getAppointments(this.activeOfficeId());
+      const value = Number(payload?.stats?.consultationsToday ?? 0);
+      const safeValue = Number.isFinite(value) && value >= 0 ? Math.trunc(value) : 0;
+      this.navItems.update((items) =>
+        items.map((item) =>
+          item.label === 'Agenda' ? { ...item, badge: String(safeValue) } : item
+        )
+      );
+    } catch {
+      this.navItems.update((items) =>
+        items.map((item) =>
+          item.label === 'Agenda' ? { ...item, badge: '?' } : item
         )
       );
     }
