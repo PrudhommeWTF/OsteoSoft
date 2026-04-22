@@ -44,193 +44,354 @@
             </div>
           </div>
       @if (activeSection().id === 'data-management') {
-        <section class="row g-3 mb-4" aria-label="Sauvegarde et restauration des données">
-          <div class="col-12 col-xl-6">
-            <article class="settings-card h-100">
-              <p class="settings-card-status mb-2">Sauvegarde</p>
-              <h3 class="settings-card-title">Télécharger une sauvegarde</h3>
-              <p class="settings-card-copy mb-3">Exportez l'intégralité des données dans une archive ZIP (manifest + data) pour archivage ou transfert.</p>
-              <button type="button" class="btn btn-primary" [disabled]="isDownloadingBackup()" (click)="downloadBackup()">
-                <i class="fa-solid fa-download me-1"></i>Télécharger la sauvegarde
-              </button>
-            </article>
-          </div>
-
-          <div class="col-12 col-xl-6">
-            <article class="settings-card h-100">
-              <p class="settings-card-status mb-2">Restauration</p>
-              <h3 class="settings-card-title">Restaurer une sauvegarde</h3>
-              <p class="settings-card-copy mb-3">Importez un fichier de sauvegarde ZIP ou JSON pour rétablir les données.</p>
-
-              <div class="mb-3">
-                <label class="form-label mb-1" for="backup-file">Fichier de sauvegarde (.zip ou .json)</label>
-                <input
-                  id="backup-file"
-                  type="file"
-                  class="form-control"
-                  accept=".zip,.json,application/zip,application/json"
-                  [disabled]="isRestoringBackup()"
-                  (change)="onBackupFileSelected($event)"
-                />
-                @if (selectedBackupFileName()) {
-                  <p class="small text-secondary mt-2 mb-0">Fichier sélectionné: {{ selectedBackupFileName() }}</p>
-                }
-              </div>
-
+        <nav class="mb-3" aria-label="Onglets de gestion des données">
+          <div class="nav nav-pills flex-row flex-wrap gap-2" role="tablist" aria-orientation="horizontal">
+            @for (tab of dataManagementTabs; track tab.id) {
               <button
                 type="button"
-                class="btn btn-outline-primary"
-                [disabled]="isRestoringBackup() || !selectedBackupPayload()"
-                (click)="restoreBackup()"
+                class="nav-link"
+                role="tab"
+                [class.active]="activeDataManagementTabId() === tab.id"
+                [attr.aria-selected]="activeDataManagementTabId() === tab.id"
+                [attr.aria-controls]="'data-management-' + tab.id + '-panel'"
+                [id]="'data-management-' + tab.id + '-tab'"
+                (click)="selectDataManagementTab(tab.id)"
               >
-                <i class="fa-solid fa-rotate-left me-1"></i>Restaurer la sauvegarde
+                {{ tab.label }}
               </button>
-
-              @if (restoreProgressStep() !== 'idle') {
-                <div class="mt-3" aria-live="polite">
-                  <p class="small text-secondary mb-1">{{ restoreProgressLabel() }}</p>
-                  <div class="progress" role="progressbar" aria-label="Progression de restauration" [attr.aria-valuenow]="restoreProgressPercent()" aria-valuemin="0" aria-valuemax="100">
-                    <div class="progress-bar" [style.width.%]="restoreProgressPercent()">{{ restoreProgressPercent() }}%</div>
-                  </div>
-
-                  <ul class="list-group list-group-flush small mt-2">
-                    @for (step of restoreTimeline; track step.id) {
-                      @let stepStatus = getRestoreStepStatus(step.id);
-                      <li class="list-group-item px-0 py-1 border-0 d-flex align-items-center justify-content-between">
-                        <span class="text-secondary" [class.fw-semibold]="stepStatus === 'active' || stepStatus === 'error'" [class.text-body]="stepStatus === 'active' || stepStatus === 'error'">
-                          {{ step.label }}
-                        </span>
-
-                        @if (stepStatus === 'done') {
-                          <i class="fa-solid fa-circle-check text-success" aria-hidden="true"></i>
-                        } @else if (stepStatus === 'active') {
-                          <i class="fa-solid fa-circle-notch fa-spin text-primary" aria-hidden="true"></i>
-                        } @else if (stepStatus === 'error') {
-                          <i class="fa-solid fa-circle-xmark text-danger" aria-hidden="true"></i>
-                        } @else {
-                          <i class="fa-regular fa-circle text-secondary" aria-hidden="true"></i>
-                        }
-                      </li>
-                    }
-                  </ul>
-                </div>
-              }
-            </article>
+            }
           </div>
+        </nav>
 
-          <div class="col-12">
-            <article class="settings-card">
-              <p class="settings-card-status mb-2">Export RGPD</p>
-              <h3 class="settings-card-title">Exporter les données d'un patient</h3>
-              <p class="settings-card-copy mb-3">
-                Sélectionnez un patient depuis la base puis générez son export RGPD complet (données patient, consultations, rendez-vous et historique).
-              </p>
+        @if (activeDataManagementTabId() === 'backup-restore') {
+          <section class="row g-3 mb-4" aria-label="Sauvegarde et restauration des données" role="tabpanel" id="data-management-backup-restore-panel" aria-labelledby="data-management-backup-restore-tab">
+            <div class="col-12 col-xl-6">
+              <article class="settings-card h-100">
+                <p class="settings-card-status mb-2">Sauvegarde</p>
+                <h3 class="settings-card-title">Télécharger une sauvegarde</h3>
+                <p class="settings-card-copy mb-3">Exportez l'intégralité des données dans une archive ZIP (manifest + data) pour archivage ou transfert.</p>
+                <button type="button" class="btn btn-primary" [disabled]="isDownloadingBackup()" (click)="downloadBackup()">
+                  <i class="fa-solid fa-download me-1"></i>Télécharger la sauvegarde
+                </button>
+              </article>
+            </div>
 
-              <div class="mb-3">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                  <label class="form-label fw-semibold mb-0">Patient concerné</label>
-                  <button type="button" class="btn btn-outline-primary btn-sm" [disabled]="isExportingRgpdPatient()" (click)="toggleRgpdPatientPicker()">
-                    <i class="fa-solid fa-user-plus me-1"></i>
-                    {{ showRgpdPatientPicker() ? 'Fermer' : 'Ajouter' }}
-                  </button>
+            <div class="col-12 col-xl-6">
+              <article class="settings-card h-100">
+                <p class="settings-card-status mb-2">Restauration</p>
+                <h3 class="settings-card-title">Restaurer une sauvegarde</h3>
+                <p class="settings-card-copy mb-3">Importez un fichier de sauvegarde ZIP ou JSON pour rétablir les données.</p>
+
+                <div class="mb-3">
+                  <label class="form-label mb-1" for="backup-file">Fichier de sauvegarde (.zip ou .json)</label>
+                  <input
+                    id="backup-file"
+                    type="file"
+                    class="form-control"
+                    accept=".zip,.json,application/zip,application/json"
+                    [disabled]="isRestoringBackup()"
+                    (change)="onBackupFileSelected($event)"
+                  />
+                  @if (selectedBackupFileName()) {
+                    <p class="small text-secondary mt-2 mb-0">Fichier sélectionné: {{ selectedBackupFileName() }}</p>
+                  }
                 </div>
 
-                @if (selectedRgpdPatient()) {
-                  <div class="d-flex flex-wrap gap-2 mb-2">
-                    <span class="badge bg-body-tertiary text-body border related-pill d-flex align-items-center gap-1 p-2">
-                      <i [class]="getRelatedPatientIcon(selectedRgpdPatient()!.sex) + ' me-1'"></i>
-                      {{ selectedRgpdPatient()!.fullName }}
-                      <button
-                        type="button"
-                        class="btn-close btn-close-xs ms-1"
-                        aria-label="Retirer"
-                        [disabled]="isExportingRgpdPatient()"
-                        (click)="clearRgpdPatientSelection()"
-                      ></button>
-                    </span>
+                <button
+                  type="button"
+                  class="btn btn-outline-primary"
+                  [disabled]="isRestoringBackup() || !selectedBackupPayload()"
+                  (click)="restoreBackup()"
+                >
+                  <i class="fa-solid fa-rotate-left me-1"></i>Restaurer la sauvegarde
+                </button>
+
+                @if (restoreProgressStep() !== 'idle') {
+                  <div class="mt-3" aria-live="polite">
+                    <p class="small text-secondary mb-1">{{ restoreProgressLabel() }}</p>
+                    <div class="progress" role="progressbar" aria-label="Progression de restauration" [attr.aria-valuenow]="restoreProgressPercent()" aria-valuemin="0" aria-valuemax="100">
+                      <div class="progress-bar" [style.width.%]="restoreProgressPercent()">{{ restoreProgressPercent() }}%</div>
+                    </div>
+
+                    <ul class="list-group list-group-flush small mt-2">
+                      @for (step of restoreTimeline; track step.id) {
+                        @let stepStatus = getRestoreStepStatus(step.id);
+                        <li class="list-group-item px-0 py-1 border-0 d-flex align-items-center justify-content-between">
+                          <span class="text-secondary" [class.fw-semibold]="stepStatus === 'active' || stepStatus === 'error'" [class.text-body]="stepStatus === 'active' || stepStatus === 'error'">
+                            {{ step.label }}
+                          </span>
+
+                          @if (stepStatus === 'done') {
+                            <i class="fa-solid fa-circle-check text-success" aria-hidden="true"></i>
+                          } @else if (stepStatus === 'active') {
+                            <i class="fa-solid fa-circle-notch fa-spin text-primary" aria-hidden="true"></i>
+                          } @else if (stepStatus === 'error') {
+                            <i class="fa-solid fa-circle-xmark text-danger" aria-hidden="true"></i>
+                          } @else {
+                            <i class="fa-regular fa-circle text-secondary" aria-hidden="true"></i>
+                          }
+                        </li>
+                      }
+                    </ul>
                   </div>
                 }
+              </article>
+            </div>
 
-                @if (showRgpdPatientPicker()) {
-                  <div class="border rounded p-2 bg-light-subtle">
-                    <label class="form-label small mb-1" for="rgpdPatientSearch">Rechercher un patient existant</label>
+            <div class="col-12">
+              <article class="settings-card">
+                <p class="settings-card-status mb-2">Configuration</p>
+                <h3 class="settings-card-title">Rappel de sauvegarde</h3>
+                <p class="settings-card-copy mb-3">Réglez la fréquence de rappel pour effectuer une sauvegarde complète des données.</p>
+
+                <div class="mb-3">
+                  <p class="small text-secondary">Cette option peut être configurée dans les paramètres généraux du système.</p>
+                </div>
+              </article>
+            </div>
+          </section>
+        } @else if (activeDataManagementTabId() === 'rgpd') {
+          <section class="row g-3 mb-4" aria-label="RGPD" role="tabpanel" id="data-management-rgpd-panel" aria-labelledby="data-management-rgpd-tab">
+            <div class="col-12">
+              <article class="settings-card">
+                <p class="settings-card-status mb-2">Export RGPD</p>
+                <h3 class="settings-card-title">Exporter les données d'un patient</h3>
+                <p class="settings-card-copy mb-3">
+                  Sélectionnez un patient depuis la base puis générez son export RGPD complet (données patient, consultations, rendez-vous et historique).
+                </p>
+
+                <div class="mb-3">
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <label class="form-label fw-semibold mb-0">Patient concerné</label>
+                    <button type="button" class="btn btn-outline-primary btn-sm" [disabled]="isExportingRgpdPatient()" (click)="toggleRgpdPatientPicker()">
+                      <i class="fa-solid fa-user-plus me-1"></i>
+                      {{ showRgpdPatientPicker() ? 'Fermer' : 'Ajouter' }}
+                    </button>
+                  </div>
+
+                  @if (selectedRgpdPatient()) {
+                    <div class="d-flex flex-wrap gap-2 mb-2">
+                      <span class="badge bg-body-tertiary text-body border related-pill d-flex align-items-center gap-1 p-2">
+                        <i [class]="getRelatedPatientIcon(selectedRgpdPatient()!.sex) + ' me-1'"></i>
+                        {{ selectedRgpdPatient()!.fullName }}
+                        <button
+                          type="button"
+                          class="btn-close btn-close-xs ms-1"
+                          aria-label="Retirer"
+                          [disabled]="isExportingRgpdPatient()"
+                          (click)="clearRgpdPatientSelection()"
+                        ></button>
+                      </span>
+                    </div>
+                  }
+
+                  @if (showRgpdPatientPicker()) {
+                    <div class="border rounded p-2 bg-light-subtle">
+                      <label class="form-label small mb-1" for="rgpdPatientSearch">Rechercher un patient existant</label>
+                      <input
+                        id="rgpdPatientSearch"
+                        type="search"
+                        class="form-control form-control-sm"
+                        placeholder="Nom ou prénom (2 caractères min.)"
+                        [value]="rgpdPatientSearch()"
+                        [disabled]="isExportingRgpdPatient()"
+                        (input)="onRgpdPatientSearchChange($any($event.target).value || '')"
+                      />
+
+                      @if (isSearchingRgpdPatients()) {
+                        <div class="small text-muted mt-2">Recherche en cours...</div>
+                      } @else if (rgpdPatientSearch().trim().length >= 2 && rgpdSearchResults().length === 0) {
+                        <div class="small text-muted mt-2">Aucun patient trouvé.</div>
+                      }
+
+                      @if (rgpdSearchResults().length > 0) {
+                        <ul class="list-group list-group-flush mt-2">
+                          @for (result of rgpdSearchResults(); track result.id) {
+                            <li class="list-group-item list-group-item-action cursor-pointer py-2 px-2" (click)="selectRgpdPatient(result)">
+                              <div class="d-flex align-items-center gap-2">
+                                <i [class]="getRelatedPatientIcon(result.sex) + ' text-secondary'"></i>
+                                <span class="fw-semibold">{{ result.fullName }}</span>
+                                <span class="text-muted small ms-auto">{{ getRelatedPatientMeta(result) }}</span>
+                              </div>
+                            </li>
+                          }
+                        </ul>
+                      }
+                    </div>
+                  }
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    class="btn btn-outline-primary"
+                    [disabled]="isSearchingRgpdPatients() || isExportingRgpdPatient() || !selectedRgpdPatient()"
+                    (click)="exportSelectedPatientRgpd()"
+                  >
+                    <i class="fa-solid fa-file-export me-1"></i>Exporter
+                  </button>
+                </div>
+              </article>
+            </div>
+          </section>
+        } @else if (activeDataManagementTabId() === 'import') {
+          <section class="row g-3 mb-4" aria-label="Import de données" role="tabpanel" id="data-management-import-panel" aria-labelledby="data-management-import-tab">
+            <div class="col-12">
+              <article class="settings-card">
+                <p class="settings-card-status mb-2">Import de donnees externes</p>
+                <h3 class="settings-card-title">Importer un CSV ou un XLSX</h3>
+                <p class="settings-card-copy mb-3">
+                  Importez des patients, consultations et contacts depuis d'autres logiciels. Pour un import multi-feuilles,
+                  utilisez le template XLSX (feuilles Patients, Consultations et Contacts).
+                </p>
+
+                <div class="row g-3">
+                  <div class="col-12 col-md-4">
+                    <label class="form-label" for="data-import-office">Cabinet cible</label>
+                    <select
+                      id="data-import-office"
+                      class="form-select"
+                      [disabled]="isImportingDataFile() || isOfficesLoading()"
+                      [value]="dataImportTargetOfficeId() ?? ''"
+                      (change)="onDataImportOfficeChange($any($event.target).value || '')"
+                    >
+                      <option value="">Sélectionner un cabinet</option>
+                      @for (office of offices(); track office.id) {
+                        <option [value]="office.id">{{ office.name }}</option>
+                      }
+                    </select>
+                  </div>
+
+                  <div class="col-12 col-md-4">
+                    <label class="form-label" for="data-import-format">Format</label>
+                    <select
+                      id="data-import-format"
+                      class="form-select"
+                      [disabled]="isImportingDataFile()"
+                      [value]="dataImportFormat()"
+                      (change)="onDataImportFormatChange($any($event.target).value || '')"
+                    >
+                      @for (option of dataImportFormatOptions; track option.value) {
+                        <option [value]="option.value">{{ option.label }}</option>
+                      }
+                    </select>
+                  </div>
+
+                  <div class="col-12 col-md-4">
+                    <label class="form-label" for="data-import-dataset">Jeu de données</label>
+                    <select
+                      id="data-import-dataset"
+                      class="form-select"
+                      [disabled]="isImportingDataFile()"
+                      [value]="dataImportDataset()"
+                      (change)="onDataImportDatasetChange($any($event.target).value || '')"
+                    >
+                      @for (option of dataImportDatasetOptions; track option.value) {
+                        <option [value]="option.value" [disabled]="dataImportFormat() === 'csv' && option.value === 'mixed'">
+                          {{ option.label }}
+                        </option>
+                      }
+                    </select>
+                  </div>
+
+                  <div class="col-12 col-md-8">
+                    <label class="form-label" for="data-import-file">Fichier d'import (.csv ou .xlsx)</label>
                     <input
-                      id="rgpdPatientSearch"
-                      type="search"
-                      class="form-control form-control-sm"
-                      placeholder="Nom ou prénom (2 caractères min.)"
-                      [value]="rgpdPatientSearch()"
-                      [disabled]="isExportingRgpdPatient()"
-                      (input)="onRgpdPatientSearchChange($any($event.target).value || '')"
+                      id="data-import-file"
+                      type="file"
+                      class="form-control"
+                      accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                      [disabled]="isImportingDataFile()"
+                      (change)="onDataImportFileSelected($event)"
                     />
-
-                    @if (isSearchingRgpdPatients()) {
-                      <div class="small text-muted mt-2">Recherche en cours...</div>
-                    } @else if (rgpdPatientSearch().trim().length >= 2 && rgpdSearchResults().length === 0) {
-                      <div class="small text-muted mt-2">Aucun patient trouvé.</div>
+                    @if (selectedDataImportFileName()) {
+                      <p class="small text-secondary mt-2 mb-0">Fichier sélectionné: {{ selectedDataImportFileName() }}</p>
                     }
+                  </div>
 
-                    @if (rgpdSearchResults().length > 0) {
-                      <ul class="list-group list-group-flush mt-2">
-                        @for (result of rgpdSearchResults(); track result.id) {
-                          <li class="list-group-item list-group-item-action cursor-pointer py-2 px-2" (click)="selectRgpdPatient(result)">
-                            <div class="d-flex align-items-center gap-2">
-                              <i [class]="getRelatedPatientIcon(result.sex) + ' text-secondary'"></i>
-                              <span class="fw-semibold">{{ result.fullName }}</span>
-                              <span class="text-muted small ms-auto">{{ getRelatedPatientMeta(result) }}</span>
-                            </div>
-                          </li>
+                  <div class="col-12 col-md-4 d-flex align-items-end">
+                    <div class="d-flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        class="btn btn-outline-primary"
+                        [disabled]="isDownloadingImportTemplate() || isImportingDataFile()"
+                        (click)="downloadDataImportTemplate()"
+                      >
+                        @if (isDownloadingImportTemplate()) {
+                          <i class="fa-solid fa-circle-notch fa-spin me-1"></i>Téléchargement...
+                        } @else {
+                          <i class="fa-solid fa-file-arrow-down me-1"></i>Télécharger le template
+                        }
+                      </button>
+
+                      <button
+                        type="button"
+                        class="btn btn-primary"
+                        [disabled]="isImportingDataFile() || !selectedDataImportFileBase64() || !dataImportTargetOfficeId()"
+                        (click)="runDataImport()"
+                      >
+                        @if (isImportingDataFile()) {
+                          <i class="fa-solid fa-circle-notch fa-spin me-1"></i>Import en cours...
+                        } @else {
+                          <i class="fa-solid fa-file-import me-1"></i>Lancer l'import
+                        }
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                @if (dataImportResult(); as result) {
+                  <div class="mt-3 border rounded p-3 bg-light-subtle">
+                    <p class="mb-2 fw-semibold">Résultat de l'import</p>
+                    <div class="small text-secondary mb-2">
+                      Patients importés: {{ result.importedPatients }} - Consultations importées: {{ result.importedConsultations }} - Contacts importés: {{ result.importedContacts }} - Lignes ignorées: {{ result.skippedRows }}
+                    </div>
+
+                    @if (result.errors.length > 0) {
+                      <p class="small fw-semibold mb-1">Erreurs détectées ({{ result.errorCount }})</p>
+                      <ul class="small mb-0 ps-3">
+                        @for (error of result.errors.slice(0, 10); track $index) {
+                          <li>{{ error.row }}: {{ error.message }}</li>
                         }
                       </ul>
                     }
                   </div>
                 }
-              </div>
+              </article>
+            </div>
+          </section>
+        } @else {
+          <section class="row g-3 mb-4" aria-label="Nettoyage des données" role="tabpanel" id="data-management-cleanup-panel" aria-labelledby="data-management-cleanup-tab">
+            <div class="col-12">
+              <article class="settings-card">
+                <p class="settings-card-status mb-2">Nettoyage des données</p>
+                <h3 class="settings-card-title">Fonctionnalités à venir</h3>
+                <p class="settings-card-copy mb-0">
+                  Cette section accueillera prochainement des outils de correction ciblée, notamment pour les erreurs de typographie sur des attributs métier précis.
+                </p>
+              </article>
+            </div>
 
-              <div>
-                <button
-                  type="button"
-                  class="btn btn-outline-primary"
-                  [disabled]="isSearchingRgpdPatients() || isExportingRgpdPatient() || !selectedRgpdPatient()"
-                  (click)="exportSelectedPatientRgpd()"
-                >
-                  <i class="fa-solid fa-file-export me-1"></i>Exporter
+            <div class="col-12">
+              <article class="settings-card border border-warning-subtle bg-warning-subtle bg-opacity-10">
+                <p class="settings-card-status mb-2">Démo interne</p>
+                <h3 class="settings-card-title">Réinitialiser l'instance de démonstration</h3>
+                <p class="settings-card-copy mb-3">
+                  Remplace les données actuelles par une démo complète avec cabinets, utilisateurs, patients, consultations,
+                  impayés, consultations non facturées et cas métier de validation.
+                </p>
+
+                <button type="button" class="btn btn-outline-warning" [disabled]="isResettingDemo()" (click)="resetDemoInstance()">
+                  @if (isResettingDemo()) {
+                    <i class="fa-solid fa-circle-notch fa-spin me-1"></i>Réinitialisation de la démo...
+                  } @else {
+                    <i class="fa-solid fa-flask me-1"></i>Réinitialiser l'instance de démonstration
+                  }
                 </button>
-              </div>
-            </article>
-          </div>
-
-          <div class="col-12">
-            <article class="settings-card">
-              <p class="settings-card-status mb-2">Configuration</p>
-              <h3 class="settings-card-title">Rappel de sauvegarde</h3>
-              <p class="settings-card-copy mb-3">Réglez la fréquence de rappel pour effectuer une sauvegarde complète des données.</p>
-
-              <div class="mb-3">
-                <p class="small text-secondary">Cette option peut être configurée dans les paramètres généraux du système.</p>
-              </div>
-            </article>
-          </div>
-
-          <div class="col-12">
-            <article class="settings-card border border-warning-subtle bg-warning-subtle bg-opacity-10">
-              <p class="settings-card-status mb-2">Démo interne</p>
-              <h3 class="settings-card-title">Réinitialiser l'instance de démonstration</h3>
-              <p class="settings-card-copy mb-3">
-                Remplace les données actuelles par une démo complète avec cabinets, utilisateurs, patients, consultations,
-                impayés, consultations non facturées et cas métier de validation.
-              </p>
-
-              <button type="button" class="btn btn-outline-warning" [disabled]="isResettingDemo()" (click)="resetDemoInstance()">
-                @if (isResettingDemo()) {
-                  <i class="fa-solid fa-circle-notch fa-spin me-1"></i>Réinitialisation de la démo...
-                } @else {
-                  <i class="fa-solid fa-flask me-1"></i>Réinitialiser l'instance de démonstration
-                }
-              </button>
-            </article>
-          </div>
-        </section>
+              </article>
+            </div>
+          </section>
+        }
 
         @if (dataManagementError()) {
           <div class="alert alert-danger py-2" role="alert">{{ dataManagementError() }}</div>

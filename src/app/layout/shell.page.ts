@@ -240,6 +240,13 @@ export class ShellPage implements OnInit, OnDestroy {
     this.themeService.toggleQuickTheme();
   }
 
+  navigateToProfile(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.closeMenu();
+    void this.router.navigate(['/mon-profil']);
+  }
+
   onSidebarSearchChange(value: string): void {
     this.sidebarSearch.set(value);
     const term = value.trim();

@@ -12,6 +12,7 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import JSZip from 'jszip';
 import jwt from 'jsonwebtoken';
+import XLSX from 'xlsx';
 import { z } from 'zod';
 
 dotenv.config();
@@ -6609,6 +6610,723 @@ app.post('/api/offices/reorder', authMiddleware, adminOnlyMiddleware, (req, res)
 
 app.get('/api/setup/status', (_req, res) => {
   return res.json(getSetupStatusSnapshot());
+});
+
+const DATA_IMPORT_PATIENTS_SHEET = 'Patients';
+const DATA_IMPORT_CONTACTS_SHEET = 'Contacts';
+const DATA_IMPORT_CONSULTATIONS_SHEET = 'Consultations';
+
+const DATA_IMPORT_PATIENT_HEADERS = [
+  'lastName',
+  'firstName',
+  'sex',
+  'birthDate',
+  'mobilePhone',
+  'landlinePhone',
+  'email',
+  'address1',
+  'address2',
+  'postalCode',
+  'city',
+  'country',
+  'maritalStatus',
+  'childrenCount',
+  'occupationOrSchool',
+  'hobbies',
+  'primaryDoctor',
+  'socialSecurityNumber',
+  'referredBy',
+  'manualPreference',
+  'generalRemarks',
+  'medicalHistory',
+  'relatedPeople',
+  'isDeceased'
+];
+
+const DATA_IMPORT_CONTACT_HEADERS = [
+  'kind',
+  'firstName',
+  'lastName',
+  'organization',
+  'role',
+  'email',
+  'mobilePhone',
+  'landlinePhone',
+  'address1',
+  'address2',
+  'postalCode',
+  'city',
+  'country',
+  'notes'
+];
+
+const DATA_IMPORT_CONSULTATION_HEADERS = [
+  'patientLastName',
+  'patientFirstName',
+  'patientBirthDate',
+  'startedAt',
+  'practitioner',
+  'title',
+  'profile',
+  'important',
+  'heightCm',
+  'weightKg',
+  'evaBefore',
+  'evaAfter',
+  'motifMainHtml',
+  'testsHtml',
+  'schemaHtml',
+  'treatmentsHtml',
+  'remarksHtml'
+];
+
+const DATA_IMPORT_PATIENT_SAMPLE = {
+  lastName: 'Durand',
+  firstName: 'Marie',
+  sex: 'Femme',
+  birthDate: '1990-05-14',
+  mobilePhone: '0611223344',
+  landlinePhone: '',
+  email: 'marie.durand@example.com',
+  address1: '12 rue des Lilas',
+  address2: '',
+  postalCode: '44000',
+  city: 'Nantes',
+  country: 'France',
+  maritalStatus: 'Marie(e)',
+  childrenCount: '2',
+  occupationOrSchool: 'Enseignante',
+  hobbies: 'Yoga',
+  primaryDoctor: 'Dr Leroy',
+  socialSecurityNumber: '',
+  referredBy: 'Doctolib',
+  manualPreference: 'Droitier',
+  generalRemarks: '',
+  medicalHistory: 'Lombalgie chronique',
+  relatedPeople: '',
+  isDeceased: 'false'
+};
+
+const DATA_IMPORT_CONTACT_SAMPLE = {
+  kind: 'person',
+  firstName: 'Paul',
+  lastName: 'Martin',
+  organization: '',
+  role: 'Medecin traitant',
+  email: 'paul.martin@example.com',
+  mobilePhone: '0601020304',
+  landlinePhone: '',
+  address1: '20 avenue de la Gare',
+  address2: '',
+  postalCode: '44000',
+  city: 'Nantes',
+  country: 'France',
+  notes: 'Correspondant principal'
+};
+
+const DATA_IMPORT_CONSULTATION_SAMPLE = {
+  patientLastName: 'Durand',
+  patientFirstName: 'Marie',
+  patientBirthDate: '1990-05-14',
+  startedAt: '2026-04-22T09:30:00.000Z',
+  practitioner: 'Dr Lucas',
+  title: 'Consultation de suivi',
+  profile: 'Adulte',
+  important: 'false',
+  heightCm: '168',
+  weightKg: '62',
+  evaBefore: '6',
+  evaAfter: '2',
+  motifMainHtml: 'Lombalgie persistante',
+  testsHtml: '',
+  schemaHtml: '',
+  treatmentsHtml: '',
+  remarksHtml: 'Bonne evolution'
+};
+
+const dataImportPayloadSchema = z.object({
+  officeId: z.number().int().positive(),
+  format: z.enum(['csv', 'xlsx']),
+  dataset: z.enum(['patients', 'directory-contacts', 'mixed']),
+  fileName: z.string().trim().min(1).max(260),
+  contentBase64: z.string().trim().min(1).max(60_000_000)
+});
+
+function normalizeDataImportFieldName(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function getDataImportFieldValue(row, aliases) {
+  if (!row || typeof row !== 'object') {
+    return '';
+  }
+
+  const byNormalizedKey = new Map(
+    Object.entries(row).map(([key, value]) => [normalizeDataImportFieldName(key), String(value ?? '').trim()])
+  );
+
+  for (const alias of aliases) {
+    const value = byNormalizedKey.get(normalizeDataImportFieldName(alias));
+    if (typeof value === 'string') {
+      return value;
+    }
+  }
+
+  return '';
+}
+
+function isDataImportRowEmpty(row) {
+  return Object.values(row ?? {}).every((value) => String(value ?? '').trim() === '');
+}
+
+function parseDataImportWorkbook(buffer, format) {
+  if (format === 'csv') {
+    const csvText = buffer.toString('utf8');
+    return XLSX.read(csvText, { type: 'string', raw: false });
+  }
+
+  return XLSX.read(buffer, { type: 'buffer', raw: false });
+}
+
+function getDataImportSheetRows(workbook, sheetName) {
+  const actualName = workbook.SheetNames.find((name) => name.toLowerCase() === sheetName.toLowerCase());
+  if (!actualName) {
+    return [];
+  }
+
+  const sheet = workbook.Sheets[actualName];
+  if (!sheet) {
+    return [];
+  }
+
+  return XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+}
+
+function getDataImportRows(workbook, dataset) {
+  if (dataset === 'patients') {
+    const patientRows = getDataImportSheetRows(workbook, DATA_IMPORT_PATIENTS_SHEET);
+    const consultationRows = getDataImportSheetRows(workbook, DATA_IMPORT_CONSULTATIONS_SHEET);
+    if (patientRows.length > 0) {
+      return { patientRows, contactRows: [], consultationRows };
+    }
+
+    const fallback = workbook.SheetNames[0] ? XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '', raw: false }) : [];
+    return { patientRows: fallback, contactRows: [], consultationRows };
+  }
+
+  if (dataset === 'directory-contacts') {
+    const contactRows = getDataImportSheetRows(workbook, DATA_IMPORT_CONTACTS_SHEET);
+    if (contactRows.length > 0) {
+      return { patientRows: [], contactRows, consultationRows: [] };
+    }
+
+    const fallback = workbook.SheetNames[0] ? XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '', raw: false }) : [];
+    return { patientRows: [], contactRows: fallback, consultationRows: [] };
+  }
+
+  return {
+    patientRows: getDataImportSheetRows(workbook, DATA_IMPORT_PATIENTS_SHEET),
+    contactRows: getDataImportSheetRows(workbook, DATA_IMPORT_CONTACTS_SHEET),
+    consultationRows: getDataImportSheetRows(workbook, DATA_IMPORT_CONSULTATIONS_SHEET)
+  };
+}
+
+function buildDataImportTemplateCsv(dataset) {
+  if (dataset === 'directory-contacts') {
+    return `${DATA_IMPORT_CONTACT_HEADERS.join(',')}\n${DATA_IMPORT_CONTACT_HEADERS.map((header) => `"${String(DATA_IMPORT_CONTACT_SAMPLE[header] ?? '').replace(/"/g, '""')}"`).join(',')}\n`;
+  }
+
+  return `${DATA_IMPORT_PATIENT_HEADERS.join(',')}\n${DATA_IMPORT_PATIENT_HEADERS.map((header) => `"${String(DATA_IMPORT_PATIENT_SAMPLE[header] ?? '').replace(/"/g, '""')}"`).join(',')}\n`;
+}
+
+function buildDataImportTemplateWorkbook(dataset) {
+  const workbook = XLSX.utils.book_new();
+
+  if (dataset !== 'directory-contacts') {
+    const patientSheet = XLSX.utils.json_to_sheet([DATA_IMPORT_PATIENT_SAMPLE], {
+      header: DATA_IMPORT_PATIENT_HEADERS,
+      skipHeader: false
+    });
+    XLSX.utils.book_append_sheet(workbook, patientSheet, DATA_IMPORT_PATIENTS_SHEET);
+
+    const consultationSheet = XLSX.utils.json_to_sheet([DATA_IMPORT_CONSULTATION_SAMPLE], {
+      header: DATA_IMPORT_CONSULTATION_HEADERS,
+      skipHeader: false
+    });
+    XLSX.utils.book_append_sheet(workbook, consultationSheet, DATA_IMPORT_CONSULTATIONS_SHEET);
+  }
+
+  if (dataset !== 'patients') {
+    const contactSheet = XLSX.utils.json_to_sheet([DATA_IMPORT_CONTACT_SAMPLE], {
+      header: DATA_IMPORT_CONTACT_HEADERS,
+      skipHeader: false
+    });
+    XLSX.utils.book_append_sheet(workbook, contactSheet, DATA_IMPORT_CONTACTS_SHEET);
+  }
+
+  return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+}
+
+function buildDataImportPatientKey(lastName, firstName, birthDate) {
+  return [
+    String(lastName ?? '').trim().toLowerCase(),
+    String(firstName ?? '').trim().toLowerCase(),
+    String(birthDate ?? '').trim()
+  ].join('|');
+}
+
+function parseImportedNullableNumber(rawValue) {
+  const value = String(rawValue ?? '').trim();
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number(value.replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseImportedBoundedInt(rawValue, min, max, fallback) {
+  const value = String(rawValue ?? '').trim();
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) {
+    return fallback;
+  }
+
+  if (parsed < min || parsed > max) {
+    return fallback;
+  }
+
+  return parsed;
+}
+
+function normalizeImportedBoolean(rawValue) {
+  const value = String(rawValue ?? '').trim().toLowerCase();
+  return value === 'true' || value === '1' || value === 'oui' || value === 'yes';
+}
+
+function normalizeImportedSex(rawValue) {
+  const value = String(rawValue ?? '').trim().toLowerCase();
+  if (value === 'f' || value === 'femme' || value === 'female') {
+    return 'Femme';
+  }
+  if (value === 'm' || value === 'homme' || value === 'male') {
+    return 'Homme';
+  }
+  return 'Non renseigne';
+}
+
+function normalizeImportedMaritalStatus(rawValue) {
+  const value = String(rawValue ?? '').trim();
+  const accepted = ['Non renseigne', 'Celibataire', 'Marie(e)', 'Pacse(e)', 'Divorce(e)', 'Veuf(ve)'];
+  return accepted.includes(value) ? value : 'Non renseigne';
+}
+
+function normalizeImportedManualPreference(rawValue) {
+  const value = String(rawValue ?? '').trim().toLowerCase();
+  if (value === 'droitier') {
+    return 'Droitier';
+  }
+  if (value === 'gaucher') {
+    return 'Gaucher';
+  }
+  return 'Non renseigne';
+}
+
+app.get('/api/data-management/import-template', authMiddleware, adminOnlyMiddleware, (req, res) => {
+  const format = String(req.query.format ?? 'csv').trim().toLowerCase();
+  const dataset = String(req.query.dataset ?? 'patients').trim().toLowerCase();
+
+  if (!['csv', 'xlsx'].includes(format)) {
+    return res.status(400).json({ message: 'Format de template invalide' });
+  }
+
+  if (!['patients', 'directory-contacts', 'mixed'].includes(dataset)) {
+    return res.status(400).json({ message: 'Jeu de donnees invalide' });
+  }
+
+  if (format === 'csv' && dataset === 'mixed') {
+    return res.status(400).json({ message: 'Le mode mixte requiert un template XLSX multi-feuilles' });
+  }
+
+  if (format === 'csv') {
+    const csvContent = buildDataImportTemplateCsv(dataset);
+    const fileName = `osteosoft-template-${dataset}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    return res.status(200).send(`\uFEFF${csvContent}`);
+  }
+
+  const workbookBuffer = buildDataImportTemplateWorkbook(dataset);
+  const fileName = `osteosoft-template-${dataset}.xlsx`;
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  return res.status(200).send(workbookBuffer);
+});
+
+app.post('/api/data-management/import', authMiddleware, adminOnlyMiddleware, (req, res) => {
+  const parsed = dataImportPayloadSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Payload d\'import invalide' });
+  }
+
+  const payload = parsed.data;
+  const scopedOffices = getScopedOfficeOptions(req.userAccess, req.user.role === 'admin');
+  const allowedOfficeIds = new Set(
+    scopedOffices.map((office) => Number(office.id)).filter((id) => Number.isInteger(id) && id > 0)
+  );
+
+  if (!allowedOfficeIds.has(payload.officeId)) {
+    return res.status(403).json({ message: 'Acces refuse au cabinet cible' });
+  }
+
+  const officeExists = db.prepare('SELECT id FROM offices WHERE id = ?').get(payload.officeId);
+  if (!officeExists) {
+    return res.status(404).json({ message: 'Cabinet cible introuvable' });
+  }
+
+  try {
+    const normalizedBase64 = payload.contentBase64.includes(',')
+      ? payload.contentBase64.slice(payload.contentBase64.indexOf(',') + 1)
+      : payload.contentBase64;
+    const fileBuffer = Buffer.from(normalizedBase64, 'base64');
+    const workbook = parseDataImportWorkbook(fileBuffer, payload.format);
+    const { patientRows, contactRows, consultationRows } = getDataImportRows(workbook, payload.dataset);
+
+    const errors = [];
+    let importedPatients = 0;
+    let importedContacts = 0;
+    let importedConsultations = 0;
+    let skippedRows = 0;
+    const importedPatientIdByKey = new Map();
+
+    for (let index = 0; index < patientRows.length; index += 1) {
+      const row = patientRows[index];
+      const rowLabel = `Patients ligne ${index + 2}`;
+
+      if (isDataImportRowEmpty(row)) {
+        skippedRows += 1;
+        continue;
+      }
+
+      const patientPayload = {
+        sex: normalizeImportedSex(getDataImportFieldValue(row, ['sex', 'sexe'])),
+        lastName: getDataImportFieldValue(row, ['lastName', 'lastname', 'nom']),
+        firstName: getDataImportFieldValue(row, ['firstName', 'firstname', 'prenom']),
+        birthDate: getDataImportFieldValue(row, ['birthDate', 'dateNaissance', 'datenaissance']),
+        mobilePhone: getDataImportFieldValue(row, ['mobilePhone', 'telephonePortable', 'portable']),
+        landlinePhone: getDataImportFieldValue(row, ['landlinePhone', 'telephoneFixe', 'fixe']),
+        email: getDataImportFieldValue(row, ['email']),
+        address1: getDataImportFieldValue(row, ['address1', 'adresse1']),
+        address2: getDataImportFieldValue(row, ['address2', 'adresse2']),
+        postalCode: getDataImportFieldValue(row, ['postalCode', 'codePostal']),
+        city: getDataImportFieldValue(row, ['city', 'ville']),
+        country: getDataImportFieldValue(row, ['country', 'pays']) || 'France',
+        maritalStatus: normalizeImportedMaritalStatus(getDataImportFieldValue(row, ['maritalStatus', 'situationMatrimoniale'])),
+        childrenCount: Number(getDataImportFieldValue(row, ['childrenCount', 'nombreEnfants']) || 0),
+        occupationOrSchool: getDataImportFieldValue(row, ['occupationOrSchool', 'profession']),
+        hobbies: getDataImportFieldValue(row, ['hobbies', 'loisirs']),
+        primaryDoctor: getDataImportFieldValue(row, ['primaryDoctor', 'medecinTraitant']),
+        socialSecurityNumber: getDataImportFieldValue(row, ['socialSecurityNumber', 'numeroSecuriteSociale']),
+        referredBy: getDataImportFieldValue(row, ['referredBy', 'adressePar', 'orientePar']),
+        manualPreference: normalizeImportedManualPreference(getDataImportFieldValue(row, ['manualPreference', 'lateralite'])),
+        generalRemarks: getDataImportFieldValue(row, ['generalRemarks', 'remarques']),
+        relatedPeople: getDataImportFieldValue(row, ['relatedPeople', 'personnesLiees']),
+        isDeceased: normalizeImportedBoolean(getDataImportFieldValue(row, ['isDeceased', 'decede'])),
+        medicalHistory: getDataImportFieldValue(row, ['medicalHistory', 'antecedents']),
+        consultationNote: '',
+        consultationDocuments: []
+      };
+
+      const validated = createPatientSchema.safeParse(patientPayload);
+      if (!validated.success) {
+        errors.push({ row: rowLabel, message: validated.error.issues[0]?.message ?? 'Donnees patient invalides' });
+        skippedRows += 1;
+        continue;
+      }
+
+      try {
+        const patient = validated.data;
+        const lastName = patient.lastName.trim();
+        const firstName = patient.firstName.trim();
+        const fullName = `${lastName} ${firstName}`.trim();
+        const mobilePhone = patient.mobilePhone.trim();
+        const landlinePhone = patient.landlinePhone.trim();
+        const mainPhone = mobilePhone || landlinePhone || 'Non renseigne';
+
+        const retentionDate = new Date();
+        retentionDate.setFullYear(retentionDate.getFullYear() + 10);
+        const retentionUntil = retentionDate.toISOString().slice(0, 10);
+        const normalizedRelatedPeople = formatRelatedPeople(parseRelatedPeople(patient.relatedPeople));
+
+        const medicalRecord = {
+          generalRemarks: patient.generalRemarks.trim(),
+          medicalHistory: patient.medicalHistory.trim(),
+          consultationNote: '',
+          relatedPeople: normalizedRelatedPeople,
+          mobilePhone,
+          landlinePhone,
+          email: patient.email.trim(),
+          address1: patient.address1.trim(),
+          address2: patient.address2.trim(),
+          postalCode: patient.postalCode.trim(),
+          city: patient.city.trim(),
+          country: patient.country.trim() || 'France',
+          maritalStatus: patient.maritalStatus,
+          childrenCount: patient.childrenCount,
+          occupationOrSchool: patient.occupationOrSchool.trim(),
+          hobbies: patient.hobbies.trim(),
+          primaryDoctor: patient.primaryDoctor.trim(),
+          socialSecurityNumber: patient.socialSecurityNumber.trim(),
+          referredBy: patient.referredBy.trim(),
+          manualPreference: normalizeManualPreference(patient.manualPreference),
+          isDeceased: Boolean(patient.isDeceased)
+        };
+
+        const birthDate = patient.birthDate.trim();
+        const inserted = db
+          .prepare(
+            `INSERT INTO patients
+             (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count, last_visit, consent_signed, retention_until, office_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            encryptSensitiveField(fullName),
+            encryptSensitiveField(mainPhone),
+            encryptSensitiveField(JSON.stringify(medicalRecord)),
+            patient.sex === 'Femme' ? 'F' : patient.sex === 'Homme' ? 'M' : 'Non renseigne',
+            birthDate || null,
+            patient.maritalStatus,
+            patient.childrenCount,
+            null,
+            1,
+            retentionUntil,
+            payload.officeId
+          );
+
+        importedPatientIdByKey.set(
+          buildDataImportPatientKey(lastName, firstName, birthDate || ''),
+          Number(inserted.lastInsertRowid)
+        );
+
+        storeAntecedentTypes(extractAntecedentCategories(patient.medicalHistory));
+        replacePatientAntecedents(Number(inserted.lastInsertRowid), patient.medicalHistory);
+        importedPatients += 1;
+      } catch (error) {
+        errors.push({ row: rowLabel, message: error instanceof Error ? error.message : 'Echec insertion patient' });
+        skippedRows += 1;
+      }
+    }
+
+    const consultationPatientLookup = new Map(importedPatientIdByKey);
+    if (consultationRows.length > 0) {
+      const patientRowsForOffice = db
+        .prepare(
+          `SELECT id, cipher_full_name, birth_date
+           FROM patients
+           WHERE is_deleted = 0
+             AND office_id = ?`
+        )
+        .all(payload.officeId);
+
+      for (const patientRow of patientRowsForOffice) {
+        const fullName = decryptSensitiveField(patientRow.cipher_full_name);
+        const parts = fullName.trim().split(/\s+/).filter(Boolean);
+        if (parts.length === 0) {
+          continue;
+        }
+
+        const lastName = parts[0] ?? '';
+        const firstName = parts.slice(1).join(' ');
+        const key = buildDataImportPatientKey(lastName, firstName, String(patientRow.birth_date ?? ''));
+        if (!consultationPatientLookup.has(key)) {
+          consultationPatientLookup.set(key, Number(patientRow.id));
+        }
+      }
+    }
+
+    for (let index = 0; index < consultationRows.length; index += 1) {
+      const row = consultationRows[index];
+      const rowLabel = `Consultations ligne ${index + 2}`;
+
+      if (isDataImportRowEmpty(row)) {
+        skippedRows += 1;
+        continue;
+      }
+
+      const patientLastName = getDataImportFieldValue(row, ['patientLastName', 'nomPatient', 'patientNom']);
+      const patientFirstName = getDataImportFieldValue(row, ['patientFirstName', 'prenomPatient', 'patientPrenom']);
+      const patientBirthDate = getDataImportFieldValue(row, ['patientBirthDate', 'dateNaissancePatient']);
+      const startedAt = getDataImportFieldValue(row, ['startedAt', 'dateHeure', 'dateConsultation']);
+
+      if (!patientLastName || !patientFirstName || !startedAt) {
+        errors.push({ row: rowLabel, message: 'patientLastName, patientFirstName et startedAt sont obligatoires' });
+        skippedRows += 1;
+        continue;
+      }
+
+      const patientKey = buildDataImportPatientKey(patientLastName, patientFirstName, patientBirthDate);
+      const patientId = consultationPatientLookup.get(patientKey);
+      if (!Number.isInteger(patientId) || patientId <= 0) {
+        errors.push({ row: rowLabel, message: 'Patient introuvable pour la consultation (nom/prenom/date de naissance)' });
+        skippedRows += 1;
+        continue;
+      }
+
+      const payloadConsultation = {
+        startedAt,
+        officeId: payload.officeId,
+        practitioner: getDataImportFieldValue(row, ['practitioner', 'praticien']),
+        title: getDataImportFieldValue(row, ['title', 'titre']),
+        important: normalizeImportedBoolean(getDataImportFieldValue(row, ['important', 'importantFlag'])),
+        heightCm: parseImportedNullableNumber(getDataImportFieldValue(row, ['heightCm', 'tailleCm'])),
+        weightKg: parseImportedNullableNumber(getDataImportFieldValue(row, ['weightKg', 'poidsKg'])),
+        evaBefore: parseImportedBoundedInt(getDataImportFieldValue(row, ['evaBefore', 'evaAvant']), 0, 10, 0),
+        evaAfter: parseImportedBoundedInt(getDataImportFieldValue(row, ['evaAfter', 'evaApres']), 0, 10, 0),
+        profile: getDataImportFieldValue(row, ['profile', 'profil']) || 'Adulte',
+        reasonItems: [],
+        motifMainHtml: getDataImportFieldValue(row, ['motifMainHtml', 'motif']),
+        testsHtml: getDataImportFieldValue(row, ['testsHtml', 'tests']),
+        schemaHtml: getDataImportFieldValue(row, ['schemaHtml', 'schema']),
+        treatmentsHtml: getDataImportFieldValue(row, ['treatmentsHtml', 'traitements']),
+        remarksHtml: getDataImportFieldValue(row, ['remarksHtml', 'remarques']),
+        consultationDocuments: []
+      };
+
+      const validatedConsultation = createPatientConsultationSchema.safeParse(payloadConsultation);
+      if (!validatedConsultation.success) {
+        errors.push({ row: rowLabel, message: validatedConsultation.error.issues[0]?.message ?? 'Donnees consultation invalides' });
+        skippedRows += 1;
+        continue;
+      }
+
+      try {
+        const consultation = validatedConsultation.data;
+        const normalizedReasonItems = normalizeConsultationReasonItems(consultation.reasonItems);
+
+        const inserted = db.prepare(
+          `INSERT INTO consultations
+            (patient_id, started_at, office_id, practitioner, title, important,
+             height_cm, weight_kg, eva_before, eva_after, profile)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+          patientId,
+          consultation.startedAt,
+          payload.officeId,
+          consultation.practitioner.trim(),
+          consultation.title.trim(),
+          consultation.important ? 1 : 0,
+          consultation.heightCm,
+          consultation.weightKg,
+          consultation.evaBefore,
+          consultation.evaAfter,
+          consultation.profile.trim() || 'Adulte'
+        );
+
+        const consultationId = Number(inserted.lastInsertRowid);
+        replaceConsultationReasonItems(consultationId, normalizedReasonItems);
+        replaceConsultationSections(consultationId, {
+          motifMainHtml: consultation.motifMainHtml,
+          testsHtml: consultation.testsHtml,
+          schemaHtml: consultation.schemaHtml,
+          treatmentsHtml: consultation.treatmentsHtml,
+          remarksHtml: consultation.remarksHtml
+        });
+
+        importedConsultations += 1;
+      } catch (error) {
+        errors.push({ row: rowLabel, message: error instanceof Error ? error.message : 'Echec insertion consultation' });
+        skippedRows += 1;
+      }
+    }
+
+    for (let index = 0; index < contactRows.length; index += 1) {
+      const row = contactRows[index];
+      const rowLabel = `Contacts ligne ${index + 2}`;
+
+      if (isDataImportRowEmpty(row)) {
+        skippedRows += 1;
+        continue;
+      }
+
+      const firstName = getDataImportFieldValue(row, ['firstName', 'firstname', 'prenom']);
+      const lastName = getDataImportFieldValue(row, ['lastName', 'lastname', 'nom']);
+      const organization = getDataImportFieldValue(row, ['organization', 'societe', 'organisation']);
+      if (!firstName && !lastName && !organization) {
+        errors.push({ row: rowLabel, message: 'Renseignez au moins un nom ou une organisation' });
+        skippedRows += 1;
+        continue;
+      }
+
+      const kindRaw = getDataImportFieldValue(row, ['kind', 'type']).toLowerCase();
+      const kind = kindRaw === 'company' || kindRaw === 'societe' ? 'company' : 'person';
+
+      try {
+        db
+          .prepare(
+            `INSERT INTO directory_contacts (
+               office_id, kind, first_name, last_name, organization, role,
+               email, mobile_phone, landline_phone,
+               address_line1, address_line2, postal_code, city, country,
+               notes, created_by, updated_by
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            payload.officeId,
+            kind,
+            firstName.slice(0, 120),
+            lastName.slice(0, 120),
+            organization.slice(0, 200),
+            getDataImportFieldValue(row, ['role', 'fonction']).slice(0, 120),
+            getDataImportFieldValue(row, ['email']).slice(0, 160),
+            getDataImportFieldValue(row, ['mobilePhone', 'telephonePortable', 'portable']).slice(0, 50),
+            getDataImportFieldValue(row, ['landlinePhone', 'telephoneFixe', 'fixe']).slice(0, 50),
+            getDataImportFieldValue(row, ['address1', 'adresse1']).slice(0, 200),
+            getDataImportFieldValue(row, ['address2', 'adresse2']).slice(0, 200),
+            getDataImportFieldValue(row, ['postalCode', 'codePostal']).slice(0, 20),
+            getDataImportFieldValue(row, ['city', 'ville']).slice(0, 120),
+            (getDataImportFieldValue(row, ['country', 'pays']) || 'France').slice(0, 80),
+            getDataImportFieldValue(row, ['notes', 'commentaires']).slice(0, 4000),
+            req.user.sub,
+            req.user.sub
+          );
+        importedContacts += 1;
+      } catch (error) {
+        errors.push({ row: rowLabel, message: error instanceof Error ? error.message : 'Echec insertion contact' });
+        skippedRows += 1;
+      }
+    }
+
+    writeAuditLog(req.user.sub, 'IMPORT', 'data-management', String(payload.officeId), {
+      dataset: payload.dataset,
+      format: payload.format,
+      importedPatients,
+      importedContacts,
+      importedConsultations,
+      skippedRows,
+      errorCount: errors.length
+    });
+
+    return res.json({
+      importedPatients,
+      importedContacts,
+      importedConsultations,
+      skippedRows,
+      errorCount: errors.length,
+      errors: errors.slice(0, 100)
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Impossible de traiter le fichier d\'import';
+    return res.status(400).json({ message });
+  }
 });
 
 app.get('/api/data-management/backup', authMiddleware, adminOnlyMiddleware, async (_req, res) => {

@@ -44,6 +44,10 @@ import {
   DirectoryContactPayload,
   DirectoryContactsPayload,
   DashboardPayload,
+  DataImportDataset,
+  DataImportFormat,
+  DataImportPayload,
+  DataImportResult,
   GeneralSettingsPayload,
   InvoiceSummaryTile,
   LocationPair,
@@ -779,6 +783,25 @@ export class ApiService {
   async restoreDataBackup(payload: unknown): Promise<void> {
     await firstValueFrom(
       this.http.post<void>(`${this.baseUrl}/data-management/restore`, payload)
+    );
+  }
+
+  async downloadDataImportTemplate(format: DataImportFormat, dataset: DataImportDataset): Promise<Blob> {
+    const params = new HttpParams()
+      .set('format', format)
+      .set('dataset', dataset);
+
+    return firstValueFrom(
+      this.http.get(`${this.baseUrl}/data-management/import-template`, {
+        params,
+        responseType: 'blob'
+      })
+    );
+  }
+
+  async importDataFile(payload: DataImportPayload): Promise<DataImportResult> {
+    return firstValueFrom(
+      this.http.post<DataImportResult>(`${this.baseUrl}/data-management/import`, payload)
     );
   }
 

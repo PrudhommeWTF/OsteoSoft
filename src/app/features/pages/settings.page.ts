@@ -7,6 +7,9 @@ import {
   AgendaSettingsPayload,
   AuthUser,
   CreateOfficePayload,
+  DataImportDataset,
+  DataImportFormat,
+  DataImportResult,
   GeneralSettingsPayload,
   LocalAgendaCalendar,
   NewOfficeDraft,
@@ -126,6 +129,7 @@ type RestoreProgressStep = 'idle' | 'reading' | 'validating' | 'checksum' | 'rea
 type RestoreStepStatus = 'pending' | 'active' | 'done' | 'error';
 type DraftSaveState = 'idle' | 'saving' | 'saved' | 'error';
 type UserModalTabId = 'application-rights' | 'cabinet-rights' | 'identity' | 'professional' | 'billing';
+type DataManagementTabId = 'backup-restore' | 'rgpd' | 'import' | 'cleanup';
 
 @Component({
   selector: 'app-settings-page',
@@ -358,6 +362,15 @@ export class SettingsPage implements OnDestroy {
   readonly backupReminderError = signal('');
   readonly backupReminderSuccess = signal('');
   readonly selectedBackupFileName = signal('');
+  readonly selectedDataImportFileName = signal('');
+  readonly selectedDataImportFileBase64 = signal('');
+  readonly selectedDataImportFileMimeType = signal('');
+  readonly dataImportTargetOfficeId = signal<number | null>(null);
+  readonly dataImportFormat = signal<DataImportFormat>('csv');
+  readonly dataImportDataset = signal<DataImportDataset>('patients');
+  readonly isDownloadingImportTemplate = signal(false);
+  readonly isImportingDataFile = signal(false);
+  readonly dataImportResult = signal<DataImportResult | null>(null);
   readonly restoreProgressStep = signal<RestoreProgressStep>('idle');
   readonly restoreProgressLabel = signal('');
   readonly restoreProgressPercent = signal(0);
@@ -441,6 +454,15 @@ export class SettingsPage implements OnDestroy {
   readonly auditLogLimitOptions = [50, 100, 200, 500];
   readonly generalDeviseOptions = ['EUR', 'USD', 'CHF', 'GBP', 'CAD'];
   readonly backupReminderOptions = ['Toutes les semaines', 'Tous les 15 jours', 'Tous les mois', 'Tous les 2 mois'] as const;
+  readonly dataImportFormatOptions: Array<{ value: DataImportFormat; label: string }> = [
+    { value: 'csv', label: 'CSV (une table)' },
+    { value: 'xlsx', label: 'Excel XLSX (plusieurs feuilles)' }
+  ];
+  readonly dataImportDatasetOptions: Array<{ value: DataImportDataset; label: string }> = [
+    { value: 'patients', label: 'Patients' },
+    { value: 'directory-contacts', label: 'Contacts du repertoire' },
+    { value: 'mixed', label: 'Patients + Consultations + Contacts (XLSX)' }
+  ];
   readonly invoiceNumberFormatOptions: Array<{ value: CreateOfficePayload['invoiceNumberFormat']; label: string }> = [
     { value: 'AAAA-XXXXXX', label: 'Compteur continu annuel (AAAA-XXXXXX)' },
     { value: 'AAAAMM-XXXXXX', label: 'Compteur continu mensuel (AAAAMM-XXXXXX)' },
@@ -530,6 +552,7 @@ export class SettingsPage implements OnDestroy {
     void this.loadAccessProfiles();
     void this.loadCurrentUser();
     void this.loadUsers();
+    void this.loadOffices();
   }
 
   ngOnDestroy(): void {
@@ -620,6 +643,13 @@ export class SettingsPage implements OnDestroy {
   ];
 
   readonly activeSectionId = signal<SettingsSectionId>('data-management');
+  readonly activeDataManagementTabId = signal<DataManagementTabId>('backup-restore');
+  readonly dataManagementTabs: Array<{ id: DataManagementTabId; label: string }> = [
+    { id: 'backup-restore', label: 'Sauvegarde / Restauration' },
+    { id: 'rgpd', label: 'RGPD' },
+    { id: 'import', label: 'Import de données' },
+    { id: 'cleanup', label: 'Nettoyage des données' }
+  ];
 
   readonly activeSection = computed(
     () => this.sections.find((section) => section.id === this.activeSectionId()) ?? this.sections[0]
@@ -766,6 +796,10 @@ export class SettingsPage implements OnDestroy {
       void this.loadOffices();
     }
 
+    if (sectionId === 'data-management' && this.offices().length === 0 && !this.isOfficesLoading()) {
+      void this.loadOffices();
+    }
+
 
 
     if (sectionId === 'offices' && this.offices().length === 0 && !this.isOfficesLoading()) {
@@ -775,6 +809,10 @@ export class SettingsPage implements OnDestroy {
     if (sectionId === 'audit-logs' && this.auditLogs().length === 0 && !this.isAuditLogsLoading()) {
       void this.loadAuditLogs();
     }
+  }
+
+  selectDataManagementTab(tabId: DataManagementTabId): void {
+    this.activeDataManagementTabId.set(tabId);
   }
 
   onAuditLogLimitChange(value: string): void {
@@ -1411,6 +1449,166 @@ export class SettingsPage implements OnDestroy {
     }
   }
 
+  onDataImportFormatChange(value: string): void {
+    const nextFormat: DataImportFormat = value === 'xlsx' ? 'xlsx' : 'csv';
+    this.dataImportFormat.set(nextFormat);
+
+    if (nextFormat === 'csv' && this.dataImportDataset() === 'mixed') {
+      this.dataImportDataset.set('patients');
+    }
+
+    this.dataImportResult.set(null);
+    this.dataManagementError.set('');
+    this.dataManagementSuccess.set('');
+  }
+
+  onDataImportDatasetChange(value: string): void {
+    const allowed: DataImportDataset[] = ['patients', 'directory-contacts', 'mixed'];
+    const nextDataset = allowed.includes(value as DataImportDataset) ? (value as DataImportDataset) : 'patients';
+
+    if (this.dataImportFormat() === 'csv' && nextDataset === 'mixed') {
+      this.dataImportDataset.set('patients');
+      return;
+    }
+
+    this.dataImportDataset.set(nextDataset);
+    this.dataImportResult.set(null);
+    this.dataManagementError.set('');
+    this.dataManagementSuccess.set('');
+  }
+
+  onDataImportOfficeChange(value: string): void {
+    const parsed = Number(value);
+    this.dataImportTargetOfficeId.set(Number.isInteger(parsed) && parsed > 0 ? parsed : null);
+    this.dataImportResult.set(null);
+    this.dataManagementError.set('');
+    this.dataManagementSuccess.set('');
+  }
+
+  async downloadDataImportTemplate(): Promise<void> {
+    if (this.isDownloadingImportTemplate()) {
+      return;
+    }
+
+    const format = this.dataImportFormat();
+    const dataset = this.dataImportDataset();
+    if (format === 'csv' && dataset === 'mixed') {
+      this.dataManagementError.set('Le template mixte nécessite le format XLSX.');
+      return;
+    }
+
+    this.dataManagementError.set('');
+    this.dataManagementSuccess.set('');
+    this.isDownloadingImportTemplate.set(true);
+
+    try {
+      const blob = await this.api.downloadDataImportTemplate(format, dataset);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `osteosoft-template-${dataset}.${format}`;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      this.dataManagementSuccess.set('Template téléchargé avec succès.');
+    } catch {
+      this.dataManagementError.set('Impossible de télécharger le template d\'import.');
+    } finally {
+      this.isDownloadingImportTemplate.set(false);
+    }
+  }
+
+  async onDataImportFileSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement | null;
+    const file = input?.files?.item(0) ?? null;
+
+    this.dataManagementError.set('');
+    this.dataManagementSuccess.set('');
+    this.dataImportResult.set(null);
+
+    if (!file) {
+      this.selectedDataImportFileName.set('');
+      this.selectedDataImportFileBase64.set('');
+      this.selectedDataImportFileMimeType.set('');
+      return;
+    }
+
+    const extension = file.name.toLowerCase();
+    if (!(extension.endsWith('.csv') || extension.endsWith('.xlsx'))) {
+      this.dataManagementError.set('Format invalide. Utilisez un fichier .csv ou .xlsx.');
+      this.selectedDataImportFileName.set('');
+      this.selectedDataImportFileBase64.set('');
+      this.selectedDataImportFileMimeType.set('');
+      if (input) {
+        input.value = '';
+      }
+      return;
+    }
+
+    this.selectedDataImportFileName.set(file.name);
+    this.selectedDataImportFileMimeType.set(file.type || 'application/octet-stream');
+
+    try {
+      const contentBase64 = await this.readFileAsBase64(file);
+      this.selectedDataImportFileBase64.set(contentBase64);
+      this.dataManagementSuccess.set('Fichier prêt pour import.');
+    } catch {
+      this.selectedDataImportFileBase64.set('');
+      this.dataManagementError.set('Impossible de lire le fichier sélectionné.');
+    }
+  }
+
+  async runDataImport(): Promise<void> {
+    const officeId = this.dataImportTargetOfficeId();
+    if (!officeId) {
+      this.dataManagementError.set('Sélectionnez un cabinet cible pour l\'import.');
+      return;
+    }
+
+    const fileName = this.selectedDataImportFileName();
+    const contentBase64 = this.selectedDataImportFileBase64();
+    if (!fileName || !contentBase64) {
+      this.dataManagementError.set('Sélectionnez un fichier CSV/XLSX à importer.');
+      return;
+    }
+
+    if (this.isImportingDataFile()) {
+      return;
+    }
+
+    const format: DataImportFormat = fileName.toLowerCase().endsWith('.xlsx') ? 'xlsx' : 'csv';
+    const dataset = this.dataImportDataset();
+    if (format === 'csv' && dataset === 'mixed') {
+      this.dataManagementError.set('Le mode mixte requiert un fichier XLSX.');
+      return;
+    }
+
+    this.dataManagementError.set('');
+    this.dataManagementSuccess.set('');
+    this.dataImportResult.set(null);
+    this.isImportingDataFile.set(true);
+
+    try {
+      const result = await this.api.importDataFile({
+        officeId,
+        format,
+        dataset,
+        fileName,
+        contentBase64
+      });
+
+      this.dataImportResult.set(result);
+      this.dataManagementSuccess.set(
+        `Import terminé: ${result.importedPatients} patient(s), ${result.importedConsultations} consultation(s), ${result.importedContacts} contact(s), ${result.skippedRows} ligne(s) ignorée(s).`
+      );
+    } catch {
+      this.dataManagementError.set('Echec de l\'import. Vérifiez le format et le contenu du fichier.');
+    } finally {
+      this.isImportingDataFile.set(false);
+    }
+  }
+
   async onBackupFileSelected(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement | null;
     const file = input?.files?.item(0) ?? null;
@@ -1530,6 +1728,20 @@ export class SettingsPage implements OnDestroy {
       data: JSON.parse(dataText),
       ...(metaText ? { meta: JSON.parse(metaText) } : {})
     };
+  }
+
+  private async readFileAsBase64(file: File): Promise<string> {
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    const chunkSize = 0x8000;
+
+    for (let index = 0; index < bytes.length; index += chunkSize) {
+      const chunk = bytes.subarray(index, index + chunkSize);
+      binary += String.fromCharCode(...chunk);
+    }
+
+    return btoa(binary);
   }
 
   private resetRestoreProgress(): void {
@@ -2418,6 +2630,12 @@ export class SettingsPage implements OnDestroy {
     try {
       const offices = await this.api.getOffices();
       this.offices.set(offices);
+      const currentTargetOfficeId = this.dataImportTargetOfficeId();
+      const hasCurrentTargetOffice = offices.some((office) => office.id === currentTargetOfficeId);
+      if (!hasCurrentTargetOffice) {
+        this.dataImportTargetOfficeId.set(offices[0]?.id ?? null);
+      }
+
       if (offices.length > 0 && this.serviceTypes().length === 0 && this.paymentMethods().length === 0) {
         const firstOffice = offices[0];
         this.serviceTypes.set(

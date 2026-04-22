@@ -1088,6 +1088,32 @@ export type GeneralSettingsPayload = {
   backupReminderFrequency: 'Toutes les semaines' | 'Tous les 15 jours' | 'Tous les mois' | 'Tous les 2 mois';
 };
 
+export type DataImportFormat = 'csv' | 'xlsx';
+
+export type DataImportDataset = 'patients' | 'directory-contacts' | 'mixed';
+
+export type DataImportPayload = {
+  officeId: number;
+  format: DataImportFormat;
+  dataset: DataImportDataset;
+  fileName: string;
+  contentBase64: string;
+};
+
+export type DataImportErrorItem = {
+  row: string;
+  message: string;
+};
+
+export type DataImportResult = {
+  importedPatients: number;
+  importedContacts: number;
+  importedConsultations: number;
+  skippedRows: number;
+  errorCount: number;
+  errors: DataImportErrorItem[];
+};
+
 export type UpdatePatientPayload = {
   lastName?: string;
   firstName?: string;
