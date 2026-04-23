@@ -172,6 +172,8 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   readonly draftSaveState = signal<DraftSaveState>('idle');
   readonly lastDraftSavedAt = signal<number | null>(null);
   readonly draftStatusNowTick = signal(Date.now());
+  readonly draftToastVisible = signal(false);
+  readonly draftToastMessage = signal('');
   readonly primaryDoctorSearch = signal('');
   readonly primaryDoctorSuggestions = signal<PeoplePickerContact[]>([]);
   readonly isSearchingPrimaryDoctor = signal(false);
@@ -394,8 +396,11 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   private antecedentIdSequence = 1;
   private autosaveTimer: ReturnType<typeof setInterval> | null = null;
   private draftStatusTimer: ReturnType<typeof setInterval> | null = null;
+  private draftToastHideTimer: ReturnType<typeof setTimeout> | null = null;
+  private draftToastLastShownAt = 0;
   private isPersistingDraft = false;
   private pendingDraftSave = false;
+  private pendingManualDraftSave = false;
   private isViewReady = false;
   private pendingBirthDateIso = '';
   private isSynchronizingLocationFields = false;
@@ -1165,6 +1170,10 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     await this.persistDraft();
   }
 
+  async saveDraftNow(): Promise<void> {
+    await this.persistDraft({ isManualSave: true });
+  }
+
   ngOnInit(): void {
     void this.loadAntecedentTypes();
     void this.loadLocationPairs();
@@ -1178,10 +1187,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     }, 1000);
 
     this.autosaveTimer = setInterval(() => {
-      const step = this.currentStep();
-      if (step === 4 || step === 5) {
-        void this.persistDraft();
-      }
+      void this.persistDraft({ isAutoSave: true });
     }, 3 * 60 * 1000);
   }
 
@@ -2109,6 +2115,8 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       this.draftStatusTimer = null;
     }
 
+    this.clearDraftToastTimer();
+
     this.destroyAntecedentDatepicker();
 
     const el = this.birthDateInputRef().nativeElement;
@@ -2642,9 +2650,15 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  private async persistDraft(): Promise<void> {
+  private async persistDraft(options?: { isAutoSave?: boolean; isManualSave?: boolean }): Promise<void> {
+    const isAutoSave = options?.isAutoSave === true;
+    const isManualSave = options?.isManualSave === true;
+
     if (this.isPersistingDraft) {
       this.pendingDraftSave = true;
+      if (isManualSave) {
+        this.pendingManualDraftSave = true;
+      }
       return;
     }
 
@@ -2657,21 +2671,62 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       this.saveLocalDraft(this.currentStep(), payload);
       this.lastDraftSavedAt.set(Date.now());
       this.draftSaveState.set('saved');
+      if (isManualSave) {
+        this.showDraftToast('Brouillon patient sauvegardé', { force: true });
+      } else if (isAutoSave) {
+        this.showDraftToast('Brouillon patient sauvegardé automatiquement');
+      } else {
+        this.showDraftToast('Brouillon patient sauvegardé');
+      }
     } catch {
       const payload = this.buildPatientPayload();
       const localSaved = this.saveLocalDraft(this.currentStep(), payload);
       if (localSaved) {
         this.lastDraftSavedAt.set(Date.now());
         this.draftSaveState.set('saved');
+        if (isManualSave) {
+          this.showDraftToast('Brouillon patient sauvegardé', { force: true });
+        } else if (isAutoSave) {
+          this.showDraftToast('Brouillon patient sauvegardé automatiquement');
+        } else {
+          this.showDraftToast('Brouillon patient sauvegardé');
+        }
       } else {
         this.draftSaveState.set('error');
       }
     } finally {
       this.isPersistingDraft = false;
       if (this.pendingDraftSave) {
+        const replayAsManual = this.pendingManualDraftSave;
         this.pendingDraftSave = false;
-        void this.persistDraft();
+        this.pendingManualDraftSave = false;
+        void this.persistDraft(replayAsManual ? { isManualSave: true } : undefined);
       }
+    }
+  }
+
+  private showDraftToast(message: string, options?: { force?: boolean }): void {
+    const now = Date.now();
+    const force = options?.force === true;
+    if (!force && now - this.draftToastLastShownAt < 15000) {
+      return;
+    }
+
+    this.draftToastLastShownAt = now;
+    this.draftToastMessage.set(message);
+    this.draftToastVisible.set(true);
+
+    this.clearDraftToastTimer();
+    this.draftToastHideTimer = setTimeout(() => {
+      this.draftToastVisible.set(false);
+      this.draftToastHideTimer = null;
+    }, 2600);
+  }
+
+  private clearDraftToastTimer(): void {
+    if (this.draftToastHideTimer !== null) {
+      clearTimeout(this.draftToastHideTimer);
+      this.draftToastHideTimer = null;
     }
   }
 

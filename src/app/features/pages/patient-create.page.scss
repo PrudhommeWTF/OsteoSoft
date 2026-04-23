@@ -268,18 +268,24 @@
 	gap: 1rem;
 }
 
+.consultation-main-panel,
+.consultation-reasons-panel {
+	min-height: 100%;
+}
+
 .reason-item {
 	width: 100%;
-	border: 1px solid #d7dfe8;
+	border: 1px solid var(--bs-border-color);
 	border-radius: 0.5rem;
 	padding: 0.45rem 0.55rem;
 	display: flex;
 	align-items: center;
 	gap: 0.55rem;
+	color: var(--bs-body-color);
 
 	&.active {
-		border-color: #6cb189;
-		background: #f1fbf5;
+		border-color: var(--bs-success-border-subtle);
+		background: color-mix(in srgb, var(--bs-success-bg-subtle) 78%, var(--bs-body-bg) 22%);
 	}
 }
 
@@ -302,16 +308,17 @@
 .reason-item-label {
 	font-size: 0.83rem;
 	font-weight: 600;
+	color: var(--bs-body-color);
 }
 
 .consultation-kpi {
-	border: 1px solid #d7e1e8;
+	border: 1px solid var(--bs-border-color);
 	border-radius: 0.75rem;
 	padding: 0.65rem 0.85rem;
 	font-size: 1rem;
 	font-weight: 700;
-	color: #22313e;
-	background: #f8fbfe;
+	color: var(--bs-body-color);
+	background: var(--bs-body-tertiary-bg);
 }
 
 .wysiwyg-toolbar {
@@ -322,11 +329,12 @@
 }
 
 .wysiwyg-editor {
-	border: 1px solid #ced4da;
+	border: 1px solid var(--bs-border-color);
 	border-radius: 0.5rem;
 	min-height: 110px;
 	padding: 0.65rem 0.75rem;
-	background: #fff;
+	background: var(--bs-body-bg);
+	color: var(--bs-body-color);
 	overflow-wrap: anywhere;
 }
 

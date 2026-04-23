@@ -1,5 +1,13 @@
 <div class="wizard-container">
 
+  @if (draftToastVisible()) {
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1400; max-width: min(92vw, 420px);" aria-live="polite" aria-atomic="true">
+      <div class="alert alert-success shadow-sm mb-0 py-2 px-3" role="status">
+        <i class="fa-solid fa-floppy-disk me-2"></i>{{ draftToastMessage() }}
+      </div>
+    </div>
+  }
+
   <!-- Progress stepper -->
   <div class="wizard-progress mb-4">
     <div class="progress-step" [class.active]="currentStep() >= 1" [class.done]="currentStep() > 1">
@@ -313,8 +321,16 @@
         </div>
 
       </div>
-      <div class="draft-indicator px-4 py-2 border-top" [class.saving]="draftSaveState() === 'saving'" [class.error]="draftSaveState() === 'error'">
-        <i class="fa-solid fa-floppy-disk me-1"></i>{{ draftStatusText() }}
+      <div class="draft-indicator px-4 py-2 border-top d-flex flex-wrap align-items-center justify-content-between gap-2" [class.saving]="draftSaveState() === 'saving'" [class.error]="draftSaveState() === 'error'">
+        <span><i class="fa-solid fa-floppy-disk me-1"></i>{{ draftStatusText() }}</span>
+        <button type="button" class="btn btn-outline-secondary btn-sm" [disabled]="draftSaveState() === 'saving' || isSaving()" (click)="saveDraftNow()">
+          @if (draftSaveState() === 'saving') {
+            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+            Sauvegarde...
+          } @else {
+            <i class="fa-solid fa-floppy-disk me-1"></i>Sauvegarder le brouillon
+          }
+        </button>
       </div>
       <div class="wizard-actions">
         <button class="btn btn-outline-secondary" type="button" (click)="goPrev()">
@@ -458,8 +474,16 @@
           </div>
         </div>
       </div>
-      <div class="draft-indicator px-4 py-2 border-top" [class.saving]="draftSaveState() === 'saving'" [class.error]="draftSaveState() === 'error'">
-        <i class="fa-solid fa-floppy-disk me-1"></i>{{ draftStatusText() }}
+      <div class="draft-indicator px-4 py-2 border-top d-flex flex-wrap align-items-center justify-content-between gap-2" [class.saving]="draftSaveState() === 'saving'" [class.error]="draftSaveState() === 'error'">
+        <span><i class="fa-solid fa-floppy-disk me-1"></i>{{ draftStatusText() }}</span>
+        <button type="button" class="btn btn-outline-secondary btn-sm" [disabled]="draftSaveState() === 'saving' || isSaving()" (click)="saveDraftNow()">
+          @if (draftSaveState() === 'saving') {
+            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+            Sauvegarde...
+          } @else {
+            <i class="fa-solid fa-floppy-disk me-1"></i>Sauvegarder le brouillon
+          }
+        </button>
       </div>
       <div class="wizard-actions">
         <button class="btn btn-outline-secondary" type="button" (click)="goPrev()">
@@ -522,8 +546,16 @@
         }
 
       </div>
-      <div class="draft-indicator px-4 py-2 border-top" [class.saving]="draftSaveState() === 'saving'" [class.error]="draftSaveState() === 'error'">
-        <i class="fa-solid fa-floppy-disk me-1"></i>{{ draftStatusText() }}
+      <div class="draft-indicator px-4 py-2 border-top d-flex flex-wrap align-items-center justify-content-between gap-2" [class.saving]="draftSaveState() === 'saving'" [class.error]="draftSaveState() === 'error'">
+        <span><i class="fa-solid fa-floppy-disk me-1"></i>{{ draftStatusText() }}</span>
+        <button type="button" class="btn btn-outline-secondary btn-sm" [disabled]="draftSaveState() === 'saving' || isSaving()" (click)="saveDraftNow()">
+          @if (draftSaveState() === 'saving') {
+            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+            Sauvegarde...
+          } @else {
+            <i class="fa-solid fa-floppy-disk me-1"></i>Sauvegarder le brouillon
+          }
+        </button>
       </div>
       <div class="wizard-actions">
         <button class="btn btn-outline-secondary" type="button" (click)="goPrev()">
@@ -1172,8 +1204,16 @@
         }
 
       </div>
-      <div class="draft-indicator px-4 py-2 border-top" [class.saving]="draftSaveState() === 'saving'" [class.error]="draftSaveState() === 'error'">
-        <i class="fa-solid fa-floppy-disk me-1"></i>{{ draftStatusText() }}
+      <div class="draft-indicator px-4 py-2 border-top d-flex flex-wrap align-items-center justify-content-between gap-2" [class.saving]="draftSaveState() === 'saving'" [class.error]="draftSaveState() === 'error'">
+        <span><i class="fa-solid fa-floppy-disk me-1"></i>{{ draftStatusText() }}</span>
+        <button type="button" class="btn btn-outline-secondary btn-sm" [disabled]="draftSaveState() === 'saving' || isSaving()" (click)="saveDraftNow()">
+          @if (draftSaveState() === 'saving') {
+            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+            Sauvegarde...
+          } @else {
+            <i class="fa-solid fa-floppy-disk me-1"></i>Sauvegarder le brouillon
+          }
+        </button>
       </div>
       <div class="wizard-actions">
         <button class="btn btn-outline-secondary" type="button" (click)="goPrev()">Retour</button>
@@ -1319,7 +1359,6 @@
               <div class="col-12 col-lg-3 fw-semibold">Pays :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="country" /></div>
               <div class="col-12 col-lg-3 fw-semibold">N° de Sécurité Sociale :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="socialSecurityNumber" /></div>
               <div class="col-12 col-lg-3 fw-semibold">Mutuelle :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="insurance" /></div>
-              <div class="col-12 col-lg-3 fw-semibold">Nom du document :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="documentName" /></div>
               <div class="col-12 col-lg-3 fw-semibold">Mentions supplémentaires :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="additionalMentions" /></div>
               <div class="col-12 col-lg-3 fw-semibold">Intégrer la signature :</div><div class="col-12 col-lg-9"><input class="form-check-input mt-1" type="checkbox" formControlName="includeSignature" /></div>
               <div class="col-12 col-lg-3 fw-semibold">Commentaire interne :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="internalComment" /></div>
@@ -1327,8 +1366,7 @@
               <div class="col-12 col-lg-9">
                 <select
                   class="form-select form-select-sm"
-                  formControlName="paymentMethod"
-                  [class.border-warning]="isConsultationBillingPaymentPending()">
+                  formControlName="paymentMethod">
                   <option value="Paiement en attente">Paiement en attente</option>
                   @for (method of consultationBillingPaymentMethodOptions(); track method) {
                     <option [value]="method">{{ method }}</option>

@@ -9134,6 +9134,8 @@ app.get('/api/people/search', authMiddleware, requirePermission('create-patient-
     return res.json({ contacts: [] });
   }
 
+  const isAdmin = req.user.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+
   const userRows = db
     .prepare(
       `SELECT id, username, role, first_name, last_name
