@@ -571,10 +571,12 @@ export class BillingPage implements OnDestroy {
 
     this.fromDate.set(this.toDateInputValue(from));
     this.toDate.set(this.toDateInputValue(to));
+    this.debtorPage.set(1);
     await this.load();
   }
 
   async onDateRangeChange(): Promise<void> {
+    this.debtorPage.set(1);
     await this.load();
   }
 
@@ -582,12 +584,14 @@ export class BillingPage implements OnDestroy {
     const parsed = Number(value);
     this.selectedOfficeId.set(Number.isInteger(parsed) && parsed > 0 ? parsed : null);
     this.selectedUserId.set(null);
+    this.debtorPage.set(1);
     await this.load();
   }
 
   async onUserChange(value: string): Promise<void> {
     const parsed = Number(value);
     this.selectedUserId.set(Number.isInteger(parsed) && parsed > 0 ? parsed : null);
+    this.debtorPage.set(1);
     await this.load();
   }
 

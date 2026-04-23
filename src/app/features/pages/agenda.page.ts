@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  OnDestroy,
   computed,
   inject,
   signal
@@ -21,7 +22,7 @@ import { WeekCalendar } from './week-calendar';
   styleUrl: './agenda.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class AgendaPage {
+export class AgendaPage implements OnDestroy {
   private readonly api = inject(ApiService);
   private readonly authService = inject(AuthService);
   private readonly fb = inject(FormBuilder);
@@ -435,6 +436,13 @@ export class AgendaPage {
       this.exportAgendaError.set('Impossible d\'exporter les données de l\'agenda.');
     } finally {
       this.isExportingAgenda.set(false);
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (this.createPatientSearchDebounceId !== null) {
+      clearTimeout(this.createPatientSearchDebounceId);
+      this.createPatientSearchDebounceId = null;
     }
   }
 
