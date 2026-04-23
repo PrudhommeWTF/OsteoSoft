@@ -5873,6 +5873,11 @@ const createPatientConsultationSchema = updateConsultationSchema.extend({
   ).optional().default([])
 });
 
+const newConsultationDraftSchema = z.object({
+  step: z.number().int().min(1).max(1).optional().default(1),
+  payload: createPatientConsultationSchema
+});
+
 const patientDraftSchema = z.object({
   step: z.number().int().min(1).max(5),
   payload: createPatientSchema
@@ -7724,6 +7729,94 @@ app.delete('/api/office-drafts/new-office', authMiddleware, adminOnlyMiddleware,
     `DELETE FROM draft
      WHERE user_id = ? AND flow_key = 'new_office'`
   ).run(req.user.sub);
+
+  return res.status(204).send();
+});
+
+app.get('/api/patients/:id/consultation-drafts/new-consultation', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+  const patientId = Number(req.params.id);
+  if (!Number.isInteger(patientId) || patientId <= 0) {
+    return res.status(400).json({ message: 'ID patient invalide' });
+  }
+
+  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
+  if (!patient) {
+    return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  const flowKey = `new_consultation_patient_${patientId}`;
+  const row = db
+    .prepare(
+      `SELECT step, draft_json, updated_at
+       FROM draft
+       WHERE user_id = ? AND flow_key = ?`
+    )
+    .get(req.user.sub, flowKey);
+
+  if (!row) {
+    return res.json({ draft: null });
+  }
+
+  let payload = null;
+  try {
+    payload = JSON.parse(row.draft_json);
+  } catch {
+    payload = null;
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return res.json({ draft: null });
+  }
+
+  return res.json({
+    draft: {
+      step: row.step,
+      payload,
+      updatedAt: row.updated_at
+    }
+  });
+});
+
+app.put('/api/patients/:id/consultation-drafts/new-consultation', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+  const patientId = Number(req.params.id);
+  if (!Number.isInteger(patientId) || patientId <= 0) {
+    return res.status(400).json({ message: 'ID patient invalide' });
+  }
+
+  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
+  if (!patient) {
+    return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  const parsed = newConsultationDraftSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Payload invalide' });
+  }
+
+  const flowKey = `new_consultation_patient_${patientId}`;
+  db.prepare(
+    `INSERT INTO draft (user_id, flow_key, draft_json, step, updated_at)
+     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(user_id, flow_key)
+     DO UPDATE SET draft_json = excluded.draft_json,
+                   step = excluded.step,
+                   updated_at = CURRENT_TIMESTAMP`
+  ).run(req.user.sub, flowKey, JSON.stringify(parsed.data.payload), parsed.data.step);
+
+  return res.status(204).send();
+});
+
+app.delete('/api/patients/:id/consultation-drafts/new-consultation', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+  const patientId = Number(req.params.id);
+  if (!Number.isInteger(patientId) || patientId <= 0) {
+    return res.status(400).json({ message: 'ID patient invalide' });
+  }
+
+  const flowKey = `new_consultation_patient_${patientId}`;
+  db.prepare(
+    `DELETE FROM draft
+     WHERE user_id = ? AND flow_key = ?`
+  ).run(req.user.sub, flowKey);
 
   return res.status(204).send();
 });

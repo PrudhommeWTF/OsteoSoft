@@ -54,6 +54,8 @@ import {
   InvoiceSummaryTile,
   LocationPair,
   MyUserProfile,
+  NewConsultationDraft,
+  NewConsultationDraftPayload,
   NewOfficeDraft,
   NewOfficeDraftPayload,
   NewPatientDraft,
@@ -571,6 +573,31 @@ export class ApiService {
 
   async deleteNewOfficeDraft(): Promise<void> {
     await firstValueFrom(this.http.delete<void>(`${this.baseUrl}/office-drafts/new-office`));
+  }
+
+  async getNewConsultationDraft(patientId: number): Promise<NewConsultationDraft | null> {
+    const response = await firstValueFrom(
+      this.http.get<NewConsultationDraftPayload>(
+        `${this.baseUrl}/patients/${patientId}/consultation-drafts/new-consultation`
+      )
+    );
+
+    return response.draft;
+  }
+
+  async saveNewConsultationDraft(patientId: number, payload: CreatePatientConsultationPayload): Promise<void> {
+    await firstValueFrom(
+      this.http.put<void>(
+        `${this.baseUrl}/patients/${patientId}/consultation-drafts/new-consultation`,
+        { step: 1, payload }
+      )
+    );
+  }
+
+  async deleteNewConsultationDraft(patientId: number): Promise<void> {
+    await firstValueFrom(
+      this.http.delete<void>(`${this.baseUrl}/patients/${patientId}/consultation-drafts/new-consultation`)
+    );
   }
 
   async getPractitioners(): Promise<Practitioner[]> {

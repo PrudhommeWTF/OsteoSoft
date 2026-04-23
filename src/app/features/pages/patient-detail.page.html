@@ -1228,6 +1228,20 @@
               <i class="fa-solid fa-file-pdf me-2"></i>Compte rendu PDF
             }
           </button>
+          @if (consultationModalMode() === 'create') {
+            <button
+              type="button"
+              class="btn btn-outline-success"
+              [disabled]="consultationEditForm.invalid || consultationAutosaveState() === 'saving' || isSavingConsultation()"
+              (click)="saveConsultationDraftNow()">
+              @if (consultationAutosaveState() === 'saving') {
+                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                Sauvegarde brouillon...
+              } @else {
+                <i class="fa-solid fa-floppy-disk me-2"></i>Sauvegarder le brouillon
+              }
+            </button>
+          }
           <button type="button" class="btn btn-primary" [disabled]="isSavingConsultation()" (click)="saveConsultation()">
             @if (isSavingConsultation()) {
               <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>

@@ -19,6 +19,7 @@ import { jsPDF } from 'jspdf';
 import { ApiService } from '../../core/api.service';
 import {
   ConsultationContextPayload,
+  CreatePatientConsultationPayload,
   ConsultationDocumentUploadPayload,
   ConsultationRecord,
   ConsultationReasonItem,
@@ -142,6 +143,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   private consultationAutosaveStatusTimer: ReturnType<typeof setInterval> | null = null;
   private autosaveToastHideTimer: ReturnType<typeof setTimeout> | null = null;
   private autosaveToastLastShownAt = 0;
+  private isPersistingConsultationDraft = false;
+  private pendingConsultationDraftSave = false;
 
   readonly isLoading = signal(true);
   readonly patient = signal<PatientDetail | null>(null);
@@ -612,7 +615,35 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       if (frequency === 'Jamais') {
         return 'Sauvegarde automatique désactivée dans votre profil';
       }
-      return `Nouvelle consultation — sera sauvegardée automatiquement (${frequency})`;
+
+      const state = this.consultationAutosaveState();
+      if (state === 'saving') {
+        return `Sauvegarde du brouillon en cours (${frequency})`;
+      }
+      if (state === 'error') {
+        return `Échec de la sauvegarde du brouillon (${frequency})`;
+      }
+
+      const savedAt = this.consultationLastSavedAt();
+      if (!savedAt) {
+        return `Nouvelle consultation — brouillon auto activé (${frequency})`;
+      }
+
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - savedAt) / 1000));
+      if (elapsedSeconds < 5) {
+        return `Brouillon sauvegardé à l'instant (${frequency})`;
+      }
+      if (elapsedSeconds < 60) {
+        return `Brouillon sauvegardé il y a ${elapsedSeconds}s (${frequency})`;
+      }
+
+      const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+      if (elapsedMinutes < 60) {
+        return `Brouillon sauvegardé il y a ${elapsedMinutes} min (${frequency})`;
+      }
+
+      const elapsedHours = Math.floor(elapsedMinutes / 60);
+      return `Brouillon sauvegardé il y a ${elapsedHours} h (${frequency})`;
     }
 
     this.consultationAutosaveNowTick();
@@ -655,6 +686,16 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
   readonly consultationAutosaveBadgeClass = computed(() => {
     if (this.consultationModalMode() === 'create') {
+      const state = this.consultationAutosaveState();
+      if (state === 'saving') {
+        return 'text-bg-info';
+      }
+      if (state === 'error') {
+        return 'text-bg-danger';
+      }
+      if (state === 'disabled') {
+        return 'text-bg-secondary';
+      }
       return 'text-bg-primary';
     }
 
@@ -1258,6 +1299,54 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     });
 
     this.setConsultationProfile(defaultProfile);
+
+    try {
+      const draft = await this.api.getNewConsultationDraft(patientId);
+      if (draft?.payload) {
+        const payload = draft.payload;
+        const draftStartedAt = this.fromDateTimeLocalValue(this.toDateTimeLocalValue(payload.startedAt)) ?? payload.startedAt;
+        this.consultationEditForm.reset({
+          startedAtLocal: this.toDateTimeLocalValue(draftStartedAt),
+          practitioner: payload.practitioner,
+          title: payload.title,
+          important: payload.important,
+          heightCm: payload.heightCm != null ? String(payload.heightCm) : '',
+          weightKg: payload.weightKg != null ? String(payload.weightKg) : '',
+          evaBefore: payload.evaBefore,
+          evaAfter: payload.evaAfter,
+          profile: payload.profile || defaultProfile
+        });
+        this.consultationOfficeId.set(payload.officeId ?? this.consultationOfficeId());
+        this.setConsultationProfile(payload.profile || defaultProfile);
+        this.hydrateConsultationReasonsFromRecord(payload.reasonItems ?? []);
+        this.consultationMotifMainHtml.set(payload.motifMainHtml ?? '');
+        this.consultationTestsHtml.set(payload.testsHtml ?? '');
+        this.consultationSchemaHtml.set(payload.schemaHtml ?? '');
+        this.consultationTreatmentsHtml.set(payload.treatmentsHtml ?? '');
+        this.consultationRemarksHtml.set(payload.remarksHtml ?? '');
+        this.consultationPendingDocuments.set(
+          (payload.consultationDocuments ?? []).map((doc) => ({
+            tempKey: this.createTempKey('consultation-doc-draft'),
+            documentRef: doc.documentRef || this.createDocumentRef(),
+            fileName: doc.fileName,
+            mimeType: doc.mimeType,
+            sizeBytes: doc.sizeBytes,
+            title: doc.title,
+            comment: doc.comment,
+            contentBase64: doc.contentBase64
+          }))
+        );
+
+        const updatedAtMs = Number(new Date(draft.updatedAt));
+        if (!Number.isNaN(updatedAtMs)) {
+          this.consultationLastSavedAt.set(updatedAtMs);
+          this.consultationAutosaveState.set('saved');
+        }
+      }
+    } catch {
+      // Keep modal creation resilient if draft loading fails.
+    }
+
     this.cdr.detectChanges();
 
     queueMicrotask(() => {
@@ -1430,7 +1519,11 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     const isAutoSave = options.isAutoSave ?? false;
 
     if (this.consultationModalMode() === 'create') {
-      await this.createConsultationFromModal(closeOnSuccess, isAutoSave);
+      if (isAutoSave) {
+        await this.persistNewConsultationDraft();
+      } else {
+        await this.createConsultationFromModal(closeOnSuccess);
+      }
       return;
     }
 
@@ -1472,6 +1565,14 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     } finally {
       this.isSavingConsultation.set(false);
     }
+  }
+
+  async saveConsultationDraftNow(): Promise<void> {
+    if (this.consultationModalMode() !== 'create') {
+      return;
+    }
+
+    await this.persistNewConsultationDraft();
   }
 
   async generateConsultationSummaryPdf(): Promise<void> {
@@ -2746,57 +2847,19 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  private async createConsultationFromModal(closeOnSuccess: boolean, isAutoSave = false): Promise<void> {
+  private async createConsultationFromModal(closeOnSuccess: boolean): Promise<void> {
     const patientId = this.patient()?.id ?? null;
     if (!patientId || this.consultationEditForm.invalid || this.isSavingConsultation()) {
       return;
     }
 
-    if (isAutoSave && !this.consultationEditForm.dirty
-      && !this.consultationMotifMainHtml()
-      && !this.consultationTestsHtml()
-      && !this.consultationSchemaHtml()
-      && !this.consultationTreatmentsHtml()
-      && !this.consultationRemarksHtml()) {
-      return;
-    }
-
     this.isSavingConsultation.set(true);
     this.isCreatingConsultation.set(true);
-    if (!isAutoSave) {
-      this.consultationSaveError.set('');
-    }
-    this.consultationAutosaveState.set(isAutoSave ? 'saving' : 'idle');
+    this.consultationSaveError.set('');
+    this.consultationAutosaveState.set('idle');
 
     try {
-      const raw = this.consultationEditForm.getRawValue();
-      const created = await this.api.createPatientConsultation(patientId, {
-        startedAt: this.fromDateTimeLocalValue(raw.startedAtLocal) ?? new Date().toISOString(),
-        practitioner: raw.practitioner,
-        title: raw.title,
-        important: raw.important,
-        heightCm: this.parseNullableNumber(raw.heightCm),
-        weightKg: this.parseNullableNumber(raw.weightKg),
-        evaBefore: Number(raw.evaBefore) || 0,
-        evaAfter: Number(raw.evaAfter) || 0,
-        profile: raw.profile,
-        reasonItems: this.consultationSelectedReasonItems(),
-        motifMainHtml: this.consultationMotifMainHtml(),
-        testsHtml: this.consultationTestsHtml(),
-        schemaHtml: this.consultationSchemaHtml(),
-        treatmentsHtml: this.consultationTreatmentsHtml(),
-        remarksHtml: this.consultationRemarksHtml(),
-        officeId: this.consultationOfficeId(),
-        consultationDocuments: this.consultationPendingDocuments().map((doc) => ({
-          documentRef: doc.documentRef,
-          fileName: doc.fileName,
-          mimeType: doc.mimeType,
-          sizeBytes: doc.sizeBytes,
-          title: doc.title,
-          comment: doc.comment,
-          contentBase64: doc.contentBase64
-        }))
-      });
+      const created = await this.api.createPatientConsultation(patientId, this.buildCreateConsultationPayload());
 
       this.consultations.update((items) => [created, ...items]);
       this.activeConsultation.set(created);
@@ -2807,20 +2870,101 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       const docs = await this.api.getPatientDocuments(patientId);
       this.patientDocuments.set(docs);
 
-      if (isAutoSave) {
-        this.showAutosaveToast('Consultation sauvegardée automatiquement');
-        this.startConsultationAutosave();
-      } else if (closeOnSuccess) {
+      try {
+        await this.api.deleteNewConsultationDraft(patientId);
+      } catch {
+        // The consultation is already created; draft cleanup failure must stay non-blocking.
+      }
+
+      if (closeOnSuccess) {
         this.closeConsultationModal();
       }
     } catch {
-      this.consultationAutosaveState.set(isAutoSave ? 'error' : 'idle');
-      if (!isAutoSave) {
-        this.consultationSaveError.set('Impossible de créer la consultation.');
-      }
+      this.consultationAutosaveState.set('idle');
+      this.consultationSaveError.set('Impossible de créer la consultation.');
     } finally {
       this.isCreatingConsultation.set(false);
       this.isSavingConsultation.set(false);
+    }
+  }
+
+  private buildCreateConsultationPayload(): CreatePatientConsultationPayload {
+    const raw = this.consultationEditForm.getRawValue();
+
+    return {
+      startedAt: this.fromDateTimeLocalValue(raw.startedAtLocal) ?? new Date().toISOString(),
+      practitioner: raw.practitioner,
+      title: raw.title,
+      important: raw.important,
+      heightCm: this.parseNullableNumber(raw.heightCm),
+      weightKg: this.parseNullableNumber(raw.weightKg),
+      evaBefore: Number(raw.evaBefore) || 0,
+      evaAfter: Number(raw.evaAfter) || 0,
+      profile: raw.profile,
+      reasonItems: this.consultationSelectedReasonItems(),
+      motifMainHtml: this.consultationMotifMainHtml(),
+      testsHtml: this.consultationTestsHtml(),
+      schemaHtml: this.consultationSchemaHtml(),
+      treatmentsHtml: this.consultationTreatmentsHtml(),
+      remarksHtml: this.consultationRemarksHtml(),
+      officeId: this.consultationOfficeId(),
+      consultationDocuments: this.consultationPendingDocuments().map((doc) => ({
+        documentRef: doc.documentRef,
+        fileName: doc.fileName,
+        mimeType: doc.mimeType,
+        sizeBytes: doc.sizeBytes,
+        title: doc.title,
+        comment: doc.comment,
+        contentBase64: doc.contentBase64
+      }))
+    };
+  }
+
+  private hasCreateConsultationDraftChanges(): boolean {
+    return this.consultationEditForm.dirty
+      || Boolean(this.consultationMotifMainHtml().trim())
+      || Boolean(this.consultationTestsHtml().trim())
+      || Boolean(this.consultationSchemaHtml().trim())
+      || Boolean(this.consultationTreatmentsHtml().trim())
+      || Boolean(this.consultationRemarksHtml().trim())
+      || this.consultationPendingDocuments().length > 0
+      || this.consultationSelectedReasonItems().length > 0;
+  }
+
+  private async persistNewConsultationDraft(): Promise<void> {
+    if (this.consultationModalMode() !== 'create') {
+      return;
+    }
+
+    const patientId = this.patient()?.id ?? null;
+    if (!patientId || this.consultationEditForm.invalid) {
+      return;
+    }
+
+    if (!this.hasCreateConsultationDraftChanges()) {
+      return;
+    }
+
+    if (this.isPersistingConsultationDraft) {
+      this.pendingConsultationDraftSave = true;
+      return;
+    }
+
+    this.isPersistingConsultationDraft = true;
+    this.consultationAutosaveState.set('saving');
+    try {
+      await this.api.saveNewConsultationDraft(patientId, this.buildCreateConsultationPayload());
+      this.consultationLastSavedAt.set(Date.now());
+      this.consultationAutosaveState.set('saved');
+      this.showAutosaveToast('Brouillon de consultation sauvegardé automatiquement');
+    } catch {
+      this.consultationAutosaveState.set('error');
+    } finally {
+      this.isPersistingConsultationDraft = false;
+      if (this.pendingConsultationDraftSave) {
+        this.pendingConsultationDraftSave = false;
+        void this.persistNewConsultationDraft();
+      }
     }
   }
 
@@ -3089,7 +3233,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     }, 1000);
 
     this.consultationAutosaveTimer = setInterval(() => {
-      if (!this.activeConsultation()) {
+      if (this.consultationModalMode() === 'edit' && !this.activeConsultation()) {
         return;
       }
       void this.saveConsultation({ closeOnSuccess: false, isAutoSave: true });

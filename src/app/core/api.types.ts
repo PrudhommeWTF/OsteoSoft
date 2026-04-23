@@ -957,6 +957,16 @@ export type NewOfficeDraftPayload = {
   draft: NewOfficeDraft | null;
 };
 
+export type NewConsultationDraft = {
+  step: number;
+  payload: CreatePatientConsultationPayload;
+  updatedAt: string;
+};
+
+export type NewConsultationDraftPayload = {
+  draft: NewConsultationDraft | null;
+};
+
 export type PatientDetail = {
   id: number;
   fullName: string;
