@@ -447,23 +447,34 @@
             <div class="timeline-groups">
               @for (group of consultationTimelineGroups(); track group.key) {
                 <section class="timeline-group mb-3">
-                  <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
-                    <button class="btn btn-light border btn-sm timeline-year-toggle" type="button" data-bs-toggle="collapse" [attr.data-bs-target]="'#' + group.collapseId" [attr.aria-expanded]="group.initiallyOpen ? 'true' : 'false'" [attr.aria-controls]="group.collapseId">
-                      <i class="fa-solid fa-calendar-days me-2"></i>{{ group.label }}
-                      <span class="badge text-bg-secondary ms-2">{{ group.consultations.length }}</span>
-                    </button>
-                  </div>
+                  @if (!group.isRecent) {
+                    <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+                      <button class="btn btn-light border btn-sm timeline-year-toggle" type="button" data-bs-toggle="collapse" [attr.data-bs-target]="'#' + group.collapseId" [attr.aria-expanded]="group.initiallyOpen ? 'true' : 'false'" [attr.aria-controls]="group.collapseId">
+                        <i class="fa-solid fa-calendar-days me-2"></i>{{ group.label }}
+                        <span class="badge text-bg-secondary ms-2">{{ group.consultations.length }}</span>
+                      </button>
+                    </div>
 
-                  <div [id]="group.collapseId" class="collapse" [class.show]="group.initiallyOpen">
+                    <div [id]="group.collapseId" class="collapse" [class.show]="group.initiallyOpen">
+                      <div class="consultation-timeline">
+                        @for (consultation of group.consultations; track consultation.id) {
+                            <button type="button" class="consultation-timeline-item" [class.bg-warning]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'" (click)="openConsultationModal(consultation)">
+                              <span class="consultation-timeline-date" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'">{{ formatConsultationDate(consultation.startedAt) }}</span>
+                              <span class="consultation-timeline-title" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'">{{ consultation.title || 'Consultation sans titre' }}</span>
+                          </button>
+                        }
+                      </div>
+                    </div>
+                  } @else {
                     <div class="consultation-timeline">
                       @for (consultation of group.consultations; track consultation.id) {
-                        <button type="button" class="consultation-timeline-item" (click)="openConsultationModal(consultation)">
-                          <span class="consultation-timeline-date">{{ formatConsultationDate(consultation.startedAt) }}</span>
-                          <span class="consultation-timeline-title">{{ consultation.title || 'Consultation sans titre' }}</span>
+                            <button type="button" class="consultation-timeline-item" [class.bg-warning]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'" (click)="openConsultationModal(consultation)">
+                              <span class="consultation-timeline-date" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'">{{ formatConsultationDate(consultation.startedAt) }}</span>
+                              <span class="consultation-timeline-title" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'">{{ consultation.title || 'Consultation sans titre' }}</span>
                         </button>
                       }
                     </div>
-                  </div>
+                  }
                 </section>
               }
             </div>
@@ -1300,7 +1311,6 @@
               <div class="col-12 col-lg-3 fw-semibold">Pays :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="country" /></div>
               <div class="col-12 col-lg-3 fw-semibold">N° de Sécurité Sociale :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="socialSecurityNumber" /></div>
               <div class="col-12 col-lg-3 fw-semibold">Mutuelle :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="insurance" /></div>
-              <div class="col-12 col-lg-3 fw-semibold">Nom du document :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="documentName" /></div>
               <div class="col-12 col-lg-3 fw-semibold">Mentions supplémentaires :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="additionalMentions" /></div>
               <div class="col-12 col-lg-3 fw-semibold">Intégrer la signature :</div><div class="col-12 col-lg-9"><input class="form-check-input mt-1" type="checkbox" formControlName="includeSignature" /></div>
               <div class="col-12 col-lg-3 fw-semibold">Commentaire interne :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="internalComment" /></div>
@@ -1308,8 +1318,7 @@
               <div class="col-12 col-lg-9">
                 <select
                   class="form-select form-select-sm"
-                  formControlName="paymentMethod"
-                  [class.border-warning]="isConsultationBillingPaymentPending()">
+                  formControlName="paymentMethod">
                   <option value="Paiement en attente">Paiement en attente</option>
                   @for (method of consultationBillingPaymentMethodOptions(); track method) {
                     <option [value]="method">{{ method }}</option>

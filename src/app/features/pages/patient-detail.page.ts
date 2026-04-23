@@ -64,6 +64,7 @@ type ConsultationTimelineGroup = {
   consultations: ConsultationRecord[];
   collapseId: string;
   initiallyOpen: boolean;
+  isRecent: boolean;
 };
 
 type AntecedentTimelineItem = {
@@ -309,6 +310,14 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     this.consultationEditForm.controls.profile.valueChanges,
     { initialValue: this.consultationEditForm.controls.profile.value }
   );
+  private readonly consultationHeightValue = toSignal(
+    this.consultationEditForm.controls.heightCm.valueChanges,
+    { initialValue: this.consultationEditForm.controls.heightCm.value }
+  );
+  private readonly consultationWeightValue = toSignal(
+    this.consultationEditForm.controls.weightKg.valueChanges,
+    { initialValue: this.consultationEditForm.controls.weightKg.value }
+  );
 
   readonly sexIcon = computed(() => {
     const sex = this.patient()?.sex;
@@ -403,10 +412,11 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     if (order === 'Antichronologique' && ungrouped.length > 0) {
       groups.push({
         key: 'recent',
-        label: threshold === 0 ? 'Séances récentes' : `${threshold} dernières années`,
+        label: 'Consultations récentes',
         consultations: ungrouped,
         collapseId: 'consultation-recent-group',
-        initiallyOpen: true
+        initiallyOpen: true,
+        isRecent: true
       });
     }
 
@@ -417,7 +427,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
         label: String(year),
         consultations,
         collapseId: `consultation-year-${year}`,
-        initiallyOpen: false
+        initiallyOpen: false,
+        isRecent: false
       }));
 
     groups.push(...yearGroups);
@@ -425,10 +436,11 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     if (order === 'Chronologique' && ungrouped.length > 0) {
       groups.push({
         key: 'recent',
-        label: threshold === 0 ? 'Séances récentes' : `${threshold} dernières années`,
+        label: 'Consultations récentes',
         consultations: ungrouped,
         collapseId: 'consultation-recent-group',
-        initiallyOpen: groups.length === 0
+        initiallyOpen: groups.length === 0,
+        isRecent: true
       });
     }
 
@@ -438,7 +450,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
         label: 'Consultations',
         consultations: ungrouped,
         collapseId: 'consultation-all-group',
-        initiallyOpen: true
+        initiallyOpen: true,
+        isRecent: true
       });
     }
 
@@ -561,8 +574,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   });
 
   readonly consultationFormBmi = computed(() => {
-    const height = this.parseNullableNumber(this.consultationEditForm.controls.heightCm.value);
-    const weight = this.parseNullableNumber(this.consultationEditForm.controls.weightKg.value);
+    const height = this.parseNullableNumber(this.consultationHeightValue());
+    const weight = this.parseNullableNumber(this.consultationWeightValue());
     if (!height || !weight || height <= 0 || weight <= 0) {
       return null;
     }
@@ -595,7 +608,11 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
   readonly consultationAutosaveStatusText = computed(() => {
     if (this.consultationModalMode() === 'create') {
-      return 'Nouvelle consultation non encore enregistrée';
+      const frequency = this.preferences()?.patientAutoSaveFrequency ?? 'Jamais';
+      if (frequency === 'Jamais') {
+        return 'Sauvegarde automatique désactivée dans votre profil';
+      }
+      return `Nouvelle consultation — sera sauvegardée automatiquement (${frequency})`;
     }
 
     this.consultationAutosaveNowTick();
@@ -1212,7 +1229,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     this.activeConsultation.set(null);
     this.consultationSaveError.set('');
     this.consultationActiveTab.set('consultation');
-    this.consultationAutosaveState.set('disabled');
+    this.consultationAutosaveState.set('idle');
     this.consultationLastSavedAt.set(null);
     this.consultationReasonSelections.set({});
     this.consultationPendingDocuments.set([]);
@@ -1246,6 +1263,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     queueMicrotask(() => {
       this.hydrateConsultationEditorsFromState();
       this.getConsultationModalInstance()?.show();
+      this.startConsultationAutosave();
     });
   }
 
@@ -1412,7 +1430,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     const isAutoSave = options.isAutoSave ?? false;
 
     if (this.consultationModalMode() === 'create') {
-      await this.createConsultationFromModal(closeOnSuccess);
+      await this.createConsultationFromModal(closeOnSuccess, isAutoSave);
       return;
     }
 
@@ -2242,6 +2260,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       );
       this.startEdit();
       this.startPatientAutosave();
+      this.primeConsultationBillingStates(consultations);
 
       queueMicrotask(() => {
         if (this.pendingFocusedConsultationId != null) {
@@ -2727,15 +2746,27 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  private async createConsultationFromModal(closeOnSuccess: boolean): Promise<void> {
+  private async createConsultationFromModal(closeOnSuccess: boolean, isAutoSave = false): Promise<void> {
     const patientId = this.patient()?.id ?? null;
     if (!patientId || this.consultationEditForm.invalid || this.isSavingConsultation()) {
       return;
     }
 
+    if (isAutoSave && !this.consultationEditForm.dirty
+      && !this.consultationMotifMainHtml()
+      && !this.consultationTestsHtml()
+      && !this.consultationSchemaHtml()
+      && !this.consultationTreatmentsHtml()
+      && !this.consultationRemarksHtml()) {
+      return;
+    }
+
     this.isSavingConsultation.set(true);
     this.isCreatingConsultation.set(true);
-    this.consultationSaveError.set('');
+    if (!isAutoSave) {
+      this.consultationSaveError.set('');
+    }
+    this.consultationAutosaveState.set(isAutoSave ? 'saving' : 'idle');
 
     try {
       const raw = this.consultationEditForm.getRawValue();
@@ -2770,15 +2801,23 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       this.consultations.update((items) => [created, ...items]);
       this.activeConsultation.set(created);
       this.consultationModalMode.set('edit');
+      this.consultationLastSavedAt.set(Date.now());
+      this.consultationAutosaveState.set('saved');
       this.consultationPendingDocuments.set([]);
       const docs = await this.api.getPatientDocuments(patientId);
       this.patientDocuments.set(docs);
 
-      if (closeOnSuccess) {
+      if (isAutoSave) {
+        this.showAutosaveToast('Consultation sauvegardée automatiquement');
+        this.startConsultationAutosave();
+      } else if (closeOnSuccess) {
         this.closeConsultationModal();
       }
     } catch {
-      this.consultationSaveError.set('Impossible de créer la consultation.');
+      this.consultationAutosaveState.set(isAutoSave ? 'error' : 'idle');
+      if (!isAutoSave) {
+        this.consultationSaveError.set('Impossible de créer la consultation.');
+      }
     } finally {
       this.isCreatingConsultation.set(false);
       this.isSavingConsultation.set(false);
@@ -3256,6 +3295,21 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     }
 
     return null;
+  }
+
+  private primeConsultationBillingStates(consultations: ConsultationRecord[]): void {
+    const billableConsultations = consultations.filter((consultation) => {
+      if (consultation.type === 'appointment') {
+        return false;
+      }
+
+      const billingInvoiceId = Number(consultation.billingInvoiceId);
+      return Number.isInteger(billingInvoiceId) && billingInvoiceId > 0;
+    });
+
+    for (const consultation of billableConsultations) {
+      void this.hydrateConsultationBillingState(consultation);
+    }
   }
 
   private async hydrateConsultationBillingState(consultation: ConsultationRecord): Promise<void> {
