@@ -331,6 +331,9 @@
                         @if (item.dateDisplay) {
                           <span class="small text-muted">{{ getAntecedentDateLabel(item) }}</span>
                         }
+                        <button type="button" class="btn btn-link text-primary p-0" (click)="openAntecedentEditModal(item.id)" aria-label="Modifier cet antécédent">
+                          <i class="fa-solid fa-pen-to-square"></i>
+                        </button>
                         <button type="button" class="btn btn-link text-danger p-0" (click)="removeAntecedent(item.id)" aria-label="Supprimer cet antécédent">
                           <i class="fa-solid fa-trash"></i>
                         </button>
@@ -493,7 +496,13 @@
       aria-labelledby="antecedentModalTitle"
       (click)="$event.stopPropagation()">
       <div class="antecedent-modal-header">
-        <h3 id="antecedentModalTitle" class="mb-0">Ajouter un antécédent</h3>
+        <h3 id="antecedentModalTitle" class="mb-0">
+          @if (editingAntecedentId()) {
+            Modifier un antécédent
+          } @else {
+            Ajouter un antécédent
+          }
+        </h3>
         <button type="button" class="btn-close" aria-label="Fermer" (click)="closeAntecedentModal()"></button>
       </div>
       <div class="antecedent-modal-body">
@@ -509,6 +518,7 @@
         <div class="mb-3">
           <label class="form-label" for="antecedentDateInput">Date</label>
           <input
+            #antecedentDateInputRef
             id="antecedentDateInput"
             type="text"
             class="form-control"
@@ -561,7 +571,13 @@
       </div>
       <div class="antecedent-modal-footer">
         <button type="button" class="btn btn-outline-secondary" (click)="closeAntecedentModal()">Annuler</button>
-        <button type="button" class="btn btn-primary" (click)="addAntecedent()">Ajouter l'élément</button>
+        <button type="button" class="btn btn-primary" (click)="addAntecedent()">
+          @if (editingAntecedentId()) {
+            Enregistrer les modifications
+          } @else {
+            Ajouter l'élément
+          }
+        </button>
       </div>
     </div>
   }

@@ -125,6 +125,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   private readonly cdr = inject(ChangeDetectorRef);
 
   private readonly birthDateInputRef = viewChild<ElementRef<HTMLInputElement>>('birthDateInput');
+  private readonly antecedentDateInputRef = viewChild<ElementRef<HTMLInputElement>>('antecedentDateInputRef');
   private readonly consultationModalRef = viewChild<ElementRef<HTMLDivElement>>('consultationModal');
   private readonly consultationMotifMainEditorRef = viewChild<ElementRef<HTMLDivElement>>('consultationMotifMainEditor');
   private readonly consultationTestsEditorRef = viewChild<ElementRef<HTMLDivElement>>('consultationTestsEditor');
@@ -134,6 +135,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
   private isViewReady = false;
   private isDatepickerInitialized = false;
+  private antecedentDatepickerMode: AntecedentPrecision | null = null;
   private pendingBirthDateIso = '';
   private pendingFocusedConsultationId: number | null = null;
   private relatedSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
@@ -220,6 +222,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   readonly antecedentCategory = signal('');
   readonly antecedentDescription = signal('');
   readonly antecedentImportant = signal(false);
+  readonly editingAntecedentId = signal<string | null>(null);
   readonly structuredAntecedents = signal<AntecedentTimelineItem[] | null>(null);
   readonly antecedentCategoryOptions = signal<string[]>([
     'Cardiologie',
@@ -762,6 +765,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       }
     }
 
+    this.destroyAntecedentDatepicker();
+
     if (this.relatedSearchDebounceId !== null) {
       clearTimeout(this.relatedSearchDebounceId);
     }
@@ -822,21 +827,43 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   openAntecedentModal(): void {
     this.isAntecedentModalOpen.set(true);
     this.antecedentError.set('');
+    this.editingAntecedentId.set(null);
     this.antecedentDatePrecision.set('date');
     this.antecedentDateDisplay.set('');
     this.antecedentCategory.set('');
     this.antecedentDescription.set('');
     this.antecedentImportant.set(false);
+    queueMicrotask(() => this.initAntecedentDatepicker(true));
+  }
+
+  openAntecedentEditModal(id: string): void {
+    const current = this.antecedents().find((item) => item.id === id);
+    if (!current) {
+      return;
+    }
+
+    this.isAntecedentModalOpen.set(true);
+    this.antecedentError.set('');
+    this.editingAntecedentId.set(current.id);
+    this.antecedentDatePrecision.set(current.precision);
+    this.antecedentDateDisplay.set(current.dateDisplay);
+    this.antecedentCategory.set(current.category);
+    this.antecedentDescription.set(current.description === 'Détail non renseigné' ? '' : current.description);
+    this.antecedentImportant.set(current.important);
+    queueMicrotask(() => this.initAntecedentDatepicker(true));
   }
 
   closeAntecedentModal(): void {
+    this.destroyAntecedentDatepicker();
     this.isAntecedentModalOpen.set(false);
     this.antecedentError.set('');
+    this.editingAntecedentId.set(null);
   }
 
   setAntecedentPrecision(precision: AntecedentPrecision): void {
     this.antecedentDatePrecision.set(precision);
     this.antecedentDateDisplay.set('');
+    queueMicrotask(() => this.initAntecedentDatepicker(true));
   }
 
   setAntecedentCategory(value: string): void {
@@ -868,15 +895,23 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    const items = [...this.antecedents(), {
-      id: this.createTempKey('antecedent'),
+    const editingId = this.editingAntecedentId();
+    const normalizedDescription = description || 'Détail non renseigné';
+    const nextItem: AntecedentTimelineItem = {
+      id: editingId ?? this.createTempKey('antecedent'),
       category,
-      description: description || 'Détail non renseigné',
+      description: normalizedDescription,
       dateDisplay,
       precision,
       sortKey,
       important: this.antecedentImportant()
-    }].sort((left, right) => right.sortKey - left.sortKey);
+    };
+
+    const baseItems = this.antecedents();
+    const items = (editingId
+      ? baseItems.map((item) => (item.id === editingId ? nextItem : item))
+      : [...baseItems, nextItem]
+    ).sort((left, right) => right.sortKey - left.sortKey);
 
     this.syncMedicalHistoryFromAntecedents(items);
     this.ensureAntecedentOption(category);
@@ -1572,7 +1607,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    await this.persistNewConsultationDraft();
+    await this.persistNewConsultationDraft({ manual: true });
   }
 
   async generateConsultationSummaryPdf(): Promise<void> {
@@ -2609,6 +2644,135 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  private initAntecedentDatepicker(forceReinit = false): void {
+    const input = this.antecedentDateInputRef()?.nativeElement;
+    if (!input) {
+      return;
+    }
+
+    const precision = this.antecedentDatePrecision();
+    if (!forceReinit && this.antecedentDatepickerMode === precision) {
+      return;
+    }
+
+    this.destroyAntecedentDatepicker();
+
+    const format = precision === 'date' ? 'dd/mm/yyyy' : precision === 'month' ? 'mm/yyyy' : 'yyyy';
+    const minViewMode = precision === 'date' ? 0 : precision === 'month' ? 1 : 2;
+
+    $(input).datepicker({
+      language: 'fr',
+      format,
+      minViewMode,
+      container: 'body',
+      autoclose: true,
+      todayHighlight: true,
+      weekStart: 1,
+      startView: 2,
+      endDate: new Date()
+    }).on('changeDate', (event: { date: Date }) => {
+      const date = event.date;
+      if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+        return;
+      }
+
+      const value = precision === 'date'
+        ? `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
+        : precision === 'month'
+          ? `${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
+          : String(date.getFullYear());
+
+      this.antecedentDateDisplay.set(value);
+      this.cdr.markForCheck();
+    });
+
+    this.antecedentDatepickerMode = precision;
+    this.applyAntecedentDateToPicker();
+  }
+
+  private destroyAntecedentDatepicker(): void {
+    const input = this.antecedentDateInputRef()?.nativeElement;
+    if (!input) {
+      this.antecedentDatepickerMode = null;
+      return;
+    }
+
+    try {
+      $(input).datepicker('destroy');
+    } catch {
+      // ignore
+    }
+
+    this.antecedentDatepickerMode = null;
+  }
+
+  private applyAntecedentDateToPicker(): void {
+    const input = this.antecedentDateInputRef()?.nativeElement;
+    const raw = this.antecedentDateDisplay().trim();
+    if (!input || !raw) {
+      return;
+    }
+
+    const date = this.parseAntecedentDisplayToDate(this.antecedentDatePrecision(), raw);
+    if (!date) {
+      return;
+    }
+
+    try {
+      $(input).datepicker('setDate', date);
+    } catch {
+      // ignore
+    }
+  }
+
+  private parseAntecedentDisplayToDate(precision: AntecedentPrecision, display: string): Date | null {
+    if (precision === 'year') {
+      const year = Number(display);
+      if (!Number.isInteger(year)) {
+        return null;
+      }
+      const date = new Date(year, 0, 1);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    if (precision === 'month') {
+      const match = display.match(/^(\d{2})\/(\d{4})$/);
+      if (!match) {
+        return null;
+      }
+      const month = Number(match[1]);
+      const year = Number(match[2]);
+      if (!Number.isInteger(month) || !Number.isInteger(year) || month < 1 || month > 12) {
+        return null;
+      }
+      const date = new Date(year, month - 1, 1);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    const match = display.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!match) {
+      return null;
+    }
+
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    const year = Number(match[3]);
+    if (!Number.isInteger(day) || !Number.isInteger(month) || !Number.isInteger(year)) {
+      return null;
+    }
+
+    const date = new Date(year, month - 1, day);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+      return null;
+    }
+
+    return date;
+  }
+
   private parseAntecedents(raw: string): AntecedentTimelineItem[] {
     const source = String(raw ?? '').trim();
     if (!source) {
@@ -2931,7 +3095,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       || this.consultationSelectedReasonItems().length > 0;
   }
 
-  private async persistNewConsultationDraft(): Promise<void> {
+  private async persistNewConsultationDraft(options?: { manual?: boolean }): Promise<void> {
+    const isManual = options?.manual === true;
+
     if (this.consultationModalMode() !== 'create') {
       return;
     }
@@ -2956,7 +3122,11 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       await this.api.saveNewConsultationDraft(patientId, this.buildCreateConsultationPayload());
       this.consultationLastSavedAt.set(Date.now());
       this.consultationAutosaveState.set('saved');
-      this.showAutosaveToast('Brouillon de consultation sauvegardé automatiquement');
+      if (isManual) {
+        this.showAutosaveToast('Brouillon de consultation sauvegardé', { force: true });
+      } else {
+        this.showAutosaveToast('Brouillon de consultation sauvegardé automatiquement');
+      }
     } catch {
       this.consultationAutosaveState.set('error');
     } finally {
@@ -3315,9 +3485,10 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
-  private showAutosaveToast(message: string): void {
+  private showAutosaveToast(message: string, options?: { force?: boolean }): void {
     const now = Date.now();
-    if (now - this.autosaveToastLastShownAt < 15000) {
+    const force = options?.force === true;
+    if (!force && now - this.autosaveToastLastShownAt < 15000) {
       return;
     }
 
