@@ -76,11 +76,6 @@
               <i class="fa-solid fa-box-open me-2"></i>Pack export JSON
             </button>
           </li>
-          <li>
-            <button type="button" class="dropdown-item" [disabled]="isSnapshotExporting() || isSaving()" (click)="exportSnapshotPackMixed()">
-              <i class="fa-solid fa-layer-group me-2"></i>Pack export mixte
-            </button>
-          </li>
         </ul>
       </div>
     }
@@ -209,7 +204,7 @@
                   <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" (click)="copyExportSessionId(item.sessionId)">
                     #{{ item.sessionId }}
                   </button>
-                  <span class="text-secondary">({{ item.operationsFormat.toUpperCase() }} / {{ item.alertsFormat.toUpperCase() }})</span>
+                  <span class="text-secondary">({{ item.operationsFormat.toUpperCase() }})</span>
                 </span>
                 <span class="d-flex align-items-center gap-2">
                   <span [class]="item.status === 'success' ? 'badge text-bg-success' : 'badge text-bg-danger'">
@@ -288,7 +283,7 @@
                 <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" (click)="copyExportSessionId(item.sessionId)">
                   #{{ item.sessionId }}
                 </button>
-                <span class="text-secondary">({{ item.operationsFormat.toUpperCase() }} / {{ item.alertsFormat.toUpperCase() }})</span>
+                <span class="text-secondary">({{ item.operationsFormat.toUpperCase() }})</span>
               </div>
               <div class="text-muted small">
                 Supprime le: {{ item.deletedAt | date: 'dd/MM/yyyy HH:mm:ss' }}
@@ -370,8 +365,8 @@
   @for (tile of tiles(); track tile.label) {
     <article class="col-12 col-md-4">
       <div class="card h-100">
+        <h5 class="card-header">{{ tile.label }}</h5>
         <div class="card-body">
-          <p class="text-secondary text-uppercase small mb-1">{{ tile.label }}</p>
           <p class="fs-4 fw-bold mb-1">{{ tile.value }}</p>
           <p class="text-success fw-semibold mb-0">{{ tile.trend }}</p>
         </div>
@@ -384,8 +379,8 @@
   <section class="row g-3 mt-1" aria-label="Tendances comptables">
     <article class="col-12 col-md-6 col-xl-3">
       <div class="card h-100">
+        <h5 class="card-header">Evolution credits</h5>
         <div class="card-body">
-          <p class="text-secondary text-uppercase small mb-1">Evolution credits</p>
           <p class="fs-5 fw-bold mb-1">{{ formatPercent(insights.kpis.trends.creditsPercent) }}</p>
           <p class="text-secondary mb-0">vs periode precedente</p>
         </div>
@@ -393,8 +388,8 @@
     </article>
     <article class="col-12 col-md-6 col-xl-3">
       <div class="card h-100">
+        <h5 class="card-header">Evolution resultat</h5>
         <div class="card-body">
-          <p class="text-secondary text-uppercase small mb-1">Evolution resultat</p>
           <p class="fs-5 fw-bold mb-1">{{ formatPercent(insights.kpis.trends.netPercent) }}</p>
           <p class="text-secondary mb-0">net periodique</p>
         </div>
@@ -402,8 +397,8 @@
     </article>
     <article class="col-12 col-md-6 col-xl-3">
       <div class="card h-100">
+        <h5 class="card-header">Encours total</h5>
         <div class="card-body">
-          <p class="text-secondary text-uppercase small mb-1">Encours total</p>
           <p class="fs-5 fw-bold mb-1">{{ formatCurrency(insights.receivables.totalOutstandingCents, 'EUR') }}</p>
           <p class="text-secondary mb-0">{{ insights.receivables.totalOutstandingCount }} facture(s)</p>
         </div>
@@ -411,8 +406,8 @@
     </article>
     <article class="col-12 col-md-6 col-xl-3">
       <div class="card h-100">
+        <h5 class="card-header">Retard critique (+60j)</h5>
         <div class="card-body">
-          <p class="text-secondary text-uppercase small mb-1">Retard critique (+60j)</p>
           <p class="fs-5 fw-bold mb-1">{{ formatCurrency(insights.receivables.aging.late61plus.amountCents, 'EUR') }}</p>
           <p class="text-secondary mb-0">{{ insights.receivables.aging.late61plus.count }} facture(s)</p>
         </div>
@@ -421,11 +416,11 @@
   </section>
 }
 
-<section class="row g-3 mt-1" aria-label="Forecast et alertes">
+<section class="row g-3 mt-1" aria-label="Forecast et top debiteurs">
   <article class="col-12 col-xl-6">
     <div class="card h-100">
+      <h5 class="card-header">Forecast tresorerie</h5>
       <div class="card-body">
-        <h6 class="mb-3">Forecast tresorerie</h6>
         @if (billingForecast(); as forecast) {
           <div class="table-responsive">
             <table class="table table-sm align-middle mb-0">
@@ -458,258 +453,96 @@
     </div>
   </article>
 
-  <article class="col-12 col-xl-6">
-    <div class="card h-100">
-      <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h6 class="mb-0">Alertes operationnelles</h6>
-          <div class="btn-group btn-group-sm">
-            <button
-              type="button"
-              class="btn btn-outline-secondary"
-              [disabled]="isSaving() || !canExportBilling() || !hasAnyAlertCategorySelected()"
-              (click)="exportAlertsCsv()">
-              <i class="fa-solid fa-file-csv me-1"></i>CSV
-            </button>
-            <button
-              type="button"
-              class="btn btn-outline-secondary"
-              [disabled]="isSaving() || !canExportBilling() || !hasAnyAlertCategorySelected()"
-              (click)="exportAlertsJson()">
-              <i class="fa-solid fa-file-code me-1"></i>JSON
-            </button>
+  @if (billingInsights(); as insights) {
+    <article class="col-12 col-xl-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <div class="d-flex flex-wrap justify-content-between align-items-center">
+            <h5 class="mb-0">Top debiteurs</h5>
+            <input
+              type="search"
+              class="form-control form-control-sm"
+              style="max-width: 320px"
+              placeholder="Rechercher un patient..."
+              [value]="debtorSearch()"
+              (input)="onDebtorSearchInput($any($event.target).value || '')" />
           </div>
         </div>
-        @if (billingAlerts(); as alerts) {
-          <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-            <span class="badge text-bg-light border">Filtres actifs: {{ activeAlertCategoryCount() }}/4</span>
-            <button
-              type="button"
-              class="btn btn-outline-secondary btn-sm py-0 px-2"
-              [disabled]="isAlertsLoading()"
-              (click)="selectAllAlertCategories()">
-              Tout cocher
-            </button>
-            <button
-              type="button"
-              class="btn btn-outline-secondary btn-sm py-0 px-2"
-              [disabled]="isAlertsLoading()"
-              (click)="clearAlertCategories()">
-              Tout decocher
-            </button>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>
+                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" (click)="setDebtorSort('name')">
+                      Patient <i class="fa-solid" [class]="'fa-solid ms-1 ' + debtorSortIcon('name')"></i>
+                    </button>
+                  </th>
+                  <th class="text-end">
+                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" (click)="setDebtorSort('invoices')">
+                      Factures <i class="fa-solid" [class]="'fa-solid ms-1 ' + debtorSortIcon('invoices')"></i>
+                    </button>
+                  </th>
+                  <th class="text-end">
+                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" (click)="setDebtorSort('outstanding')">
+                      Encours <i class="fa-solid" [class]="'fa-solid ms-1 ' + debtorSortIcon('outstanding')"></i>
+                    </button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (pagedTopDebtors().length === 0) {
+                  <tr>
+                    <td colspan="3" class="text-center text-secondary py-3">Aucun debiteur sur les filtres actuels.</td>
+                  </tr>
+                } @else {
+                  @for (debtor of pagedTopDebtors(); track debtor.patientName) {
+                    <tr>
+                      <td>{{ debtor.patientName }}</td>
+                      <td class="text-end">{{ debtor.invoiceCount }}</td>
+                      <td class="text-end fw-semibold">{{ formatCurrency(debtor.totalOutstandingCents, 'EUR') }}</td>
+                    </tr>
+                  }
+                }
+              </tbody>
+            </table>
           </div>
 
-          <div class="d-flex flex-wrap gap-3 mb-3 small">
-            <div class="form-check">
-              <input
-                id="alert-filter-overdue"
-                type="checkbox"
-                class="form-check-input"
-                [checked]="alertCategoryOverdue()"
-                (change)="toggleAlertCategory('overdue', !!$any($event.target).checked)" />
-              <label class="form-check-label" for="alert-filter-overdue">Retards critiques</label>
+          <div class="d-flex justify-content-between align-items-center mt-3">
+            <small class="text-secondary">Page {{ debtorPage() }} / {{ debtorTotalPages() }}</small>
+            <div class="btn-group btn-group-sm">
+              <button type="button" class="btn btn-outline-secondary" [disabled]="debtorPage() <= 1" (click)="previousDebtorPage()">Precedent</button>
+              <button type="button" class="btn btn-outline-secondary" [disabled]="debtorPage() >= debtorTotalPages()" (click)="nextDebtorPage()">Suivant</button>
             </div>
-            <div class="form-check">
-              <input
-                id="alert-filter-due-soon"
-                type="checkbox"
-                class="form-check-input"
-                [checked]="alertCategoryDueSoon()"
-                (change)="toggleAlertCategory('dueSoon', !!$any($event.target).checked)" />
-              <label class="form-check-label" for="alert-filter-due-soon">Echeances 7j</label>
-            </div>
-            <div class="form-check">
-              <input
-                id="alert-filter-high-expenses"
-                type="checkbox"
-                class="form-check-input"
-                [checked]="alertCategoryHighExpenses()"
-                (change)="toggleAlertCategory('highExpenses', !!$any($event.target).checked)" />
-              <label class="form-check-label" for="alert-filter-high-expenses">Depenses elevees</label>
-            </div>
-            <div class="form-check">
-              <input
-                id="alert-filter-unassigned"
-                type="checkbox"
-                class="form-check-input"
-                [checked]="alertCategoryUnassigned()"
-                (change)="toggleAlertCategory('unassigned', !!$any($event.target).checked)" />
-              <label class="form-check-label" for="alert-filter-unassigned">Sans proprietaire</label>
-            </div>
-            <button
-              type="button"
-              class="btn btn-outline-secondary btn-sm py-0 px-2"
-              [disabled]="isAlertsLoading()"
-              (click)="resetAlertCategories()">
-              Reinitialiser
-            </button>
           </div>
-
-          @if (isAlertsLoading()) {
-            <p class="small text-secondary mb-2">
-              <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-              Mise a jour des alertes...
-            </p>
-          }
-
-          <div class="d-flex flex-wrap gap-2 mb-3">
-            @if (alertCategoryOverdue()) {
-              <span class="badge text-bg-danger">Retards critiques: {{ alerts.summary.overdueCriticalCount }}</span>
-            }
-            @if (alertCategoryDueSoon()) {
-              <span class="badge text-bg-warning">Echeances 7j: {{ alerts.summary.dueSoonCount }}</span>
-            }
-            @if (alertCategoryHighExpenses()) {
-              <span class="badge text-bg-info">Depenses elevees: {{ alerts.summary.highExpensesCount }}</span>
-            }
-            @if (alertCategoryUnassigned()) {
-              <span class="badge text-bg-secondary">Sans proprietaire: {{ alerts.summary.unassignedOwnerCount }}</span>
-            }
-          </div>
-
-          @if (!hasAnyAlertCategorySelected()) {
-            <p class="text-secondary mb-0">Selectionnez au moins une categorie d'alerte.</p>
-          } @else if (alertCategoryOverdue() && alerts.overdueCritical.length > 0) {
-            <p class="small fw-semibold mb-1">Top retards critiques</p>
-            <ul class="list-group list-group-flush small">
-              @for (item of alerts.overdueCritical.slice(0, 5); track item.invoiceId) {
-                <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                  <span>#{{ item.invoiceNumber || item.invoiceId }} - {{ item.patientName }}</span>
-                  <span class="text-danger fw-semibold">{{ item.daysLate }}j / {{ formatCurrency(item.remainingAmountCents, 'EUR') }}</span>
-                </li>
-              }
-            </ul>
-          } @else if (alertCategoryDueSoon() && alerts.dueSoon.length > 0) {
-            <p class="small fw-semibold mb-1">Factures a echeance proche</p>
-            <ul class="list-group list-group-flush small">
-              @for (item of alerts.dueSoon.slice(0, 5); track item.invoiceId) {
-                <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                  <span>#{{ item.invoiceNumber || item.invoiceId }} - {{ item.patientName }}</span>
-                  <span class="text-warning fw-semibold">{{ formatCurrency(item.remainingAmountCents, 'EUR') }}</span>
-                </li>
-              }
-            </ul>
-          } @else if (alertCategoryHighExpenses() && alerts.highExpenses.length > 0) {
-            <p class="small fw-semibold mb-1">Depenses elevees recentes</p>
-            <ul class="list-group list-group-flush small">
-              @for (item of alerts.highExpenses.slice(0, 5); track item.expenseId) {
-                <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                  <span>{{ item.title }}</span>
-                  <span class="text-info fw-semibold">{{ formatCurrency(item.amountCents, item.currency) }}</span>
-                </li>
-              }
-            </ul>
-          } @else if (alertCategoryUnassigned() && alerts.unassignedOwnerOperations.length > 0) {
-            <p class="small fw-semibold mb-1">Operations sans proprietaire</p>
-            <ul class="list-group list-group-flush small">
-              @for (item of alerts.unassignedOwnerOperations.slice(0, 5); track item.id) {
-                <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                  <span>{{ item.title }}</span>
-                  <span class="text-secondary fw-semibold">{{ formatDateTime(item.occurredAt) }}</span>
-                </li>
-              }
-            </ul>
-          } @else {
-            <p class="text-secondary mb-0">Aucune alerte sur les categories selectionnees.</p>
-          }
-        } @else {
-          <p class="text-secondary mb-0">Alertes indisponibles pour le moment.</p>
-        }
+        </div>
       </div>
-    </div>
-  </article>
+    </article>
+  }
 </section>
 
-@if (billingInsights(); as insights) {
-  <section class="card mt-3" aria-label="Top debiteurs">
-    <div class="card-body">
-      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <h6 class="mb-0">Top debiteurs</h6>
-        <input
-          type="search"
-          class="form-control form-control-sm"
-          style="max-width: 320px"
-          placeholder="Rechercher un patient..."
-          [value]="debtorSearch()"
-          (input)="onDebtorSearchInput($any($event.target).value || '')" />
-      </div>
-
-      <div class="table-responsive">
-        <table class="table table-sm align-middle mb-0">
-          <thead>
-            <tr>
-              <th>
-                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" (click)="setDebtorSort('name')">
-                  Patient <i class="fa-solid" [class]="'fa-solid ms-1 ' + debtorSortIcon('name')"></i>
-                </button>
-              </th>
-              <th class="text-end">
-                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" (click)="setDebtorSort('invoices')">
-                  Factures <i class="fa-solid" [class]="'fa-solid ms-1 ' + debtorSortIcon('invoices')"></i>
-                </button>
-              </th>
-              <th class="text-end">
-                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" (click)="setDebtorSort('outstanding')">
-                  Encours <i class="fa-solid" [class]="'fa-solid ms-1 ' + debtorSortIcon('outstanding')"></i>
-                </button>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            @if (pagedTopDebtors().length === 0) {
-              <tr>
-                <td colspan="3" class="text-center text-secondary py-3">Aucun debiteur sur les filtres actuels.</td>
-              </tr>
-            } @else {
-              @for (debtor of pagedTopDebtors(); track debtor.patientName) {
-                <tr>
-                  <td>{{ debtor.patientName }}</td>
-                  <td class="text-end">{{ debtor.invoiceCount }}</td>
-                  <td class="text-end fw-semibold">{{ formatCurrency(debtor.totalOutstandingCents, 'EUR') }}</td>
-                </tr>
-              }
-            }
-          </tbody>
-        </table>
-      </div>
-
-      <div class="d-flex justify-content-between align-items-center mt-3">
-        <small class="text-secondary">Page {{ debtorPage() }} / {{ debtorTotalPages() }}</small>
-        <div class="btn-group btn-group-sm">
-          <button type="button" class="btn btn-outline-secondary" [disabled]="debtorPage() <= 1" (click)="previousDebtorPage()">Precedent</button>
-          <button type="button" class="btn btn-outline-secondary" [disabled]="debtorPage() >= debtorTotalPages()" (click)="nextDebtorPage()">Suivant</button>
-        </div>
-      </div>
-    </div>
-  </section>
-}
-
 <section class="card mt-3">
-  <div class="card-body">
-    <div class="row g-2 mb-3">
-      <div class="col-12 col-md-3">
-        <label class="form-label mb-1">Proprietaire (selection)</label>
-        <select class="form-select form-select-sm" (change)="onBulkOwnerChange($any($event.target).value)">
-          <option value="">Ne pas modifier</option>
-          @for (user of users(); track user.id) {
-            <option [value]="user.id">{{ user.displayName }}</option>
-          }
-        </select>
-      </div>
-      <div class="col-12 col-md-2">
-        <label class="form-label mb-1">Retro %</label>
-        <input type="number" min="0" max="100" step="0.01" class="form-control form-control-sm" [value]="bulkRetrocessionPercent()" (input)="bulkRetrocessionPercent.set($any($event.target).value || '')" />
-      </div>
-      <div class="col-12 col-md-4">
-        <label class="form-label mb-1">Destinataire retrocession</label>
-        <input type="text" class="form-control form-control-sm" [value]="bulkRetrocessionRecipient()" (input)="bulkRetrocessionRecipient.set($any($event.target).value || '')" />
-      </div>
-      <div class="col-12 col-md-3 d-flex align-items-end gap-2">
-        <button type="button" class="btn btn-outline-primary btn-sm" [disabled]="selectedCount() === 0" (click)="applyBulkUpdate()">Appliquer</button>
-        <button type="button" class="btn btn-outline-danger btn-sm" [disabled]="selectedCount() === 0" (click)="deleteSelectedOperations()">Supprimer</button>
-      </div>
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <h5 class="mb-0">Consultations</h5>
+      @if (selectedCount() > 0) {
+        <span class="badge text-bg-secondary">{{ selectedCount() }} selectionnee(s)</span>
+      }
     </div>
-
+    @if (selectedCount() > 0) {
+      <div class="d-flex flex-wrap gap-2">
+        <button type="button" class="btn btn-outline-primary btn-sm" (click)="openConsultationSelectionModal('bulk-update')">
+          Modifier la selection
+        </button>
+        @if (selectedUnpaidInvoiceIds().length > 0) {
+          <button type="button" class="btn btn-primary btn-sm" (click)="openConsultationSelectionModal('payment')">
+            Ajouter un paiement
+          </button>
+        }
+      </div>
+    }
+  </div>
+  <div class="card-body">
     @if (errorMessage()) {
       <div class="alert alert-danger py-2">{{ errorMessage() }}</div>
     }
@@ -733,7 +566,7 @@
             <th class="text-end">Credit</th>
             <th>Retrocession</th>
             <th>Facture</th>
-            <th>Paiements</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -747,7 +580,7 @@
             </tr>
           } @else {
             @for (operation of operations(); track operation.id) {
-              <tr>
+              <tr [class.bg-warning-subtle]="operation.remainingAmountCents > 0">
                 <td class="text-center">
                   <input type="checkbox" [checked]="isOperationSelected(operation.id)" (change)="toggleOperationSelection(operation.id, !!$any($event.target).checked)" />
                 </td>
@@ -764,10 +597,18 @@
                       class="btn btn-outline-primary btn-sm"
                       [routerLink]="['/patients', operation.paymentRef.patientId]">
                       <i class="fa-solid fa-address-card me-1" aria-hidden="true"></i>
-                      Fiche patient
                     </button>
                   } @else {
                     {{ operationPaymentLabel(operation) }}
+                  }
+                  @if (operation.depositId != null) {
+                    <button
+                      type="button"
+                      class="btn btn-outline-secondary btn-sm ms-1"
+                      title="Remise de banque #{{ operation.depositId }}"
+                      (click)="openDepositEditorById(operation.depositId, operation.depositType!)">
+                      <i class="fa-solid fa-building-columns" aria-hidden="true"></i>
+                    </button>
                   }
                 </td>
               </tr>
@@ -778,6 +619,111 @@
     </div>
   </div>
 </section>
+
+@if (consultationSelectionModal() !== null) {
+  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="billing-consultation-selection-title">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div>
+            <h5 id="billing-consultation-selection-title" class="modal-title mb-1">
+              {{ consultationSelectionModal() === 'payment' ? 'Ajouter un paiement' : 'Modifier la selection' }}
+            </h5>
+            <p class="text-secondary small mb-0">
+              {{ selectedCount() }} consultation(s) selectionnee(s)
+              @if (consultationSelectionModal() === 'payment') {
+                <span class="ms-2">{{ selectedUnpaidInvoiceIds().length }} impayee(s) ciblee(s)</span>
+              }
+            </p>
+          </div>
+          <button type="button" class="btn-close" (click)="closeConsultationSelectionModal()" aria-label="Fermer"></button>
+        </div>
+        <div class="modal-body">
+          @if (consultationSelectionModal() === 'bulk-update') {
+            <div class="row g-3">
+              <div class="col-12 col-md-4">
+                <label class="form-label mb-1">Proprietaire</label>
+                <select class="form-select" (change)="onBulkOwnerChange($any($event.target).value)">
+                  <option value="">Ne pas modifier</option>
+                  @for (user of users(); track user.id) {
+                    <option [value]="user.id">{{ user.displayName }}</option>
+                  }
+                </select>
+              </div>
+              <div class="col-12 col-md-3">
+                <label class="form-label mb-1">Retro %</label>
+                <input type="number" min="0" max="100" step="0.01" class="form-control" [value]="bulkRetrocessionPercent()" (input)="bulkRetrocessionPercent.set($any($event.target).value || '')" />
+              </div>
+              <div class="col-12 col-md-5">
+                <label class="form-label mb-1">Destinataire retrocession</label>
+                <input type="text" class="form-control" [value]="bulkRetrocessionRecipient()" (input)="bulkRetrocessionRecipient.set($any($event.target).value || '')" />
+              </div>
+            </div>
+          } @else {
+            <div class="alert alert-warning py-2">
+              Un seul paiement sera reparti sur les consultations impayees selectionnees.
+            </div>
+            <div class="row g-3">
+              <div class="col-12 col-md-4">
+                <label class="form-label mb-1">Date/heure</label>
+                <input type="datetime-local" class="form-control" [value]="prototypePaymentOccurredAt()" (input)="prototypePaymentOccurredAt.set($any($event.target).value || '')" />
+              </div>
+              <div class="col-12 col-md-4">
+                <label class="form-label mb-1">Montant (EUR)</label>
+                <input type="number" min="0" step="0.01" class="form-control" [value]="prototypePaymentAmount()" (input)="prototypePaymentAmount.set($any($event.target).value || '')" />
+                <div class="form-text">Reste a regler selectionne: {{ formatCurrency(selectedUnpaidAmountCents(), 'EUR') }}</div>
+              </div>
+              <div class="col-12 col-md-4">
+                <label class="form-label mb-1">Moyen de paiement</label>
+                <select class="form-select" [value]="prototypePaymentMethod()" (change)="prototypePaymentMethod.set($any($event.target).value || '')">
+                  <option value="">Selectionner un moyen de paiement</option>
+                  @for (method of consultationPaymentMethodOptions(); track method) {
+                    <option [value]="method">{{ method }}</option>
+                  }
+                </select>
+                @if (consultationPaymentMethodOptions().length === 0) {
+                  <div class="form-text text-warning">Aucun moyen de paiement actif n'est configure pour le cabinet actif.</div>
+                }
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label mb-1">Reference</label>
+                <input type="text" class="form-control" [value]="prototypePaymentReference()" (input)="prototypePaymentReference.set($any($event.target).value || '')" />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label mb-1">Notes</label>
+                <input type="text" class="form-control" [value]="prototypePaymentNotes()" (input)="prototypePaymentNotes.set($any($event.target).value || '')" />
+              </div>
+            </div>
+
+            @if (isPrototypeChequePayment()) {
+              <div class="row g-3 mt-1">
+                <div class="col-12 col-md-6">
+                  <label class="form-label mb-1">Banque (cheque)</label>
+                  <input type="text" class="form-control" [value]="prototypePaymentBankName()" (input)="prototypePaymentBankName.set($any($event.target).value || '')" />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label class="form-label mb-1">Numero de cheque</label>
+                  <input type="text" class="form-control" [value]="prototypePaymentChequeNumber()" (input)="prototypePaymentChequeNumber.set($any($event.target).value || '')" />
+                </div>
+              </div>
+            }
+          }
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" (click)="closeConsultationSelectionModal()">Annuler</button>
+          @if (consultationSelectionModal() === 'bulk-update') {
+            <button type="button" class="btn btn-primary" [disabled]="isSaving() || selectedCount() === 0" (click)="applyBulkUpdate()">Appliquer</button>
+          } @else {
+            <button type="button" class="btn btn-primary" [disabled]="isSaving() || !canRunPrototypeGroupedPayment()" (click)="applyPrototypeGroupedPayment()">
+              Ajouter le paiement
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop fade show"></div>
+}
 
 @if (isExpenseModalOpen()) {
   <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="billing-expense-modal-title">
@@ -898,48 +844,42 @@
           <button type="button" class="btn-close" (click)="closeDepositEditorModal()" aria-label="Fermer"></button>
         </div>
         <div class="modal-body">
-          @if (!editingDepositId()) {
-            <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-              <button
-                type="button"
-                class="btn btn-sm"
-                [class]="depositWizardStep() === 1 ? 'btn-primary btn-sm' : 'btn-outline-primary btn-sm'"
-                (click)="goToDepositWizardStep(1)">
-                1. Configuration
-              </button>
-              <button
-                type="button"
-                class="btn btn-sm"
-                [class]="depositWizardStep() === 2 ? 'btn-primary btn-sm' : 'btn-outline-primary btn-sm'"
-                (click)="goToDepositWizardStep(2)">
-                2. Pointage
-              </button>
-              <button
-                type="button"
-                class="btn btn-sm"
-                [class]="depositWizardStep() === 3 ? 'btn-primary btn-sm' : 'btn-outline-primary btn-sm'"
-                (click)="goToDepositWizardStep(3)">
-                3. Recapitulatif
-              </button>
-            </div>
-          }
-
-          <div class="row g-3 mb-3">
+          @if (editingDepositId()) {
+            <div class="row g-3 mb-3">
             <div class="col-12 col-lg-2">
               <label class="form-label">Code</label>
-              <input type="text" class="form-control" [value]="depositCode()" (input)="depositCode.set($any($event.target).value || '')" />
+              <input
+                type="text"
+                class="form-control"
+                [readonly]="!editingDepositId()"
+                [value]="depositCode()"
+                (input)="depositCode.set($any($event.target).value || '')" />
             </div>
             <div class="col-12 col-lg-2">
               <label class="form-label">Date</label>
-              <input type="datetime-local" class="form-control" [value]="depositOccurredAt()" (input)="depositOccurredAt.set($any($event.target).value || '')" />
+              <input
+                type="datetime-local"
+                class="form-control"
+                [value]="depositOccurredAt()"
+                (input)="onDepositOccurredAtInput($any($event.target).value || '')" />
             </div>
             <div class="col-12 col-lg-3">
               <label class="form-label">Banque</label>
-              <input type="text" class="form-control" [value]="depositBankName()" (input)="depositBankName.set($any($event.target).value || '')" />
+              <input
+                type="text"
+                class="form-control"
+                [readonly]="!editingDepositId()"
+                [value]="depositBankName()"
+                (input)="depositBankName.set($any($event.target).value || '')" />
             </div>
             <div class="col-12 col-lg-3">
-              <label class="form-label">Compte</label>
-              <input type="text" class="form-control" [value]="depositAccountLabel()" (input)="depositAccountLabel.set($any($event.target).value || '')" />
+              <label class="form-label">Numero de compte</label>
+              <input
+                type="text"
+                class="form-control"
+                [readonly]="!editingDepositId()"
+                [value]="depositAccountLabel()"
+                (input)="depositAccountLabel.set($any($event.target).value || '')" />
             </div>
             <div class="col-12 col-lg-2">
               <label class="form-label">Montant</label>
@@ -951,82 +891,100 @@
                 [readonly]="!editingDepositId()"
                 [value]="depositAmount()"
                 (input)="depositAmount.set($any($event.target).value || '')" />
-              @if (!editingDepositId()) {
-                <small class="text-secondary">Auto-calcule depuis la selection</small>
-              }
             </div>
-            <div class="col-12 col-lg-6">
-              <label class="form-label">Intitule</label>
-              <input type="text" class="form-control" [value]="depositTitle()" (input)="depositTitle.set($any($event.target).value || '')" />
             </div>
-            <div class="col-12 col-lg-6">
-              <label class="form-label">Notes</label>
-              <input type="text" class="form-control" [value]="depositNotes()" (input)="depositNotes.set($any($event.target).value || '')" />
-            </div>
-          </div>
+          }
 
-          @if (!editingDepositId() && depositWizardStep() === 2) {
-            <h6 class="fw-semibold mb-2">Consultations/paiements eligibles ({{ depositModalType() === 'especes' ? 'especes' : 'cheques' }})</h6>
-            <div class="small text-secondary mb-2">
-              {{ filteredDepositCandidates().length }} resultat(s) compatible(s) sur {{ depositCandidates().length }} paiement(s) charge(s)
-            </div>
-            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-              <div class="d-flex align-items-center gap-2">
-                <input
-                  type="checkbox"
-                  class="form-check-input"
-                  [checked]="isAllFilteredDepositCandidatesSelected()"
-                  (change)="toggleSelectAllFilteredDepositCandidates(!!$any($event.target).checked)" />
-                <span class="small text-secondary">Tout selectionner (resultats filtres)</span>
-              </div>
+          <h6 class="fw-semibold mb-2">Consultations/paiements eligibles ({{ depositModalType() === 'especes' ? 'especes' : 'cheques' }})</h6>
+          <div class="small text-secondary mb-2">
+            {{ filteredDepositCandidates().length }} resultat(s) compatible(s) sur {{ depositCandidates().length }} paiement(s) charge(s)
+          </div>
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <div class="d-flex align-items-center gap-2">
               <input
-                type="search"
-                class="form-control form-control-sm"
-                style="max-width: 280px"
-                placeholder="Rechercher patient/facture/moyen"
-                [value]="depositCandidateSearch()"
-                (input)="onDepositCandidateSearchInput($any($event.target).value || '')" />
+                type="checkbox"
+                class="form-check-input"
+                [checked]="isAllFilteredDepositCandidatesSelected()"
+                (change)="toggleSelectAllFilteredDepositCandidates(!!$any($event.target).checked)" />
+              <span class="small text-secondary">Tout selectionner (resultats filtres)</span>
             </div>
-            @if (hasIncompatibleSelectedDepositCandidates()) {
-              <div class="alert alert-warning py-2 small" role="alert">
-                Certains paiements selectionnes ne correspondent pas au type de remise courant.
-              </div>
-            }
-            <div class="table-responsive">
-              <table class="table table-sm align-middle">
-                <thead class="table-light">
-                  <tr>
-                    <th style="width:44px"></th>
-                    <th>Date</th>
-                    <th>Facture</th>
-                    <th>Patient</th>
-                    <th>Consultation</th>
-                    <th>Moyen de paiement</th>
-                    <th class="text-end">Montant</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @if (isLoadingDepositCandidates()) {
-                    <tr><td colspan="7" class="text-center text-secondary py-3">Chargement...</td></tr>
-                  } @else if (filteredDepositCandidates().length === 0) {
-                    <tr><td colspan="7" class="text-center text-secondary py-3">Aucun paiement eligible.</td></tr>
-                  } @else {
-                    @for (candidate of filteredDepositCandidates(); track candidate.operationId) {
-                      <tr>
-                        <td>
+            <input
+              type="search"
+              class="form-control form-control-sm"
+              style="max-width: 280px"
+              placeholder="Rechercher patient/facture/moyen"
+              [value]="depositCandidateSearch()"
+              (input)="onDepositCandidateSearchInput($any($event.target).value || '')" />
+          </div>
+          @if (hasIncompatibleSelectedDepositCandidates()) {
+            <div class="alert alert-warning py-2 small" role="alert">
+              Certains paiements selectionnes ne correspondent pas au type de remise courant.
+            </div>
+          }
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th style="width:44px"></th>
+                  <th>Date</th>
+                  <th>Facture</th>
+                  <th>Patient</th>
+                  <th>Consultation</th>
+                  <th>Moyen de paiement</th>
+                  <th class="text-end">Montant</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (isLoadingDepositCandidates()) {
+                  <tr><td colspan="7" class="text-center text-secondary py-3">Chargement...</td></tr>
+                } @else if (groupedDepositCandidates().length === 0) {
+                  <tr><td colspan="7" class="text-center text-secondary py-3">Aucun paiement eligible.</td></tr>
+                } @else {
+                  @for (group of groupedDepositCandidates(); track group.groupRef ?? group.invoices[0]?.sourceId) {
+                    <tr class="table-active">
+                      <td style="width:44px">
+                        <input
+                          type="checkbox"
+                          [checked]="group.invoices.every((inv) => depositEditorCandidateIds().includes(inv.operationId))"
+                          (change)="toggleDepositGroup(group, !!$any($event.target).checked)"
+                          [indeterminate]="group.invoices.some((inv) => depositEditorCandidateIds().includes(inv.operationId)) && !group.invoices.every((inv) => depositEditorCandidateIds().includes(inv.operationId))" />
+                      </td>
+                      <td>
+                        @if (group.paidAt) {
+                          {{ formatDateTime(group.paidAt) }}
+                        } @else if (group.invoices[0]) {
+                          {{ formatDateTime(group.invoices[0].occurredAt) }}
+                        }
+                      </td>
+                      <td colspan="2" class="fw-semibold">
+                        @if (group.groupRef) {
+                          <i class="fa-solid fa-layer-group me-2" title="Paiement groupe"></i>Paiement groupe
+                        } @else {
+                          Paiement
+                        }
+                      </td>
+                      <td class="small text-secondary">
+                        {{ group.invoices.length }} facture(s)
+                      </td>
+                      <td>{{ group.paymentMethod || '-' }}</td>
+                      <td class="text-end fw-semibold">{{ formatCurrency(group.totalAmountCents, 'EUR') }}</td>
+                    </tr>
+                    @for (invoice of group.invoices; track invoice.operationId) {
+                      <tr class="table-borderless">
+                        <td style="width:44px; padding-left: 3rem">
                           <input
                             type="checkbox"
-                            [checked]="depositEditorCandidateIds().includes(candidate.operationId)"
-                            (change)="toggleDepositCandidate(candidate.operationId, !!$any($event.target).checked)" />
+                            [checked]="depositEditorCandidateIds().includes(invoice.operationId)"
+                            (change)="toggleDepositCandidate(invoice.operationId, !!$any($event.target).checked)" />
                         </td>
-                        <td>{{ formatDateTime(candidate.occurredAt) }}</td>
-                        <td>{{ candidate.invoiceNumber || '-' }}</td>
-                        <td>{{ candidate.patientName }}</td>
+                        <td class="small">{{ formatDateTime(invoice.occurredAt) }}</td>
+                        <td class="small">{{ invoice.invoiceNumber || '-' }}</td>
+                        <td class="small">{{ invoice.patientName }}</td>
                         <td>
-                          @if (candidate.patientId) {
+                          @if (invoice.patientId) {
                             <a
                               class="btn btn-link btn-sm p-0"
-                              [attr.href]="'/patients/' + candidate.patientId + (candidate.consultationId ? '?consultationId=' + candidate.consultationId : '')"
+                              [attr.href]="'/patients/' + invoice.patientId + (invoice.consultationId ? '?consultationId=' + invoice.consultationId : '')"
                               target="_blank"
                               rel="noopener noreferrer">
                               Ouvrir
@@ -1035,72 +993,40 @@
                             <span class="text-secondary">-</span>
                           }
                         </td>
-                        <td>{{ candidate.paymentMethod || '-' }}</td>
-                        <td class="text-end">{{ formatCurrency(candidate.amountCents, candidate.currency) }}</td>
+                        <td></td>
+                        <td class="text-end small">{{ formatCurrency(invoice.amountCents, invoice.currency) }}</td>
+                      </tr>
+                    }
+                    @if (group.groupRef && (group.bankName || group.chequeNumber)) {
+                      <tr class="table-borderless">
+                        <td colspan="7" class="small text-secondary ps-5">
+                          @if (group.bankName) {
+                            <i class="fa-solid fa-university me-1"></i>{{ group.bankName }}
+                          }
+                          @if (group.chequeNumber) {
+                            <span class="ms-2"><i class="fa-solid fa-receipt me-1"></i>Cheque #{{ group.chequeNumber }}</span>
+                          }
+                        </td>
                       </tr>
                     }
                   }
-                </tbody>
-              </table>
+                }
+              </tbody>
+            </table>
+          </div>
+          <div class="d-flex justify-content-between align-items-center mt-2">
+            <span class="small text-secondary">{{ selectedDepositCandidateCount() }} paiement(s) selectionne(s)</span>
+            <div class="text-end fw-semibold">
+              Total selectionne: {{ formatCurrency(selectedDepositCandidateAmountCents(), 'EUR') }}
             </div>
-            <div class="d-flex justify-content-between align-items-center mt-2">
-              <span class="small text-secondary">{{ selectedDepositCandidateCount() }} paiement(s) selectionne(s)</span>
-              <div class="text-end fw-semibold">
-                Total selectionne: {{ formatCurrency(selectedDepositCandidateAmountCents(), 'EUR') }}
-              </div>
-            </div>
-          }
-
-          @if (!editingDepositId() && depositWizardStep() === 3) {
-            <div class="card border-0 bg-light">
-              <div class="card-body">
-                <h6 class="fw-semibold mb-3">Validation finale du bordereau</h6>
-                <div class="row g-2 small mb-3">
-                  <div class="col-12 col-md-6"><strong>Type:</strong> {{ depositType() === 'especes' ? "Especes" : "Cheques" }}</div>
-                  <div class="col-12 col-md-6"><strong>Date:</strong> {{ depositOccurredAt() || '-' }}</div>
-                  <div class="col-12 col-md-6"><strong>Banque:</strong> {{ depositBankName() || '-' }}</div>
-                  <div class="col-12 col-md-6"><strong>Compte:</strong> {{ depositAccountLabel() || '-' }}</div>
-                  <div class="col-12 col-md-6"><strong>Paiements pointes:</strong> {{ selectedDepositCandidateCount() }}</div>
-                  <div class="col-12 col-md-6"><strong>Montant:</strong> {{ formatCurrency(selectedDepositCandidateAmountCents(), 'EUR') }}</div>
-                </div>
-                <div class="table-responsive">
-                  <table class="table table-sm align-middle mb-0">
-                    <thead class="table-light">
-                      <tr>
-                        <th>Date</th>
-                        <th>Facture</th>
-                        <th>Patient</th>
-                        <th>Moyen</th>
-                        <th class="text-end">Montant</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      @for (candidate of selectedDepositCandidates(); track candidate.operationId) {
-                        <tr>
-                          <td>{{ formatDateTime(candidate.occurredAt) }}</td>
-                          <td>{{ candidate.invoiceNumber || '-' }}</td>
-                          <td>{{ candidate.patientName }}</td>
-                          <td>{{ candidate.paymentMethod || '-' }}</td>
-                          <td class="text-end">{{ formatCurrency(candidate.amountCents, candidate.currency) }}</td>
-                        </tr>
-                      }
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          }
+          </div>
         </div>
         <div class="modal-footer">
-          @if (!editingDepositId()) {
-            <button type="button" class="btn btn-outline-secondary" [disabled]="depositWizardStep() === 1" (click)="goToPreviousDepositWizardStep()">Etape precedente</button>
-            <button type="button" class="btn btn-outline-primary" [disabled]="depositWizardStep() === 3" (click)="goToNextDepositWizardStep()">Etape suivante</button>
-          }
           <button type="button" class="btn btn-outline-secondary" (click)="closeDepositEditorModal()">Annuler</button>
           <button
             type="button"
             class="btn btn-primary"
-            [disabled]="isSaving() || (!editingDepositId() && depositWizardStep() !== 3)"
+            [disabled]="isSaving() || (!editingDepositId() && selectedDepositCandidateCount() === 0)"
             (click)="saveDepositEditor()">
             {{ editingDepositId() ? 'Enregistrer' : 'Generer le bordereau' }}
           </button>

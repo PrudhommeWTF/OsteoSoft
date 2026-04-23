@@ -198,7 +198,6 @@ export class ProfilePage {
       });
 
       this.preferencesForm.reset(preferences);
-      this.themeService.setThemeMode(preferences.themeMode, { persist: true });
     } catch {
       this.error.set('Impossible de charger votre profil.');
     } finally {

@@ -58,7 +58,7 @@
   </section>
 
   <div class="accordion patient-accordion" id="patientDetailAccordion">
-    <div class="accordion-item shadow-sm mb-3 bg-body border">
+    <div class="accordion-item">
       <h2 class="accordion-header" id="headingIdentity">
         <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-identity" aria-expanded="true" aria-controls="patient-accordion-identity">
           <i class="fa-solid fa-id-card text-primary me-2"></i>État civil
@@ -229,7 +229,7 @@
       </div>
     </div>
 
-    <div class="accordion-item shadow-sm mb-3 bg-body border">
+    <div class="accordion-item">
       <h2 class="accordion-header" id="headingPatientInfo">
         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-patient-info" aria-expanded="false" aria-controls="patient-accordion-patient-info">
           <i class="fa-solid fa-user-pen text-primary me-2"></i>Informations sur le patient
@@ -292,7 +292,7 @@
       </div>
     </div>
 
-    <div class="accordion-item shadow-sm mb-3 bg-body border">
+    <div class="accordion-item">
       <h2 class="accordion-header" id="headingAntecedents">
         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-antecedents" aria-expanded="false" aria-controls="patient-accordion-antecedents">
           <i class="fa-solid fa-heart-pulse text-primary me-2"></i>Antécédents
@@ -346,7 +346,7 @@
       </div>
     </div>
 
-    <div class="accordion-item shadow-sm mb-3 bg-body border">
+    <div class="accordion-item">
       <h2 class="accordion-header" id="headingDocuments">
         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-documents" aria-expanded="false" aria-controls="patient-accordion-documents">
           <i class="fa-regular fa-folder-open text-primary me-2"></i>Documents du patient
@@ -427,7 +427,7 @@
       </div>
     </div>
 
-    <div class="accordion-item shadow-sm mb-3 bg-body border">
+    <div class="accordion-item">
       <h2 class="accordion-header" id="headingConsultations">
         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-consultations" aria-expanded="false" aria-controls="patient-accordion-consultations">
           <i class="fa-solid fa-stethoscope text-primary me-2"></i>Consultations
@@ -610,7 +610,7 @@
     <div class="modal-backdrop fade show"></div>
   }
 
-  <div #consultationModal class="modal fade" tabindex="-1" aria-hidden="true">
+  <div #consultationModal class="modal fade" tabindex="-1" aria-hidden="true" data-bs-focus="false">
     <div class="modal-dialog modal-fullscreen modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">
@@ -1151,6 +1151,21 @@
                                   <i class="fa-solid fa-trash-can me-1"></i>Supprimer
                                 </button>
                               </div>
+                              <div class="small text-secondary mt-1">
+                                Commentaire: {{ payment.comment || '-' }}
+                              </div>
+                              @if (isConsultationChequePaymentMethod(payment.method)) {
+                                <div class="small text-secondary mt-1">
+                                  Banque: {{ payment.bankName || '-' }} | N° chèque: {{ payment.chequeNumber || '-' }}
+                                </div>
+                              }
+                            </li>
+                          }
+                          @if (billing.paymentStatus !== 'paid') {
+                            <li class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                              <button type="button" class="btn btn-outline-info btn-sm" (click)="openConsultationPaymentCreateModal()">
+                                <i class="fa-solid fa-plus me-1"></i>Ajouter un paiement
+                              </button>
                             </li>
                           }
                         }
@@ -1349,16 +1364,33 @@
             <div class="row g-3">
               <div class="col-12">
                 <label class="form-label">Montant</label>
-                <input type="text" inputmode="decimal" class="form-control" formControlName="amount" placeholder="Ex: 65,00" />
+                <input type="number" min="0.01" step="0.01" inputmode="decimal" class="form-control" formControlName="amount" placeholder="Ex: 65,00" />
               </div>
               <div class="col-12">
                 <label class="form-label">Moyen de paiement</label>
-                <input type="text" class="form-control" formControlName="method" list="consultation-payment-method-options" placeholder="Choisir ou saisir un moyen de paiement" />
-                <datalist id="consultation-payment-method-options">
+                <select class="form-select" formControlName="method">
+                  <option value="">Selectionner un moyen de paiement</option>
                   @for (method of getConsultationPaymentMethodOptions(); track method) {
-                    <option [value]="method"></option>
+                    <option [value]="method">{{ method }}</option>
                   }
-                </datalist>
+                </select>
+                @if (getConsultationPaymentMethodOptions().length === 0) {
+                  <div class="form-text text-warning">Aucun moyen de paiement actif n'est configure pour ce cabinet.</div>
+                }
+              </div>
+              @if (isConsultationPaymentMethodChequeSelected()) {
+                <div class="col-12 col-lg-6">
+                  <label class="form-label">Banque du chèque</label>
+                  <input type="text" class="form-control" formControlName="bankName" placeholder="Nom de la banque" />
+                </div>
+                <div class="col-12 col-lg-6">
+                  <label class="form-label">N° de chèque</label>
+                  <input type="text" class="form-control" formControlName="chequeNumber" placeholder="Numero du chèque" />
+                </div>
+              }
+              <div class="col-12">
+                <label class="form-label">Commentaire de paiement</label>
+                <textarea class="form-control" rows="2" formControlName="comment" placeholder="Commentaire (optionnel)"></textarea>
               </div>
               <div class="col-12">
                 <label class="form-label">Date et heure</label>

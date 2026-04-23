@@ -27,6 +27,8 @@ import {
   BillingDepositPayload,
   BillingForecastPayload,
   BillingExpensePayload,
+  BillingGroupedInvoicePaymentPayload,
+  BillingGroupedInvoicePaymentResult,
   BillingInvoiceCreatePayload,
   BillingInvoiceDetail,
   BillingAlertsPayload,
@@ -381,10 +383,17 @@ export class ApiService {
     return Array.isArray(response.deposits) ? response.deposits : [];
   }
 
-  async getBillingDepositCandidates(type: 'cheque' | 'especes', officeId?: number | null): Promise<BillingDepositCandidate[]> {
+  async getBillingDepositCandidates(
+    type: 'cheque' | 'especes',
+    officeId?: number | null,
+    currentDepositId?: number | null
+  ): Promise<BillingDepositCandidate[]> {
     let params = new HttpParams().set('type', type);
     if (Number.isInteger(officeId) && Number(officeId) > 0) {
       params = params.set('officeId', String(officeId));
+    }
+    if (Number.isInteger(currentDepositId) && Number(currentDepositId) > 0) {
+      params = params.set('currentDepositId', String(currentDepositId));
     }
 
     const response = await firstValueFrom(
@@ -404,6 +413,7 @@ export class ApiService {
       title: string;
       notes: string;
       amount: number;
+      operationIds?: string[];
     }
   ): Promise<void> {
     await firstValueFrom(
@@ -651,6 +661,13 @@ export class ApiService {
       this.http.put<{ invoice: BillingInvoiceDetail }>(`${this.baseUrl}/billing/invoices/${invoiceId}/payments`, payload)
     );
     return response.invoice;
+  }
+
+  async createGroupedInvoicePayment(payload: BillingGroupedInvoicePaymentPayload): Promise<BillingGroupedInvoicePaymentResult> {
+    const response = await firstValueFrom(
+      this.http.post<{ groupedPayment: BillingGroupedInvoicePaymentResult }>(`${this.baseUrl}/billing/invoice-payments/grouped`, payload)
+    );
+    return response.groupedPayment;
   }
 
   async deleteBillingInvoice(invoiceId: number): Promise<void> {

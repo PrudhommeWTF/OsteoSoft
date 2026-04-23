@@ -83,6 +83,9 @@ type ConsultationPaymentEntry = {
   amount: number;
   currency: string;
   method: string;
+  bankName: string;
+  chequeNumber: string;
+  comment: string;
   paidAt: string;
 };
 
@@ -101,7 +104,6 @@ type ConsultationBillingState = {
 };
 
 const PAYMENT_PENDING_LABEL = 'Paiement en attente';
-const DEFAULT_PAYMENT_METHODS = ['Carte bancaire', 'Cheque', 'Especes', 'Virement'];
 const CONSULTATION_BILLING_STORAGE_KEY = 'osteosoft:consultation-billing:v1';
 
 @Component({
@@ -178,6 +180,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   readonly consultationPendingDocuments = signal<ConsultationUploadDocument[]>([]);
   readonly isConsultationDocumentDragOver = signal(false);
   readonly isLoadingConsultationContext = signal(false);
+  private loadConsultationContextPromise: Promise<void> | null = null;
+  private hydrateConsultationBillingStatePromises: Map<number, Promise<void>> = new Map();
   readonly consultationMotifMainHtml = signal('');
   readonly consultationTestsHtml = signal('');
   readonly consultationSchemaHtml = signal('');
@@ -295,6 +299,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   readonly consultationPaymentEditForm = this.fb.nonNullable.group({
     amount: ['0'],
     method: [''],
+    bankName: [''],
+    chequeNumber: [''],
+    comment: [''],
     paidAtLocal: ['']
   });
 
@@ -1141,6 +1148,14 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     return Boolean(this.documentSavingRefs()[documentRef]);
   }
 
+  private getConsultationModalInstance(): any {
+    const modalElement = this.consultationModalRef()?.nativeElement;
+    if (!modalElement) {
+      return null;
+    }
+    return bootstrap.Modal.getOrCreateInstance(modalElement, { focus: false });
+  }
+
   openConsultationModal(consultation: ConsultationRecord): void {
     if (consultation.type === 'appointment') {
       return;
@@ -1180,10 +1195,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     queueMicrotask(() => {
       this.hydrateConsultationEditorsFromState();
 
-      const modalElement = this.consultationModalRef()?.nativeElement;
-      if (modalElement) {
-        bootstrap.Modal.getOrCreateInstance(modalElement).show();
-      }
+      this.getConsultationModalInstance()?.show();
 
       this.startConsultationAutosave();
     });
@@ -1233,10 +1245,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
     queueMicrotask(() => {
       this.hydrateConsultationEditorsFromState();
-      const modalElement = this.consultationModalRef()?.nativeElement;
-      if (modalElement) {
-        bootstrap.Modal.getOrCreateInstance(modalElement).show();
-      }
+      this.getConsultationModalInstance()?.show();
     });
   }
 
@@ -1284,10 +1293,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
   closeConsultationModal(): void {
     this.stopConsultationAutosave();
-    const modalElement = this.consultationModalRef()?.nativeElement;
-    if (modalElement) {
-      bootstrap.Modal.getOrCreateInstance(modalElement).hide();
-    }
+    this.getConsultationModalInstance()?.hide();
   }
 
   setConsultationTab(tab: ConsultationModalTab): void {
@@ -1676,6 +1682,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       const quantity = Number(raw.quantity ?? 1);
       const amountHt = Number(raw.amountHt ?? 0);
       const tvaRate = Number(raw.tvaRate ?? 0);
+      const paymentComment = String(raw.internalComment ?? '').trim() || 'Paiement enregistre lors de la facturation';
       const status: ConsultationPaymentStatus = !paymentMethod || paymentMethod === PAYMENT_PENDING_LABEL
         ? 'pending'
         : 'paid';
@@ -1686,6 +1693,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
             amount: totalAmount,
             currency,
             method: paymentMethod,
+            bankName: '',
+            chequeNumber: '',
+            comment: paymentComment,
             paidAt: nowIso
           }
         ]
@@ -1744,7 +1754,10 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
               paidAt: payment.paidAt,
               amountCents: Math.max(0, Math.round(payment.amount * 100)),
               currency: payment.currency,
-              paymentMethod: payment.method
+              paymentMethod: payment.method,
+              bankName: payment.bankName,
+              chequeNumber: payment.chequeNumber,
+              notes: payment.comment
             }))
           });
           this.upsertConsultationBillingState({
@@ -1834,7 +1847,16 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     this.consultationBillingChoice.set(null);
   }
 
-  openConsultationPaymentEditModal(paymentId: string): void {
+  async openConsultationPaymentEditModal(paymentId: string): Promise<void> {
+    const activeConsult = this.activeConsultation();
+    if (!activeConsult) {
+      return;
+    }
+
+    // Ensure both context and billing state are ready
+    await this.loadConsultationContext();
+    await this.hydrateConsultationBillingState(activeConsult);
+
     const billing = this.activeConsultationBillingState();
     if (!billing) {
       return;
@@ -1845,20 +1867,39 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
+    const availableMethods = this.getConsultationPaymentMethodOptions();
+    const resolvedMethod = availableMethods.includes(payment.method)
+      ? payment.method
+      : (availableMethods[0] ?? '');
+
     this.editingConsultationPaymentId.set(payment.id);
     this.consultationPaymentEditForm.reset({
       amount: String(payment.amount),
-      method: payment.method,
+      method: resolvedMethod,
+      bankName: String(payment.bankName ?? '').trim(),
+      chequeNumber: String(payment.chequeNumber ?? '').trim(),
+      comment: String(payment.comment ?? '').trim(),
       paidAtLocal: this.toDateTimeLocalValue(payment.paidAt)
     });
     this.isConsultationPaymentModalOpen.set(true);
   }
 
-  openConsultationPaymentCreateModal(): void {
+  async openConsultationPaymentCreateModal(): Promise<void> {
+    const activeConsult = this.activeConsultation();
+    if (!activeConsult) {
+      return;
+    }
+
+    // Ensure both context and billing state are ready
+    await this.loadConsultationContext();
+    await this.hydrateConsultationBillingState(activeConsult);
+
     const billing = this.activeConsultationBillingState();
     if (!billing) {
       return;
     }
+
+    const availableMethods = this.getConsultationPaymentMethodOptions();
 
     const totalPaid = billing.payments.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
     const remaining = Math.max(0, Number((billing.totalAmount - totalPaid).toFixed(2)));
@@ -1866,7 +1907,10 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     this.editingConsultationPaymentId.set(null);
     this.consultationPaymentEditForm.reset({
       amount: String(remaining),
-      method: '',
+      method: availableMethods[0] ?? '',
+      bankName: '',
+      chequeNumber: '',
+      comment: '',
       paidAtLocal: this.toDateTimeLocalValue(new Date().toISOString())
     });
     this.isConsultationPaymentModalOpen.set(true);
@@ -1875,6 +1919,14 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   closeConsultationPaymentEditModal(): void {
     this.isConsultationPaymentModalOpen.set(false);
     this.editingConsultationPaymentId.set(null);
+    this.consultationPaymentEditForm.reset({
+      amount: '0',
+      method: '',
+      bankName: '',
+      chequeNumber: '',
+      comment: '',
+      paidAtLocal: ''
+    });
   }
 
   async saveConsultationPaymentEdit(): Promise<void> {
@@ -1887,9 +1939,13 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     const raw = this.consultationPaymentEditForm.getRawValue();
     const amount = this.parsePaymentAmount(raw.amount);
     const method = String(raw.method ?? '').trim();
+    const bankName = String(raw.bankName ?? '').trim();
+    const chequeNumber = String(raw.chequeNumber ?? '').trim();
+    const comment = String(raw.comment ?? '').trim();
+    const isCheque = this.isChequePaymentMethod(method);
     const paidAt = this.fromDateTimeLocalValue(raw.paidAtLocal);
 
-    if (!method || amount <= 0 || !paidAt) {
+    if (!method || amount <= 0 || !paidAt || (isCheque && (!bankName || !chequeNumber))) {
       return;
     }
 
@@ -1900,6 +1956,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
             ...entry,
             amount,
             method,
+            bankName: isCheque ? bankName : '',
+            chequeNumber: isCheque ? chequeNumber : '',
+            comment,
             paidAt
           }
           : entry
@@ -1911,6 +1970,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
           amount,
           currency: billing.currency,
           method,
+          bankName: isCheque ? bankName : '',
+          chequeNumber: isCheque ? chequeNumber : '',
+          comment,
           paidAt
         }
       ];
@@ -1926,7 +1988,10 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
             paidAt: entry.paidAt,
             amountCents: Math.max(0, Math.round(entry.amount * 100)),
             currency: entry.currency,
-            paymentMethod: entry.method
+            paymentMethod: entry.method,
+            bankName: entry.bankName,
+            chequeNumber: entry.chequeNumber,
+            notes: String(entry.comment ?? "").trim()
           }))
         });
         this.upsertConsultationBillingState(
@@ -1971,7 +2036,10 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
             paidAt: entry.paidAt,
             amountCents: Math.max(0, Math.round(entry.amount * 100)),
             currency: entry.currency,
-            paymentMethod: entry.method
+            paymentMethod: entry.method,
+            bankName: entry.bankName,
+            chequeNumber: entry.chequeNumber,
+            notes: String(entry.comment ?? "").trim()
           }))
         });
         this.upsertConsultationBillingState(
@@ -2061,10 +2129,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   getConsultationPaymentMethodOptions(): string[] {
-    const values = [
-      ...this.consultationBillingPaymentMethodOptions(),
-      ...DEFAULT_PAYMENT_METHODS
-    ]
+    const values = this.consultationBillingPaymentMethodOptions()
       .map((value) => String(value ?? '').trim())
       .filter((value) => value.length > 0);
 
@@ -2080,7 +2145,28 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
     const method = String(raw.method ?? '').trim();
     if (!method) {
-      return 'Sélectionnez ou saisissez un moyen de paiement.';
+      return 'Sélectionnez un moyen de paiement.';
+    }
+
+    if (this.isChequePaymentMethod(method)) {
+      const bankName = String(raw.bankName ?? '').trim();
+      if (!bankName) {
+        return 'Renseignez la banque du chèque.';
+      }
+
+      const chequeNumber = String(raw.chequeNumber ?? '').trim();
+      if (!chequeNumber) {
+        return 'Renseignez le numero du chèque.';
+      }
+    }
+
+    const allowedMethods = this.getConsultationPaymentMethodOptions();
+    if (allowedMethods.length === 0) {
+      return 'Aucun moyen de paiement actif n\'est configuré pour ce cabinet.';
+    }
+
+    if (!allowedMethods.includes(method)) {
+      return 'Le moyen de paiement doit faire partie des moyens actifs du cabinet.';
     }
 
     const paidAtRaw = String(raw.paidAtLocal ?? '').trim();
@@ -2740,32 +2826,52 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private async loadConsultationContext(): Promise<void> {
-    if (this.isLoadingConsultationContext()) {
-      return;
+    if (this.loadConsultationContextPromise) {
+      return this.loadConsultationContextPromise;
     }
 
     this.isLoadingConsultationContext.set(true);
-    try {
-      const preferredOfficeId = this.resolvePreferredConsultationOfficeId();
-      const context: ConsultationContextPayload = await this.api.getConsultationContext(preferredOfficeId);
-      this.consultationOfficeId.set(context.officeId ?? null);
-      this.consultationOfficeName.set(context.officeName ?? null);
-      this.practitioners.set(Array.isArray(context.practitioners) ? context.practitioners : []);
-      this.consultationOfficeProfiles.set(Array.isArray(context.profiles) ? context.profiles : []);
-      if (this.consultationModalMode() === 'create') {
-        this.applyDefaultConsultationPractitioner();
+    this.loadConsultationContextPromise = (async () => {
+      try {
+        const preferredOfficeId = this.resolvePreferredConsultationOfficeId();
+        const context: ConsultationContextPayload = await this.api.getConsultationContext(preferredOfficeId);
+        this.consultationOfficeId.set(context.officeId ?? null);
+        this.consultationOfficeName.set(context.officeName ?? null);
+        this.practitioners.set(Array.isArray(context.practitioners) ? context.practitioners : []);
+        this.consultationOfficeProfiles.set(Array.isArray(context.profiles) ? context.profiles : []);
+        if (this.consultationModalMode() === 'create') {
+          this.applyDefaultConsultationPractitioner();
+        }
+        if (Array.isArray(context.paymentMethods)) {
+          const serviceOptions = (context.serviceTypes ?? [])
+            .map((item) => ({
+              label: String(item.label ?? '').trim(),
+              amountHt: Number(item.amountHt) || 0,
+              tvaRate: Number(item.vatRate) || 0
+            }))
+            .filter((item) => Boolean(item.label));
+          this.consultationBillingServiceOptions.set(serviceOptions);
+          this.consultationBillingPaymentMethodOptions.set(
+            context.paymentMethods.map((m) => String(m ?? '').trim()).filter(Boolean)
+          );
+          this.applyConsultationBillingDefaults();
+        } else {
+          await this.loadConsultationBillingCatalog(context.officeId ?? preferredOfficeId ?? null);
+        }
+      } catch {
+        this.consultationOfficeId.set(null);
+        this.consultationOfficeName.set(null);
+        this.practitioners.set([]);
+        this.consultationOfficeProfiles.set([]);
+        this.consultationBillingServiceOptions.set([]);
+        this.consultationBillingPaymentMethodOptions.set([]);
+      } finally {
+        this.isLoadingConsultationContext.set(false);
+        this.loadConsultationContextPromise = null;
       }
-      await this.loadConsultationBillingCatalog(context.officeId ?? preferredOfficeId ?? null);
-    } catch {
-      this.consultationOfficeId.set(null);
-      this.consultationOfficeName.set(null);
-      this.practitioners.set([]);
-      this.consultationOfficeProfiles.set([]);
-      this.consultationBillingServiceOptions.set([]);
-      this.consultationBillingPaymentMethodOptions.set([]);
-    } finally {
-      this.isLoadingConsultationContext.set(false);
-    }
+    })();
+
+    return this.loadConsultationContextPromise;
   }
 
   private async loadConsultationBillingCatalog(contextOfficeId: number | null): Promise<void> {
@@ -3158,45 +3264,66 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    const states = this.consultationBillingStates();
-    if (states[consultationId]) {
-      return;
+    // If already hydrating, return the existing promise
+    const existingPromise = this.hydrateConsultationBillingStatePromises.get(consultationId);
+    if (existingPromise) {
+      return existingPromise;
     }
 
-    const billingInvoiceId = Number(consultation.billingInvoiceId);
-    if (Number.isInteger(billingInvoiceId) && billingInvoiceId > 0) {
-      try {
-        const invoice = await this.api.getBillingInvoice(billingInvoiceId);
-        const invoiceDocumentRef = this.resolveConsultationInvoiceDocumentRef(consultationId, invoice.issuedAt);
+    // Create and store the hydration promise
+    const hydrationPromise = (async () => {
+      const states = this.consultationBillingStates();
+      const billingInvoiceId = Number(consultation.billingInvoiceId);
+      const hasValidInvoiceId = Number.isInteger(billingInvoiceId) && billingInvoiceId > 0;
 
-        this.consultationBillingStates.update((items) => ({
-          ...items,
-          [consultationId]: this.mapInvoiceDetailToConsultationBillingState(
-            consultationId,
-            consultation.practitioner || '-',
-            invoiceDocumentRef,
-            invoice
-          )
-        }));
-        this.persistConsultationBillingStates();
-        this.consultationBillingChoice.set('bill');
-        return;
-      } catch {
-        // Fall back to locally persisted billing state.
+      if (states[consultationId]) {
+        // Only skip re-fetch if the cached state already reflects the current invoice,
+        // or if this consultation has no invoice at all.
+        if (!hasValidInvoiceId || states[consultationId].billingInvoiceId === billingInvoiceId) {
+          return;
+        }
       }
-    }
+      if (hasValidInvoiceId) {
+        try {
+          const invoice = await this.api.getBillingInvoice(billingInvoiceId);
+          const invoiceDocumentRef = this.resolveConsultationInvoiceDocumentRef(consultationId, invoice.issuedAt);
 
-    const persisted = this.readPersistedConsultationBillingStates();
-    const state = persisted[consultationId];
-    if (!state) {
-      return;
-    }
+          this.consultationBillingStates.update((items) => ({
+            ...items,
+            [consultationId]: this.mapInvoiceDetailToConsultationBillingState(
+              consultationId,
+              consultation.practitioner || '-',
+              invoiceDocumentRef,
+              invoice
+            )
+          }));
+          this.persistConsultationBillingStates();
+          this.consultationBillingChoice.set('bill');
+          return;
+        } catch {
+          // Fall back to locally persisted billing state.
+        }
+      }
 
-    this.consultationBillingStates.update((items) => ({
-      ...items,
-      [consultationId]: state
-    }));
-    this.consultationBillingChoice.set('bill');
+      const persisted = this.readPersistedConsultationBillingStates();
+      const state = persisted[consultationId];
+      if (!state) {
+        return;
+      }
+
+      this.consultationBillingStates.update((items) => ({
+        ...items,
+        [consultationId]: state
+      }));
+      this.consultationBillingChoice.set('bill');
+    })();
+
+    this.hydrateConsultationBillingStatePromises.set(consultationId, hydrationPromise);
+    try {
+      await hydrationPromise;
+    } finally {
+      this.hydrateConsultationBillingStatePromises.delete(consultationId);
+    }
   }
 
   private mapInvoiceDetailToConsultationBillingState(
@@ -3222,6 +3349,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
           amount: Number((entry.amountCents / 100).toFixed(2)),
           currency: entry.currency,
           method: entry.paymentMethod,
+          bankName: String(entry.bankName ?? '').trim(),
+          chequeNumber: String(entry.chequeNumber ?? '').trim(),
+          comment: String(entry.notes ?? '').trim(),
           paidAt: entry.paidAt
         }))
       ),
@@ -3230,6 +3360,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
         amount: Number((entry.amountCents / 100).toFixed(2)),
         currency: entry.currency,
         method: entry.paymentMethod,
+        bankName: String(entry.bankName ?? '').trim(),
+        chequeNumber: String(entry.chequeNumber ?? '').trim(),
+        comment: String(entry.notes ?? '').trim(),
         paidAt: entry.paidAt
       }))
     };
@@ -3256,6 +3389,24 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       return 0;
     }
     return Number(parsed.toFixed(2));
+  }
+
+  isConsultationPaymentMethodChequeSelected(): boolean {
+    const method = String(this.consultationPaymentEditForm.controls.method.value ?? '').trim();
+    return this.isChequePaymentMethod(method);
+  }
+
+  isConsultationChequePaymentMethod(method: string): boolean {
+    return this.isChequePaymentMethod(method);
+  }
+
+  private isChequePaymentMethod(method: string): boolean {
+    const normalized = String(method ?? '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    return normalized.includes('cheque') || normalized.includes('chq') || normalized.includes('check');
   }
 
   private resolveConsultationInvoiceDocumentRef(consultationId: number, issuedAtIso: string): string {

@@ -226,6 +226,10 @@ function buildDepositCandidate(operationId: string, paymentMethod: string): {
   currency: string;
   paymentMethod: string;
   officeId: number | null;
+  groupRef: string | null;
+  bankName: string;
+  chequeNumber: string;
+  paidAt: string | null;
 } {
   return {
     operationId,
@@ -238,6 +242,10 @@ function buildDepositCandidate(operationId: string, paymentMethod: string): {
     amountCents: 1000,
     currency: 'EUR',
     paymentMethod,
-    officeId: null
+    officeId: null,
+    groupRef: null,
+    bankName: '',
+    chequeNumber: '',
+    paidAt: null
   };
 }

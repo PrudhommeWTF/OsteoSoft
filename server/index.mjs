@@ -225,10 +225,45 @@ db.exec(`
     amount_cents INTEGER NOT NULL,
     currency TEXT NOT NULL DEFAULT 'EUR',
     payment_method TEXT NOT NULL DEFAULT '',
+    bank_name TEXT NOT NULL DEFAULT '',
+    cheque_number TEXT NOT NULL DEFAULT '',
     reference TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
     created_by INTEGER,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
+    FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS patient_payment_credits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id INTEGER NOT NULL,
+    office_id INTEGER,
+    paid_at TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    remaining_cents INTEGER NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'EUR',
+    payment_method TEXT NOT NULL DEFAULT '',
+    bank_name TEXT NOT NULL DEFAULT '',
+    cheque_number TEXT NOT NULL DEFAULT '',
+    reference TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+    FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE SET NULL,
+    FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS patient_payment_credit_allocations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    credit_id INTEGER NOT NULL,
+    invoice_id INTEGER NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    allocated_at TEXT NOT NULL,
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(credit_id) REFERENCES patient_payment_credits(id) ON DELETE CASCADE,
     FOREIGN KEY(invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
     FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL
   );
@@ -560,6 +595,10 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_invoices_consultation_id ON invoices(consultation_id);
   CREATE INDEX IF NOT EXISTS idx_invoice_line_items_invoice_order ON invoice_line_items(invoice_id, display_order);
   CREATE INDEX IF NOT EXISTS idx_invoice_payments_invoice_paid_at ON invoice_payments(invoice_id, paid_at);
+  CREATE INDEX IF NOT EXISTS idx_patient_payment_credits_patient_paid_at ON patient_payment_credits(patient_id, paid_at);
+  CREATE INDEX IF NOT EXISTS idx_patient_payment_credits_office_id ON patient_payment_credits(office_id);
+  CREATE INDEX IF NOT EXISTS idx_patient_payment_credit_allocations_credit_id ON patient_payment_credit_allocations(credit_id);
+  CREATE INDEX IF NOT EXISTS idx_patient_payment_credit_allocations_invoice_id ON patient_payment_credit_allocations(invoice_id);
 
   CREATE INDEX IF NOT EXISTS idx_directory_contacts_office_kind ON directory_contacts(office_id, kind);
   CREATE INDEX IF NOT EXISTS idx_directory_contacts_office_name_sort ON directory_contacts(office_id, last_name, first_name, organization);
@@ -2835,7 +2874,7 @@ function buildDataBackupSnapshot() {
        ORDER BY invoice_id ASC, display_order ASC, id ASC`
     ).all(),
     invoicePayments: db.prepare(
-      `SELECT id, invoice_id, paid_at, amount_cents, currency, payment_method, reference, notes, created_by, created_at
+      `SELECT id, invoice_id, paid_at, amount_cents, currency, payment_method, bank_name, cheque_number, reference, notes, created_by, created_at
        FROM invoice_payments
        ORDER BY invoice_id ASC, paid_at ASC, id ASC`
     ).all(),
@@ -3037,8 +3076,8 @@ function restoreDataBackupSnapshot(backupPayload) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
      );
      const insertInvoicePayment = db.prepare(
-      `INSERT INTO invoice_payments (id, invoice_id, paid_at, amount_cents, currency, payment_method, reference, notes, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO invoice_payments (id, invoice_id, paid_at, amount_cents, currency, payment_method, bank_name, cheque_number, reference, notes, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
      );
      const insertAccountingExpense = db.prepare(
       `INSERT INTO accounting_expenses (
@@ -3367,6 +3406,8 @@ function restoreDataBackupSnapshot(backupPayload) {
         Number(row.amount_cents) || 0,
         String(row.currency ?? 'EUR'),
         String(row.payment_method ?? ''),
+        String(row.bank_name ?? ''),
+        String(row.cheque_number ?? ''),
         String(row.reference ?? ''),
         String(row.notes ?? ''),
         row.created_by != null ? Number(row.created_by) : null,
@@ -3986,6 +4027,8 @@ async function ensureSeedData() {
   ensureColumn('patients', 'children_count', 'children_count INTEGER NOT NULL DEFAULT 0');
   ensureColumn('service_types', 'office_id', 'office_id INTEGER');
   ensureColumn('payment_methods', 'office_id', 'office_id INTEGER');
+  ensureColumn('invoice_payments', 'bank_name', "bank_name TEXT NOT NULL DEFAULT ''");
+  ensureColumn('invoice_payments', 'cheque_number', "cheque_number TEXT NOT NULL DEFAULT ''");
   ensureColumn('user_preference', 'slot_duration_minutes', 'slot_duration_minutes INTEGER NOT NULL DEFAULT 15');
   ensureColumn('user_preference', 'display_height', 'display_height INTEGER NOT NULL DEFAULT 14');
   ensureColumn('user_preference', 'theme_mode', "theme_mode TEXT NOT NULL DEFAULT 'system'");
@@ -4343,6 +4386,8 @@ async function ensureSeedData() {
       }
     }
 
+    // Always ensure default payment methods have proper system_keys and active status.
+    // This is important for offices that were created before the system_key column was added.
     ensureDefaultOfficePaymentMethods(officeId);
   }
 
@@ -7842,11 +7887,40 @@ app.get('/api/consultation-context', authMiddleware, requirePermission('create-p
       };
     });
 
+  const serviceTypeRows = db
+    .prepare(
+      `SELECT label, amount_ht_cents, vat_rate, display_order
+       FROM service_types
+       WHERE office_id = ?
+       ORDER BY display_order ASC, id ASC`
+    )
+    .all(selectedOfficeId);
+
+  const serviceTypes = serviceTypeRows.map((row) => ({
+    label: String(row.label ?? '').trim(),
+    amountHt: Number(row.amount_ht_cents ?? 0) / 100,
+    vatRate: Number(row.vat_rate ?? 0),
+    displayOrder: Number(row.display_order ?? 0)
+  })).filter((item) => item.label.length > 0);
+
+  const paymentMethodRows = db
+    .prepare(
+      `SELECT label, is_active, display_order
+       FROM payment_methods
+       WHERE office_id = ? AND is_active = 1
+       ORDER BY display_order ASC, id ASC`
+    )
+    .all(selectedOfficeId);
+
+  const paymentMethods = paymentMethodRows.map((row) => String(row.label ?? '').trim()).filter(Boolean);
+
   return res.json({
     officeId: Number(officeRow.id),
     officeName: String(officeRow.name ?? '').trim() || null,
     practitioners,
-    profiles: parseOfficeConsultationProfiles(officeRow.consultationProfilesJson)
+    profiles: parseOfficeConsultationProfiles(officeRow.consultationProfilesJson),
+    serviceTypes,
+    paymentMethods
   });
 });
 
@@ -11657,6 +11731,8 @@ function normalizeInvoicePayments(rawPayments, fallbackPaymentMethod, fallbackCu
       const paidAt = String(item?.paidAt ?? issuedAt ?? new Date().toISOString()).trim() || new Date().toISOString();
       const currency = String(item?.currency ?? fallbackCurrency ?? 'EUR').trim() || 'EUR';
       const paymentMethod = String(item?.paymentMethod ?? fallbackPaymentMethod ?? '').trim();
+      const bankName = String(item?.bankName ?? '').trim();
+      const chequeNumber = String(item?.chequeNumber ?? '').trim();
       const reference = String(item?.reference ?? '').trim();
       const notes = String(item?.notes ?? '').trim();
 
@@ -11669,6 +11745,8 @@ function normalizeInvoicePayments(rawPayments, fallbackPaymentMethod, fallbackCu
         paidAt,
         currency,
         paymentMethod,
+        bankName,
+        chequeNumber,
         reference,
         notes
       };
@@ -11685,6 +11763,8 @@ function normalizeInvoicePayments(rawPayments, fallbackPaymentMethod, fallbackCu
       paidAt: String(issuedAt ?? new Date().toISOString()).trim() || new Date().toISOString(),
       currency: String(fallbackCurrency ?? 'EUR').trim() || 'EUR',
       paymentMethod: String(fallbackPaymentMethod ?? '').trim(),
+      bankName: '',
+      chequeNumber: '',
       reference: '',
       notes: ''
     }].filter((item) => item.amountCents > 0);
@@ -11733,7 +11813,7 @@ function getInvoiceDetail(invoiceId) {
   ).all(invoiceId);
 
   const payments = db.prepare(
-    `SELECT id, paid_at, amount_cents, currency, payment_method, reference, notes
+    `SELECT id, paid_at, amount_cents, currency, payment_method, bank_name, cheque_number, reference, notes
      FROM invoice_payments
      WHERE invoice_id = ?
      ORDER BY datetime(paid_at) ASC, id ASC`
@@ -11772,9 +11852,73 @@ function getInvoiceDetail(invoiceId) {
       amountCents: Number(item.amount_cents ?? 0),
       currency: String(item.currency ?? 'EUR').trim() || 'EUR',
       paymentMethod: String(item.payment_method ?? '').trim(),
+      bankName: String(item.bank_name ?? '').trim(),
+      chequeNumber: String(item.cheque_number ?? '').trim(),
       reference: String(item.reference ?? '').trim(),
       notes: String(item.notes ?? '').trim()
     }))
+  };
+}
+
+function appendInvoicePayment(invoiceId, payment, createdBy) {
+  db.prepare(
+    `INSERT INTO invoice_payments (invoice_id, paid_at, amount_cents, currency, payment_method, bank_name, cheque_number, reference, notes, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    invoiceId,
+    payment.paidAt,
+    payment.amountCents,
+    payment.currency,
+    payment.paymentMethod,
+    payment.bankName,
+    payment.chequeNumber,
+    payment.reference,
+    payment.notes,
+    createdBy
+  );
+}
+
+function refreshInvoicePaymentState(invoiceId) {
+  const invoice = db.prepare(
+    `SELECT id, amount_cents, status
+     FROM invoices
+     WHERE id = ?`
+  ).get(invoiceId);
+
+  if (!invoice) {
+    return null;
+  }
+
+  const payments = db.prepare(
+    `SELECT amount_cents, payment_method
+     FROM invoice_payments
+     WHERE invoice_id = ?
+     ORDER BY datetime(paid_at) ASC, id ASC`
+  ).all(invoiceId).map((row) => ({
+    amountCents: Number(row.amount_cents ?? 0),
+    paymentMethod: String(row.payment_method ?? '').trim()
+  }));
+
+  const status = computeInvoiceStatusFromPayments(
+    Number(invoice.amount_cents ?? 0),
+    payments,
+    String(invoice.status ?? '')
+  );
+
+  const paymentMethod = payments.length === 1
+    ? String(payments[0].paymentMethod ?? '').trim()
+    : (payments.length > 1 ? 'multiple' : '');
+
+  db.prepare(
+    `UPDATE invoices
+     SET status = ?, payment_method = ?
+     WHERE id = ?`
+  ).run(status, paymentMethod, invoiceId);
+
+  return {
+    status,
+    paymentMethod,
+    paidAmountCents: payments.reduce((sum, item) => sum + Number(item.amountCents ?? 0), 0)
   };
 }
 
@@ -11818,7 +11962,19 @@ function getBillingOfficeOptions(officeIds) {
        ORDER BY lower(name) ASC, id ASC`
     )
     .all(...officeIds)
-    .map((row) => ({ id: Number(row.id), name: String(row.name ?? '').trim() }));
+    .map((row) => {
+      const officeId = Number(row.id);
+      const paymentMethods = readOfficePaymentMethods(officeId)
+        .filter((item) => item.isActive)
+        .map((item) => String(item.label ?? '').trim())
+        .filter((item) => item.length > 0);
+
+      return {
+        id: officeId,
+        name: String(row.name ?? '').trim(),
+        paymentMethods: [...new Set(paymentMethods)]
+      };
+    });
 }
 
 function getStatisticsUsersForOfficeIds(officeIds) {
@@ -12693,10 +12849,28 @@ function getBillingOperationsData({ userId, access, fromIso, toIso, availableOff
     });
   }
 
+  const depositItemRows = db
+    .prepare(
+      `SELECT di.source_type, di.source_id, di.deposit_id, d.type AS deposit_type
+       FROM accounting_deposit_items di
+       INNER JOIN accounting_deposits d ON d.id = di.deposit_id
+       WHERE d.is_deleted = 0`
+    )
+    .all();
+
+  const depositItemByKey = new Map();
+  for (const di of depositItemRows) {
+    depositItemByKey.set(`${di.source_type}:${Number(di.source_id)}`, {
+      depositId: Number(di.deposit_id),
+      depositType: String(di.deposit_type)
+    });
+  }
+
   const invoices = db
     .prepare(
       `SELECT i.id, i.patient_id, i.invoice_number, i.amount_cents, i.issued_at,
               p.cipher_full_name,
+              COALESCE(pay.paid_cents, 0) AS paid_cents,
               COALESCE(
                 i.office_id,
                 (
@@ -12709,6 +12883,11 @@ function getBillingOperationsData({ userId, access, fromIso, toIso, availableOff
               ) AS office_id
        FROM invoices i
        INNER JOIN patients p ON p.id = i.patient_id
+       LEFT JOIN (
+         SELECT invoice_id, SUM(amount_cents) AS paid_cents
+         FROM invoice_payments
+         GROUP BY invoice_id
+       ) pay ON pay.invoice_id = i.id
        WHERE datetime(i.issued_at) >= datetime(?)
          AND datetime(i.issued_at) <= datetime(?)`
     )
@@ -12755,6 +12934,7 @@ function getBillingOperationsData({ userId, access, fromIso, toIso, availableOff
       continue;
     }
 
+    const depositItem = depositItemByKey.get(operationId);
     operations.push({
       id: operationId,
       sourceType: 'invoice',
@@ -12769,6 +12949,9 @@ function getBillingOperationsData({ userId, access, fromIso, toIso, availableOff
       retrocessionPercent: meta?.retrocessionPercent ?? 0,
       retrocessionRecipient: meta?.retrocessionRecipient ?? '',
       invoiceNumber: String(row.invoice_number ?? '').trim(),
+      remainingAmountCents: Math.max(0, Number(row.amount_cents ?? 0) - Number(row.paid_cents ?? 0)),
+      depositId: depositItem?.depositId ?? null,
+      depositType: depositItem?.depositType ?? null,
       paymentRef: {
         type: 'patient',
         patientId: Number(row.patient_id)
@@ -12801,6 +12984,7 @@ function getBillingOperationsData({ userId, access, fromIso, toIso, availableOff
       retrocessionPercent: Number(row.retrocession_percent ?? 0),
       retrocessionRecipient: String(row.retrocession_recipient ?? '').trim(),
       invoiceNumber: '',
+      remainingAmountCents: 0,
       paymentRef: {
         type: 'expense',
         expenseId: Number(row.id)
@@ -12833,6 +13017,7 @@ function getBillingOperationsData({ userId, access, fromIso, toIso, availableOff
       retrocessionPercent: Number(row.retrocession_percent ?? 0),
       retrocessionRecipient: String(row.retrocession_recipient ?? '').trim(),
       invoiceNumber: '',
+      remainingAmountCents: 0,
       paymentRef: {
         type: 'deposit',
         depositId: Number(row.id)
@@ -13678,6 +13863,9 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('create-pati
   const currency = String(req.body?.currency ?? 'EUR').trim() || 'EUR';
   const lineItems = normalizeInvoiceLineItems(req.body?.lineItems, amountCents);
   const payments = normalizeInvoicePayments(req.body?.payments, paymentMethod, currency, amountCents, issuedAt);
+  if (payments.some((payment) => inferPaymentMethodSystemKey(payment.paymentMethod) === 'cheque' && (!String(payment.bankName ?? '').trim() || !String(payment.chequeNumber ?? '').trim()))) {
+    return res.status(400).json({ message: 'La banque et le numero de chèque sont obligatoires pour un paiement par chèque.' });
+  }
 
   if (!Number.isInteger(patientId) || patientId <= 0) {
     return res.status(400).json({ message: 'Patient invalide' });
@@ -13748,8 +13936,8 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('create-pati
        VALUES (?, ?, ?, ?, ?, ?)`
     );
     const insertPayment = db.prepare(
-      `INSERT INTO invoice_payments (invoice_id, paid_at, amount_cents, currency, payment_method, reference, notes, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO invoice_payments (invoice_id, paid_at, amount_cents, currency, payment_method, bank_name, cheque_number, reference, notes, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
 
     for (const item of lineItems) {
@@ -13770,6 +13958,8 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('create-pati
         payment.amountCents,
         payment.currency,
         payment.paymentMethod,
+        payment.bankName,
+        payment.chequeNumber,
         payment.reference,
         payment.notes,
         req.user.sub
@@ -13854,43 +14044,17 @@ app.put('/api/billing/invoices/:id/payments', authMiddleware, requirePermission(
     0,
     new Date().toISOString()
   );
+  if (payments.some((payment) => inferPaymentMethodSystemKey(payment.paymentMethod) === 'cheque' && (!String(payment.bankName ?? '').trim() || !String(payment.chequeNumber ?? '').trim()))) {
+    return res.status(400).json({ message: 'La banque et le numero de chèque sont obligatoires pour un paiement par chèque.' });
+  }
 
   const replacePayments = db.transaction(() => {
     db.prepare('DELETE FROM invoice_payments WHERE invoice_id = ?').run(invoiceId);
 
-    const insertPayment = db.prepare(
-      `INSERT INTO invoice_payments (invoice_id, paid_at, amount_cents, currency, payment_method, reference, notes, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    );
-
     for (const payment of payments) {
-      insertPayment.run(
-        invoiceId,
-        payment.paidAt,
-        payment.amountCents,
-        payment.currency,
-        payment.paymentMethod,
-        payment.reference,
-        payment.notes,
-        req.user.sub
-      );
+      appendInvoicePayment(invoiceId, payment, req.user.sub);
     }
-
-    const status = computeInvoiceStatusFromPayments(
-      Number(invoice.amount_cents ?? 0),
-      payments,
-      String(invoice.status ?? '')
-    );
-
-    const paymentMethod = payments.length === 1
-      ? String(payments[0].paymentMethod ?? '').trim()
-      : (payments.length > 1 ? 'multiple' : '');
-
-    db.prepare(
-      `UPDATE invoices
-       SET status = ?, payment_method = ?, updated_at = CURRENT_TIMESTAMP
-       WHERE id = ?`
-    ).run(status, paymentMethod, invoiceId);
+    refreshInvoicePaymentState(invoiceId);
   });
 
   replacePayments();
@@ -13902,6 +14066,128 @@ app.put('/api/billing/invoices/:id/payments', authMiddleware, requirePermission(
   });
 
   return res.json({ invoice: detail });
+});
+
+app.post('/api/billing/invoice-payments/grouped', authMiddleware, requirePermission('mark-payment'), (req, res) => {
+  const invoiceIds = Array.isArray(req.body?.invoiceIds)
+    ? [...new Set(req.body.invoiceIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))]
+    : [];
+
+  const amountCents = Math.round(Number(req.body?.payment?.amountCents ?? 0));
+  const paidAt = String(req.body?.payment?.paidAt ?? new Date().toISOString()).trim() || new Date().toISOString();
+  const currency = String(req.body?.payment?.currency ?? 'EUR').trim() || 'EUR';
+  const paymentMethod = String(req.body?.payment?.paymentMethod ?? '').trim();
+  const bankName = String(req.body?.payment?.bankName ?? '').trim();
+  const chequeNumber = String(req.body?.payment?.chequeNumber ?? '').trim();
+  const reference = String(req.body?.payment?.reference ?? '').trim();
+  const notes = String(req.body?.payment?.notes ?? '').trim();
+
+  if (invoiceIds.length === 0) {
+    return res.status(400).json({ message: 'Selectionnez au moins une facture.' });
+  }
+  if (!Number.isFinite(amountCents) || amountCents <= 0) {
+    return res.status(400).json({ message: 'Montant invalide.' });
+  }
+  if (!paymentMethod) {
+    return res.status(400).json({ message: 'Moyen de paiement requis.' });
+  }
+  if (inferPaymentMethodSystemKey(paymentMethod) === 'cheque' && (!bankName || !chequeNumber)) {
+    return res.status(400).json({ message: 'La banque et le numero de chèque sont obligatoires pour un paiement par chèque.' });
+  }
+
+  const placeholders = invoiceIds.map(() => '?').join(', ');
+  const invoices = db.prepare(
+    `SELECT id, invoice_number, amount_cents, office_id, issued_at
+     FROM invoices
+     WHERE id IN (${placeholders})
+     ORDER BY datetime(issued_at) ASC, id ASC`
+  ).all(...invoiceIds);
+
+  if (invoices.length !== invoiceIds.length) {
+    return res.status(404).json({ message: 'Une ou plusieurs factures sont introuvables.' });
+  }
+
+  const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+  if (!isAdmin) {
+    const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+    for (const invoice of invoices) {
+      const officeId = invoice.office_id != null ? Number(invoice.office_id) : null;
+      if (officeId !== null && !accessibleOfficeIds.includes(officeId)) {
+        return res.status(403).json({ message: 'Acces refuse - facture d\'un autre cabinet' });
+      }
+    }
+  }
+
+  const groupRef = `GP-${Date.now()}`;
+  const allocateGroupedPayment = db.transaction(() => {
+    let remainingCents = amountCents;
+    const allocations = [];
+
+    for (const invoice of invoices) {
+      if (remainingCents <= 0) {
+        break;
+      }
+
+      const alreadyPaidCents = Number(db.prepare(
+        `SELECT COALESCE(SUM(amount_cents), 0) AS paid
+         FROM invoice_payments
+         WHERE invoice_id = ?`
+      ).get(invoice.id)?.paid ?? 0);
+
+      const invoiceAmountCents = Number(invoice.amount_cents ?? 0);
+      const remainingForInvoice = Math.max(0, invoiceAmountCents - alreadyPaidCents);
+      const allocatedAmountCents = Math.min(remainingForInvoice, remainingCents);
+
+      if (allocatedAmountCents <= 0) {
+        continue;
+      }
+
+      appendInvoicePayment(invoice.id, {
+        paidAt,
+        amountCents: allocatedAmountCents,
+        currency,
+        paymentMethod,
+        bankName,
+        chequeNumber,
+        reference,
+        notes: [notes, `[encaissement groupe ${groupRef}]`].filter(Boolean).join(' | ')
+      }, req.user.sub);
+      refreshInvoicePaymentState(invoice.id);
+
+      allocations.push({
+        invoiceId: Number(invoice.id),
+        invoiceNumber: String(invoice.invoice_number ?? '').trim(),
+        allocatedAmountCents
+      });
+
+      remainingCents -= allocatedAmountCents;
+    }
+
+    return {
+      allocations,
+      remainingCents
+    };
+  });
+
+  const result = allocateGroupedPayment();
+  const allocatedAmountCents = result.allocations.reduce((sum, item) => sum + Number(item.allocatedAmountCents ?? 0), 0);
+
+  writeAuditLog(req.user.sub, 'CREATE', 'grouped-invoice-payment', groupRef, {
+    invoiceCount: invoices.length,
+    totalAmountCents: amountCents,
+    allocatedAmountCents,
+    unallocatedAmountCents: Math.max(0, result.remainingCents)
+  });
+
+  return res.status(201).json({
+    groupedPayment: {
+      reference: groupRef,
+      totalAmountCents: amountCents,
+      allocatedAmountCents,
+      unallocatedAmountCents: Math.max(0, result.remainingCents),
+      allocations: result.allocations
+    }
+  });
 });
 
 app.post('/api/billing/expenses', authMiddleware, requirePermission('mark-payment'), (req, res) => {
@@ -13957,17 +14243,50 @@ app.post('/api/billing/expenses', authMiddleware, requirePermission('mark-paymen
 app.post('/api/billing/deposits', authMiddleware, requirePermission('mark-payment'), (req, res) => {
   const occurredAt = String(req.body?.occurredAt ?? '').trim() || new Date().toISOString();
   const type = String(req.body?.type ?? 'cheque').trim().toLowerCase() === 'especes' ? 'especes' : 'cheque';
-  const depositCode = String(req.body?.depositCode ?? '').trim();
-  const bankName = String(req.body?.bankName ?? '').trim();
-  const accountLabel = String(req.body?.accountLabel ?? '').trim();
-  const titleRaw = String(req.body?.title ?? '').trim();
-  const title = titleRaw || (type === 'especes' ? 'Remise d\'especes' : 'Remise de cheques');
+  const title = type === 'especes' ? 'Remise d\'especes' : 'Remise de cheques';
   const amountRaw = Number(req.body?.amount ?? NaN);
   const currency = String(req.body?.currency ?? 'EUR').trim() || 'EUR';
   const officeId = Number(req.body?.officeId);
   const ownerUserId = Number(req.body?.ownerUserId);
-  const notes = String(req.body?.notes ?? '').trim();
+  const notes = '';
   const operationIds = Array.isArray(req.body?.operationIds) ? req.body.operationIds : [];
+
+  const userProfile = db
+    .prepare(
+      `SELECT username, last_name, first_name, bank_name, iban
+       FROM users
+       WHERE id = ?`
+    )
+    .get(req.user.sub);
+
+  const trigramSeed = [
+    String(userProfile?.last_name ?? ''),
+    String(userProfile?.first_name ?? ''),
+    String(userProfile?.username ?? '')
+  ]
+    .join('')
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Z0-9]/g, '');
+
+  let trigram = 'USR';
+  if (trigramSeed.length >= 3) {
+    trigram = trigramSeed.slice(0, 3);
+  } else if (trigramSeed.length === 2) {
+    trigram = `${trigramSeed}X`;
+  } else if (trigramSeed.length === 1) {
+    trigram = `${trigramSeed}XX`;
+  }
+
+  const occurredAtDate = new Date(occurredAt);
+  const safeDate = Number.isNaN(occurredAtDate.getTime()) ? new Date() : occurredAtDate;
+  const yyyy = String(safeDate.getFullYear());
+  const mm = String(safeDate.getMonth() + 1).padStart(2, '0');
+  const dd = String(safeDate.getDate()).padStart(2, '0');
+  const depositCode = `${trigram}-${yyyy}${mm}${dd}`;
+  const bankName = String(userProfile?.bank_name ?? '').trim();
+  const accountLabel = String(userProfile?.iban ?? '').trim();
 
   const officeIds = getScopedBillingOfficeIds(req.userAccess, officeId);
   if (!officeIds.length) {
@@ -14112,18 +14431,45 @@ app.get('/api/billing/deposits', authMiddleware, requirePermission('read-billing
 app.get('/api/billing/deposit-candidates', authMiddleware, requirePermission('read-billing-kpis'), (req, res) => {
   const type = String(req.query.type ?? 'cheque').trim().toLowerCase() === 'especes' ? 'especes' : 'cheque';
   const officeId = Number(req.query.officeId);
+  const currentDepositIdRaw = Number(req.query.currentDepositId);
+  const currentDepositId = Number.isInteger(currentDepositIdRaw) && currentDepositIdRaw > 0
+    ? currentDepositIdRaw
+    : null;
   const scopedOfficeIds = getScopedBillingOfficeIds(req.userAccess, officeId);
 
   if (!scopedOfficeIds.length) {
     return res.json({ candidates: [] });
   }
 
+  if (currentDepositId != null) {
+    const currentDeposit = db.prepare(
+      `SELECT id, office_id, type
+       FROM accounting_deposits
+       WHERE id = ? AND is_deleted = 0`
+    ).get(currentDepositId);
+
+    if (!currentDeposit) {
+      return res.status(404).json({ message: 'Remise introuvable' });
+    }
+
+    if (!scopedOfficeIds.includes(Number(currentDeposit.office_id))) {
+      return res.status(403).json({ message: 'Cabinet inaccessible' });
+    }
+
+    const currentType = String(currentDeposit.type ?? '').trim().toLowerCase() === 'especes' ? 'especes' : 'cheque';
+    if (currentType !== type) {
+      return res.status(400).json({ message: 'Type de remise incoherent' });
+    }
+  }
+
   const placeholders = scopedOfficeIds.map(() => '?').join(', ');
   const rows = db.prepare(
     `SELECT i.id, i.patient_id, i.consultation_id, i.invoice_number, i.issued_at, i.amount_cents, i.status, i.payment_method, i.office_id,
-            p.cipher_full_name
+            p.cipher_full_name,
+            ip.id AS payment_id, ip.paid_at, ip.bank_name, ip.cheque_number, ip.notes AS payment_notes
      FROM invoices i
      INNER JOIN patients p ON p.id = i.patient_id
+     LEFT JOIN invoice_payments ip ON ip.invoice_id = i.id
      WHERE i.office_id IN (${placeholders})
        AND i.status = 'payee'
        AND NOT EXISTS (
@@ -14133,25 +14479,38 @@ app.get('/api/billing/deposit-candidates', authMiddleware, requirePermission('re
          WHERE di.source_type = 'invoice'
            AND di.source_id = i.id
            AND d.is_deleted = 0
+           AND (? IS NULL OR di.deposit_id <> ?)
        )
-     ORDER BY datetime(i.issued_at) DESC, i.id DESC`
-  ).all(...scopedOfficeIds);
+     ORDER BY datetime(i.issued_at) DESC, i.id DESC, ip.paid_at DESC, ip.id DESC`
+  ).all(...scopedOfficeIds, currentDepositId, currentDepositId);
+
+  const extractGroupRef = (notes) => {
+    const match = String(notes ?? '').match(/\[encaissement groupe\s+([^\]]+)\]/);
+    return match ? match[1] : null;
+  };
 
   const candidates = rows
     .filter((row) => billingPaymentMethodMatchesDepositType(row.payment_method, type))
-    .map((row) => ({
-      operationId: `invoice:${Number(row.id)}`,
-      sourceId: Number(row.id),
-      patientId: row.patient_id != null ? Number(row.patient_id) : null,
-      consultationId: row.consultation_id != null ? Number(row.consultation_id) : null,
-      occurredAt: String(row.issued_at),
-      patientName: decryptSensitiveField(row.cipher_full_name),
-      invoiceNumber: String(row.invoice_number ?? '').trim(),
-      amountCents: Number(row.amount_cents ?? 0),
-      currency: 'EUR',
-      paymentMethod: String(row.payment_method ?? '').trim(),
-      officeId: row.office_id != null ? Number(row.office_id) : null
-    }));
+    .map((row) => {
+      const groupRef = extractGroupRef(row.payment_notes);
+      return {
+        operationId: `invoice:${Number(row.id)}`,
+        sourceId: Number(row.id),
+        patientId: row.patient_id != null ? Number(row.patient_id) : null,
+        consultationId: row.consultation_id != null ? Number(row.consultation_id) : null,
+        occurredAt: String(row.issued_at),
+        patientName: decryptSensitiveField(row.cipher_full_name),
+        invoiceNumber: String(row.invoice_number ?? '').trim(),
+        amountCents: Number(row.amount_cents ?? 0),
+        currency: 'EUR',
+        paymentMethod: String(row.payment_method ?? '').trim(),
+        officeId: row.office_id != null ? Number(row.office_id) : null,
+        groupRef: groupRef,
+        bankName: String(row.bank_name ?? '').trim(),
+        chequeNumber: String(row.cheque_number ?? '').trim(),
+        paidAt: row.paid_at != null ? String(row.paid_at) : null
+      };
+    });
 
   return res.json({ candidates });
 });
@@ -14179,24 +14538,88 @@ app.patch('/api/billing/deposits/:id', authMiddleware, requirePermission('mark-p
   const title = String(req.body?.title ?? '').trim() || 'Remise';
   const notes = String(req.body?.notes ?? '').trim();
   const amount = Number(req.body?.amount ?? 0);
+  const operationIds = Array.isArray(req.body?.operationIds) ? req.body.operationIds : null;
   if (!Number.isFinite(amount) || amount <= 0) {
     return res.status(400).json({ message: 'Montant invalide' });
   }
 
-  db.prepare(
-    `UPDATE accounting_deposits
-     SET occurred_at = ?, deposit_code = ?, bank_name = ?, account_label = ?, title = ?, notes = ?, amount_cents = ?
-     WHERE id = ?`
-  ).run(
-    occurredAt,
-    code,
-    bankName,
-    accountLabel,
-    title,
-    notes,
-    Math.round(amount * 100),
-    depositId
-  );
+  let parsedOperationIds = null;
+  if (operationIds) {
+    parsedOperationIds = operationIds
+      .map((value) => parseBillingOperationId(value))
+      .filter(Boolean);
+
+    const duplicateCheck = new Set(parsedOperationIds.map((item) => `${item.sourceType}:${item.sourceId}`));
+    if (duplicateCheck.size !== parsedOperationIds.length) {
+      return res.status(400).json({ message: 'Operations en double dans la remise' });
+    }
+
+    const invoiceIds = parsedOperationIds
+      .filter((item) => item.sourceType === 'invoice')
+      .map((item) => item.sourceId);
+
+    if (invoiceIds.length > 0) {
+      const invoicePlaceholders = invoiceIds.map(() => '?').join(', ');
+      const invoiceRows = db
+        .prepare(`SELECT id, office_id FROM invoices WHERE id IN (${invoicePlaceholders})`)
+        .all(...invoiceIds);
+
+      if (invoiceRows.length !== invoiceIds.length) {
+        return res.status(400).json({ message: 'Operations de remise invalides' });
+      }
+
+      const hasForeignOffice = invoiceRows.some((row) => Number(row.office_id) !== Number(existing.office_id));
+      if (hasForeignOffice) {
+        return res.status(403).json({ message: 'Cabinet inaccessible' });
+      }
+
+      const conflicts = db
+        .prepare(
+          `SELECT di.source_id
+           FROM accounting_deposit_items di
+           INNER JOIN accounting_deposits d ON d.id = di.deposit_id
+           WHERE di.source_type = 'invoice'
+             AND di.source_id IN (${invoicePlaceholders})
+             AND di.deposit_id <> ?
+             AND d.is_deleted = 0`
+        )
+        .all(...invoiceIds, depositId);
+
+      if (conflicts.length > 0) {
+        return res.status(400).json({ message: 'Certaines operations sont deja affectees a une autre remise' });
+      }
+    }
+  }
+
+  const tx = db.transaction(() => {
+    db.prepare(
+      `UPDATE accounting_deposits
+       SET occurred_at = ?, deposit_code = ?, bank_name = ?, account_label = ?, title = ?, notes = ?, amount_cents = ?
+       WHERE id = ?`
+    ).run(
+      occurredAt,
+      code,
+      bankName,
+      accountLabel,
+      title,
+      notes,
+      Math.round(amount * 100),
+      depositId
+    );
+
+    if (parsedOperationIds) {
+      db.prepare('DELETE FROM accounting_deposit_items WHERE deposit_id = ?').run(depositId);
+      const insertItem = db.prepare(
+        `INSERT OR IGNORE INTO accounting_deposit_items (deposit_id, source_type, source_id)
+         VALUES (?, ?, ?)`
+      );
+      for (const item of parsedOperationIds) {
+        insertItem.run(depositId, item.sourceType, item.sourceId);
+      }
+    }
+  });
+
+  tx();
 
   return res.status(204).send();
 });
@@ -14246,13 +14669,20 @@ app.get('/api/billing/deposits/:id/detail', authMiddleware, requirePermission('r
   }
 
   const items = db.prepare(
-    `SELECT i.id AS invoice_id, i.invoice_number, i.issued_at, i.amount_cents, p.cipher_full_name
+    `SELECT i.id AS invoice_id, i.invoice_number, i.issued_at, i.amount_cents, p.cipher_full_name,
+            ip.bank_name, ip.cheque_number, ip.notes AS payment_notes, ip.paid_at
      FROM accounting_deposit_items di
      INNER JOIN invoices i ON i.id = di.source_id AND di.source_type = 'invoice'
      INNER JOIN patients p ON p.id = i.patient_id
+     LEFT JOIN invoice_payments ip ON ip.invoice_id = i.id
      WHERE di.deposit_id = ?
-     ORDER BY datetime(i.issued_at) DESC, i.id DESC`
+     ORDER BY datetime(i.issued_at) DESC, i.id DESC, ip.paid_at DESC, ip.id DESC`
   ).all(depositId);
+
+  const extractGroupRef = (notes) => {
+    const match = String(notes ?? '').match(/\[encaissement groupe\s+([^\]]+)\]/);
+    return match ? match[1] : null;
+  };
 
   return res.json({
     detail: {
@@ -14288,7 +14718,11 @@ app.get('/api/billing/deposits/:id/detail', authMiddleware, requirePermission('r
         patientName: decryptSensitiveField(item.cipher_full_name),
         invoiceNumber: String(item.invoice_number ?? '').trim(),
         amountCents: Number(item.amount_cents ?? 0),
-        currency: 'EUR'
+        currency: 'EUR',
+        groupRef: extractGroupRef(item.payment_notes),
+        bankName: String(item.bank_name ?? '').trim(),
+        chequeNumber: String(item.cheque_number ?? '').trim(),
+        paidAt: item.paid_at != null ? String(item.paid_at) : null
       }))
     }
   });

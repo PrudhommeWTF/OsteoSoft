@@ -12,6 +12,7 @@ export type AuthUser = {
 export type OfficeOption = {
   id: number;
   name: string;
+  paymentMethods?: string[];
 };
 
 export type SetupStatus = {
@@ -120,6 +121,8 @@ export type ConsultationContextPayload = {
   officeName: string | null;
   practitioners: Practitioner[];
   profiles: OfficeConsultationProfile[];
+  serviceTypes?: Array<{ label: string; amountHt: number; vatRate: number; displayOrder: number }>;
+  paymentMethods?: string[];
 };
 
 export type Appointment = {
@@ -312,6 +315,9 @@ export type BillingOperation = {
   retrocessionPercent: number;
   retrocessionRecipient: string;
   invoiceNumber: string;
+  remainingAmountCents: number;
+  depositId: number | null;
+  depositType: 'cheque' | 'especes' | null;
   paymentRef:
     | { type: 'patient'; patientId: number }
     | { type: 'expense'; expenseId: number }
@@ -472,12 +478,31 @@ export type BillingInvoicePaymentPayload = {
   amountCents: number;
   currency: string;
   paymentMethod: string;
+  bankName?: string;
+  chequeNumber?: string;
   reference?: string;
   notes?: string;
 };
 
 export type BillingInvoicePaymentsUpdatePayload = {
   payments: BillingInvoicePaymentPayload[];
+};
+
+export type BillingGroupedInvoicePaymentPayload = {
+  invoiceIds: number[];
+  payment: BillingInvoicePaymentPayload;
+};
+
+export type BillingGroupedInvoicePaymentResult = {
+  reference: string;
+  totalAmountCents: number;
+  allocatedAmountCents: number;
+  unallocatedAmountCents: number;
+  allocations: Array<{
+    invoiceId: number;
+    invoiceNumber: string;
+    allocatedAmountCents: number;
+  }>;
 };
 
 export type BillingInvoiceCreatePayload = {
@@ -526,6 +551,8 @@ export type BillingInvoiceDetail = {
     amountCents: number;
     currency: string;
     paymentMethod: string;
+    bankName: string;
+    chequeNumber: string;
     reference: string;
     notes: string;
   }>;
@@ -575,6 +602,10 @@ export type BillingDepositCandidate = {
   currency: string;
   paymentMethod: string;
   officeId: number | null;
+  groupRef: string | null;
+  bankName: string;
+  chequeNumber: string;
+  paidAt: string | null;
 };
 
 export type BillingDepositDetail = {
@@ -597,6 +628,10 @@ export type BillingDepositDetail = {
     invoiceNumber: string;
     amountCents: number;
     currency: string;
+    groupRef: string | null;
+    bankName: string;
+    chequeNumber: string;
+    paidAt: string | null;
   }>;
 };
 

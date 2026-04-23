@@ -4,7 +4,6 @@ import { RouterLink } from '@angular/router';
 
 import { ApiService } from '../../core/api.service';
 import {
-  BillingAlertsPayload,
   BillingDepositCandidate,
   BillingDepositDetail,
   BillingDepositListItem,
@@ -14,6 +13,7 @@ import {
   BillingOperationsPayload,
   BillingUserOption,
   InvoiceSummaryTile,
+  MyUserProfile,
   OfficeOption
 } from '../../core/api.types';
 import { AuthService } from '../../core/auth.service';
@@ -23,13 +23,22 @@ type ExportHistoryItem = {
   sessionId: string;
   label: string;
   operationsFormat: 'json' | 'excel';
-  alertsFormat: 'json' | 'excel';
   status: 'success' | 'error';
   createdAt: string;
 };
 
 type TrashExportItem = ExportHistoryItem & {
   deletedAt: string;
+};
+
+type DepositCandidateGroup = {
+  groupRef: string | null;
+  paymentMethod: string;
+  bankName: string;
+  chequeNumber: string;
+  paidAt: string | null;
+  invoices: BillingDepositCandidate[];
+  totalAmountCents: number;
 };
 
 @Component({
@@ -43,10 +52,8 @@ type TrashExportItem = ExportHistoryItem & {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class BillingPage implements OnDestroy {
-  private static readonly ALERT_FILTERS_STORAGE_KEY = 'billing-alert-filters-v1';
   private static readonly EXPORT_HISTORY_STORAGE_KEY = 'billing-export-history-v1';
   private static readonly EXPORT_HISTORY_EXPIRATION_DAYS = 30;
-  private alertsReloadTimeout: ReturnType<typeof setTimeout> | null = null;
   private exportToastTimeout: ReturnType<typeof setTimeout> | null = null;
 
   private readonly api = inject(ApiService);
@@ -58,7 +65,6 @@ export class BillingPage implements OnDestroy {
   readonly users = signal<BillingUserOption[]>([]);
   readonly billingInsights = signal<BillingInsightsPayload | null>(null);
   readonly billingForecast = signal<BillingForecastPayload | null>(null);
-  readonly billingAlerts = signal<BillingAlertsPayload | null>(null);
   readonly debtorSearch = signal('');
   readonly debtorSort = signal<'name' | 'invoices' | 'outstanding'>('outstanding');
   readonly debtorSortDirection = signal<'asc' | 'desc'>('desc');
@@ -75,7 +81,6 @@ export class BillingPage implements OnDestroy {
   readonly selectedOperationIds = signal<string[]>([]);
   readonly isLoading = signal(false);
   readonly isSaving = signal(false);
-  readonly isAlertsLoading = signal(false);
   readonly isSnapshotExporting = signal(false);
   readonly errorMessage = signal('');
   readonly successMessage = signal('');
@@ -94,6 +99,7 @@ export class BillingPage implements OnDestroy {
   readonly showExportTrash = signal(false);
   readonly isTrashActionConfirmVisible = signal(false);
   readonly trashActionType = signal<'restore-all' | 'empty' | null>(null);
+  readonly consultationSelectionModal = signal<'bulk-update' | 'payment' | null>(null);
 
   private readonly EXPORT_TRASH_STORAGE_KEY = 'osteo_export_trash';
   private readonly EXPORT_TRASH_EXPIRATION_DAYS = 7;
@@ -127,19 +133,96 @@ export class BillingPage implements OnDestroy {
   readonly isLoadingDepositCandidates = signal(false);
   readonly isDepositMenuOpen = signal(false);
   readonly isExportMenuOpen = signal(false);
-
-  readonly alertCategoryOverdue = signal(true);
-  readonly alertCategoryDueSoon = signal(true);
-  readonly alertCategoryHighExpenses = signal(true);
-  readonly alertCategoryUnassigned = signal(true);
+  readonly currentUserProfile = signal<MyUserProfile | null>(null);
 
   readonly bulkOwnerUserId = signal<number | null>(null);
   readonly bulkRetrocessionPercent = signal('');
   readonly bulkRetrocessionRecipient = signal('');
 
+  readonly prototypePaymentOccurredAt = signal(this.defaultNowDateTimeLocal());
+  readonly prototypePaymentAmount = signal('');
+  readonly prototypePaymentMethod = signal('');
+  readonly prototypePaymentBankName = signal('');
+  readonly prototypePaymentChequeNumber = signal('');
+  readonly prototypePaymentReference = signal('');
+  readonly prototypePaymentNotes = signal('');
+
   readonly canExportBilling = computed(() => this.authService.hasPermission('export-billing'));
 
   readonly selectedCount = computed(() => this.selectedOperationIds().length);
+
+  readonly selectedInvoiceOperations = computed(() => {
+    return this.selectedOperations().filter((operation) => {
+      return operation.sourceType === 'invoice'
+        && Number.isInteger(Number(operation.sourceId))
+        && Number(operation.sourceId) > 0
+        && Number(operation.creditCents ?? 0) > 0;
+    });
+  });
+
+  readonly selectedInvoiceIds = computed(() => {
+    return [...new Set(this.selectedInvoiceOperations().map((operation) => Number(operation.sourceId)))];
+  });
+
+  readonly selectedUnpaidInvoiceOperations = computed(() => {
+    return this.selectedInvoiceOperations().filter((operation) => Number(operation.remainingAmountCents ?? 0) > 0);
+  });
+
+  readonly selectedUnpaidInvoiceIds = computed(() => {
+    return [...new Set(this.selectedUnpaidInvoiceOperations().map((operation) => Number(operation.sourceId)))];
+  });
+
+  readonly selectedUnpaidAmountCents = computed(() => {
+    return this.selectedUnpaidInvoiceOperations().reduce((sum, operation) => sum + Number(operation.remainingAmountCents ?? 0), 0);
+  });
+
+  readonly activeBillingOffice = computed(() => {
+    const selectedOfficeId = this.selectedOfficeId();
+    const offices = this.offices();
+    if (selectedOfficeId != null) {
+      return offices.find((office) => office.id === selectedOfficeId) ?? null;
+    }
+    return offices.length === 1 ? offices[0] : null;
+  });
+
+  readonly consultationPaymentMethodOptions = computed(() => {
+    const officesById = new Map(this.offices().map((office) => [office.id, office]));
+    const selectedOfficeIds = [...new Set(
+      this.selectedUnpaidInvoiceOperations()
+        .map((operation) => operation.officeId)
+        .filter((officeId): officeId is number => Number.isInteger(officeId) && Number(officeId) > 0)
+    )];
+
+    const sourceOffices = selectedOfficeIds.length > 0
+      ? selectedOfficeIds
+        .map((officeId) => officesById.get(officeId) ?? null)
+        .filter((office): office is OfficeOption => office !== null)
+      : (this.activeBillingOffice() ? [this.activeBillingOffice()!] : []);
+
+    const values = sourceOffices
+      .flatMap((office) => office.paymentMethods ?? [])
+      .map((value) => String(value ?? '').trim())
+      .filter((value) => value.length > 0);
+
+    return [...new Set(values)];
+  });
+
+  readonly isPrototypeChequePayment = computed(() => {
+    const normalized = this.normalizePaymentMethod(this.prototypePaymentMethod());
+    return normalized.includes('cheque') || normalized.includes('chq') || normalized.includes('check');
+  });
+
+  readonly canRunPrototypeGroupedPayment = computed(() => {
+    const amount = Number(this.prototypePaymentAmount());
+    const hasChequeFields = !this.isPrototypeChequePayment()
+      || (this.prototypePaymentBankName().trim().length > 0 && this.prototypePaymentChequeNumber().trim().length > 0);
+
+    return this.selectedUnpaidInvoiceIds().length > 0
+      && Number.isFinite(amount)
+      && amount > 0
+      && this.prototypePaymentMethod().trim().length > 0
+      && hasChequeFields;
+  });
 
   readonly selectedDepositCandidates = computed(() => {
     const selected = new Set(this.depositEditorCandidateIds());
@@ -166,6 +249,37 @@ export class BillingPage implements OnDestroy {
     });
   });
 
+  readonly groupedDepositCandidates = computed(() => {
+    const candidates = this.filteredDepositCandidates();
+    const groups = new Map<string, DepositCandidateGroup>();
+
+    for (const candidate of candidates) {
+      // Use groupRef if available, otherwise use a unique key per invoice
+      const key = candidate.groupRef ?? `ungrouped:${candidate.sourceId}`;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          groupRef: candidate.groupRef,
+          paymentMethod: candidate.paymentMethod,
+          bankName: candidate.bankName,
+          chequeNumber: candidate.chequeNumber,
+          paidAt: candidate.paidAt,
+          invoices: [],
+          totalAmountCents: 0
+        });
+      }
+      const group = groups.get(key)!;
+      group.invoices.push(candidate);
+      group.totalAmountCents += candidate.amountCents;
+    }
+
+    // Sort groups by paidAt descending, then by first invoice date
+    return Array.from(groups.values()).sort((a, b) => {
+      const aDate = new Date(a.paidAt || a.invoices[0]?.occurredAt || '');
+      const bDate = new Date(b.paidAt || b.invoices[0]?.occurredAt || '');
+      return bDate.getTime() - aDate.getTime();
+    });
+  });
+
   readonly selectedDepositCandidateCount = computed(() => this.selectedDepositCandidates().length);
 
   readonly incompatibleSelectedDepositCandidates = computed(() => {
@@ -178,7 +292,7 @@ export class BillingPage implements OnDestroy {
   });
 
   readonly canProceedToDepositPointage = computed(() => {
-    return this.depositOccurredAt().trim().length > 0 && this.depositTitle().trim().length > 0;
+    return this.depositOccurredAt().trim().length > 0;
   });
 
   readonly canProceedToDepositRecap = computed(() => {
@@ -243,25 +357,6 @@ export class BillingPage implements OnDestroy {
     return this.sortedTopDebtors().slice(start, start + pageSize);
   });
 
-  readonly selectedAlertCategories = computed<Array<'overdue' | 'dueSoon' | 'highExpenses' | 'unassigned'>>(() => {
-    const categories: Array<'overdue' | 'dueSoon' | 'highExpenses' | 'unassigned'> = [];
-    if (this.alertCategoryOverdue()) {
-      categories.push('overdue');
-    }
-    if (this.alertCategoryDueSoon()) {
-      categories.push('dueSoon');
-    }
-    if (this.alertCategoryHighExpenses()) {
-      categories.push('highExpenses');
-    }
-    if (this.alertCategoryUnassigned()) {
-      categories.push('unassigned');
-    }
-    return categories;
-  });
-
-  readonly hasAnyAlertCategorySelected = computed(() => this.selectedAlertCategories().length > 0);
-  readonly activeAlertCategoryCount = computed(() => this.selectedAlertCategories().length);
   readonly filteredExportHistory = computed(() => {
     const statusFilter = this.exportHistoryFilter();
     const formatFilter = this.exportHistoryFormatFilter();
@@ -275,7 +370,7 @@ export class BillingPage implements OnDestroy {
     }
 
     return statusFiltered.filter((item) =>
-      item.operationsFormat === formatFilter || item.alertsFormat === formatFilter
+      item.operationsFormat === formatFilter
     );
   });
 
@@ -367,10 +462,10 @@ export class BillingPage implements OnDestroy {
     const successRate = total === 0 ? 0 : Math.round((successful / total) * 100);
 
     const excelCount = items.filter((item) =>
-      item.operationsFormat === 'excel' || item.alertsFormat === 'excel'
+      item.operationsFormat === 'excel'
     ).length;
     const jsonCount = items.filter((item) =>
-      item.operationsFormat === 'json' || item.alertsFormat === 'json'
+      item.operationsFormat === 'json'
     ).length;
 
     return {
@@ -432,7 +527,6 @@ export class BillingPage implements OnDestroy {
   });
 
   constructor() {
-    this.restoreAlertCategories();
     this.restoreExportHistory();
     this.restoreExportTrash();
 
@@ -443,10 +537,6 @@ export class BillingPage implements OnDestroy {
   }
 
   ngOnDestroy(): void {
-    if (this.alertsReloadTimeout != null) {
-      clearTimeout(this.alertsReloadTimeout);
-      this.alertsReloadTimeout = null;
-    }
     if (this.exportToastTimeout != null) {
       clearTimeout(this.exportToastTimeout);
       this.exportToastTimeout = null;
@@ -555,6 +645,27 @@ export class BillingPage implements OnDestroy {
     this.isExportMenuOpen.set(false);
   }
 
+  openConsultationSelectionModal(mode: 'bulk-update' | 'payment'): void {
+    this.closeActionMenus();
+    this.errorMessage.set('');
+    this.successMessage.set('');
+    if (mode === 'payment' && this.selectedUnpaidInvoiceIds().length === 0) {
+      return;
+    }
+    if (mode === 'payment') {
+      this.prototypePaymentAmount.set((this.selectedUnpaidAmountCents() / 100).toFixed(2));
+      const paymentMethods = this.consultationPaymentMethodOptions();
+      if (!paymentMethods.includes(this.prototypePaymentMethod().trim())) {
+        this.prototypePaymentMethod.set(paymentMethods[0] ?? '');
+      }
+    }
+    this.consultationSelectionModal.set(mode);
+  }
+
+  closeConsultationSelectionModal(): void {
+    this.consultationSelectionModal.set(null);
+  }
+
   openExpenseModal(): void {
     this.closeActionMenus();
     this.expenseOccurredAt.set(this.defaultNowDateTimeLocal());
@@ -624,14 +735,23 @@ export class BillingPage implements OnDestroy {
     const type = this.depositModalType();
     this.editingDepositId.set(mode === 'edit' ? (deposit?.id ?? null) : null);
 
+    if (mode === 'create') {
+      await this.ensureCurrentUserProfile();
+    }
+
     const now = this.defaultNowDateTimeLocal();
-    this.depositOccurredAt.set(mode === 'edit' ? this.toDateTimeLocalValue(deposit?.occurredAt ?? '') || now : now);
+    const occurredAt = mode === 'edit' ? this.toDateTimeLocalValue(deposit?.occurredAt ?? '') || now : now;
+    this.depositOccurredAt.set(occurredAt);
     this.depositType.set(type);
     this.depositWizardStep.set(1);
-    this.depositTitle.set(mode === 'edit' ? String(deposit?.title ?? '') : (type === 'especes' ? 'Bordereau de remise d\'especes' : 'Bordereau de remise de cheques'));
-    this.depositCode.set(mode === 'edit' ? String(deposit?.code ?? '') : '');
-    this.depositBankName.set(mode === 'edit' ? String(deposit?.bankName ?? '') : 'Banque principale');
-    this.depositAccountLabel.set(mode === 'edit' ? String(deposit?.accountLabel ?? '') : (type === 'especes' ? 'Caisse especes' : 'Compte cheques')); 
+    this.depositTitle.set(mode === 'edit' ? String(deposit?.title ?? '') : (type === 'especes' ? 'Remise d\'especes' : 'Remise de cheques'));
+    if (mode === 'edit') {
+      this.depositCode.set(String(deposit?.code ?? ''));
+      this.depositBankName.set(String(deposit?.bankName ?? ''));
+      this.depositAccountLabel.set(String(deposit?.accountLabel ?? ''));
+    } else {
+      this.applyCreateDepositUserDefaults();
+    }
     this.depositNotes.set(mode === 'edit' ? String(deposit?.notes ?? '') : '');
     this.depositAmount.set(mode === 'edit' ? (Number(deposit?.amountCents ?? 0) / 100).toFixed(2) : '0.00');
     this.depositEditorCandidateIds.set(mode === 'edit' ? [...(deposit?.operationIds ?? [])] : []);
@@ -650,13 +770,19 @@ export class BillingPage implements OnDestroy {
       this.pruneIncompatibleDepositSelections();
       this.syncDepositAmountFromCandidates();
     } else {
-      await this.loadDepositCandidates(type);
+      await this.loadDepositCandidates(type, this.editingDepositId());
     }
   }
 
   closeDepositEditorModal(): void {
     this.isDepositEditorModalOpen.set(false);
     this.depositWizardStep.set(1);
+  }
+
+  async openDepositEditorById(depositId: number, depositType: 'cheque' | 'especes'): Promise<void> {
+    this.depositModalType.set(depositType);
+    const detail = await this.api.getBillingDepositDetail(depositId);
+    await this.openDepositEditorModal('edit', detail.deposit);
   }
 
   goToDepositWizardStep(step: 1 | 2 | 3): void {
@@ -700,27 +826,29 @@ export class BillingPage implements OnDestroy {
   applyDepositTemplate(type: 'cheque' | 'especes'): void {
     this.depositType.set(type);
     if (type === 'especes') {
-      this.depositTitle.set('Bordereau de remise d\'especes');
-      if (!this.depositAccountLabel().trim()) {
-        this.depositAccountLabel.set('Caisse especes');
-      }
-      if (!this.depositBankName().trim()) {
-        this.depositBankName.set('Banque principale');
+      this.depositTitle.set('Remise d\'especes');
+      if (!this.editingDepositId()) {
+        this.applyCreateDepositUserDefaults();
       }
       this.pruneIncompatibleDepositSelections();
       this.syncDepositAmountFromCandidates();
       return;
     }
 
-    this.depositTitle.set('Bordereau de remise de cheques');
-    if (!this.depositAccountLabel().trim()) {
-      this.depositAccountLabel.set('Compte cheques');
-    }
-    if (!this.depositBankName().trim()) {
-      this.depositBankName.set('Banque principale');
+    this.depositTitle.set('Remise de cheques');
+    if (!this.editingDepositId()) {
+      this.applyCreateDepositUserDefaults();
     }
     this.pruneIncompatibleDepositSelections();
     this.syncDepositAmountFromCandidates();
+  }
+
+  onDepositOccurredAtInput(value: string): void {
+    const normalized = String(value ?? '');
+    this.depositOccurredAt.set(normalized);
+    if (this.editingDepositId() == null) {
+      this.applyCreateDepositUserDefaults();
+    }
   }
 
   toggleDepositCandidate(operationId: string, checked: boolean): void {
@@ -742,6 +870,20 @@ export class BillingPage implements OnDestroy {
     this.syncDepositAmountFromCandidates();
   }
 
+  toggleDepositGroup(group: DepositCandidateGroup, checked: boolean): void {
+    const groupIds = group.invoices.map((inv) => inv.operationId);
+    const current = new Set(this.depositEditorCandidateIds());
+    
+    if (checked) {
+      groupIds.forEach((id) => current.add(id));
+    } else {
+      groupIds.forEach((id) => current.delete(id));
+    }
+    
+    this.depositEditorCandidateIds.set(Array.from(current));
+    this.syncDepositAmountFromCandidates();
+  }
+
   toggleSelectAllFilteredDepositCandidates(checked: boolean): void {
     const ids = this.filteredDepositCandidates().map((item) => item.operationId);
     const current = new Set(this.depositEditorCandidateIds());
@@ -760,10 +902,6 @@ export class BillingPage implements OnDestroy {
 
   async saveDepositEditor(): Promise<void> {
     const isEditing = this.editingDepositId() != null;
-    if (!isEditing && this.depositWizardStep() !== 3) {
-      this.errorMessage.set('Finalisez le recapitulatif avant de creer le bordereau.');
-      return;
-    }
     if (!isEditing && this.depositEditorCandidateIds().length === 0) {
       this.errorMessage.set('Selectionnez au moins un paiement a pointer.');
       return;
@@ -795,7 +933,8 @@ export class BillingPage implements OnDestroy {
           accountLabel: this.depositAccountLabel().trim(),
           title: this.depositTitle().trim(),
           notes: this.depositNotes().trim(),
-          amount
+          amount,
+          operationIds: this.depositEditorCandidateIds()
         });
         this.successMessage.set('Bordereau mis a jour.');
       } else {
@@ -807,10 +946,8 @@ export class BillingPage implements OnDestroy {
           depositCode: this.depositCode().trim(),
           bankName: this.depositBankName().trim(),
           accountLabel: this.depositAccountLabel().trim(),
-          title: this.depositTitle().trim(),
           amount,
           currency: 'EUR',
-          notes: this.depositNotes().trim(),
           operationIds: this.depositEditorCandidateIds()
         });
         this.successMessage.set('Bordereau enregistre.');
@@ -871,10 +1008,10 @@ export class BillingPage implements OnDestroy {
     }
   }
 
-  private async loadDepositCandidates(type: 'cheque' | 'especes'): Promise<void> {
+  private async loadDepositCandidates(type: 'cheque' | 'especes', currentDepositId?: number | null): Promise<void> {
     this.isLoadingDepositCandidates.set(true);
     try {
-      const rows = await this.api.getBillingDepositCandidates(type, this.selectedOfficeId());
+      const rows = await this.api.getBillingDepositCandidates(type, this.selectedOfficeId(), currentDepositId);
       this.depositCandidates.set(rows);
     } catch {
       this.errorMessage.set('Impossible de charger les paiements eligibles.');
@@ -1014,6 +1151,7 @@ export class BillingPage implements OnDestroy {
         retrocessionRecipient: this.bulkRetrocessionRecipient().trim() || null
       });
       this.successMessage.set('Operations mises a jour.');
+      this.closeConsultationSelectionModal();
       await this.load();
     } catch {
       this.errorMessage.set('Impossible de mettre a jour les operations.');
@@ -1046,6 +1184,43 @@ export class BillingPage implements OnDestroy {
     }
   }
 
+  async applyPrototypeGroupedPayment(): Promise<void> {
+    if (!this.canRunPrototypeGroupedPayment()) {
+      this.errorMessage.set('Renseignez un paiement valide et selectionnez des consultations impayees.');
+      return;
+    }
+
+    const amountCents = Math.round(Number(this.prototypePaymentAmount()) * 100);
+    this.isSaving.set(true);
+    this.errorMessage.set('');
+    this.successMessage.set('');
+    try {
+      const result = await this.api.createGroupedInvoicePayment({
+        invoiceIds: this.selectedUnpaidInvoiceIds(),
+        payment: {
+          paidAt: this.fromDateTimeLocalValue(this.prototypePaymentOccurredAt()) ?? new Date().toISOString(),
+          amountCents,
+          currency: 'EUR',
+          paymentMethod: this.prototypePaymentMethod().trim(),
+          bankName: this.prototypePaymentBankName().trim(),
+          chequeNumber: this.prototypePaymentChequeNumber().trim(),
+          reference: this.prototypePaymentReference().trim(),
+          notes: this.prototypePaymentNotes().trim()
+        }
+      });
+
+      this.successMessage.set(
+        `Paiement ajoute: ${(result.allocatedAmountCents / 100).toFixed(2)} EUR repartis sur ${result.allocations.length} consultation(s).`
+      );
+      this.closeConsultationSelectionModal();
+      await this.load();
+    } catch {
+      this.errorMessage.set('Impossible d\'appliquer le paiement groupe.');
+    } finally {
+      this.isSaving.set(false);
+    }
+  }
+
   async exportOperations(format: 'json' | 'excel', mode: 'standard' | 'analytical' = 'standard'): Promise<void> {
     this.closeActionMenus();
     if (!this.canExportBilling()) {
@@ -1073,25 +1248,14 @@ export class BillingPage implements OnDestroy {
   }
 
   async exportAlertsCsv(): Promise<void> {
-    await this.exportAlerts('excel');
+    // removed
   }
 
   async exportAlertsJson(): Promise<void> {
-    await this.exportAlerts('json');
+    // removed
   }
 
   async exportSnapshotPack(format: 'json' | 'excel'): Promise<void> {
-    await this.exportSnapshotPackInternal(format, format);
-  }
-
-  async exportSnapshotPackMixed(): Promise<void> {
-    await this.exportSnapshotPackInternal('excel', 'json');
-  }
-
-  private async exportSnapshotPackInternal(
-    operationsFormat: 'json' | 'excel',
-    alertsFormat: 'json' | 'excel'
-  ): Promise<void> {
     this.closeActionMenus();
     if (!this.canExportBilling()) {
       this.errorMessage.set('Vous n\'avez pas le droit d\'exporter la comptabilite.');
@@ -1104,45 +1268,30 @@ export class BillingPage implements OnDestroy {
       return;
     }
 
-    const categories = this.selectedAlertCategories();
-    if (categories.length === 0) {
-      this.errorMessage.set('Selectionnez au moins une categorie d\'alerte.');
-      this.showExportToast('Selectionnez une categorie d\'alerte.', 'error');
-      return;
-    }
-
     const createdAt = new Date().toISOString();
     const sessionId = this.buildExportSessionId();
-    const label = operationsFormat === alertsFormat
-      ? `Pack ${operationsFormat === 'json' ? 'JSON' : 'CSV'}`
-      : 'Pack mixte (compta CSV + alertes JSON)';
+    const label = `Pack ${format === 'json' ? 'JSON' : 'CSV'}`;
 
     this.isSnapshotExporting.set(true);
     this.isSaving.set(true);
     this.errorMessage.set('');
     this.successMessage.set('');
     try {
-      const [operationsBlob, alertsBlob] = await Promise.all([
-        this.api.exportBillingOperations(operationsFormat, {
-          ...this.buildFilters(),
-          mode: 'analytical'
-        }),
-        this.api.exportBillingAlerts(alertsFormat, this.selectedOfficeId(), categories)
-      ]);
+      const blob = await this.api.exportBillingOperations(format, {
+        ...this.buildFilters(),
+        mode: 'analytical'
+      });
 
-      const operationsExtension = operationsFormat === 'json' ? 'json' : 'csv';
-      const alertsExtension = alertsFormat === 'json' ? 'json' : 'csv';
+      const extension = format === 'json' ? 'json' : 'csv';
       const datePart = new Date().toISOString().slice(0, 10);
-      this.downloadBlob(operationsBlob, `snapshot-comptabilite-analytical-${datePart}-${sessionId}.${operationsExtension}`);
-      this.downloadBlob(alertsBlob, `snapshot-alertes-${datePart}-${sessionId}.${alertsExtension}`);
+      this.downloadBlob(blob, `snapshot-comptabilite-analytical-${datePart}-${sessionId}.${extension}`);
       this.successMessage.set(`Pack export telecharge (${label.toLowerCase()}).`);
       this.showExportToast('Pack export termine.', 'success');
       this.pushExportHistory({
         id: `${createdAt}-success-${Math.random().toString(36).slice(2, 8)}`,
         sessionId,
         label,
-        operationsFormat,
-        alertsFormat,
+        operationsFormat: format,
         status: 'success',
         createdAt
       });
@@ -1153,8 +1302,7 @@ export class BillingPage implements OnDestroy {
         id: `${createdAt}-error-${Math.random().toString(36).slice(2, 8)}`,
         sessionId,
         label,
-        operationsFormat,
-        alertsFormat,
+        operationsFormat: format,
         status: 'error',
         createdAt
       });
@@ -1162,6 +1310,10 @@ export class BillingPage implements OnDestroy {
       this.isSnapshotExporting.set(false);
       this.isSaving.set(false);
     }
+  }
+
+  async exportSnapshotPackMixed(): Promise<void> {
+    // removed - alerts no longer available
   }
 
   onDebtorSearchInput(value: string): void {
@@ -1192,134 +1344,6 @@ export class BillingPage implements OnDestroy {
       return 'fa-sort';
     }
     return this.debtorSortDirection() === 'asc' ? 'fa-sort-up' : 'fa-sort-down';
-  }
-
-  toggleAlertCategory(category: 'overdue' | 'dueSoon' | 'highExpenses' | 'unassigned', checked: boolean): void {
-    if (category === 'overdue') {
-      this.alertCategoryOverdue.set(checked);
-      this.persistAlertCategories();
-      this.scheduleAlertsReload();
-      return;
-    }
-    if (category === 'dueSoon') {
-      this.alertCategoryDueSoon.set(checked);
-      this.persistAlertCategories();
-      this.scheduleAlertsReload();
-      return;
-    }
-    if (category === 'highExpenses') {
-      this.alertCategoryHighExpenses.set(checked);
-      this.persistAlertCategories();
-      this.scheduleAlertsReload();
-      return;
-    }
-    this.alertCategoryUnassigned.set(checked);
-    this.persistAlertCategories();
-    this.scheduleAlertsReload();
-  }
-
-  resetAlertCategories(): void {
-    this.alertCategoryOverdue.set(true);
-    this.alertCategoryDueSoon.set(true);
-    this.alertCategoryHighExpenses.set(true);
-    this.alertCategoryUnassigned.set(true);
-    this.persistAlertCategories();
-    this.scheduleAlertsReload();
-  }
-
-  selectAllAlertCategories(): void {
-    this.alertCategoryOverdue.set(true);
-    this.alertCategoryDueSoon.set(true);
-    this.alertCategoryHighExpenses.set(true);
-    this.alertCategoryUnassigned.set(true);
-    this.persistAlertCategories();
-    this.scheduleAlertsReload();
-  }
-
-  clearAlertCategories(): void {
-    this.alertCategoryOverdue.set(false);
-    this.alertCategoryDueSoon.set(false);
-    this.alertCategoryHighExpenses.set(false);
-    this.alertCategoryUnassigned.set(false);
-    this.persistAlertCategories();
-    this.scheduleAlertsReload();
-  }
-
-  private async exportAlerts(format: 'json' | 'excel'): Promise<void> {
-    this.closeActionMenus();
-    if (!this.canExportBilling()) {
-      this.errorMessage.set('Vous n\'avez pas le droit d\'exporter la comptabilite.');
-      return;
-    }
-
-    this.isSaving.set(true);
-    this.errorMessage.set('');
-    this.successMessage.set('');
-    try {
-      const categories = this.selectedAlertCategories();
-      if (categories.length === 0) {
-        this.errorMessage.set('Selectionnez au moins une categorie d\'alerte.');
-        return;
-      }
-
-      const blob = await this.api.exportBillingAlerts(format, this.selectedOfficeId(), categories);
-      const extension = format === 'json' ? 'json' : 'csv';
-      const fileName = `billing-alerts-${new Date().toISOString().slice(0, 10)}.${extension}`;
-      this.downloadBlob(blob, fileName);
-      this.successMessage.set(`Export ${format === 'json' ? 'JSON' : 'CSV'} des alertes termine.`);
-    } catch {
-      this.errorMessage.set('Impossible d\'exporter les alertes.');
-    } finally {
-      this.isSaving.set(false);
-    }
-  }
-
-  private async reloadAlerts(): Promise<void> {
-    const filters = this.buildFilters();
-    const categories = this.selectedAlertCategories();
-    if (categories.length === 0) {
-      this.billingAlerts.set(this.emptyAlertsPayload());
-      return;
-    }
-
-    this.isAlertsLoading.set(true);
-    try {
-      const alerts = await this.api.getBillingAlerts(filters.officeId, categories);
-      this.billingAlerts.set(alerts);
-    } catch {
-      this.billingAlerts.set(null);
-    } finally {
-      this.isAlertsLoading.set(false);
-    }
-  }
-
-  private scheduleAlertsReload(): void {
-    if (this.alertsReloadTimeout != null) {
-      clearTimeout(this.alertsReloadTimeout);
-      this.alertsReloadTimeout = null;
-    }
-
-    this.isAlertsLoading.set(true);
-    this.alertsReloadTimeout = setTimeout(() => {
-      this.alertsReloadTimeout = null;
-      void this.reloadAlerts();
-    }, 180);
-  }
-
-  private emptyAlertsPayload(): BillingAlertsPayload {
-    return {
-      generatedAt: new Date().toISOString(),
-      summary: {
-        overdueCriticalCount: 0,
-        dueSoonCount: 0,
-        highExpensesCount: 0,
-        unassignedOwnerCount: 0
-      },
-      overdueCritical: [],
-      dueSoon: [],
-      highExpenses: [],
-      unassignedOwnerOperations: []
-    };
   }
 
   formatDateTime(value: string): string {
@@ -1358,22 +1382,17 @@ export class BillingPage implements OnDestroy {
 
   private async load(): Promise<void> {
     this.isLoading.set(true);
-    this.isAlertsLoading.set(true);
     this.errorMessage.set('');
     try {
       const filters = this.buildFilters();
-      const categories = this.selectedAlertCategories();
-      const [operationsResult, insightsResult, forecastResult, alertsResult] = await Promise.allSettled([
+      const [operationsResult, insightsResult, forecastResult] = await Promise.allSettled([
         this.api.getBillingOperations(filters),
         this.api.getBillingInsights({
           from: filters.from,
           to: filters.to,
           officeId: filters.officeId
         }),
-        this.api.getBillingForecast(filters.officeId),
-        categories.length > 0
-          ? this.api.getBillingAlerts(filters.officeId, categories)
-          : Promise.resolve(this.emptyAlertsPayload())
+        this.api.getBillingForecast(filters.officeId)
       ]);
 
       if (operationsResult.status === 'fulfilled') {
@@ -1384,51 +1403,10 @@ export class BillingPage implements OnDestroy {
 
       this.billingInsights.set(insightsResult.status === 'fulfilled' ? insightsResult.value : null);
       this.billingForecast.set(forecastResult.status === 'fulfilled' ? forecastResult.value : null);
-      this.billingAlerts.set(alertsResult.status === 'fulfilled' ? alertsResult.value : null);
     } catch {
       this.errorMessage.set('Impossible de charger les operations comptables.');
     } finally {
       this.isLoading.set(false);
-      this.isAlertsLoading.set(false);
-    }
-  }
-
-  private persistAlertCategories(): void {
-    try {
-      const payload = {
-        overdue: this.alertCategoryOverdue(),
-        dueSoon: this.alertCategoryDueSoon(),
-        highExpenses: this.alertCategoryHighExpenses(),
-        unassigned: this.alertCategoryUnassigned()
-      };
-      localStorage.setItem(BillingPage.ALERT_FILTERS_STORAGE_KEY, JSON.stringify(payload));
-    } catch {
-      // Storage may be unavailable (private mode / tests), keep runtime state only.
-    }
-  }
-
-  private restoreAlertCategories(): void {
-    try {
-      const raw = localStorage.getItem(BillingPage.ALERT_FILTERS_STORAGE_KEY);
-      if (!raw) {
-        return;
-      }
-      const parsed = JSON.parse(raw) as {
-        overdue?: boolean;
-        dueSoon?: boolean;
-        highExpenses?: boolean;
-        unassigned?: boolean;
-      };
-
-      this.alertCategoryOverdue.set(parsed.overdue !== false);
-      this.alertCategoryDueSoon.set(parsed.dueSoon !== false);
-      this.alertCategoryHighExpenses.set(parsed.highExpenses !== false);
-      this.alertCategoryUnassigned.set(parsed.unassigned !== false);
-    } catch {
-      this.alertCategoryOverdue.set(true);
-      this.alertCategoryDueSoon.set(true);
-      this.alertCategoryHighExpenses.set(true);
-      this.alertCategoryUnassigned.set(true);
     }
   }
 
@@ -1639,7 +1617,6 @@ export class BillingPage implements OnDestroy {
       sessionId: trashItem.sessionId,
       label: trashItem.label,
       operationsFormat: trashItem.operationsFormat,
-      alertsFormat: trashItem.alertsFormat,
       status: trashItem.status,
       createdAt: trashItem.createdAt
     };
@@ -1676,7 +1653,6 @@ export class BillingPage implements OnDestroy {
       sessionId: item.sessionId,
       label: item.label,
       operationsFormat: item.operationsFormat,
-      alertsFormat: item.alertsFormat,
       status: item.status,
       createdAt: item.createdAt
     }));
@@ -1732,13 +1708,12 @@ export class BillingPage implements OnDestroy {
       return;
     }
 
-    const header = ['Date', 'SessionId', 'Label', 'OperationsFormat', 'AlertsFormat', 'Status'];
+    const header = ['Date', 'SessionId', 'Label', 'OperationsFormat', 'Status'];
     const csvRows = rows.map((item) => [
       item.createdAt,
       item.sessionId,
       item.label,
       item.operationsFormat,
-      item.alertsFormat,
       item.status
     ]);
     const csv = [header, ...csvRows]
@@ -1762,7 +1737,6 @@ export class BillingPage implements OnDestroy {
       sessionId: item.sessionId,
       label: item.label,
       operationsFormat: item.operationsFormat,
-      alertsFormat: item.alertsFormat,
       status: item.status
     }));
 
@@ -1785,13 +1759,12 @@ export class BillingPage implements OnDestroy {
       return;
     }
 
-    const header = ['Date', 'SessionId', 'Label', 'OperationsFormat', 'AlertsFormat', 'Status'];
+    const header = ['Date', 'SessionId', 'Label', 'OperationsFormat', 'Status'];
     const csvRows = rows.map((item) => [
       item.createdAt,
       item.sessionId,
       item.label,
       item.operationsFormat,
-      item.alertsFormat,
       item.status
     ]);
     const csv = [header, ...csvRows]
@@ -1821,7 +1794,6 @@ export class BillingPage implements OnDestroy {
       sessionId: item.sessionId,
       label: item.label,
       operationsFormat: item.operationsFormat,
-      alertsFormat: item.alertsFormat,
       status: item.status
     }));
 
@@ -1873,7 +1845,6 @@ export class BillingPage implements OnDestroy {
           sessionId: String(item.sessionId ?? this.buildExportSessionId()),
           label: String(item.label ?? 'Pack export'),
           operationsFormat: item.operationsFormat === 'json' ? 'json' as const : 'excel' as const,
-          alertsFormat: item.alertsFormat === 'excel' ? 'excel' as const : 'json' as const,
           status: item.status === 'error' ? 'error' as const : 'success' as const,
           createdAt: String(item.createdAt ?? new Date().toISOString())
         }));
@@ -1928,7 +1899,6 @@ export class BillingPage implements OnDestroy {
           sessionId: String(item.sessionId ?? this.buildExportSessionId()),
           label: String(item.label ?? 'Pack export'),
           operationsFormat: item.operationsFormat === 'json' ? 'json' as const : 'excel' as const,
-          alertsFormat: item.alertsFormat === 'excel' ? 'excel' as const : 'json' as const,
           status: item.status === 'error' ? 'error' as const : 'success' as const,
           createdAt: String(item.createdAt ?? new Date().toISOString()),
           deletedAt: String(item.deletedAt ?? new Date().toISOString())
@@ -1954,7 +1924,7 @@ export class BillingPage implements OnDestroy {
   private applyPayload(payload: BillingOperationsPayload): void {
     this.closeActionMenus();
     this.tiles.set(payload.summary ?? []);
-    this.operations.set(payload.operations ?? []);
+    this.operations.set((payload.operations ?? []).filter((op) => op.sourceType === 'invoice'));
     this.offices.set(payload.offices ?? []);
     this.users.set(payload.users ?? []);
 
@@ -1985,6 +1955,78 @@ export class BillingPage implements OnDestroy {
     const month = String(value.getMonth() + 1).padStart(2, '0');
     const day = String(value.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  }
+
+  private async ensureCurrentUserProfile(): Promise<MyUserProfile | null> {
+    const existing = this.currentUserProfile();
+    if (existing) {
+      return existing;
+    }
+
+    try {
+      const profile = await this.api.getMyUserProfile();
+      this.currentUserProfile.set(profile);
+      return profile;
+    } catch {
+      return null;
+    }
+  }
+
+  private applyCreateDepositUserDefaults(): void {
+    if (this.editingDepositId() != null) {
+      return;
+    }
+
+    const profile = this.currentUserProfile();
+    const bankName = String(profile?.bankName ?? '').trim();
+    const iban = String(profile?.iban ?? '').trim();
+    const code = this.buildCreateDepositCode(profile, this.depositOccurredAt());
+
+    this.depositCode.set(code);
+    this.depositBankName.set(bankName);
+    this.depositAccountLabel.set(iban);
+  }
+
+  private buildCreateDepositCode(profile: MyUserProfile | null, occurredAtLocal: string): string {
+    const trigram = this.buildUserTrigram(profile);
+    const dayToken = this.formatDepositDateToken(occurredAtLocal);
+    return `${trigram}-${dayToken}`;
+  }
+
+  private buildUserTrigram(profile: MyUserProfile | null): string {
+    const seed = [
+      String(profile?.lastName ?? ''),
+      String(profile?.firstName ?? ''),
+      this.authService.username()
+    ]
+      .join('')
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Z0-9]/g, '');
+
+    if (seed.length >= 3) {
+      return seed.slice(0, 3);
+    }
+
+    if (seed.length === 2) {
+      return `${seed}X`;
+    }
+
+    if (seed.length === 1) {
+      return `${seed}XX`;
+    }
+
+    return 'USR';
+  }
+
+  private formatDepositDateToken(localDateTimeValue: string): string {
+    const date = new Date(String(localDateTimeValue ?? '').trim());
+    const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+    const yyyy = String(safeDate.getFullYear());
+    const mm = String(safeDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(safeDate.getDate()).padStart(2, '0');
+    return `${yyyy}${mm}${dd}`;
   }
 
   private defaultNowDateTimeLocal(): string {
