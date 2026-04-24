@@ -36,6 +36,7 @@ export class AgendaPage implements OnDestroy {
   readonly appointments = signal<Appointment[]>([]);
   readonly officeOptions = signal<OfficeOption[]>([]);
   readonly selectedOfficeId = signal<number | null>(null);
+  readonly defaultAgendaView = signal<string>('Semaine');
   readonly events = signal<DashboardEvent[]>([]);
   readonly officeOpeningHoursById = signal<Record<number, OfficeOpeningHours>>({});
   readonly agendaSettings = signal<AgendaSettings | null>(null);
@@ -84,6 +85,8 @@ export class AgendaPage implements OnDestroy {
     status: ['A confirmer' as const, [Validators.required]]
   });
 
+  private defaultsLoaded = false;
+
   constructor() {
     this.load();
   }
@@ -100,6 +103,12 @@ export class AgendaPage implements OnDestroy {
   }
 
   private async load(): Promise<void> {
+    if (!this.defaultsLoaded) {
+      this.defaultsLoaded = true;
+      const profile = await this.api.getMyUserProfile();
+      this.defaultAgendaView.set(profile.defaultAgendaView || 'Semaine');
+    }
+
     const me = await this.api.me();
     const offices = Array.isArray(me.offices) ? me.offices : [];
     this.officeOptions.set(offices);

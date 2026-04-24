@@ -76,6 +76,7 @@ export class WeekCalendar {
   readonly settings = input.required<AgendaSettings>();
   readonly selectedCalendars = input<LocalAgendaCalendar[]>([]);
   readonly officeOpeningHoursById = input<Record<number, OfficeOpeningHours>>({});
+  readonly initialView = input<string>('Semaine');
   readonly visibleEventsChange = output<DashboardEvent[]>();
   readonly now = signal(new Date());
 
@@ -93,6 +94,20 @@ export class WeekCalendar {
   readonly consultationPractitionerDraft = signal('');
   readonly isConsultationConflictModalOpen = signal(false);
   readonly consultationConflictCandidate = signal<ConsultationConflictCandidate | null>(null);
+
+  private mapInitialAgendaView(view: string): 'week' | 'day' | 'three-days' | 'month' {
+    const normalized = String(view ?? '').trim().toLowerCase();
+    if (normalized === 'jour') {
+      return 'day';
+    }
+    if (normalized === '3 jours' || normalized === '3jours' || normalized === 'trois jours') {
+      return 'three-days';
+    }
+    if (normalized === 'mois') {
+      return 'month';
+    }
+    return 'week';
+  }
 
   readonly isMonthView = computed((): boolean => this.viewMode() === 'month');
 
@@ -249,6 +264,19 @@ export class WeekCalendar {
     effect(() => {
       this.visibleEventsChange.emit(this.visibleEvents());
     });
+
+    // Apply the user's default agenda view once on first load.
+    // Uses a flag so user navigation is not overridden if the input changes.
+    let applied = false;
+    effect(() => {
+      const view = this.initialView();
+      if (!applied && view !== 'Semaine') {
+        applied = true;
+        this.viewMode.set(this.mapInitialAgendaView(view));
+      } else if (!applied) {
+        applied = true; // 'Semaine' is already the default
+      }
+    }, { allowSignalWrites: true });
   }
 
   goToPrev(): void {

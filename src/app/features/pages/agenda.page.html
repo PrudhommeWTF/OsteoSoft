@@ -58,6 +58,7 @@
         [settings]="agendaSettings()!"
         [selectedCalendars]="selectedCalendars()"
         [officeOpeningHoursById]="officeOpeningHoursById()"
+        [initialView]="defaultAgendaView()"
         (visibleEventsChange)="onVisibleEventsChange($event)"
       ></app-week-calendar>
     }

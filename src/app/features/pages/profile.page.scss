@@ -1,0 +1,36 @@
+:host {
+	display: block;
+}
+
+.profile-tabs-nav {
+	align-items: center;
+}
+
+.profile-tabs-nav .nav-link {
+	white-space: nowrap;
+}
+
+.profile-horizontal-field .form-label {
+	margin-bottom: 0.35rem;
+}
+
+@media (min-width: 768px) {
+	.profile-horizontal-field {
+		display: grid;
+		grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr);
+		align-items: center;
+		column-gap: 0.75rem;
+	}
+
+	.profile-horizontal-field .form-label {
+		margin-bottom: 0;
+	}
+}
+
+@media (max-width: 767.98px) {
+	.profile-tabs-nav {
+		flex-wrap: nowrap !important;
+		overflow-x: auto;
+		padding-bottom: 0.25rem;
+	}
+}

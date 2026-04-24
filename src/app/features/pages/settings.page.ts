@@ -128,8 +128,12 @@ type OfficeCreateStep = 1 | 2 | 3 | 4 | 5 | 6;
 type RestoreProgressStep = 'idle' | 'reading' | 'validating' | 'checksum' | 'ready' | 'uploading' | 'applying' | 'done' | 'error';
 type RestoreStepStatus = 'pending' | 'active' | 'done' | 'error';
 type DraftSaveState = 'idle' | 'saving' | 'saved' | 'error';
-type UserModalTabId = 'application-rights' | 'cabinet-rights' | 'identity' | 'professional' | 'billing';
+type UserModalTabId = 'application-rights' | 'cabinet-rights' | 'identity' | 'professional' | 'billing' | 'preferences';
 type DataManagementTabId = 'backup-restore' | 'rgpd' | 'import' | 'cleanup';
+type UserModalTabDefinition = {
+  id: UserModalTabId;
+  label: string;
+};
 
 @Component({
   selector: 'app-settings-page',
@@ -396,6 +400,8 @@ export class SettingsPage implements OnDestroy {
   readonly expandedAccordionId = signal<string | null>('general-root');
   readonly userSignatureValue = signal('');
   readonly selectedUserOfficeIds = signal<number[]>([]);
+  readonly userModalBaselinePayload = signal<UserAccountPayload | null>(null);
+  readonly userModalBaselineOfficeIds = signal<number[]>([]);
   readonly auditLogs = signal<SystemAuditLog[]>([]);
   readonly offices = signal<Office[]>([]);
   readonly isOfficesLoading = signal(false);
@@ -451,6 +457,14 @@ export class SettingsPage implements OnDestroy {
     { value: 'user' as const, label: 'Couleur de l\'utilisateur' }
   ];
   readonly countryOptions = ['France', 'Belgique', 'Suisse', 'Luxembourg', 'Canada'];
+  readonly userModalTabs: UserModalTabDefinition[] = [
+    { id: 'identity', label: 'Identité' },
+    { id: 'professional', label: 'Informations pro' },
+    { id: 'billing', label: 'Facturation' },
+    { id: 'preferences', label: 'Préférences' },
+    { id: 'cabinet-rights', label: 'Droits Cabinets' },
+    { id: 'application-rights', label: 'Droits Application' }
+  ];
   readonly auditLogLimitOptions = [50, 100, 200, 500];
   readonly generalDeviseOptions = ['EUR', 'USD', 'CHF', 'GBP', 'CAD'];
   readonly backupReminderOptions = ['Toutes les semaines', 'Tous les 15 jours', 'Tous les mois', 'Tous les 2 mois'] as const;
@@ -734,6 +748,12 @@ export class SettingsPage implements OnDestroy {
   readonly isEditingAdminUser = computed(() => {
     const selectedUser = this.selectedEditableUser();
     return Boolean(selectedUser && selectedUser.username === 'admin');
+  });
+
+  readonly isEditingOwnProfile = computed(() => {
+    const currentUser = this.currentUser();
+    const selectedUser = this.selectedEditableUser();
+    return Boolean(currentUser && selectedUser && currentUser.id === selectedUser.id);
   });
 
   readonly selectedUserCabinetDelegations = computed(() => {
@@ -1318,6 +1338,7 @@ export class SettingsPage implements OnDestroy {
       void this.loadOffices();
     }
 
+    this.captureUserModalBaseline();
     this.isUserModalOpen.set(true);
   }
 
@@ -1333,18 +1354,83 @@ export class SettingsPage implements OnDestroy {
 
     this.selectUserForProfileLink(targetId);
     this.userModalTab.set('identity');
+    this.captureUserModalBaseline();
     this.isUserModalOpen.set(true);
   }
 
-  closeUserModal(): void {
+  openCurrentUserProfileModal(): void {
+    const currentUserId = this.currentUser()?.id ?? null;
+    if (!currentUserId) {
+      this.userProfileLinkError.set('Impossible de récupérer votre profil utilisateur.');
+      return;
+    }
+
+    this.openEditUserModal(currentUserId);
+  }
+
+  closeUserModal(forceClose = false): void {
+    if (!forceClose && this.hasUserFormUnsavedChanges()) {
+      const confirmed = globalThis.confirm('Des modifications non sauvegardées seront perdues. Fermer quand même ?');
+      if (!confirmed) {
+        return;
+      }
+    }
+
     this.isUserModalOpen.set(false);
     this.userModalTab.set('identity');
     this.userProfileLinkError.set('');
     this.userSignatureError.set('');
+    this.userModalBaselinePayload.set(null);
+    this.userModalBaselineOfficeIds.set([]);
   }
 
   selectUserModalTab(tabId: UserModalTabId): void {
     this.userModalTab.set(tabId);
+  }
+
+  resetCurrentUserModalTab(): void {
+    const baseline = this.userModalBaselinePayload();
+    if (!baseline) {
+      return;
+    }
+
+    const fields = this.getUserModalTabFields(this.userModalTab());
+    const patch: Record<string, unknown> = {};
+
+    for (const field of fields) {
+      patch[field] = baseline[field];
+    }
+
+    this.userForm.patchValue(patch as Parameters<typeof this.userForm.patchValue>[0]);
+
+    if (this.userModalTab() === 'cabinet-rights') {
+      this.selectedUserOfficeIds.set([...this.userModalBaselineOfficeIds()]);
+    }
+
+    if (this.userModalTab() === 'professional') {
+      const signature = String(patch['signatureText'] ?? '');
+      this.userSignatureValue.set(signature);
+      this.selectedUserSignatureFileName.set('');
+      this.userSignatureError.set('');
+    }
+  }
+
+  isUserModalTabDirty(tabId: UserModalTabId): boolean {
+    const baseline = this.userModalBaselinePayload();
+    if (!baseline) {
+      return false;
+    }
+
+    if (tabId === 'cabinet-rights') {
+      return !this.areNumberListsEqual(this.selectedUserOfficeIds(), this.userModalBaselineOfficeIds());
+    }
+
+    const fields = this.getUserModalTabFields(tabId);
+    return fields.some((field) => !this.areJsonValuesEqual(this.userForm.get(field)?.value, baseline[field]));
+  }
+
+  hasUserFormUnsavedChanges(): boolean {
+    return this.userModalTabs.some((tab) => this.isUserModalTabDirty(tab.id));
   }
 
   openCabinetDelegationsSection(): void {
@@ -2091,7 +2177,7 @@ export class SettingsPage implements OnDestroy {
         this.users.update((items) => [...items, createdUser].sort((a, b) => a.username.localeCompare(b.username)));
         this.selectUserForProfileLink(createdUser.id);
         this.userProfileLinkSuccess.set('Compte utilisateur créé.');
-        this.closeUserModal();
+        this.closeUserModal(true);
       } else {
         await this.api.updateUserAccount(userId, payload);
 
@@ -2120,7 +2206,7 @@ export class SettingsPage implements OnDestroy {
         this.userSignatureValue.set(payload.signatureText);
         this.selectedUserSignatureFileName.set('');
         this.userProfileLinkSuccess.set('Compte utilisateur mis à jour.');
-        this.closeUserModal();
+        this.closeUserModal(true);
       }
     } catch {
       this.userProfileLinkError.set('Impossible d’enregistrer le compte utilisateur.');
@@ -2535,6 +2621,44 @@ export class SettingsPage implements OnDestroy {
       includeFreeConsultations: raw.includeFreeConsultations,
       showConsultationHour: raw.showConsultationHour
     };
+  }
+
+  private captureUserModalBaseline(): void {
+    const baseline = this.buildUserAccountPayload();
+    this.userModalBaselinePayload.set({ ...baseline, officeIds: [...baseline.officeIds] });
+    this.userModalBaselineOfficeIds.set([...baseline.officeIds]);
+  }
+
+  private getUserModalTabFields(tabId: UserModalTabId): Array<Exclude<keyof UserAccountPayload, 'officeIds'>> {
+    switch (tabId) {
+      case 'identity':
+        return ['username', 'password', 'lastName', 'firstName', 'email', 'mobilePhone', 'country'];
+      case 'professional':
+        return ['siret', 'nameSuffixText', 'adeliCode', 'rppsCode', 'apeNafCode', 'letterHeader', 'letterFooter', 'signatureText', 'colorHex'];
+      case 'billing':
+        return ['bankName', 'iban', 'invoiceMentions'];
+      case 'preferences':
+        return ['defaultAgendaView', 'defaultYearsForStatistics', 'includeFreeConsultations', 'showConsultationHour'];
+      case 'application-rights':
+        return ['isActive', 'profileId', 'role'];
+      case 'cabinet-rights':
+        return [];
+      default:
+        return [];
+    }
+  }
+
+  private areJsonValuesEqual(left: unknown, right: unknown): boolean {
+    return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+  }
+
+  private areNumberListsEqual(left: number[], right: number[]): boolean {
+    const normalizedLeft = [...new Set(left.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0))]
+      .sort((a, b) => a - b);
+    const normalizedRight = [...new Set(right.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0))]
+      .sort((a, b) => a - b);
+
+    return this.areJsonValuesEqual(normalizedLeft, normalizedRight);
   }
 
   private readFileAsDataUrl(file: File): Promise<string> {

@@ -235,6 +235,22 @@
 	padding: 0.2rem;
 }
 
+.settings-user-tab-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+}
+
+.settings-user-modal-footer {
+	position: sticky;
+	bottom: 0;
+	z-index: 2;
+	background: var(--bs-body-bg);
+	border-top: 1px solid var(--bs-border-color);
+	box-shadow: 0 -0.35rem 0.9rem rgba(0, 0, 0, 0.08);
+	gap: 0.5rem;
+}
+
 @media (max-width: 991px) {
 	.settings-profiles-layout {
 		grid-template-columns: 1fr;
@@ -242,5 +258,10 @@
 
 	.settings-rights-col-toggle {
 		width: 7.5rem;
+	}
+
+	.settings-user-modal-footer {
+		position: static;
+		box-shadow: none;
 	}
 }

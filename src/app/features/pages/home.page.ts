@@ -38,6 +38,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   readonly pendingPayments = signal<DashboardPayload['pendingPayments']>([]);
   readonly calendarEvents = signal<DashboardEvent[]>([]);
   readonly calendarSettings = signal<AgendaSettings | null>(null);
+  readonly defaultAgendaView = signal<string>('Semaine');
 
   readonly hasMonthlyChartData = computed(() =>
     (this.pendingPayload()?.monthlyConsultations ?? []).some((point) => Number(point.count) > 0)
@@ -68,11 +69,15 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   private async load(): Promise<void> {
     try {
-      const payload = await this.api.getDashboard();
+      const [payload, profile] = await Promise.all([
+        this.api.getDashboard(),
+        this.api.getMyUserProfile()
+      ]);
       this.recentPatients.set(payload.recentPatients);
       this.pendingPayments.set(payload.pendingPayments);
       this.calendarEvents.set(payload.events);
       this.calendarSettings.set(payload.agendaSettings);
+      this.defaultAgendaView.set(profile.defaultAgendaView || 'Semaine');
       this.pendingPayload.set(payload);
       this.isLoading.set(false);
       afterNextRender(

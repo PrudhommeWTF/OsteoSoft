@@ -673,9 +673,14 @@
           <div class="card-body p-3 p-lg-4">
             <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
               <h3 class="h6 mb-0">Comptes utilisateurs</h3>
-              <button type="button" class="btn btn-sm btn-primary" (click)="openCreateUserModal()">
-                <i class="fa-solid fa-user-plus me-1"></i>Nouveau compte
-              </button>
+              <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-sm btn-outline-primary" (click)="openCurrentUserProfileModal()">
+                  <i class="fa-solid fa-id-card me-1"></i>Éditer mon profil
+                </button>
+                <button type="button" class="btn btn-sm btn-primary" (click)="openCreateUserModal()">
+                  <i class="fa-solid fa-user-plus me-1"></i>Nouveau compte
+                </button>
+              </div>
             </div>
 
             @if (userProfileLinkError()) {
@@ -749,7 +754,7 @@
               <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
                   <h4 id="user-account-modal-title" class="modal-title h5 mb-0">
-                    {{ isCreatingUserMode() ? 'Créer un utilisateur' : 'Modifier un utilisateur' }}
+                    {{ isCreatingUserMode() ? 'Créer un utilisateur' : (isEditingOwnProfile() ? 'Éditer mon profil' : 'Modifier un utilisateur') }}
                   </h4>
                   <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeUserModal()"></button>
                 </div>
@@ -757,61 +762,22 @@
                 <form class="settings-user-modal-form" [formGroup]="userForm" (ngSubmit)="saveUserAccount()" novalidate>
                   <div class="modal-body settings-user-modal-body pb-0">
                     <nav class="nav nav-pills flex-wrap gap-2 mb-3" role="tablist" aria-label="Sections de configuration de l'utilisateur">
-                      <button
-                        type="button"
-                        class="nav-link"
-                        [class.active]="userModalTab() === 'identity'"
-                        role="tab"
-                        [attr.aria-selected]="userModalTab() === 'identity'"
-                        [attr.aria-controls]="'user-tab-identity'"
-                        (click)="selectUserModalTab('identity')"
-                      >
-                        Identité
-                      </button>
-                      <button
-                        type="button"
-                        class="nav-link"
-                        [class.active]="userModalTab() === 'professional'"
-                        role="tab"
-                        [attr.aria-selected]="userModalTab() === 'professional'"
-                        [attr.aria-controls]="'user-tab-professional'"
-                        (click)="selectUserModalTab('professional')"
-                      >
-                        Informations pro
-                      </button>
-                      <button
-                        type="button"
-                        class="nav-link"
-                        [class.active]="userModalTab() === 'billing'"
-                        role="tab"
-                        [attr.aria-selected]="userModalTab() === 'billing'"
-                        [attr.aria-controls]="'user-tab-billing'"
-                        (click)="selectUserModalTab('billing')"
-                      >
-                        Facturation
-                      </button>
-                      <button
-                        type="button"
-                        class="nav-link"
-                        [class.active]="userModalTab() === 'cabinet-rights'"
-                        role="tab"
-                        [attr.aria-selected]="userModalTab() === 'cabinet-rights'"
-                        [attr.aria-controls]="'user-tab-cabinet-rights'"
-                        (click)="selectUserModalTab('cabinet-rights')"
-                      >
-                        Droits Cabinets
-                      </button>
-                      <button
-                        type="button"
-                        class="nav-link"
-                        [class.active]="userModalTab() === 'application-rights'"
-                        role="tab"
-                        [attr.aria-selected]="userModalTab() === 'application-rights'"
-                        [attr.aria-controls]="'user-tab-application-rights'"
-                        (click)="selectUserModalTab('application-rights')"
-                      >
-                        Droits Application
-                      </button>
+                      @for (tab of userModalTabs; track tab.id) {
+                        <button
+                          type="button"
+                          class="nav-link settings-user-tab-link"
+                          [class.active]="userModalTab() === tab.id"
+                          role="tab"
+                          [attr.aria-selected]="userModalTab() === tab.id"
+                          [attr.aria-controls]="'user-tab-' + tab.id"
+                          (click)="selectUserModalTab(tab.id)"
+                        >
+                          <span>{{ tab.label }}</span>
+                          @if (isUserModalTabDirty(tab.id)) {
+                            <span class="badge rounded-pill text-bg-warning ms-2">Modifié</span>
+                          }
+                        </button>
+                      }
                     </nav>
                   </div>
 
@@ -1055,6 +1021,13 @@
                           <input id="user-iban" type="text" class="form-control" formControlName="iban" />
                         </div>
 
+                        <div class="col-12">
+                          <label class="form-label" for="user-invoice-mentions">Mentions factures</label>
+                          <textarea id="user-invoice-mentions" class="form-control" formControlName="invoiceMentions" rows="3"></textarea>
+                        </div>
+                      </div>
+                    } @else if (userModalTab() === 'preferences') {
+                      <div id="user-tab-preferences" role="tabpanel" class="row g-3">
                         <div class="col-12 col-md-6">
                           <label class="form-label" for="user-agenda-view">Vue agenda</label>
                           <select id="user-agenda-view" class="form-select" formControlName="defaultAgendaView">
@@ -1064,9 +1037,16 @@
                           </select>
                         </div>
 
-                        <div class="col-12">
-                          <label class="form-label" for="user-invoice-mentions">Mentions factures</label>
-                          <textarea id="user-invoice-mentions" class="form-control" formControlName="invoiceMentions" rows="3"></textarea>
+                        <div class="col-12 col-md-6">
+                          <label class="form-label" for="user-default-years-for-statistics">Période des statistiques (années)</label>
+                          <input
+                            id="user-default-years-for-statistics"
+                            type="number"
+                            min="2"
+                            max="10"
+                            class="form-control"
+                            formControlName="defaultYearsForStatistics"
+                          />
                         </div>
 
                         <div class="col-12">
@@ -1096,7 +1076,19 @@
 
                   <div class="modal-footer settings-user-modal-footer">
                     <button type="button" class="btn btn-outline-secondary" (click)="closeUserModal()">Annuler</button>
-                    <button type="submit" class="btn btn-success" [disabled]="isCreatingUserAccount() || isSavingUserAccount()">
+                    <button
+                      type="button"
+                      class="btn btn-outline-dark"
+                      [disabled]="!isUserModalTabDirty(userModalTab())"
+                      (click)="resetCurrentUserModalTab()"
+                    >
+                      Réinitialiser cette section
+                    </button>
+                    <button
+                      type="submit"
+                      class="btn btn-success"
+                      [disabled]="isCreatingUserAccount() || isSavingUserAccount() || (!isCreatingUserMode() && !hasUserFormUnsavedChanges())"
+                    >
                       <i class="fa-solid fa-check me-1"></i>{{ isCreatingUserMode() ? 'Créer le compte' : 'Enregistrer' }}
                     </button>
                   </div>

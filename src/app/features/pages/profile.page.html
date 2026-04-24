@@ -16,23 +16,12 @@
       </div>
     </div>
   } @else {
-    <div class="row g-4">
-      <!-- Navigation Pills Sidebar -->
-      <div class="col-12 col-sm-3 col-lg-2">
-        <div class="card border-0 shadow-sm position-sticky top-0">
-          <nav class="nav nav-pills flex-column p-3 gap-2" role="tablist">
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-body p-3">
+        <nav class="nav nav-pills flex-row flex-wrap gap-2 profile-tabs-nav" role="tablist" aria-label="Sections du profil">
             <button
               type="button"
-              class="nav-link text-start"
-              [class.active]="isTabActive('compte')"
-              (click)="toggleTab('compte')"
-              role="tab"
-            >
-              Compte
-            </button>
-            <button
-              type="button"
-              class="nav-link text-start"
+              class="nav-link"
               [class.active]="isTabActive('identite')"
               (click)="toggleTab('identite')"
               role="tab"
@@ -41,7 +30,7 @@
             </button>
             <button
               type="button"
-              class="nav-link text-start"
+              class="nav-link"
               [class.active]="isTabActive('pro')"
               (click)="toggleTab('pro')"
               role="tab"
@@ -50,7 +39,7 @@
             </button>
             <button
               type="button"
-              class="nav-link text-start"
+              class="nav-link"
               [class.active]="isTabActive('documents')"
               (click)="toggleTab('documents')"
               role="tab"
@@ -59,7 +48,7 @@
             </button>
             <button
               type="button"
-              class="nav-link text-start"
+              class="nav-link"
               [class.active]="isTabActive('compta')"
               (click)="toggleTab('compta')"
               role="tab"
@@ -68,26 +57,95 @@
             </button>
             <button
               type="button"
-              class="nav-link text-start"
+              class="nav-link"
               [class.active]="isTabActive('agenda')"
               (click)="toggleTab('agenda')"
               role="tab"
             >
               Agenda
             </button>
-          </nav>
-        </div>
+            <button
+              type="button"
+              class="nav-link"
+              [class.active]="isTabActive('consultation')"
+              (click)="toggleTab('consultation')"
+              role="tab"
+            >
+              Consultation
+            </button>
+            <button
+              type="button"
+              class="nav-link"
+              [class.active]="isTabActive('interface')"
+              (click)="toggleTab('interface')"
+              role="tab"
+            >
+              Interface
+            </button>
+            <button
+              type="button"
+              class="nav-link"
+              [class.active]="isTabActive('securite')"
+              (click)="toggleTab('securite')"
+              role="tab"
+            >
+              Sécurité
+            </button>
+        </nav>
       </div>
+    </div>
 
       <!-- Main Content -->
-      <div class="col-12 col-sm-9 col-lg-10">
+      <div>
         <form [formGroup]="accountForm">
-          <!-- TAB: COMPTE -->
-          @if (isTabActive('compte')) {
+          <!-- TAB: Securité -->
+          @if (isTabActive('securite')) {
             <div class="card border-0 shadow-sm mb-4" role="tabpanel">
               <div class="card-header bg-body-tertiary py-3">
                 <h2 class="h5 mb-0">
-                  <i class="bi bi-person-circle me-2 text-primary"></i>Compte
+                  <i class="bi bi-person-circle me-2 text-primary"></i>Sécurité
+                </h2>
+              </div>
+              <div class="card-body">
+                <div class="row g-3">
+                  <!-- Password -->
+                  <div class="col-12 profile-horizontal-field">
+                    <label class="form-label" for="profile-password">Nouveau mot de passe</label>
+                    <input
+                      id="profile-password"
+                      type="password"
+                      class="form-control"
+                      formControlName="password"
+                    />
+                  </div>
+
+                  <!-- Password Confirmation -->
+                  <div class="col-12 profile-horizontal-field">
+                    <label class="form-label" for="profile-password-confirmation">Confirmation mot de passe</label>
+                    <input
+                      id="profile-password-confirmation"
+                      type="password"
+                      class="form-control"
+                      formControlName="passwordConfirmation"
+                    />
+                  </div>
+                </div>
+
+                @if (hasPasswordMismatch() && (accountForm.controls.password.dirty || accountForm.controls.passwordConfirmation.dirty)) {
+                  <div class="alert alert-danger mt-3 mb-0" role="alert">
+                    Les mots de passe ne correspondent pas.
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- TAB: IDENTITÉ -->
+          @if (isTabActive('identite')) {
+            <div class="card border-0 shadow-sm mb-4" role="tabpanel">
+              <div class="card-header bg-body-tertiary py-3">
+                <h2 class="h5 mb-0">
+                  <i class="bi bi-file-person me-2 text-primary"></i>Identité
                 </h2>
               </div>
               <div class="card-body">
@@ -116,36 +174,53 @@
                     </div>
                   </div>
 
-                  <!-- Password -->
-                  <div class="col-12 col-lg-6">
-                    <div class="form-floating">
-                      <input
-                        id="profile-password"
-                        type="password"
-                        class="form-control"
-                        placeholder="Nouveau mot de passe"
-                        formControlName="password"
-                      />
-                      <label for="profile-password">Nouveau mot de passe</label>
-                    </div>
+                  <div class="col-12 profile-horizontal-field">
+                    <label class="form-label" for="profile-last-name">Nom</label>
+                    <input
+                      id="profile-last-name"
+                      type="text"
+                      class="form-control"
+                      formControlName="lastName"
+                    />
                   </div>
 
-                  <!-- Password Confirmation -->
-                  <div class="col-12 col-lg-6">
-                    <div class="form-floating">
-                      <input
-                        id="profile-password-confirmation"
-                        type="password"
-                        class="form-control"
-                        placeholder="Confirmation"
-                        formControlName="passwordConfirmation"
-                      />
-                      <label for="profile-password-confirmation">Confirmation mot de passe</label>
-                    </div>
+                  <div class="col-12 profile-horizontal-field">
+                    <label class="form-label" for="profile-first-name">Prénom</label>
+                    <input
+                      id="profile-first-name"
+                      type="text"
+                      class="form-control"
+                      formControlName="firstName"
+                    />
+                  </div>
+
+                  <div class="col-12 profile-horizontal-field">
+                    <label class="form-label" for="profile-email">Email</label>
+                    <input id="profile-email" type="email" class="form-control" formControlName="email" />
+                  </div>
+
+                  <div class="col-12 profile-horizontal-field">
+                    <label class="form-label" for="profile-mobile">Téléphone mobile</label>
+                    <input
+                      id="profile-mobile"
+                      type="text"
+                      class="form-control"
+                      formControlName="mobilePhone"
+                    />
+                  </div>
+
+                  <div class="col-12 profile-horizontal-field">
+                    <label class="form-label" for="profile-name-suffix">Texte à côté du nom</label>
+                    <input
+                      id="profile-name-suffix"
+                      type="text"
+                      class="form-control"
+                      formControlName="nameSuffixText"
+                    />
                   </div>
 
                   <!-- Color -->
-                  <div class="col-12">
+                  <div class="col-12 profile-horizontal-field">
                     <label class="form-label" for="profile-color">Couleur praticien</label>
                     <input
                       id="profile-color"
@@ -154,96 +229,6 @@
                       style="height: 50px"
                       formControlName="colorHex"
                     />
-                  </div>
-                </div>
-
-                @if (hasPasswordMismatch() && (accountForm.controls.password.dirty || accountForm.controls.passwordConfirmation.dirty)) {
-                  <div class="alert alert-danger mt-3 mb-0" role="alert">
-                    Les mots de passe ne correspondent pas.
-                  </div>
-                }
-              </div>
-            </div>
-          }
-
-          <!-- TAB: IDENTITÉ -->
-          @if (isTabActive('identite')) {
-            <div class="card border-0 shadow-sm mb-4" role="tabpanel">
-              <div class="card-header bg-body-tertiary py-3">
-                <h2 class="h5 mb-0">
-                  <i class="bi bi-file-person me-2 text-primary"></i>Identité
-                </h2>
-              </div>
-              <div class="card-body">
-                <div class="row g-3">
-                  <div class="col-12 col-lg-6">
-                    <div class="form-floating">
-                      <input
-                        id="profile-last-name"
-                        type="text"
-                        class="form-control"
-                        placeholder="Nom"
-                        formControlName="lastName"
-                      />
-                      <label for="profile-last-name">Nom</label>
-                    </div>
-                  </div>
-
-                  <div class="col-12 col-lg-6">
-                    <div class="form-floating">
-                      <input
-                        id="profile-first-name"
-                        type="text"
-                        class="form-control"
-                        placeholder="Prénom"
-                        formControlName="firstName"
-                      />
-                      <label for="profile-first-name">Prénom</label>
-                    </div>
-                  </div>
-
-                  <div class="col-12 col-lg-6">
-                    <div class="form-floating">
-                      <input id="profile-email" type="email" class="form-control" placeholder="Email" formControlName="email" />
-                      <label for="profile-email">Email</label>
-                    </div>
-                  </div>
-
-                  <div class="col-12 col-lg-6">
-                    <div class="form-floating">
-                      <input
-                        id="profile-mobile"
-                        type="text"
-                        class="form-control"
-                        placeholder="Téléphone"
-                        formControlName="mobilePhone"
-                      />
-                      <label for="profile-mobile">Téléphone mobile</label>
-                    </div>
-                  </div>
-
-                  <div class="col-12 col-lg-6">
-                    <div class="form-floating">
-                      <select id="profile-country" class="form-select" formControlName="country" aria-label="Pays">
-                        @for (country of countryOptions; track country) {
-                          <option [value]="country">{{ country }}</option>
-                        }
-                      </select>
-                      <label for="profile-country">Pays</label>
-                    </div>
-                  </div>
-
-                  <div class="col-12 col-lg-6">
-                    <div class="form-floating">
-                      <input
-                        id="profile-name-suffix"
-                        type="text"
-                        class="form-control"
-                        placeholder="Texte à côté du nom"
-                        formControlName="nameSuffixText"
-                      />
-                      <label for="profile-name-suffix">Texte à côté du nom</label>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -260,70 +245,54 @@
               </div>
               <div class="card-body">
                 <div class="row g-3">
-                  <div class="col-12 col-lg-4">
-                    <div class="form-floating">
-                      <input
-                        id="profile-siret"
-                        type="text"
-                        class="form-control"
-                        placeholder="SIRET"
-                        formControlName="siret"
-                      />
-                      <label for="profile-siret">N° SIRET</label>
-                    </div>
+                  <div class="col-12 profile-horizontal-field">
+                    <label class="form-label" for="profile-siret">N° SIRET</label>
+                    <input
+                      id="profile-siret"
+                      type="text"
+                      class="form-control"
+                      formControlName="siret"
+                    />
                   </div>
 
-                  <div class="col-12 col-lg-4">
-                    <div class="form-floating">
-                      <input
-                        id="profile-adeli"
-                        type="text"
-                        class="form-control"
-                        placeholder="ADELI"
-                        formControlName="adeliCode"
-                      />
-                      <label for="profile-adeli">Code ADELI</label>
-                    </div>
+                  <div class="col-12 profile-horizontal-field">
+                    <label class="form-label" for="profile-adeli">Code ADELI</label>
+                    <input
+                      id="profile-adeli"
+                      type="text"
+                      class="form-control"
+                      formControlName="adeliCode"
+                    />
                   </div>
 
-                  <div class="col-12 col-lg-4">
-                    <div class="form-floating">
-                      <input
-                        id="profile-rpps"
-                        type="text"
-                        class="form-control"
-                        placeholder="RPPS"
-                        formControlName="rppsCode"
-                      />
-                      <label for="profile-rpps">Code RPPS</label>
-                    </div>
+                  <div class="col-12 profile-horizontal-field">
+                    <label class="form-label" for="profile-rpps">Code RPPS</label>
+                    <input
+                      id="profile-rpps"
+                      type="text"
+                      class="form-control"
+                      formControlName="rppsCode"
+                    />
                   </div>
 
-                  <div class="col-12 col-lg-6">
-                    <div class="form-floating">
-                      <input
-                        id="profile-ape"
-                        type="text"
-                        class="form-control"
-                        placeholder="APE / NAF"
-                        formControlName="apeNafCode"
-                      />
-                      <label for="profile-ape">Code APE / NAF</label>
-                    </div>
+                  <div class="col-12 profile-horizontal-field">
+                    <label class="form-label" for="profile-ape">Code APE / NAF</label>
+                    <input
+                      id="profile-ape"
+                      type="text"
+                      class="form-control"
+                      formControlName="apeNafCode"
+                    />
+                  </div>
+                  <hr/>
+                  <div class="col-12 profile-horizontal-field">
+                    <label class="form-label" for="profile-bank">Banque</label>
+                    <input id="profile-bank" type="text" class="form-control" formControlName="bankName" />
                   </div>
 
-                  <div class="col-12 col-lg-6">
-                    <div class="form-floating">
-                      <input id="profile-bank" type="text" class="form-control" placeholder="Banque" formControlName="bankName" />
-                      <label for="profile-bank">Banque</label>
-                    </div>
-                  </div>
-
-                  <div class="col-12 col-lg-6">
-                    <div class="form-floating">
-                      <input id="profile-iban" type="text" class="form-control" placeholder="IBAN" formControlName="iban" />
-                      <label for="profile-iban">IBAN</label>
-                    </div>
+                  <div class="col-12 profile-horizontal-field">
+                    <label class="form-label" for="profile-iban">IBAN</label>
+                    <input id="profile-iban" type="text" class="form-control" formControlName="iban" />
                   </div>
                 </div>
               </div>
@@ -340,56 +309,44 @@
               </div>
               <div class="card-body">
                 <div class="row g-3">
-                  <div class="col-12">
-                    <div class="form-floating">
-                      <input
-                        id="profile-letter-header"
-                        type="text"
-                        class="form-control"
-                        placeholder="Entête"
-                        formControlName="letterHeader"
-                      />
-                      <label for="profile-letter-header">Entête courriers</label>
-                    </div>
+                  <div class="col-12 profile-horizontal-field">
+                    <label class="form-label" for="profile-letter-header">Entête courriers</label>
+                    <input
+                      id="profile-letter-header"
+                      type="text"
+                      class="form-control"
+                      formControlName="letterHeader"
+                    />
                   </div>
 
-                  <div class="col-12">
-                    <div class="form-floating">
-                      <input
-                        id="profile-letter-footer"
-                        type="text"
-                        class="form-control"
-                        placeholder="Pied de page"
-                        formControlName="letterFooter"
-                      />
-                      <label for="profile-letter-footer">Pied de page courriers</label>
-                    </div>
+                  <div class="col-12 profile-horizontal-field">
+                    <label class="form-label" for="profile-letter-footer">Pied de page courriers</label>
+                    <input
+                      id="profile-letter-footer"
+                      type="text"
+                      class="form-control"
+                      formControlName="letterFooter"
+                    />
                   </div>
 
-                  <div class="col-12">
-                    <div class="form-floating">
-                      <textarea
-                        id="profile-signature"
-                        class="form-control"
-                        placeholder="Signature"
-                        style="height: 120px"
-                        formControlName="signatureText"
-                      ></textarea>
-                      <label for="profile-signature">Signature (texte / data)</label>
-                    </div>
+                  <div class="col-12 profile-horizontal-field">
+                    <label class="form-label" for="profile-signature">Signature (texte / data)</label>
+                    <textarea
+                      id="profile-signature"
+                      class="form-control"
+                      style="height: 120px"
+                      formControlName="signatureText"
+                    ></textarea>
                   </div>
 
-                  <div class="col-12">
-                    <div class="form-floating">
-                      <textarea
-                        id="profile-invoice-mentions"
-                        class="form-control"
-                        placeholder="Mentions"
-                        style="height: 120px"
-                        formControlName="invoiceMentions"
-                      ></textarea>
-                      <label for="profile-invoice-mentions">Mentions factures</label>
-                    </div>
+                  <div class="col-12 profile-horizontal-field">
+                    <label class="form-label" for="profile-invoice-mentions">Mentions factures</label>
+                    <textarea
+                      id="profile-invoice-mentions"
+                      class="form-control"
+                      style="height: 120px"
+                      formControlName="invoiceMentions"
+                    ></textarea>
                   </div>
                 </div>
               </div>
@@ -405,20 +362,18 @@
             </div>
             <div class="card-body">
               <div class="row g-3">
-                <div class="col-12 col-lg-6">
-                  <div class="form-floating">
-                    <select
-                      id="profile-default-years-statistics"
-                      class="form-select"
-                      formControlName="defaultYearsForStatistics"
-                      aria-label="Années pour statistiques"
-                    >
-                      @for (year of yearsForStatisticsOptions; track year) {
-                        <option [value]="year">{{ year }}</option>
-                      }
-                    </select>
-                    <label for="profile-default-years-statistics">Années à afficher par défaut</label>
-                  </div>
+                <div class="col-12 profile-horizontal-field">
+                  <label class="form-label" for="profile-default-years-statistics">Années à afficher par défaut</label>
+                  <select
+                    id="profile-default-years-statistics"
+                    class="form-select"
+                    formControlName="defaultYearsForStatistics"
+                    aria-label="Années pour statistiques"
+                  >
+                    @for (year of yearsForStatisticsOptions; track year) {
+                      <option [value]="year">{{ year }}</option>
+                    }
+                  </select>
                 </div>
 
                 <div class="col-12 col-lg-6">
@@ -453,6 +408,97 @@
           </div>
         }
 
+        @if (isTabActive('consultation')) {
+          <div class="card border-0 shadow-sm mb-4" role="tabpanel" [formGroup]="preferencesForm">
+            <div class="card-header bg-body-tertiary py-3">
+              <h2 class="h5 mb-0">Consultation</h2>
+            </div>
+            <div class="card-body">
+              <div class="row g-3">
+                <div class="col-12 profile-horizontal-field">
+                  <label class="form-label" for="profile-consultation-order">Ordre consultations</label>
+                  <select
+                    id="profile-consultation-order"
+                    class="form-select"
+                    formControlName="consultationOrder"
+                    aria-label="Ordre consultations"
+                  >
+                    @for (option of consultationOrderOptions; track option) {
+                      <option [value]="option">{{ option }}</option>
+                    }
+                  </select>
+                </div>
+
+                <div class="col-12 profile-horizontal-field">
+                  <label class="form-label" for="profile-group-by-year">Regrouper par année à partir de</label>
+                  <input
+                    id="profile-group-by-year"
+                    type="number"
+                    class="form-control"
+                    formControlName="groupConsultationsByYearFrom"
+                    min="0"
+                    max="200"
+                  />
+                </div>
+
+                <div class="col-12 profile-horizontal-field">
+                  <label class="form-label" for="profile-patient-auto-save">Enregistrement auto fiche patient</label>
+                  <select
+                    id="profile-patient-auto-save"
+                    class="form-select"
+                    formControlName="patientAutoSaveFrequency"
+                    aria-label="Enregistrement auto"
+                  >
+                    @for (option of patientAutoSaveOptions; track option) {
+                      <option [value]="option">{{ option }}</option>
+                    }
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        }
+
+        @if (isTabActive('interface')) {
+          <div class="card border-0 shadow-sm mb-4" role="tabpanel" [formGroup]="preferencesForm">
+            <div class="card-header bg-body-tertiary py-3">
+              <h2 class="h5 mb-0">Interface</h2>
+            </div>
+            <div class="card-body">
+              <div class="row g-3">
+                <div class="col-12 profile-horizontal-field">
+                  <label class="form-label" for="profile-theme-mode">Thème de l'application</label>
+                  <select
+                    id="profile-theme-mode"
+                    class="form-select"
+                    formControlName="themeMode"
+                    aria-label="Mode de thème"
+                    (change)="onThemeModePreviewChange($any($event.target).value)"
+                  >
+                    @for (option of themeModeOptions; track option.value) {
+                      <option [value]="option.value">{{ option.label }}</option>
+                    }
+                  </select>
+                </div>
+
+                <div class="col-12 profile-horizontal-field">
+                  <label class="form-label" for="profile-patient-remarks-display">Remarques patient</label>
+                  <select
+                    id="profile-patient-remarks-display"
+                    class="form-select"
+                    formControlName="patientRemarksDisplay"
+                    aria-label="Remarques patient"
+                  >
+                    @for (option of patientRemarksDisplayOptions; track option.value) {
+                      <option [value]="option.value">{{ option.label }}</option>
+                    }
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        }
+
         <!-- TAB: AGENDA -->
         @if (isTabActive('agenda')) {
           <div class="card border-0 shadow-sm mb-4" role="tabpanel">
@@ -462,17 +508,18 @@
             <div class="card-body">
               <form [formGroup]="accountForm" class="mb-4">
                 <div class="row g-3">
-                  <div class="col-12 col-lg-6">
-                    <div class="form-floating">
-                      <input
-                        id="profile-default-agenda-view"
-                        type="text"
-                        class="form-control"
-                        placeholder="Vue agenda"
-                        formControlName="defaultAgendaView"
-                      />
-                      <label for="profile-default-agenda-view">Vue par défaut de l'agenda</label>
-                    </div>
+                  <div class="col-12 profile-horizontal-field">
+                    <label class="form-label" for="profile-default-agenda-view">Vue par défaut de l'agenda</label>
+                    <select
+                      id="profile-default-agenda-view"
+                      class="form-select"
+                      formControlName="defaultAgendaView"
+                      aria-label="Vue par défaut de l'agenda"
+                    >
+                      @for (view of agendaViewOptions; track view) {
+                        <option [value]="view">{{ view }}</option>
+                      }
+                    </select>
                   </div>
                 </div>
               </form>
@@ -509,116 +556,18 @@
                     />
                   </div>
 
-                <div class="col-12 col-lg-4">
-                  <div class="form-floating">
-                    <select
-                      id="profile-theme-mode"
-                      class="form-select"
-                      formControlName="themeMode"
-                      aria-label="Mode de thème"
-                      (change)="onThemeModePreviewChange($any($event.target).value)"
-                    >
-                      @for (option of themeModeOptions; track option.value) {
-                        <option [value]="option.value">{{ option.label }}</option>
-                      }
-                    </select>
-                    <label for="profile-theme-mode">Thème de l'application</label>
-                  </div>
-                </div>
-
-                <div class="col-12 col-lg-4">
-                  <div class="form-floating">
-                    <select
-                      id="profile-pdf-display-mode"
-                      class="form-select"
-                      formControlName="pdfDisplayMode"
-                      aria-label="Affichage PDF"
-                    >
-                      @for (option of pdfDisplayModeOptions; track option.value) {
-                        <option [value]="option.value">{{ option.label }}</option>
-                      }
-                    </select>
-                    <label for="profile-pdf-display-mode">Affichage PDF</label>
-                  </div>
-                </div>
-
-                <div class="col-12 col-lg-4">
-                  <div class="form-floating">
-                    <select
-                      id="profile-consultation-order"
-                      class="form-select"
-                      formControlName="consultationOrder"
-                      aria-label="Ordre consultations"
-                    >
-                      @for (option of consultationOrderOptions; track option) {
-                        <option [value]="option">{{ option }}</option>
-                      }
-                    </select>
-                    <label for="profile-consultation-order">Ordre consultations</label>
-                  </div>
-                </div>
-
-                <div class="col-12 col-lg-4">
-                  <div class="form-floating">
-                    <input
-                      id="profile-group-by-year"
-                      type="number"
-                      class="form-control"
-                      placeholder="Regrouper"
-                      formControlName="groupConsultationsByYearFrom"
-                      min="0"
-                      max="200"
-                    />
-                    <label for="profile-group-by-year">Regrouper par année à partir de</label>
-                  </div>
-                </div>
-
-                <div class="col-12 col-lg-6">
-                  <div class="form-floating">
-                    <select
-                      id="profile-patient-auto-save"
-                      class="form-select"
-                      formControlName="patientAutoSaveFrequency"
-                      aria-label="Enregistrement auto"
-                    >
-                      @for (option of patientAutoSaveOptions; track option) {
-                        <option [value]="option">{{ option }}</option>
-                      }
-                    </select>
-                    <label for="profile-patient-auto-save">Enregistrement auto fiche patient</label>
-                  </div>
-                </div>
-
-                <div class="col-12 col-lg-6">
-                  <div class="form-floating">
-                    <select
-                      id="profile-patient-remarks-display"
-                      class="form-select"
-                      formControlName="patientRemarksDisplay"
-                      aria-label="Remarques patient"
-                    >
-                      @for (option of patientRemarksDisplayOptions; track option.value) {
-                        <option [value]="option.value">{{ option.label }}</option>
-                      }
-                    </select>
-                    <label for="profile-patient-remarks-display">Remarques patient</label>
-                  </div>
-                </div>
-
-                <div class="col-12 col-lg-6">
-                  <div class="form-floating">
-                    <select
-                      id="profile-appointment-color-mode"
-                      class="form-select"
-                      formControlName="appointmentColorMode"
-                      aria-label="Couleur RDV"
-                    >
-                      @for (option of appointmentColorModeOptions; track option.value) {
-                        <option [value]="option.value">{{ option.label }}</option>
-                      }
-                    </select>
-                    <label for="profile-appointment-color-mode">Couleur des RDV</label>
-                  </div>
+                <div class="col-12 profile-horizontal-field">
+                  <label class="form-label" for="profile-appointment-color-mode">Couleur des RDV</label>
+                  <select
+                    id="profile-appointment-color-mode"
+                    class="form-select"
+                    formControlName="appointmentColorMode"
+                    aria-label="Couleur RDV"
+                  >
+                    @for (option of appointmentColorModeOptions; track option.value) {
+                      <option [value]="option.value">{{ option.label }}</option>
+                    }
+                  </select>
                 </div>
 
                 <div class="col-12 col-lg-6">
@@ -633,7 +582,7 @@
                   </div>
                 </div>
 
-                <div class="col-12 col-lg-4">
+                <div class="col-12 col-lg-6">
                   <div class="form-check form-switch pt-2">
                     <input
                       id="profile-show-sex"
@@ -645,7 +594,7 @@
                   </div>
                 </div>
 
-                <div class="col-12 col-lg-4">
+                <div class="col-12 col-lg-6">
                   <div class="form-check form-switch pt-2">
                     <input
                       id="profile-show-mobile"
@@ -657,7 +606,7 @@
                   </div>
                 </div>
 
-                <div class="col-12 col-lg-4">
+                <div class="col-12 col-lg-6">
                   <div class="form-check form-switch pt-2">
                     <input
                       id="profile-show-landline"
@@ -669,7 +618,7 @@
                   </div>
                 </div>
 
-                  <div class="col-12 col-lg-4">
+                  <div class="col-12 col-lg-6">
                     <div class="form-check form-switch pt-2">
                       <input
                         id="profile-show-comment"
@@ -708,6 +657,5 @@
           </button>
         </div>
       </div>
-    </div>
   }
 </div>

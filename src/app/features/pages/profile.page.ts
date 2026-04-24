@@ -23,7 +23,7 @@ export class ProfilePage {
   readonly isSaving = signal(false);
   readonly error = signal('');
   readonly success = signal('');
-  readonly activeTab = signal<'compte' | 'identite' | 'pro' | 'documents' | 'compta' | 'agenda'>('compte');
+  readonly activeTab = signal<'securite' | 'identite' | 'pro' | 'documents' | 'compta' | 'agenda' | 'consultation' | 'interface'>('identite');
   readonly lockedRole = signal('');
   readonly lockedIsActive = signal(true);
   readonly lockedCabinets = signal<string[]>([]);
@@ -53,6 +53,8 @@ export class ProfilePage {
     { value: 'light' as const, label: 'Forcer le thème clair' },
     { value: 'dark' as const, label: 'Forcer le thème sombre' }
   ];
+
+  readonly agendaViewOptions = ['Mois', 'Semaine', '3 jours', 'Jour'] as const;
 
   readonly consultationOrderOptions = ['Chronologique', 'Antichronologique'] as const;
 
@@ -216,11 +218,11 @@ export class ProfilePage {
     return password !== confirmation;
   }
 
-  toggleTab(tab: 'compte' | 'identite' | 'pro' | 'documents' | 'compta' | 'agenda'): void {
+  toggleTab(tab: 'securite' | 'identite' | 'pro' | 'documents' | 'compta' | 'agenda' | 'consultation' | 'interface'): void {
     this.activeTab.set(tab);
   }
 
-  isTabActive(tab: 'compte' | 'identite' | 'pro' | 'documents' | 'compta' | 'agenda'): boolean {
+  isTabActive(tab: 'securite' | 'identite' | 'pro' | 'documents' | 'compta' | 'agenda' | 'consultation' | 'interface'): boolean {
     return this.activeTab() === tab;
   }
 
