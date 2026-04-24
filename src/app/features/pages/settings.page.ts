@@ -341,6 +341,7 @@ export class SettingsPage implements OnDestroy {
   readonly rightsSaveError = signal('');
   readonly isProfilesLoading = signal(false);
   readonly isCreatingProfile = signal(false);
+  readonly isCreateProfileModalOpen = signal(false);
   readonly isSavingRights = signal(false);
   readonly isSavingCurrentUserProfile = signal(false);
   readonly isDownloadingBackup = signal(false);
@@ -2246,11 +2247,27 @@ export class SettingsPage implements OnDestroy {
       this.profiles.update((items) => [...items, normalizedProfile]);
       this.selectedProfileId.set(normalizedProfile.id);
       this.profileForm.reset({ label: '', description: '' });
+      this.isCreateProfileModalOpen.set(false);
     } catch {
       this.profileFormError.set('Impossible de créer le profil pour le moment.');
     } finally {
       this.isCreatingProfile.set(false);
     }
+  }
+
+  openCreateProfileModal(): void {
+    this.profileFormError.set('');
+    this.profileForm.reset({ label: '', description: '' });
+    this.isCreateProfileModalOpen.set(true);
+  }
+
+  closeCreateProfileModal(): void {
+    if (this.isCreatingProfile()) {
+      return;
+    }
+
+    this.profileFormError.set('');
+    this.isCreateProfileModalOpen.set(false);
   }
 
   selectProfile(profileId: string): void {

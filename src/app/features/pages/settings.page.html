@@ -470,137 +470,33 @@
           }
         </section>
       } @else if (activeSection().id === 'roles-and-access') {
-        <section class="settings-access-intro mb-4" aria-label="Présentation de la gestion des accès">
-          <div class="settings-access-intro-copy">
-            <h3 class="h6 mb-2">Présentation par type d'accès</h3>
-            <p class="mb-0 text-secondary">
-              La gestion des profils d'accès est organisée par domaine fonctionnel pour clarifier, module par module, ce que chaque profil peut consulter, modifier ou administrer.
-            </p>
-          </div>
-          <div class="settings-access-intro-metrics" aria-label="Synthèse des domaines">
-            <div class="settings-metric">
-              <span class="settings-metric-value">{{ accessDomains.length }}</span>
-              <span class="settings-metric-label">domaines d'accès</span>
-            </div>
-            <div class="settings-metric">
-              <span class="settings-metric-value">3</span>
-              <span class="settings-metric-label">niveaux de droits cibles</span>
-            </div>
-          </div>
-        </section>
-
-        <section class="settings-profiles-layout mb-4" aria-label="Gestion des profils">
-          <article class="settings-profiles-card">
-            <h3 class="h6 mb-3">Profils d'accès</h3>
-
-            @if (isProfilesLoading()) {
-              <p class="text-secondary mb-3">Chargement des profils...</p>
-            }
-
-            <div class="settings-profile-list" role="list" aria-label="Profils disponibles">
-              @for (profile of profiles(); track profile.id) {
-                <button
-                  type="button"
-                  class="settings-profile-item"
-                  role="listitem"
-                  [class.active]="selectedProfile().id === profile.id"
-                  (click)="selectProfile(profile.id)"
-                >
-                  <span class="settings-profile-item-head">
-                    <span class="settings-profile-item-label">{{ profile.label }}</span>
-                    @if (profile.immutable) {
-                      <span class="settings-profile-badge">Système</span>
-                    }
-                  </span>
-                  <span class="settings-profile-item-copy">{{ profile.description }}</span>
-                </button>
-              }
-            </div>
-          </article>
-
-          <article class="settings-profile-form-card">
-            <h3 class="h6 mb-3">Ajouter un nouveau profil</h3>
-
-            <form class="row g-2" [formGroup]="profileForm" (ngSubmit)="createProfile()" novalidate>
-              <div class="col-12">
-                <label class="form-label mb-1" for="profile-label">Nom du profil</label>
-                <input
-                  id="profile-label"
-                  type="text"
-                  class="form-control"
-                  formControlName="label"
-                  placeholder="Ex: Assistant médical"
-                />
-              </div>
-
-              <div class="col-12">
-                <label class="form-label mb-1" for="profile-description">Description</label>
-                <input
-                  id="profile-description"
-                  type="text"
-                  class="form-control"
-                  formControlName="description"
-                  placeholder="Description courte du profil"
-                />
-              </div>
-
-              @if (profileFormError()) {
-                <div class="col-12">
-                  <div class="alert alert-danger py-2 mb-0" role="alert">{{ profileFormError() }}</div>
-                </div>
-              }
-
-              <div class="col-12 d-flex justify-content-end">
-                <button type="submit" class="btn btn-primary" [disabled]="isCreatingProfile()">
-                  <i class="fa-solid fa-plus me-1"></i>Créer le profil
-                </button>
-              </div>
-            </form>
-          </article>
-        </section>
-
-        <section class="settings-selected-profile mb-4" aria-live="polite">
-          <h3 class="h6 mb-2">Compte connecté: {{ currentUser()?.username || 'Utilisateur' }}</h3>
-          <form class="row g-2 align-items-end" (ngSubmit)="saveCurrentUserProfile()" novalidate>
-            <div class="col-12 col-md-8">
-              <label class="form-label mb-1" for="current-user-profile">Profil appliqué à ce compte</label>
+        <section class="settings-card mb-4" aria-label="Gestion des profils d'accès">
+          <div class="d-flex flex-wrap align-items-end justify-content-between gap-3">
+            <div class="flex-grow-1">
+              <label class="form-label mb-1" for="access-profile-select">Profil d'accès</label>
               <select
-                id="current-user-profile"
+                id="access-profile-select"
                 class="form-select"
-                [value]="currentUserProfileId()"
-                (change)="updateCurrentUserProfileId($any($event.target).value || '')"
+                [value]="selectedProfile().id"
+                [disabled]="isProfilesLoading()"
+                (change)="selectProfile($any($event.target).value || '')"
               >
                 @for (profile of profiles(); track profile.id) {
                   <option [value]="profile.id">{{ profile.label }}</option>
                 }
               </select>
             </div>
-            <div class="col-12 col-md-4 d-grid">
-              <button type="submit" class="btn btn-outline-primary" [disabled]="isSavingCurrentUserProfile()">
-                Associer le profil
+
+            <div>
+              <button type="button" class="btn btn-primary" (click)="openCreateProfileModal()" [disabled]="isProfilesLoading()">
+                <i class="fa-solid fa-plus me-1"></i>Nouveau profil
               </button>
             </div>
-            @if (profileLinkError()) {
-              <div class="col-12">
-                <div class="alert alert-danger py-2 mb-0" role="alert">{{ profileLinkError() }}</div>
-              </div>
-            }
-            @if (profileLinkSuccess()) {
-              <div class="col-12">
-                <div class="alert alert-success py-2 mb-0" role="status">{{ profileLinkSuccess() }}</div>
-              </div>
-            }
-          </form>
-        </section>
+          </div>
 
-        <section class="settings-selected-profile mb-3" aria-live="polite">
-          <h3 class="h6 mb-1">Profil sélectionné: {{ selectedProfile().label }}</h3>
-          <p class="text-secondary mb-0">
-            {{ selectedProfile().description }}
-            @if (isSuperAdminSelected()) {
-              <span class="settings-inline-note">Le profil Super Administrateur conserve tous les droits activés.</span>
-            }
-          </p>
+          @if (isProfilesLoading()) {
+            <p class="text-secondary mt-3 mb-0">Chargement des profils...</p>
+          }
         </section>
 
         <div class="row g-3 mb-4" aria-label="Domaines d'accès">
@@ -667,6 +563,59 @@
 
         @if (rightsSaveError()) {
           <div class="alert alert-danger py-2" role="alert">{{ rightsSaveError() }}</div>
+        }
+
+        @if (isCreateProfileModalOpen()) {
+          <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="create-access-profile-modal-title">
+            <div class="modal-dialog modal-dialog-centered">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h3 id="create-access-profile-modal-title" class="modal-title h5 mb-0">Créer un profil d'accès</h3>
+                  <button type="button" class="btn-close" aria-label="Fermer" (click)="closeCreateProfileModal()"></button>
+                </div>
+
+                <form [formGroup]="profileForm" (ngSubmit)="createProfile()" novalidate>
+                  <div class="modal-body">
+                    <div class="mb-3">
+                      <label class="form-label" for="profile-label">Nom du profil</label>
+                      <input
+                        id="profile-label"
+                        type="text"
+                        class="form-control"
+                        formControlName="label"
+                        placeholder="Ex: Assistant médical"
+                      />
+                    </div>
+
+                    <div>
+                      <label class="form-label" for="profile-description">Description</label>
+                      <input
+                        id="profile-description"
+                        type="text"
+                        class="form-control"
+                        formControlName="description"
+                        placeholder="Description courte du profil"
+                      />
+                    </div>
+
+                    @if (profileFormError()) {
+                      <div class="alert alert-danger py-2 mt-3 mb-0" role="alert">{{ profileFormError() }}</div>
+                    }
+                  </div>
+
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" (click)="closeCreateProfileModal()" [disabled]="isCreatingProfile()">
+                      Annuler
+                    </button>
+                    <button type="submit" class="btn btn-primary" [disabled]="isCreatingProfile()">
+                      <i class="fa-solid fa-plus me-1"></i>Créer le profil
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+          <div class="modal-backdrop fade show" (click)="closeCreateProfileModal()"></div>
         }
       } @else if (activeSection().id === 'user-management') {
         <section class="card border-0 shadow-sm mb-4" aria-label="Liste des comptes utilisateurs">
