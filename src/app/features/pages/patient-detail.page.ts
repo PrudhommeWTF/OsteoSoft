@@ -33,6 +33,7 @@ import {
   PatientDocumentSummary,
   MyUserProfile,
   Office,
+  PeoplePickerContact,
   Practitioner,
   UserAgendaPreferences
 } from '../../core/api.types';
@@ -140,6 +141,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   private pendingFocusedConsultationId: number | null = null;
   private relatedSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
   private relatedSearchRequestId = 0;
+  private primaryDoctorSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
+  private primaryDoctorSearchRequestId = 0;
   private patientAutosaveTimer: ReturnType<typeof setInterval> | null = null;
   private consultationAutosaveTimer: ReturnType<typeof setInterval> | null = null;
   private consultationAutosaveStatusTimer: ReturnType<typeof setInterval> | null = null;
@@ -210,6 +213,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   readonly relatedSearchResults = signal<Patient[]>([]);
   readonly selectedRelatedPatients = signal<Patient[]>([]);
   readonly isSearchingRelated = signal(false);
+  readonly primaryDoctorSearch = signal('');
+  readonly primaryDoctorSuggestions = signal<PeoplePickerContact[]>([]);
+  readonly isSearchingPrimaryDoctor = signal(false);
   readonly locationPairs = signal<LocationPair[]>([]);
   readonly postalCodeSuggestions = signal<string[]>([]);
   readonly citySuggestions = signal<string[]>([]);
@@ -962,6 +968,34 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     this.relatedSearchDebounceId = setTimeout(() => {
       void this.searchRelatedPatients(term);
     }, 250);
+  }
+
+  onPrimaryDoctorSearchChange(value: string): void {
+    this.primaryDoctorSearch.set(value);
+    this.editForm.controls.primaryDoctor.setValue(value.trim());
+
+    if (this.primaryDoctorSearchDebounceId !== null) {
+      clearTimeout(this.primaryDoctorSearchDebounceId);
+      this.primaryDoctorSearchDebounceId = null;
+    }
+
+    const term = value.trim();
+    if (term.length < 2) {
+      this.primaryDoctorSuggestions.set([]);
+      this.isSearchingPrimaryDoctor.set(false);
+      return;
+    }
+
+    this.isSearchingPrimaryDoctor.set(true);
+    this.primaryDoctorSearchDebounceId = setTimeout(() => {
+      void this.searchPrimaryDoctorSuggestions(term);
+    }, 220);
+  }
+
+  applyPrimaryDoctorSuggestion(contact: PeoplePickerContact): void {
+    this.editForm.controls.primaryDoctor.setValue(contact.fullName);
+    this.primaryDoctorSearch.set(contact.fullName);
+    this.primaryDoctorSuggestions.set([]);
   }
 
   addRelatedPatient(patient: Patient): void {
@@ -2451,6 +2485,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     this.editSex.set(patient.sex);
     this.birthDateIso.set(patient.birthDate ?? '');
     this.saveError.set('');
+    this.primaryDoctorSearch.set(patient.primaryDoctor ?? '');
     this.hydrateSelectedRelatedPatients(patient.relatedPeople);
     this.updateLocationSuggestions(patient.postalCode, patient.city);
 
@@ -2589,6 +2624,27 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     }
 
     this.cdr.markForCheck();
+  }
+
+  private async searchPrimaryDoctorSuggestions(term: string): Promise<void> {
+    const requestId = ++this.primaryDoctorSearchRequestId;
+    try {
+      const contacts = await this.api.searchPeopleContacts(term);
+      if (requestId !== this.primaryDoctorSearchRequestId) {
+        return;
+      }
+
+      this.primaryDoctorSuggestions.set(contacts.slice(0, 8));
+    } catch {
+      if (requestId !== this.primaryDoctorSearchRequestId) {
+        return;
+      }
+      this.primaryDoctorSuggestions.set([]);
+    } finally {
+      if (requestId === this.primaryDoctorSearchRequestId) {
+        this.isSearchingPrimaryDoctor.set(false);
+      }
+    }
   }
 
   private syncRelatedPeopleField(): void {

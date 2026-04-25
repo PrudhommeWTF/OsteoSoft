@@ -262,9 +262,39 @@
                 <label class="form-label" for="edit-hobbies">Loisirs</label>
                 <input id="edit-hobbies" type="text" class="form-control" formControlName="hobbies" />
               </div>
-              <div class="col-12 col-md-6">
+              <div class="col-12 col-md-6 position-relative">
                 <label class="form-label" for="edit-primary-doctor">Médecin traitant</label>
-                <input id="edit-primary-doctor" type="text" class="form-control" formControlName="primaryDoctor" />
+                <input
+                  id="edit-primary-doctor"
+                  type="search"
+                  class="form-control"
+                  placeholder="Rechercher une personne par nom..."
+                  [value]="primaryDoctorSearch()"
+                  (input)="onPrimaryDoctorSearchChange($any($event.target).value)"
+                  (blur)="primaryDoctorSuggestions.set([])" />
+                @if (isSearchingPrimaryDoctor()) {
+                  <div class="form-text" aria-live="polite">
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    Recherche en cours...
+                  </div>
+                }
+                @if (primaryDoctorSuggestions().length > 0) {
+                  <ul class="autocomplete-list list-group shadow-sm">
+                    @for (contact of primaryDoctorSuggestions(); track contact.id) {
+                      <li
+                        class="list-group-item list-group-item-action"
+                        (mousedown)="$event.preventDefault()"
+                        (click)="applyPrimaryDoctorSuggestion(contact)">
+                        <strong>{{ contact.fullName }}</strong>
+                        <span class="small text-muted ms-2">{{ contact.role }}</span>
+                        @if ((contact.city ?? '').trim()) {
+                          <span class="small text-muted ms-2">{{ contact.city }}</span>
+                        }
+                      </li>
+                    }
+                  </ul>
+                }
+                <input type="hidden" formControlName="primaryDoctor" />
               </div>
               <div class="col-12 col-md-6">
                 <label class="form-label" for="edit-social-security">Numéro de sécurité sociale</label>
