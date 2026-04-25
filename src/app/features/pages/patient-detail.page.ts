@@ -989,7 +989,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     this.isSearchingPrimaryDoctor.set(true);
     this.primaryDoctorSearchDebounceId = setTimeout(() => {
       void this.searchPrimaryDoctorSuggestions(term);
-    }, 220);
+    }, 250);
   }
 
   applyPrimaryDoctorSuggestion(contact: PeoplePickerContact): void {
