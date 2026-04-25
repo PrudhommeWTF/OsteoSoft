@@ -2484,6 +2484,34 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
         consultationCount: 0
       }))
     );
+
+    void this.enrichRelatedPatientsWithRealData(names);
+  }
+
+  private async enrichRelatedPatientsWithRealData(names: string[]): Promise<void> {
+    if (names.length === 0) {
+      return;
+    }
+
+    const normalize = (value: string): string => value.trim().replace(/\s+/g, ' ').toLowerCase();
+
+    await Promise.all(
+      names.map(async (name) => {
+        try {
+          const results = await this.api.getPatients(name);
+          const match = results.find((p) => normalize(p.fullName) === normalize(name));
+          if (match) {
+            this.selectedRelatedPatients.update((items) =>
+              items.map((item) => (normalize(item.fullName) === normalize(name) && item.id < 0 ? match : item))
+            );
+          }
+        } catch (error) {
+          console.error(`[enrichRelatedPatients] Failed to look up patient "${name}":`, error);
+        }
+      })
+    );
+
+    this.cdr.markForCheck();
   }
 
   private async loadLocationPairs(): Promise<void> {
