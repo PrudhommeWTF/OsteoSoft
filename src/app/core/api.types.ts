@@ -1274,7 +1274,7 @@ export type Office = {
   openingHours?: OfficeOpeningHours;
   consultationProfiles: OfficeConsultationProfile[];
   paymentReminderLetterTemplate: OfficeLetterTemplate;
-  patientLetterTemplate: OfficeLetterTemplate;
+  patientLetterTemplates: OfficeLetterTemplate[];
   officeUserDelegations: OfficeUserDelegation[];
   serviceTypes: ServiceTypeSetting[];
   paymentMethods: PaymentMethodSetting[];
@@ -1308,7 +1308,7 @@ export type CreateOfficePayload = {
   openingHours?: OfficeOpeningHours;
   consultationProfiles: OfficeConsultationProfile[];
   paymentReminderLetterTemplate: OfficeLetterTemplate;
-  patientLetterTemplate: OfficeLetterTemplate;
+  patientLetterTemplates: OfficeLetterTemplate[];
   officeUserDelegations: OfficeUserDelegationPayload[];
   serviceTypes: ServiceTypeSetting[];
   paymentMethods: PaymentMethodSetting[];

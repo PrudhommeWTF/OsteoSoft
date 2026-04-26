@@ -92,6 +92,12 @@ type ConsultationPaymentEntry = {
   paidAt: string;
 };
 
+type OfficePatientLetterTemplate = {
+  kind: 'payment-reminder' | 'patient-template';
+  title: string;
+  content: string;
+};
+
 type ConsultationBillingState = {
   consultationId: number;
   billingInvoiceId: number | null;
@@ -108,6 +114,12 @@ type ConsultationBillingState = {
 
 const PAYMENT_PENDING_LABEL = 'Paiement en attente';
 const CONSULTATION_BILLING_STORAGE_KEY = 'osteosoft:consultation-billing:v1';
+const DEFAULT_PAYMENT_REMINDER_LETTER_TITLE = 'Relance de règlement';
+const DEFAULT_PAYMENT_REMINDER_LETTER_CONTENT = `{$CIVILITE},
+
+Suite à la consultation ostéopathique du {$DATECONSULTATION}, il apparaît que la somme de {$MONTANTCONSULTATION} {$DEVISE} n'a pas été réglée à ce jour. Si ceci n'est pas une erreur de ma part, je vous prie de bien vouloir régulariser cette situation par retour de courrier.
+
+Je vous remercie par avance, et vous prie d'agréer mes sincères salutations.`;
 
 @Component({
   selector: 'app-patient-detail-page',
@@ -205,6 +217,10 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   readonly isConsultationPaymentModalOpen = signal(false);
   readonly isSavingConsultationPayment = signal(false);
   readonly editingConsultationPaymentId = signal<string | null>(null);
+  readonly consultationOfficePatientLetterTemplates = signal<OfficePatientLetterTemplate[]>([]);
+  readonly isPatientLetterComposeModalOpen = signal(false);
+  readonly isSavingPatientLetterPdf = signal(false);
+  readonly patientLetterComposeError = signal('');
   readonly autosaveToastVisible = signal(false);
   readonly autosaveToastMessage = signal('');
 
@@ -316,6 +332,14 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     chequeNumber: [''],
     comment: [''],
     paidAtLocal: ['']
+  });
+
+  readonly patientLetterComposeForm = this.fb.nonNullable.group({
+    date: [''],
+    templateIndex: [''],
+    subject: ['', [Validators.maxLength(200)]],
+    recipient: ['', [Validators.maxLength(1000)]],
+    content: ['', [Validators.maxLength(20000)]]
   });
 
   private readonly consultationProfileValue = toSignal(
@@ -1469,6 +1493,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
   closeConsultationModal(): void {
     this.stopConsultationAutosave();
+    this.isPatientLetterComposeModalOpen.set(false);
     this.getConsultationModalInstance()?.hide();
   }
 
@@ -1477,6 +1502,108 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     if (tab === 'consultation') {
       this.cdr.detectChanges();
       queueMicrotask(() => this.hydrateConsultationEditorsFromState());
+    }
+  }
+
+  async openPatientLetterComposeModal(): Promise<void> {
+    await this.loadConsultationContext();
+
+    const currentPatient = this.patient();
+    if (!currentPatient) {
+      return;
+    }
+
+    this.patientLetterComposeForm.reset({
+      date: this.toDateInputValue(new Date().toISOString()),
+      templateIndex: '',
+      subject: '',
+      recipient: this.buildPatientLetterRecipient(currentPatient),
+      content: ''
+    });
+    this.patientLetterComposeError.set('');
+    this.isPatientLetterComposeModalOpen.set(true);
+  }
+
+  closePatientLetterComposeModal(): void {
+    this.patientLetterComposeError.set('');
+    this.isPatientLetterComposeModalOpen.set(false);
+  }
+
+  async onPatientLetterTemplateChange(value: string): Promise<void> {
+    this.patientLetterComposeForm.controls.templateIndex.setValue(value);
+    const index = Number(value);
+    if (!Number.isInteger(index) || index < 0) {
+      this.patientLetterComposeForm.patchValue({
+        subject: '',
+        content: ''
+      });
+      return;
+    }
+
+    const template = this.consultationOfficePatientLetterTemplates()[index];
+    if (!template) {
+      return;
+    }
+
+    if (template.kind === 'payment-reminder') {
+      await this.hydrateBillableConsultationsBillingStates();
+    }
+
+    const resolved = this.resolvePatientLetterTemplate(template);
+
+    this.patientLetterComposeForm.patchValue({
+      subject: resolved.subject,
+      content: resolved.content
+    });
+  }
+
+  async savePatientLetterAsPdfDocument(): Promise<void> {
+    const currentPatient = this.patient();
+    if (!currentPatient || this.isSavingPatientLetterPdf()) {
+      return;
+    }
+
+    const raw = this.patientLetterComposeForm.getRawValue();
+    const recipient = String(raw.recipient ?? '').trim();
+    const content = String(raw.content ?? '').trim();
+    if (!recipient || !content) {
+      this.patientLetterComposeError.set('Le destinataire et le contenu sont obligatoires pour générer le PDF.');
+      return;
+    }
+
+    this.patientLetterComposeError.set('');
+    this.isSavingPatientLetterPdf.set(true);
+    this.documentActionError.set('');
+
+    try {
+      const [offices, profile] = await Promise.all([
+        this.api.getOffices().catch(() => [] as Office[]),
+        this.api.getMyUserProfile().catch(() => null as MyUserProfile | null)
+      ]);
+      const office = this.resolveConsultationBillingOffice(offices);
+      const pdfBlob = this.buildPatientLetterPdfBlob(office, profile);
+      const contentBase64 = await this.blobToBase64(pdfBlob);
+      const subject = String(raw.subject ?? '').trim() || 'Courrier patient';
+      const letterDate = this.fromDateInputValue(String(raw.date ?? '').trim()) ?? new Date().toISOString();
+      const fileName = `${this.toFileSlug(currentPatient.fullName)}_courrier_${this.toFileSlug(subject) || 'patient'}.pdf`;
+
+      const created = await this.api.createPatientDocument(currentPatient.id, {
+        consultationId: this.activeConsultation()?.id ?? null,
+        officeId: this.consultationOfficeId(),
+        fileName,
+        mimeType: 'application/pdf',
+        sizeBytes: pdfBlob.size,
+        title: subject,
+        comment: `Courrier patient du ${this.formatShortDate(letterDate)}`,
+        contentBase64
+      });
+
+      this.patientDocuments.update((items) => [created, ...items]);
+      this.closePatientLetterComposeModal();
+    } catch {
+      this.patientLetterComposeError.set('Impossible d\'enregistrer le courrier au format PDF.');
+    } finally {
+      this.isSavingPatientLetterPdf.set(false);
     }
   }
 
@@ -3295,6 +3422,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
         } else {
           await this.loadConsultationBillingCatalog(context.officeId ?? preferredOfficeId ?? null);
         }
+        await this.loadConsultationOfficePatientLetterTemplates(context.officeId ?? preferredOfficeId ?? null);
       } catch {
         this.consultationOfficeId.set(null);
         this.consultationOfficeName.set(null);
@@ -3302,6 +3430,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
         this.consultationOfficeProfiles.set([]);
         this.consultationBillingServiceOptions.set([]);
         this.consultationBillingPaymentMethodOptions.set([]);
+        this.consultationOfficePatientLetterTemplates.set([]);
       } finally {
         this.isLoadingConsultationContext.set(false);
         this.loadConsultationContextPromise = null;
@@ -3374,6 +3503,38 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     this.applyConsultationBillingDefaults();
   }
 
+  private async loadConsultationOfficePatientLetterTemplates(contextOfficeId: number | null): Promise<void> {
+    try {
+      const offices = await this.api.getOffices();
+      const requestedOfficeId = Number.isInteger(contextOfficeId) && Number(contextOfficeId) > 0
+        ? Number(contextOfficeId)
+        : null;
+      const office = requestedOfficeId === null
+        ? null
+        : (offices.find((item) => item.id === requestedOfficeId) ?? null);
+
+      const patientTemplates = (office?.patientLetterTemplates ?? [])
+        .map((item) => ({
+          kind: 'patient-template' as const,
+          title: String(item?.title ?? '').trim(),
+          content: String(item?.content ?? '').trim()
+        }))
+        .filter((item) => Boolean(item.title) || Boolean(item.content));
+
+      const paymentReminderTemplate: OfficePatientLetterTemplate = {
+        kind: 'payment-reminder',
+        title: String(office?.paymentReminderLetterTemplate?.title ?? '').trim() || DEFAULT_PAYMENT_REMINDER_LETTER_TITLE,
+        content: String(office?.paymentReminderLetterTemplate?.content ?? '').trim() || DEFAULT_PAYMENT_REMINDER_LETTER_CONTENT
+      };
+
+      const templates = [paymentReminderTemplate, ...patientTemplates];
+
+      this.consultationOfficePatientLetterTemplates.set(templates);
+    } catch {
+      this.consultationOfficePatientLetterTemplates.set([]);
+    }
+  }
+
   private applyConsultationBillingDefaults(): void {
     const services = this.consultationBillingServiceOptions();
     const paymentMethods = this.consultationBillingPaymentMethodOptions();
@@ -3393,6 +3554,121 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       ? currentPaymentMethod
       : PAYMENT_PENDING_LABEL;
     this.consultationBillingForm.controls.paymentMethod.setValue(resolvedPayment);
+  }
+
+  private async hydrateBillableConsultationsBillingStates(): Promise<void> {
+    const billableConsultations = this.consultationRecords().filter((consultation) => {
+      const billingInvoiceId = Number(consultation.billingInvoiceId);
+      return Number.isInteger(billingInvoiceId) && billingInvoiceId > 0;
+    });
+
+    await Promise.all(billableConsultations.map((consultation) => this.hydrateConsultationBillingState(consultation)));
+  }
+
+  private resolvePatientLetterTemplate(template: OfficePatientLetterTemplate): { subject: string; content: string } {
+    const currentPatient = this.patient();
+    if (!currentPatient) {
+      return {
+        subject: template.title,
+        content: template.content
+      };
+    }
+
+    const activeConsultation = this.activeConsultation();
+    const practitionerRaw = String(activeConsultation?.practitioner ?? this.consultationEditForm.controls.practitioner.value ?? '').trim();
+    const practitionerParts = practitionerRaw.split(/\s+/).filter(Boolean);
+    const practitionerLastName = practitionerParts.length > 0 ? practitionerParts[practitionerParts.length - 1] : '';
+    const practitionerFirstName = practitionerParts.length > 1 ? practitionerParts.slice(0, -1).join(' ') : '';
+
+    const unpaidConsultations = this.getUnpaidConsultations();
+    const unpaidCount = unpaidConsultations.length;
+    const unpaidTotal = unpaidConsultations.reduce((sum, item) => sum + item.remainingAmount, 0);
+    const unpaidCurrency = unpaidConsultations[0]?.currency || 'EUR';
+    const unpaidDateLabel = unpaidCount === 1
+      ? this.formatShortDate(unpaidConsultations[0].startedAt)
+      : (unpaidCount > 1 ? `${unpaidCount} consultations impayées` : '-');
+    const unpaidDetails = unpaidCount === 0
+      ? 'Aucune consultation impayée.'
+      : unpaidConsultations
+        .map((item) => `${this.formatShortDate(item.startedAt)} - ${this.formatAmountFr(item.remainingAmount)} ${item.currency}${item.title ? ` (${item.title})` : ''}`)
+        .join('\n');
+
+    const replacements: Record<string, string> = {
+      '{$DATE}': this.formatShortDate(new Date().toISOString()),
+      '{$CIVILITE}': this.getPatientCivilite(currentPatient.sex),
+      '{$NOM}': String(currentPatient.lastName ?? '').trim(),
+      '{$PRENOM}': String(currentPatient.firstName ?? '').trim(),
+      '{$AGE}': currentPatient.age === null ? '' : String(currentPatient.age),
+      '{$DATE_NAISSANCE}': currentPatient.birthDate ? this.formatShortDate(currentPatient.birthDate) : '',
+      '{$DATE_DERNIERE_CONSULTATION}': currentPatient.lastVisit ? this.formatShortDate(currentPatient.lastVisit) : '',
+      '{$NOMPRATICIEN}': practitionerLastName,
+      '{$PRENOMPRATICIEN}': practitionerFirstName,
+      '{$DATECONSULTATION}': unpaidDateLabel,
+      '{$MONTANTCONSULTATION}': this.formatAmountFr(unpaidTotal),
+      '{$DEVISE}': unpaidCurrency,
+      '{$CONSULTATIONS_IMPAYEES}': unpaidDetails,
+      '{$NB_CONSULTATIONS_IMPAYEES}': String(unpaidCount),
+      '{$MONTANTTOTALIMPAYE}': this.formatAmountFr(unpaidTotal),
+      '{$MOTIFSCONSULTATION}': unpaidConsultations.map((item) => item.title).filter(Boolean).join(', '),
+      '{$TESTCONSULTATION}': '',
+      '{$SCHEMADYSFONCTIONNEL}': '',
+      '{$TRAITEMENTCONSULTATION}': '',
+      '{$REMARQUECONSULTATION}': ''
+    };
+
+    return {
+      subject: this.replaceLetterVariables(template.title, replacements),
+      content: this.replaceLetterVariables(template.content, replacements)
+    };
+  }
+
+  private getUnpaidConsultations(): Array<{ consultationId: number; startedAt: string; title: string; remainingAmount: number; currency: string }> {
+    const consultationsById = new Map(this.consultationRecords().map((item) => [item.id, item]));
+    const states = this.consultationBillingStates();
+
+    return Object.values(states)
+      .filter((state) => {
+        const remainingAmount = Number((state.totalAmount - this.getConsultationBillingPaidAmount(state)).toFixed(2));
+        return state.paymentStatus !== 'paid' && remainingAmount > 0;
+      })
+      .map((state) => {
+        const consultation = consultationsById.get(state.consultationId);
+        const remainingAmount = Number((state.totalAmount - this.getConsultationBillingPaidAmount(state)).toFixed(2));
+        return {
+          consultationId: state.consultationId,
+          startedAt: consultation?.startedAt || state.issuedAt,
+          title: String(consultation?.title ?? '').trim(),
+          remainingAmount,
+          currency: state.currency || 'EUR'
+        };
+      })
+      .sort((left, right) => new Date(left.startedAt).getTime() - new Date(right.startedAt).getTime());
+  }
+
+  private replaceLetterVariables(templateText: string, replacements: Record<string, string>): string {
+    let resolved = String(templateText ?? '');
+    for (const [token, value] of Object.entries(replacements)) {
+      resolved = resolved.split(token).join(value);
+    }
+    return resolved;
+  }
+
+  private getPatientCivilite(sex: PatientDetail['sex']): string {
+    if (sex === 'Femme') {
+      return 'Madame';
+    }
+    if (sex === 'Homme') {
+      return 'Monsieur';
+    }
+    return 'Madame, Monsieur';
+  }
+
+  private formatAmountFr(amount: number): string {
+    const normalized = Number.isFinite(amount) ? amount : 0;
+    return new Intl.NumberFormat('fr-FR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(normalized);
   }
 
   private hydrateConsultationReasonsFromRecord(reasonItems: ConsultationReasonItem[]): void {
@@ -3633,6 +3909,158 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
+  private toDateInputValue(iso: string): string {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private fromDateInputValue(value: string): string | null {
+    const trimmed = String(value ?? '').trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = new Date(`${trimmed}T00:00:00`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }
+
+  private buildPatientLetterPdfBlob(office: Office | null, profile: MyUserProfile | null): Blob {
+    const raw = this.patientLetterComposeForm.getRawValue();
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+    const margin = 18;
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const contentWidth = pageWidth - (margin * 2);
+
+    const dateIso = this.fromDateInputValue(String(raw.date ?? '').trim()) ?? new Date().toISOString();
+    const subject = this.normalizeMultilineText(String(raw.subject ?? '').trim() || 'Courrier patient');
+    const recipient = this.normalizeMultilineText(String(raw.recipient ?? '').trim());
+    const content = this.normalizeMultilineText(String(raw.content ?? '').trim());
+
+    const officeName = String(office?.name ?? this.consultationOfficeName() ?? 'Cabinet').trim() || 'Cabinet';
+    const officeHeading = `Cabinet de ${officeName}`;
+    const writerName = profile
+      ? `${String(profile.lastName ?? '').trim().toUpperCase()} ${String(profile.firstName ?? '').trim()}`.trim()
+      : this.authService.username().trim();
+    const writerNameSuffix = String(profile?.nameSuffixText ?? '').trim();
+    const writerLine = [writerName, writerNameSuffix].filter(Boolean).join(' ');
+    const officePhone = String(office?.phoneMobile ?? '').trim() || String(office?.phoneLandline ?? '').trim();
+    const officeEmail = String(office?.email ?? '').trim();
+    const officeWebsite = String(office?.website ?? '').trim().replace(/^https?:\/\//i, '');
+    const patientLine = this.patient()
+      ? this.normalizeMultilineText(`Concernant le patient : ${String(this.patient()?.fullName ?? '').trim()}`)
+      : recipient.split('\n')[0] || '';
+
+    const officeLines = [
+      officeHeading,
+      writerLine,
+      String(office?.addressLine1 ?? '').trim(),
+      `${String(office?.postalCode ?? '').trim()} ${String(office?.city ?? '').trim()}`.trim(),
+      officePhone ? `Port. : ${officePhone}` : '',
+      officeEmail,
+      officeWebsite
+    ].filter(Boolean);
+
+    let y = margin;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(11);
+    let officeY = y;
+    for (const line of officeLines) {
+      if (line === officeHeading) {
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(12.5);
+      } else if (line === writerLine) {
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(11);
+      } else {
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(10.5);
+      }
+      pdf.text(line, margin + 2, officeY);
+      officeY += 6;
+    }
+
+    y = officeY + 26;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(11);
+    pdf.text(`Date : ${this.formatShortDate(dateIso)}`, margin + 2, y);
+    y += 8;
+    if (patientLine) {
+      pdf.text(patientLine, margin + 2, y);
+      y += 10;
+    }
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(subject, margin + 2, y);
+    y += 8;
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10.8);
+    const wrappedContent = pdf.splitTextToSize(content, contentWidth - 4) as string[];
+    pdf.text(wrappedContent, margin + 2, y);
+
+    const contentEndY = y + (wrappedContent.length * 5);
+    const signatureWidth = 58;
+    const signatureHeight = 24;
+    const signatureX = pageWidth - margin - signatureWidth;
+    const minSignatureY = contentEndY + 10;
+    let signatureY = Math.max(minSignatureY, pageHeight - 62);
+
+    if (signatureY + signatureHeight + 14 > pageHeight) {
+      pdf.addPage();
+      signatureY = pageHeight - 62;
+    }
+
+    const signatureRaw = String(profile?.signatureText ?? '').trim();
+    const isSignatureImage = /^data:image\//i.test(signatureRaw);
+    if (isSignatureImage) {
+      try {
+        const format = signatureRaw.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+        pdf.addImage(signatureRaw, format, signatureX, signatureY, signatureWidth, signatureHeight);
+      } catch {
+        pdf.setFont('helvetica', 'italic');
+        pdf.setFontSize(10);
+        pdf.text('Signature', signatureX + signatureWidth, signatureY + 8, { align: 'right' });
+      }
+    } else if (signatureRaw) {
+      pdf.setFont('helvetica', 'italic');
+      pdf.setFontSize(10);
+      const signatureLines = pdf.splitTextToSize(signatureRaw, signatureWidth) as string[];
+      pdf.text(signatureLines, signatureX + signatureWidth, signatureY + 8, { align: 'right' });
+    }
+
+    const footerRaw = this.normalizeMultilineText(String(profile?.letterFooter ?? '').trim());
+    if (footerRaw) {
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      const footerLines = pdf.splitTextToSize(footerRaw, signatureWidth) as string[];
+      pdf.text(footerLines, signatureX + signatureWidth, signatureY + signatureHeight + 5, { align: 'right' });
+    }
+
+    return pdf.output('blob');
+  }
+
+  private buildPatientLetterRecipient(patient: PatientDetail): string {
+    const lastName = String(patient.lastName ?? '').trim().toUpperCase();
+    const firstName = String(patient.firstName ?? '').trim();
+    const nameLine = `${lastName} ${firstName}`.trim() || String(patient.fullName ?? '').trim();
+    const address1 = String(patient.address1 ?? '').trim();
+    const address2 = String(patient.address2 ?? '').trim();
+    const postalCode = String(patient.postalCode ?? '').trim();
+    const city = String(patient.city ?? '').trim();
+    const cityLine = [postalCode, city].filter(Boolean).join(' ').trim();
+    const country = String(patient.country ?? '').trim();
+
+    return [nameLine, address1, address2, cityLine, country].filter(Boolean).join('\n');
   }
 
   private fromDateTimeLocalValue(value: string): string | null {

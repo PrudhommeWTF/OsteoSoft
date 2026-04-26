@@ -398,8 +398,7 @@ db.exec(`
     consultation_profiles_json TEXT NOT NULL DEFAULT '[]',
     payment_reminder_letter_title TEXT NOT NULL DEFAULT '',
     payment_reminder_letter_content TEXT NOT NULL DEFAULT '',
-    patient_letter_title TEXT NOT NULL DEFAULT '',
-    patient_letter_content TEXT NOT NULL DEFAULT '',
+    patient_letters_json TEXT NOT NULL DEFAULT '[]',
     is_active INTEGER NOT NULL DEFAULT 1,
     display_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1183,6 +1182,27 @@ function normalizeOfficeLetterContent(rawValue) {
   return String(rawValue ?? '').trim().slice(0, 20000);
 }
 
+const DEFAULT_PAYMENT_REMINDER_LETTER_TITLE = 'Relance de règlement';
+const DEFAULT_PAYMENT_REMINDER_LETTER_CONTENT = `{$CIVILITE},
+
+Suite à la consultation ostéopathique du {$DATECONSULTATION}, il apparaît que la somme de {$MONTANTCONSULTATION} {$DEVISE} n'a pas été réglée à ce jour. Si ceci n'est pas une erreur de ma part, je vous prie de bien vouloir régulariser cette situation par retour de courrier.
+
+Je vous remercie par avance, et vous prie d'agréer mes sincères salutations.`;
+
+function normalizePatientLetterTemplates(rawValue) {
+  let arr;
+  try {
+    arr = typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue;
+  } catch {
+    arr = [];
+  }
+  if (!Array.isArray(arr)) return [];
+  return arr.map((item) => ({
+    title: String(item?.title ?? '').trim().slice(0, 200),
+    content: String(item?.content ?? '').trim().slice(0, 20000)
+  }));
+}
+
 function readOfficeServiceTypes(officeId) {
   return db
     .prepare(
@@ -1607,8 +1627,7 @@ function mapOfficeRow(row) {
     invoiceTemplateLayoutJson,
     paymentReminderLetterTitle,
     paymentReminderLetterContent,
-    patientLetterTitle,
-    patientLetterContent,
+    patientLettersJson,
     ...officeFields
   } = row;
   const officeId = Number(officeFields.id);
@@ -1626,10 +1645,7 @@ function mapOfficeRow(row) {
       title: normalizeOfficeLetterTitle(paymentReminderLetterTitle),
       content: normalizeOfficeLetterContent(paymentReminderLetterContent)
     },
-    patientLetterTemplate: {
-      title: normalizeOfficeLetterTitle(patientLetterTitle),
-      content: normalizeOfficeLetterContent(patientLetterContent)
-    },
+    patientLetterTemplates: normalizePatientLetterTemplates(patientLettersJson),
     serviceTypes: Number.isInteger(officeId) && officeId > 0 ? readOfficeServiceTypes(officeId) : [],
     paymentMethods: Number.isInteger(officeId) && officeId > 0 ? readOfficePaymentMethods(officeId) : [],
     officeUserDelegations: Number.isInteger(officeId) && officeId > 0 ? readOfficeUserDelegations(officeId) : [],
@@ -4036,8 +4052,7 @@ async function ensureSeedData() {
   ensureColumn('offices', 'consultation_profiles_json', "consultation_profiles_json TEXT NOT NULL DEFAULT '[]'");
   ensureColumn('offices', 'payment_reminder_letter_title', "payment_reminder_letter_title TEXT NOT NULL DEFAULT ''");
   ensureColumn('offices', 'payment_reminder_letter_content', "payment_reminder_letter_content TEXT NOT NULL DEFAULT ''");
-  ensureColumn('offices', 'patient_letter_title', "patient_letter_title TEXT NOT NULL DEFAULT ''");
-  ensureColumn('offices', 'patient_letter_content', "patient_letter_content TEXT NOT NULL DEFAULT ''");
+  ensureColumn('offices', 'patient_letters_json', "patient_letters_json TEXT NOT NULL DEFAULT '[]'");
   ensureColumn('consultations', 'office_id', 'office_id INTEGER');
   ensureColumn('patients', 'office_id', 'office_id INTEGER');
   ensureColumn('patients', 'marital_status', "marital_status TEXT NOT NULL DEFAULT 'Non renseigne'");
@@ -6419,8 +6434,7 @@ app.get('/api/offices', authMiddleware, adminOnlyMiddleware, (_req, res) => {
            consultation_profiles_json as consultationProfilesJson,
            payment_reminder_letter_title as paymentReminderLetterTitle,
            payment_reminder_letter_content as paymentReminderLetterContent,
-           patient_letter_title as patientLetterTitle,
-           patient_letter_content as patientLetterContent,
+           patient_letters_json as patientLettersJson,
            is_active as isActive,
            display_order as displayOrder, created_at as createdAt, updated_at as updatedAt
     FROM offices
@@ -6454,7 +6468,7 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
     vatNumber,
     logoData,
     paymentReminderLetterTemplate,
-    patientLetterTemplate,
+    patientLetterTemplates,
     invoiceTemplateLayoutJson,
     openingHours,
     consultationProfiles,
@@ -6477,10 +6491,13 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
   const normalizedInvoiceHideVatMention = hideVatMention ? 1 : 0;
   const normalizedInvoiceTemplateLayoutJson = normalizeInvoiceTemplateLayoutJson(invoiceTemplateLayoutJson);
   const normalizedConsultationProfiles = normalizeOfficeConsultationProfiles(consultationProfiles);
-  const normalizedPaymentReminderLetterTitle = normalizeOfficeLetterTitle(paymentReminderLetterTemplate?.title);
-  const normalizedPaymentReminderLetterContent = normalizeOfficeLetterContent(paymentReminderLetterTemplate?.content);
-  const normalizedPatientLetterTitle = normalizeOfficeLetterTitle(patientLetterTemplate?.title);
-  const normalizedPatientLetterContent = normalizeOfficeLetterContent(patientLetterTemplate?.content);
+  const normalizedPaymentReminderLetterTitle = normalizeOfficeLetterTitle(
+    paymentReminderLetterTemplate?.title ?? DEFAULT_PAYMENT_REMINDER_LETTER_TITLE
+  );
+  const normalizedPaymentReminderLetterContent = normalizeOfficeLetterContent(
+    paymentReminderLetterTemplate?.content ?? DEFAULT_PAYMENT_REMINDER_LETTER_CONTENT
+  );
+  const normalizedPatientLettersJson = JSON.stringify(normalizePatientLetterTemplates(patientLetterTemplates));
 
   try {
     const maxOrder = db.prepare(`SELECT MAX(display_order) as maxOrder FROM offices`).get() || {};
@@ -6491,8 +6508,8 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
                            invoice_show_insurance_fields, invoice_hide_vat_mention, invoice_template_layout_json, address_line1, address_line2, postal_code, city, phone_mobile,
                            phone_landline, phone_fax, email, website, vat_number, logo_data, opening_hours_json,
                            consultation_profiles_json, payment_reminder_letter_title, payment_reminder_letter_content,
-                           patient_letter_title, patient_letter_content, display_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                           patient_letters_json, display_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = insert.run(
@@ -6505,8 +6522,7 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
       JSON.stringify(normalizedConsultationProfiles),
       normalizedPaymentReminderLetterTitle,
       normalizedPaymentReminderLetterContent,
-      normalizedPatientLetterTitle,
-      normalizedPatientLetterContent,
+      normalizedPatientLettersJson,
       displayOrder
     );
 
@@ -6538,8 +6554,7 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
              consultation_profiles_json as consultationProfilesJson,
              payment_reminder_letter_title as paymentReminderLetterTitle,
              payment_reminder_letter_content as paymentReminderLetterContent,
-             patient_letter_title as patientLetterTitle,
-             patient_letter_content as patientLetterContent,
+             patient_letters_json as patientLettersJson,
              is_active as isActive,
              display_order as displayOrder, created_at as createdAt, updated_at as updatedAt
       FROM offices WHERE id = ?
@@ -6575,7 +6590,7 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
     vatNumber,
     logoData,
     paymentReminderLetterTemplate,
-    patientLetterTemplate,
+    patientLetterTemplates,
     invoiceTemplateLayoutJson,
     openingHours,
     consultationProfiles,
@@ -6601,8 +6616,7 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
   const normalizedConsultationProfiles = normalizeOfficeConsultationProfiles(consultationProfiles);
   const normalizedPaymentReminderLetterTitle = normalizeOfficeLetterTitle(paymentReminderLetterTemplate?.title);
   const normalizedPaymentReminderLetterContent = normalizeOfficeLetterContent(paymentReminderLetterTemplate?.content);
-  const normalizedPatientLetterTitle = normalizeOfficeLetterTitle(patientLetterTemplate?.title);
-  const normalizedPatientLetterContent = normalizeOfficeLetterContent(patientLetterTemplate?.content);
+  const normalizedPatientLettersJson = JSON.stringify(normalizePatientLetterTemplates(patientLetterTemplates));
 
   try {
     const update = db.prepare(`
@@ -6612,7 +6626,7 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
           phone_mobile = ?, phone_landline = ?, phone_fax = ?, email = ?, website = ?,
           vat_number = ?, logo_data = ?, opening_hours_json = ?, consultation_profiles_json = ?,
           payment_reminder_letter_title = ?, payment_reminder_letter_content = ?,
-          patient_letter_title = ?, patient_letter_content = ?,
+          patient_letters_json = ?,
           is_active = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `);
@@ -6627,8 +6641,7 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
       JSON.stringify(normalizedConsultationProfiles),
       normalizedPaymentReminderLetterTitle,
       normalizedPaymentReminderLetterContent,
-      normalizedPatientLetterTitle,
-      normalizedPatientLetterContent,
+      normalizedPatientLettersJson,
       isActive ? 1 : 0,
       officeId
     );
@@ -6650,8 +6663,7 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
                   consultation_profiles_json as consultationProfilesJson,
                   payment_reminder_letter_title as paymentReminderLetterTitle,
                   payment_reminder_letter_content as paymentReminderLetterContent,
-                  patient_letter_title as patientLetterTitle,
-                  patient_letter_content as patientLetterContent,
+                  patient_letters_json as patientLettersJson,
                   is_active as isActive,
              display_order as displayOrder, created_at as createdAt, updated_at as updatedAt
       FROM offices WHERE id = ?

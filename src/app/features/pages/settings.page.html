@@ -2376,128 +2376,8 @@
                       } @else if (officeModalTab() === 'patient-letters') {
                         <div id="office-tab-patient-letters" role="tabpanel">
                           <div class="d-flex flex-column gap-3">
-                            <article class="settings-card mb-0">
-                              <p class="settings-card-status mb-2">Cabinet</p>
-                              <h6 class="settings-card-title mb-2">Lettres de relance paiements</h6>
-                              <div class="row g-3">
-                                <div class="col-12">
-                                  <label class="form-label" for="office-payment-reminder-title">Titre</label>
-                                  <input
-                                    id="office-payment-reminder-title"
-                                    type="text"
-                                    class="form-control"
-                                    formControlName="paymentReminderLetterTitle"
-                                    placeholder="Ex: Relance de reglement"
-                                  />
-                                  <div class="d-flex flex-wrap gap-2 mt-2">
-                                    @for (variable of officeLetterCommonVariables; track variable.token) {
-                                      <button
-                                        type="button"
-                                        class="btn btn-sm btn-outline-secondary"
-                                        [title]="variable.description"
-                                        (click)="insertOfficeLetterVariable('paymentReminderLetterTitle', variable.token, 'office-payment-reminder-title')"
-                                      >
-                                        {{ variable.token }}
-                                      </button>
-                                    }
-                                  </div>
-                                </div>
-                                <div class="col-12">
-                                  <label class="form-label" for="office-payment-reminder-content">Contenu</label>
-                                  <textarea
-                                    id="office-payment-reminder-content"
-                                    class="form-control"
-                                    rows="7"
-                                    formControlName="paymentReminderLetterContent"
-                                    placeholder="Renseignez le contenu de la lettre"
-                                  ></textarea>
-                                  <div class="d-flex flex-wrap gap-2 mt-2">
-                                    @for (variable of officeLetterCommonVariables; track variable.token) {
-                                      <button
-                                        type="button"
-                                        class="btn btn-sm btn-outline-secondary"
-                                        [title]="variable.description"
-                                        (click)="insertOfficeLetterVariable('paymentReminderLetterContent', variable.token, 'office-payment-reminder-content')"
-                                      >
-                                        {{ variable.token }}
-                                      </button>
-                                    }
-                                    @for (variable of officeLetterConsultationVariables; track variable.token) {
-                                      <button
-                                        type="button"
-                                        class="btn btn-sm btn-outline-primary"
-                                        [title]="variable.description"
-                                        (click)="insertOfficeLetterVariable('paymentReminderLetterContent', variable.token, 'office-payment-reminder-content')"
-                                      >
-                                        {{ variable.token }}
-                                      </button>
-                                    }
-                                  </div>
-                                </div>
-                              </div>
-                            </article>
 
-                            <article class="settings-card mb-0">
-                              <p class="settings-card-status mb-2">Cabinet</p>
-                              <h6 class="settings-card-title mb-2">Lettres type aux patient</h6>
-                              <div class="row g-3">
-                                <div class="col-12">
-                                  <label class="form-label" for="office-patient-letter-title">Titre</label>
-                                  <input
-                                    id="office-patient-letter-title"
-                                    type="text"
-                                    class="form-control"
-                                    formControlName="patientLetterTitle"
-                                    placeholder="Ex: Courrier de suivi"
-                                  />
-                                  <div class="d-flex flex-wrap gap-2 mt-2">
-                                    @for (variable of officeLetterCommonVariables; track variable.token) {
-                                      <button
-                                        type="button"
-                                        class="btn btn-sm btn-outline-secondary"
-                                        [title]="variable.description"
-                                        (click)="insertOfficeLetterVariable('patientLetterTitle', variable.token, 'office-patient-letter-title')"
-                                      >
-                                        {{ variable.token }}
-                                      </button>
-                                    }
-                                  </div>
-                                </div>
-                                <div class="col-12">
-                                  <label class="form-label" for="office-patient-letter-content">Contenu</label>
-                                  <textarea
-                                    id="office-patient-letter-content"
-                                    class="form-control"
-                                    rows="7"
-                                    formControlName="patientLetterContent"
-                                    placeholder="Renseignez le contenu de la lettre"
-                                  ></textarea>
-                                  <div class="d-flex flex-wrap gap-2 mt-2">
-                                    @for (variable of officeLetterCommonVariables; track variable.token) {
-                                      <button
-                                        type="button"
-                                        class="btn btn-sm btn-outline-secondary"
-                                        [title]="variable.description"
-                                        (click)="insertOfficeLetterVariable('patientLetterContent', variable.token, 'office-patient-letter-content')"
-                                      >
-                                        {{ variable.token }}
-                                      </button>
-                                    }
-                                    @for (variable of officeLetterConsultationVariables; track variable.token) {
-                                      <button
-                                        type="button"
-                                        class="btn btn-sm btn-outline-primary"
-                                        [title]="variable.description"
-                                        (click)="insertOfficeLetterVariable('patientLetterContent', variable.token, 'office-patient-letter-content')"
-                                      >
-                                        {{ variable.token }}
-                                      </button>
-                                    }
-                                  </div>
-                                </div>
-                              </div>
-                            </article>
-
+                            <!-- Variables reference panel (at top) -->
                             <article class="settings-card mb-0">
                               <p class="settings-card-status mb-2">Variables</p>
                               <h6 class="settings-card-title mb-2">Variables que vous pouvez utiliser dans le contenu</h6>
@@ -2514,6 +2394,201 @@
                                 }
                               </ul>
                             </article>
+
+                            <!-- Sub-tab nav -->
+                            <ul class="nav nav-tabs" role="tablist">
+                              <li class="nav-item" role="presentation">
+                                <button
+                                  type="button"
+                                  class="nav-link"
+                                  [class.active]="activeLetterSubTab() === 'payment-reminder'"
+                                  (click)="activeLetterSubTab.set('payment-reminder')"
+                                  role="tab"
+                                >
+                                  Lettres de relance paiements
+                                </button>
+                              </li>
+                              <li class="nav-item" role="presentation">
+                                <button
+                                  type="button"
+                                  class="nav-link"
+                                  [class.active]="activeLetterSubTab() === 'patient-letters'"
+                                  (click)="activeLetterSubTab.set('patient-letters')"
+                                  role="tab"
+                                >
+                                  Lettres type aux patients
+                                </button>
+                              </li>
+                            </ul>
+
+                            <!-- Payment reminder sub-tab -->
+                            @if (activeLetterSubTab() === 'payment-reminder') {
+                              <article class="settings-card mb-0">
+                                <div class="row g-3">
+                                  <div class="col-12">
+                                    <label class="form-label" for="office-payment-reminder-title">Titre</label>
+                                    <input
+                                      id="office-payment-reminder-title"
+                                      type="text"
+                                      class="form-control"
+                                      formControlName="paymentReminderLetterTitle"
+                                      placeholder="Ex: Relance de reglement"
+                                    />
+                                    <div class="d-flex flex-wrap gap-2 mt-2">
+                                      @for (variable of officeLetterCommonVariables; track variable.token) {
+                                        <button
+                                          type="button"
+                                          class="btn btn-sm btn-outline-secondary"
+                                          [title]="variable.description"
+                                          (click)="insertOfficeLetterVariable('paymentReminderLetterTitle', variable.token, 'office-payment-reminder-title')"
+                                        >
+                                          {{ variable.token }}
+                                        </button>
+                                      }
+                                    </div>
+                                  </div>
+                                  <div class="col-12">
+                                    <label class="form-label" for="office-payment-reminder-content">Contenu</label>
+                                    <textarea
+                                      id="office-payment-reminder-content"
+                                      class="form-control"
+                                      rows="7"
+                                      formControlName="paymentReminderLetterContent"
+                                      placeholder="Renseignez le contenu de la lettre"
+                                    ></textarea>
+                                    <div class="d-flex flex-wrap gap-2 mt-2">
+                                      @for (variable of officeLetterCommonVariables; track variable.token) {
+                                        <button
+                                          type="button"
+                                          class="btn btn-sm btn-outline-secondary"
+                                          [title]="variable.description"
+                                          (click)="insertOfficeLetterVariable('paymentReminderLetterContent', variable.token, 'office-payment-reminder-content')"
+                                        >
+                                          {{ variable.token }}
+                                        </button>
+                                      }
+                                      @for (variable of officeLetterConsultationVariables; track variable.token) {
+                                        <button
+                                          type="button"
+                                          class="btn btn-sm btn-outline-primary"
+                                          [title]="variable.description"
+                                          (click)="insertOfficeLetterVariable('paymentReminderLetterContent', variable.token, 'office-payment-reminder-content')"
+                                        >
+                                          {{ variable.token }}
+                                        </button>
+                                      }
+                                    </div>
+                                  </div>
+                                </div>
+                              </article>
+                            }
+
+                            <!-- Patient letters sub-tab -->
+                            @if (activeLetterSubTab() === 'patient-letters') {
+                              <article class="settings-card mb-0">
+                                <div class="d-flex align-items-center gap-2 mb-3">
+                                  @if (patientLetterTemplates().length > 0) {
+                                    <select
+                                      class="form-select"
+                                      [value]="activePatientLetterIndex()"
+                                      (change)="activePatientLetterIndex.set(+($any($event.target).value))"
+                                    >
+                                      @for (letter of patientLetterTemplates(); track $index) {
+                                        <option [value]="$index">
+                                          {{ letter.title || ('Lettre ' + ($index + 1)) }}
+                                        </option>
+                                      }
+                                    </select>
+                                    <button
+                                      type="button"
+                                      class="btn btn-outline-danger flex-shrink-0"
+                                      [title]="'Supprimer cette lettre'"
+                                      (click)="removePatientLetterTemplate(activePatientLetterIndex())"
+                                    >
+                                      <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                  }
+                                  <button
+                                    type="button"
+                                    class="btn btn-outline-primary flex-shrink-0"
+                                    (click)="addPatientLetterTemplate()"
+                                  >
+                                    <i class="fa-solid fa-plus me-1"></i>
+                                    Nouvelle lettre
+                                  </button>
+                                </div>
+
+                                @if (patientLetterTemplates().length === 0) {
+                                  <div class="border rounded-3 p-4 text-center bg-light-subtle">
+                                    <p class="mb-3 text-muted">Aucune lettre type définie.</p>
+                                    <button type="button" class="btn btn-outline-primary" (click)="addPatientLetterTemplate()">
+                                      <i class="fa-solid fa-plus me-2"></i>
+                                      Créer la première lettre
+                                    </button>
+                                  </div>
+                                } @else {
+                                  <div class="row g-3">
+                                    <div class="col-12">
+                                      <label class="form-label" for="office-patient-letter-title">Titre</label>
+                                      <input
+                                        id="office-patient-letter-title"
+                                        type="text"
+                                        class="form-control"
+                                        [value]="patientLetterTemplates()[activePatientLetterIndex()]?.title ?? ''"
+                                        (input)="updatePatientLetterTemplate(activePatientLetterIndex(), 'title', $any($event.target).value)"
+                                        placeholder="Ex: Courrier de suivi"
+                                      />
+                                      <div class="d-flex flex-wrap gap-2 mt-2">
+                                        @for (variable of officeLetterCommonVariables; track variable.token) {
+                                          <button
+                                            type="button"
+                                            class="btn btn-sm btn-outline-secondary"
+                                            [title]="variable.description"
+                                            (click)="insertPatientLetterVariable(variable.token, 'title', 'office-patient-letter-title')"
+                                          >
+                                            {{ variable.token }}
+                                          </button>
+                                        }
+                                      </div>
+                                    </div>
+                                    <div class="col-12">
+                                      <label class="form-label" for="office-patient-letter-content">Contenu</label>
+                                      <textarea
+                                        id="office-patient-letter-content"
+                                        class="form-control"
+                                        rows="7"
+                                        [value]="patientLetterTemplates()[activePatientLetterIndex()]?.content ?? ''"
+                                        (input)="updatePatientLetterTemplate(activePatientLetterIndex(), 'content', $any($event.target).value)"
+                                        placeholder="Renseignez le contenu de la lettre"
+                                      ></textarea>
+                                      <div class="d-flex flex-wrap gap-2 mt-2">
+                                        @for (variable of officeLetterCommonVariables; track variable.token) {
+                                          <button
+                                            type="button"
+                                            class="btn btn-sm btn-outline-secondary"
+                                            [title]="variable.description"
+                                            (click)="insertPatientLetterVariable(variable.token, 'content', 'office-patient-letter-content')"
+                                          >
+                                            {{ variable.token }}
+                                          </button>
+                                        }
+                                        @for (variable of officeLetterConsultationVariables; track variable.token) {
+                                          <button
+                                            type="button"
+                                            class="btn btn-sm btn-outline-primary"
+                                            [title]="variable.description"
+                                            (click)="insertPatientLetterVariable(variable.token, 'content', 'office-patient-letter-content')"
+                                          >
+                                            {{ variable.token }}
+                                          </button>
+                                        }
+                                      </div>
+                                    </div>
+                                  </div>
+                                }
+                              </article>
+                            }
+
                           </div>
                         </div>
                       }

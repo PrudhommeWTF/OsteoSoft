@@ -27,6 +27,13 @@ type EditableConsultationProfile = {
   reasons: EditableConsultationReason[];
 };
 
+const DEFAULT_PAYMENT_REMINDER_LETTER_TITLE = 'Relance de règlement';
+const DEFAULT_PAYMENT_REMINDER_LETTER_CONTENT = `{$CIVILITE},
+
+Suite à la consultation ostéopathique du {$DATECONSULTATION}, il apparaît que la somme de {$MONTANTCONSULTATION} {$DEVISE} n'a pas été réglée à ce jour. Si ceci n'est pas une erreur de ma part, je vous prie de bien vouloir régulariser cette situation par retour de courrier.
+
+Je vous remercie par avance, et vous prie d'agréer mes sincères salutations.`;
+
 @Component({
   selector: 'app-installation-page',
   imports: [ReactiveFormsModule],
@@ -598,13 +605,10 @@ export class InstallationPage {
       vatNumber: '',
       logoData: raw.logoData.trim(),
       paymentReminderLetterTemplate: {
-        title: '',
-        content: ''
+        title: DEFAULT_PAYMENT_REMINDER_LETTER_TITLE,
+        content: DEFAULT_PAYMENT_REMINDER_LETTER_CONTENT
       },
-      patientLetterTemplate: {
-        title: '',
-        content: ''
-      },
+      patientLetterTemplates: [],
       invoiceTemplateLayoutJson: '{}',
       openingHours: this.officeOpeningHoursDraft(),
       consultationProfiles: this.toOfficeConsultationProfiles(),

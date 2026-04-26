@@ -97,9 +97,7 @@ type EditableOfficeUserDelegation = {
 
 type OfficeLetterControlName =
   | 'paymentReminderLetterTitle'
-  | 'paymentReminderLetterContent'
-  | 'patientLetterTitle'
-  | 'patientLetterContent';
+  | 'paymentReminderLetterContent';
 
 type InvoiceTemplateBlockId =
   | 'logo'
@@ -139,6 +137,12 @@ type UserModalTabDefinition = {
   id: UserModalTabId;
   label: string;
 };
+const DEFAULT_PAYMENT_REMINDER_LETTER_TITLE = 'Relance de règlement';
+const DEFAULT_PAYMENT_REMINDER_LETTER_CONTENT = `{$CIVILITE},
+
+Suite à la consultation ostéopathique du {$DATECONSULTATION}, il apparaît que la somme de {$MONTANTCONSULTATION} {$DEVISE} n'a pas été réglée à ce jour. Si ceci n'est pas une erreur de ma part, je vous prie de bien vouloir régulariser cette situation par retour de courrier.
+
+Je vous remercie par avance, et vous prie d'agréer mes sincères salutations.`;
 
 @Component({
   selector: 'app-settings-page',
@@ -322,8 +326,6 @@ export class SettingsPage implements OnDestroy {
     logoData: [''],
     paymentReminderLetterTitle: ['', [Validators.maxLength(200)]],
     paymentReminderLetterContent: ['', [Validators.maxLength(20_000)]],
-    patientLetterTitle: ['', [Validators.maxLength(200)]],
-    patientLetterContent: ['', [Validators.maxLength(20_000)]],
     invoiceTemplateLayoutJson: ['', [Validators.maxLength(20_000)]],
     openingHoursJson: ['']
   });
@@ -436,6 +438,9 @@ export class SettingsPage implements OnDestroy {
   readonly paymentMethods = signal<EditablePaymentMethod[]>([]);
   readonly consultationProfiles = signal<EditableConsultationProfile[]>([]);
   readonly officeUserDelegations = signal<EditableOfficeUserDelegation[]>([]);
+  readonly patientLetterTemplates = signal<Array<{ title: string; content: string }>>([]);
+  readonly activePatientLetterIndex = signal(0);
+  readonly activeLetterSubTab = signal<'payment-reminder' | 'patient-letters'>('payment-reminder');
   readonly localCalendars = signal<EditableLocalCalendar[]>([]);
   readonly isAgendaSettingsLoading = signal(false);
   readonly isSavingAgendaSettings = signal(false);
@@ -2904,6 +2909,9 @@ export class SettingsPage implements OnDestroy {
         );
         this.consultationProfiles.set(this.toEditableConsultationProfiles(office.consultationProfiles));
         this.officeUserDelegations.set(this.toEditableOfficeUserDelegations(office.officeUserDelegations));
+        this.patientLetterTemplates.set(Array.isArray(office.patientLetterTemplates) ? office.patientLetterTemplates.map(t => ({ title: t.title || '', content: t.content || '' })) : []);
+        this.activePatientLetterIndex.set(0);
+        this.activeLetterSubTab.set('payment-reminder');
         this.officeForm.reset({
           name: office.name,
           defaultSessionDurationMinutes: office.defaultSessionDurationMinutes,
@@ -2924,10 +2932,8 @@ export class SettingsPage implements OnDestroy {
           website: office.website || '',
           vatNumber: office.vatNumber || '',
           logoData: office.logoData || '',
-          paymentReminderLetterTitle: office.paymentReminderLetterTemplate?.title || '',
-          paymentReminderLetterContent: office.paymentReminderLetterTemplate?.content || '',
-          patientLetterTitle: office.patientLetterTemplate?.title || '',
-          patientLetterContent: office.patientLetterTemplate?.content || '',
+          paymentReminderLetterTitle: office.paymentReminderLetterTemplate?.title || DEFAULT_PAYMENT_REMINDER_LETTER_TITLE,
+          paymentReminderLetterContent: office.paymentReminderLetterTemplate?.content || DEFAULT_PAYMENT_REMINDER_LETTER_CONTENT,
           invoiceTemplateLayoutJson: this.stringifyInvoiceTemplateLayout(invoiceTemplateLayout),
           openingHoursJson: JSON.stringify(openingHours)
         });
@@ -2963,14 +2969,15 @@ export class SettingsPage implements OnDestroy {
         website: '',
         vatNumber: '',
         logoData: '',
-        paymentReminderLetterTitle: '',
-        paymentReminderLetterContent: '',
-        patientLetterTitle: '',
-        patientLetterContent: '',
+        paymentReminderLetterTitle: DEFAULT_PAYMENT_REMINDER_LETTER_TITLE,
+        paymentReminderLetterContent: DEFAULT_PAYMENT_REMINDER_LETTER_CONTENT,
         invoiceTemplateLayoutJson: this.stringifyInvoiceTemplateLayout(invoiceTemplateLayout),
         openingHoursJson: JSON.stringify(openingHours)
       });
 
+      this.patientLetterTemplates.set([]);
+      this.activePatientLetterIndex.set(0);
+      this.activeLetterSubTab.set('payment-reminder');
       void this.loadOfficeDraft();
       this.startOfficeDraftAutosave();
     }
@@ -3548,8 +3555,6 @@ export class SettingsPage implements OnDestroy {
       logoData: String(payload.logoData ?? ''),
       paymentReminderLetterTitle: String(payload.paymentReminderLetterTemplate?.title ?? ''),
       paymentReminderLetterContent: String(payload.paymentReminderLetterTemplate?.content ?? ''),
-      patientLetterTitle: String(payload.patientLetterTemplate?.title ?? ''),
-      patientLetterContent: String(payload.patientLetterTemplate?.content ?? ''),
       invoiceTemplateLayoutJson: this.stringifyInvoiceTemplateLayout(
         this.parseInvoiceTemplateLayout(payload.invoiceTemplateLayoutJson)
       ),
@@ -3776,6 +3781,54 @@ export class SettingsPage implements OnDestroy {
     control.setValue(`${currentValue}${separator}${token}`);
   }
 
+  insertPatientLetterVariable(token: string, field: 'title' | 'content', elementId: string): void {
+    const index = this.activePatientLetterIndex();
+    const current = this.patientLetterTemplates()[index];
+    if (!current) return;
+
+    const element = document.getElementById(elementId) as HTMLInputElement | HTMLTextAreaElement | null;
+    const currentValue = field === 'title' ? current.title : current.content;
+
+    let nextValue: string;
+    if (element && typeof element.selectionStart === 'number' && typeof element.selectionEnd === 'number') {
+      const start = element.selectionStart;
+      const end = element.selectionEnd;
+      nextValue = `${currentValue.slice(0, start)}${token}${currentValue.slice(end)}`;
+      this.updatePatientLetterTemplate(index, field, nextValue);
+      setTimeout(() => {
+        element.focus();
+        const nextCaret = start + token.length;
+        element.setSelectionRange(nextCaret, nextCaret);
+      });
+    } else {
+      const separator = currentValue.length > 0 && !currentValue.endsWith(' ') ? ' ' : '';
+      nextValue = `${currentValue}${separator}${token}`;
+      this.updatePatientLetterTemplate(index, field, nextValue);
+    }
+  }
+
+  updatePatientLetterTemplate(index: number, field: 'title' | 'content', value: string): void {
+    const templates = this.patientLetterTemplates().slice();
+    if (index < 0 || index >= templates.length) return;
+    templates[index] = { ...templates[index], [field]: value };
+    this.patientLetterTemplates.set(templates);
+  }
+
+  addPatientLetterTemplate(): void {
+    const templates = this.patientLetterTemplates().slice();
+    templates.push({ title: '', content: '' });
+    this.patientLetterTemplates.set(templates);
+    this.activePatientLetterIndex.set(templates.length - 1);
+  }
+
+  removePatientLetterTemplate(index: number): void {
+    const templates = this.patientLetterTemplates().slice();
+    templates.splice(index, 1);
+    this.patientLetterTemplates.set(templates);
+    const newIndex = Math.max(0, Math.min(index, templates.length - 1));
+    this.activePatientLetterIndex.set(templates.length > 0 ? newIndex : 0);
+  }
+
   officeOpeningHoursSummary(hours?: OfficeOpeningHours): string {
     const openingHours = this.ensureOfficeOpeningHours(hours);
     const daysWithRanges = this.officeWeekDays.filter((day) => openingHours[day].length > 0);
@@ -3821,10 +3874,7 @@ export class SettingsPage implements OnDestroy {
         title: String(raw.paymentReminderLetterTitle ?? '').trim(),
         content: String(raw.paymentReminderLetterContent ?? '').trim()
       },
-      patientLetterTemplate: {
-        title: String(raw.patientLetterTitle ?? '').trim(),
-        content: String(raw.patientLetterContent ?? '').trim()
-      },
+      patientLetterTemplates: this.patientLetterTemplates(),
       invoiceTemplateLayoutJson: this.stringifyInvoiceTemplateLayout(invoiceTemplateLayout),
       openingHours: this.officeOpeningHoursDraft(),
       consultationProfiles: this.toOfficeConsultationProfiles(),
