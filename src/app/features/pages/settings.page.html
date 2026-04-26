@@ -1228,24 +1228,13 @@
                         <button
                           type="button"
                           class="nav-link"
-                          [class.active]="officeModalTab() === 'opening-hours'"
-                          role="tab"
-                          [attr.aria-selected]="officeModalTab() === 'opening-hours'"
-                          [attr.aria-controls]="'office-tab-opening-hours'"
-                          (click)="selectOfficeModalTab('opening-hours')"
-                        >
-                          Horaires
-                        </button>
-                        <button
-                          type="button"
-                          class="nav-link"
                           [class.active]="officeModalTab() === 'agendas'"
                           role="tab"
                           [attr.aria-selected]="officeModalTab() === 'agendas'"
                           [attr.aria-controls]="'office-tab-agendas'"
                           (click)="selectOfficeModalTab('agendas')"
                         >
-                          Agendas
+                          Agenda & horaires
                         </button>
                         <button
                           type="button"
@@ -1256,7 +1245,7 @@
                           [attr.aria-controls]="'office-tab-users-profiles'"
                           (click)="selectOfficeModalTab('users-profiles')"
                         >
-                          User & Profils
+                          Utilisateurs & accès
                         </button>
                         <button
                           type="button"
@@ -1267,7 +1256,7 @@
                           [attr.aria-controls]="'office-tab-consultation-reasons'"
                           (click)="selectOfficeModalTab('consultation-reasons')"
                         >
-                          Profils & motifs
+                          Profils de consult. & motifs
                         </button>
                         <button
                           type="button"
@@ -2079,9 +2068,9 @@
                             </div>
                           </div>
                         </div>
-                      } @else if (officeModalTab() === 'opening-hours') {
-                        <div id="office-tab-opening-hours" role="tabpanel">
-                          <div class="mt-3">
+                      } @else if (officeModalTab() === 'agendas') {
+                        <div id="office-tab-agendas" role="tabpanel">
+                          <div class="mt-3 mb-4">
                             <input type="hidden" formControlName="openingHoursJson" />
                             <div class="d-flex align-items-center justify-content-between mb-2">
                               <h6 class="mb-0">Horaires d'ouverture hebdomadaires</h6>
@@ -2148,9 +2137,7 @@
                               </table>
                             </div>
                           </div>
-                        </div>
-                      } @else if (officeModalTab() === 'agendas') {
-                        <div id="office-tab-agendas" role="tabpanel">
+
                           @if (!editingOfficeId()) {
                             <div class="alert alert-info mb-0">
                               Enregistrez d'abord le cabinet pour configurer ses agendas.
@@ -2264,29 +2251,20 @@
                                   @for (delegation of officeUserDelegations(); track delegation.tempKey) {
                                     <tr>
                                       <td>
-                                        <select
-                                          class="form-select form-select-sm"
-                                          [value]="delegation.userId ?? ''"
-                                          (change)="updateOfficeUserDelegationUser(delegation.tempKey, $any($event.target).value)"
-                                        >
-                                          <option value="">Selectionner un utilisateur</option>
-                                          @for (option of officeDelegationUserOptions(); track option.id) {
-                                            <option [value]="option.id">{{ option.label }}</option>
-                                          }
-                                        </select>
+                                        <span class="fw-semibold">{{ getOfficeDelegationUserLabel(delegation) }}</span>
                                       </td>
                                       <td>
-                                        <select
-                                          class="form-select form-select-sm"
-                                          [value]="delegation.profileId"
-                                          (change)="updateOfficeUserDelegationProfile(delegation.tempKey, $any($event.target).value)"
-                                        >
-                                          @for (profileOption of officeDelegationProfileOptions(); track profileOption.id) {
-                                            <option [value]="profileOption.id">{{ profileOption.label }}</option>
-                                          }
-                                        </select>
+                                        <span class="badge text-bg-light border">{{ getOfficeDelegationProfileLabel(delegation) }}</span>
                                       </td>
                                       <td class="text-end">
+                                        <button
+                                          type="button"
+                                          class="btn btn-sm btn-outline-primary me-2"
+                                          (click)="editOfficeUserDelegation(delegation.tempKey)"
+                                          title="Modifier le role"
+                                        >
+                                          <i class="fa-solid fa-pen"></i>
+                                        </button>
                                         <button
                                           type="button"
                                           class="btn btn-sm btn-outline-danger"
@@ -2397,13 +2375,146 @@
                         </div>
                       } @else if (officeModalTab() === 'patient-letters') {
                         <div id="office-tab-patient-letters" role="tabpanel">
-                          <article class="settings-card mb-0">
-                            <p class="settings-card-status mb-2">Cabinet</p>
-                            <h6 class="settings-card-title mb-2">Lettres types aux patients</h6>
-                            <p class="settings-card-copy mb-0">
-                              Cette configuration est désormais rattachée au cabinet. Les modèles de lettres seront gérés par cabinet.
-                            </p>
-                          </article>
+                          <div class="d-flex flex-column gap-3">
+                            <article class="settings-card mb-0">
+                              <p class="settings-card-status mb-2">Cabinet</p>
+                              <h6 class="settings-card-title mb-2">Lettres de relance paiements</h6>
+                              <div class="row g-3">
+                                <div class="col-12">
+                                  <label class="form-label" for="office-payment-reminder-title">Titre</label>
+                                  <input
+                                    id="office-payment-reminder-title"
+                                    type="text"
+                                    class="form-control"
+                                    formControlName="paymentReminderLetterTitle"
+                                    placeholder="Ex: Relance de reglement"
+                                  />
+                                  <div class="d-flex flex-wrap gap-2 mt-2">
+                                    @for (variable of officeLetterCommonVariables; track variable.token) {
+                                      <button
+                                        type="button"
+                                        class="btn btn-sm btn-outline-secondary"
+                                        [title]="variable.description"
+                                        (click)="insertOfficeLetterVariable('paymentReminderLetterTitle', variable.token, 'office-payment-reminder-title')"
+                                      >
+                                        {{ variable.token }}
+                                      </button>
+                                    }
+                                  </div>
+                                </div>
+                                <div class="col-12">
+                                  <label class="form-label" for="office-payment-reminder-content">Contenu</label>
+                                  <textarea
+                                    id="office-payment-reminder-content"
+                                    class="form-control"
+                                    rows="7"
+                                    formControlName="paymentReminderLetterContent"
+                                    placeholder="Renseignez le contenu de la lettre"
+                                  ></textarea>
+                                  <div class="d-flex flex-wrap gap-2 mt-2">
+                                    @for (variable of officeLetterCommonVariables; track variable.token) {
+                                      <button
+                                        type="button"
+                                        class="btn btn-sm btn-outline-secondary"
+                                        [title]="variable.description"
+                                        (click)="insertOfficeLetterVariable('paymentReminderLetterContent', variable.token, 'office-payment-reminder-content')"
+                                      >
+                                        {{ variable.token }}
+                                      </button>
+                                    }
+                                    @for (variable of officeLetterConsultationVariables; track variable.token) {
+                                      <button
+                                        type="button"
+                                        class="btn btn-sm btn-outline-primary"
+                                        [title]="variable.description"
+                                        (click)="insertOfficeLetterVariable('paymentReminderLetterContent', variable.token, 'office-payment-reminder-content')"
+                                      >
+                                        {{ variable.token }}
+                                      </button>
+                                    }
+                                  </div>
+                                </div>
+                              </div>
+                            </article>
+
+                            <article class="settings-card mb-0">
+                              <p class="settings-card-status mb-2">Cabinet</p>
+                              <h6 class="settings-card-title mb-2">Lettres type aux patient</h6>
+                              <div class="row g-3">
+                                <div class="col-12">
+                                  <label class="form-label" for="office-patient-letter-title">Titre</label>
+                                  <input
+                                    id="office-patient-letter-title"
+                                    type="text"
+                                    class="form-control"
+                                    formControlName="patientLetterTitle"
+                                    placeholder="Ex: Courrier de suivi"
+                                  />
+                                  <div class="d-flex flex-wrap gap-2 mt-2">
+                                    @for (variable of officeLetterCommonVariables; track variable.token) {
+                                      <button
+                                        type="button"
+                                        class="btn btn-sm btn-outline-secondary"
+                                        [title]="variable.description"
+                                        (click)="insertOfficeLetterVariable('patientLetterTitle', variable.token, 'office-patient-letter-title')"
+                                      >
+                                        {{ variable.token }}
+                                      </button>
+                                    }
+                                  </div>
+                                </div>
+                                <div class="col-12">
+                                  <label class="form-label" for="office-patient-letter-content">Contenu</label>
+                                  <textarea
+                                    id="office-patient-letter-content"
+                                    class="form-control"
+                                    rows="7"
+                                    formControlName="patientLetterContent"
+                                    placeholder="Renseignez le contenu de la lettre"
+                                  ></textarea>
+                                  <div class="d-flex flex-wrap gap-2 mt-2">
+                                    @for (variable of officeLetterCommonVariables; track variable.token) {
+                                      <button
+                                        type="button"
+                                        class="btn btn-sm btn-outline-secondary"
+                                        [title]="variable.description"
+                                        (click)="insertOfficeLetterVariable('patientLetterContent', variable.token, 'office-patient-letter-content')"
+                                      >
+                                        {{ variable.token }}
+                                      </button>
+                                    }
+                                    @for (variable of officeLetterConsultationVariables; track variable.token) {
+                                      <button
+                                        type="button"
+                                        class="btn btn-sm btn-outline-primary"
+                                        [title]="variable.description"
+                                        (click)="insertOfficeLetterVariable('patientLetterContent', variable.token, 'office-patient-letter-content')"
+                                      >
+                                        {{ variable.token }}
+                                      </button>
+                                    }
+                                  </div>
+                                </div>
+                              </div>
+                            </article>
+
+                            <article class="settings-card mb-0">
+                              <p class="settings-card-status mb-2">Variables</p>
+                              <h6 class="settings-card-title mb-2">Variables que vous pouvez utiliser dans le contenu</h6>
+                              <p class="settings-card-copy mb-2">Cliquez sur les variables sous chaque champ pour les inserer automatiquement.</p>
+                              <ul class="mb-3">
+                                @for (variable of officeLetterCommonVariables; track variable.token) {
+                                  <li><strong>{{ variable.token }}</strong> : {{ variable.description }}</li>
+                                }
+                              </ul>
+                              <h6 class="settings-card-title mb-2">Variables utilisables pour les courriers liés aux consultations</h6>
+                              <ul class="mb-0">
+                                @for (variable of officeLetterConsultationVariables; track variable.token) {
+                                  <li><strong>{{ variable.token }}</strong> : {{ variable.description }}</li>
+                                }
+                              </ul>
+                            </article>
+                          </div>
                         </div>
                       }
                     </div>
@@ -2448,7 +2559,9 @@
               <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
                   <div class="modal-header bg-primary text-white">
-                    <h4 id="office-delegation-modal-title" class="modal-title h6 mb-0">Ajouter une délégation</h4>
+                    <h4 id="office-delegation-modal-title" class="modal-title h6 mb-0">
+                      {{ isEditingOfficeDelegation() ? 'Modifier le role de cabinet' : 'Ajouter une délégation' }}
+                    </h4>
                     <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeOfficeDelegationModal()"></button>
                   </div>
 
@@ -2457,12 +2570,15 @@
                       <div class="row g-3">
                         <div class="col-12">
                           <label class="form-label" for="office-delegation-user">Compte utilisateur</label>
-                          <select id="office-delegation-user" class="form-select" formControlName="userId">
-                            <option [value]="0">Sélectionner un utilisateur</option>
-                            @for (option of officeDelegationUserOptions(); track option.id) {
+                          <select id="office-delegation-user" class="form-select" formControlName="userId" [disabled]="isEditingOfficeDelegation()">
+                            <option value="">Sélectionner un utilisateur</option>
+                            @for (option of (isEditingOfficeDelegation() ? officeDelegationUserOptions() : officeDelegationAvailableUserOptions()); track option.id) {
                               <option [value]="option.id">{{ option.label }}</option>
                             }
                           </select>
+                          @if (isEditingOfficeDelegation()) {
+                            <div class="form-text">Le compte utilisateur ne peut pas être modifié ici.</div>
+                          }
                         </div>
 
                         <div class="col-12">
@@ -2484,7 +2600,9 @@
 
                     <div class="modal-footer">
                       <button type="button" class="btn btn-outline-secondary" (click)="closeOfficeDelegationModal()">Annuler</button>
-                      <button type="submit" class="btn btn-primary">Ajouter</button>
+                      <button type="submit" class="btn btn-primary" [disabled]="officeDelegationForm.invalid">
+                        {{ isEditingOfficeDelegation() ? 'Enregistrer' : 'Ajouter' }}
+                      </button>
                     </div>
                   </form>
                 </div>

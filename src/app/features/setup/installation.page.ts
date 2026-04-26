@@ -597,6 +597,14 @@ export class InstallationPage {
       website: raw.website.trim(),
       vatNumber: '',
       logoData: raw.logoData.trim(),
+      paymentReminderLetterTemplate: {
+        title: '',
+        content: ''
+      },
+      patientLetterTemplate: {
+        title: '',
+        content: ''
+      },
       invoiceTemplateLayoutJson: '{}',
       openingHours: this.officeOpeningHoursDraft(),
       consultationProfiles: this.toOfficeConsultationProfiles(),

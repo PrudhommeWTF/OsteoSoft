@@ -396,6 +396,10 @@ db.exec(`
     logo_data TEXT,
     opening_hours_json TEXT NOT NULL DEFAULT '{"monday":[],"tuesday":[],"wednesday":[],"thursday":[],"friday":[],"saturday":[],"sunday":[]}',
     consultation_profiles_json TEXT NOT NULL DEFAULT '[]',
+    payment_reminder_letter_title TEXT NOT NULL DEFAULT '',
+    payment_reminder_letter_content TEXT NOT NULL DEFAULT '',
+    patient_letter_title TEXT NOT NULL DEFAULT '',
+    patient_letter_content TEXT NOT NULL DEFAULT '',
     is_active INTEGER NOT NULL DEFAULT 1,
     display_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1171,6 +1175,14 @@ function normalizeInvoiceTemplateLayoutJson(rawValue) {
   return JSON.stringify(normalized);
 }
 
+function normalizeOfficeLetterTitle(rawValue) {
+  return String(rawValue ?? '').trim().slice(0, 200);
+}
+
+function normalizeOfficeLetterContent(rawValue) {
+  return String(rawValue ?? '').trim().slice(0, 20000);
+}
+
 function readOfficeServiceTypes(officeId) {
   return db
     .prepare(
@@ -1246,32 +1258,16 @@ function normalizeOfficeUserDelegationsPayload(officeId, rawDelegations) {
 
   const allowedUserIds = new Set(
     db
-      .prepare(
-        `SELECT DISTINCT user_id
-         FROM user_offices
-         WHERE office_id = ?
-         UNION
-         SELECT user_id
-         FROM office_user_delegations
-         WHERE office_id = ?
-         UNION
-         SELECT id AS user_id
-         FROM users
-         WHERE office_id = ?`
-      )
-      .all(normalizedOfficeId, normalizedOfficeId, normalizedOfficeId)
-      .map((row) => Number(row.user_id))
-      .filter((value) => Number.isInteger(value) && value > 0)
-  );
-
-  if (allowedUserIds.size === 0) {
-    const activeUserIds = db
       .prepare('SELECT id FROM users WHERE is_active = 1 ORDER BY id ASC')
       .all()
       .map((row) => Number(row.id))
-      .filter((value) => Number.isInteger(value) && value > 0);
+      .filter((value) => Number.isInteger(value) && value > 0)
+  );
 
-    for (const userId of activeUserIds) {
+  // Keep previously configured delegations valid even if a delegated user became inactive.
+  for (const row of db.prepare('SELECT user_id FROM office_user_delegations WHERE office_id = ?').all(normalizedOfficeId)) {
+    const userId = Number(row.user_id);
+    if (Number.isInteger(userId) && userId > 0) {
       allowedUserIds.add(userId);
     }
   }
@@ -1605,7 +1601,16 @@ function replaceOfficeBusinessSettings(officeId, serviceTypes, paymentMethods) {
 }
 
 function mapOfficeRow(row) {
-  const { openingHoursJson, consultationProfilesJson, invoiceTemplateLayoutJson, ...officeFields } = row;
+  const {
+    openingHoursJson,
+    consultationProfilesJson,
+    invoiceTemplateLayoutJson,
+    paymentReminderLetterTitle,
+    paymentReminderLetterContent,
+    patientLetterTitle,
+    patientLetterContent,
+    ...officeFields
+  } = row;
   const officeId = Number(officeFields.id);
   return {
     ...officeFields,
@@ -1617,6 +1622,14 @@ function mapOfficeRow(row) {
     alwaysShowSocialSecurityAndMutuelle: Boolean(officeFields.invoiceShowInsuranceFields),
     hideVatMention: Boolean(officeFields.invoiceHideVatMention),
     invoiceTemplateLayoutJson: normalizeInvoiceTemplateLayoutJson(invoiceTemplateLayoutJson),
+    paymentReminderLetterTemplate: {
+      title: normalizeOfficeLetterTitle(paymentReminderLetterTitle),
+      content: normalizeOfficeLetterContent(paymentReminderLetterContent)
+    },
+    patientLetterTemplate: {
+      title: normalizeOfficeLetterTitle(patientLetterTitle),
+      content: normalizeOfficeLetterContent(patientLetterContent)
+    },
     serviceTypes: Number.isInteger(officeId) && officeId > 0 ? readOfficeServiceTypes(officeId) : [],
     paymentMethods: Number.isInteger(officeId) && officeId > 0 ? readOfficePaymentMethods(officeId) : [],
     officeUserDelegations: Number.isInteger(officeId) && officeId > 0 ? readOfficeUserDelegations(officeId) : [],
@@ -4021,6 +4034,10 @@ async function ensureSeedData() {
   ensureColumn('offices', 'invoice_template_layout_json', "invoice_template_layout_json TEXT NOT NULL DEFAULT '{}'");
   ensureColumn('offices', 'opening_hours_json', `opening_hours_json TEXT NOT NULL DEFAULT '{"monday":[],"tuesday":[],"wednesday":[],"thursday":[],"friday":[],"saturday":[],"sunday":[]}'`);
   ensureColumn('offices', 'consultation_profiles_json', "consultation_profiles_json TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn('offices', 'payment_reminder_letter_title', "payment_reminder_letter_title TEXT NOT NULL DEFAULT ''");
+  ensureColumn('offices', 'payment_reminder_letter_content', "payment_reminder_letter_content TEXT NOT NULL DEFAULT ''");
+  ensureColumn('offices', 'patient_letter_title', "patient_letter_title TEXT NOT NULL DEFAULT ''");
+  ensureColumn('offices', 'patient_letter_content', "patient_letter_content TEXT NOT NULL DEFAULT ''");
   ensureColumn('consultations', 'office_id', 'office_id INTEGER');
   ensureColumn('patients', 'office_id', 'office_id INTEGER');
   ensureColumn('patients', 'marital_status', "marital_status TEXT NOT NULL DEFAULT 'Non renseigne'");
@@ -6399,7 +6416,12 @@ app.get('/api/offices', authMiddleware, adminOnlyMiddleware, (_req, res) => {
            postal_code as postalCode, city, phone_mobile as phoneMobile,
            phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
            vat_number as vatNumber, logo_data as logoData, opening_hours_json as openingHoursJson,
-           consultation_profiles_json as consultationProfilesJson, is_active as isActive,
+           consultation_profiles_json as consultationProfilesJson,
+           payment_reminder_letter_title as paymentReminderLetterTitle,
+           payment_reminder_letter_content as paymentReminderLetterContent,
+           patient_letter_title as patientLetterTitle,
+           patient_letter_content as patientLetterContent,
+           is_active as isActive,
            display_order as displayOrder, created_at as createdAt, updated_at as updatedAt
     FROM offices
     ORDER BY display_order ASC, created_at DESC
@@ -6431,6 +6453,8 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
     website,
     vatNumber,
     logoData,
+    paymentReminderLetterTemplate,
+    patientLetterTemplate,
     invoiceTemplateLayoutJson,
     openingHours,
     consultationProfiles,
@@ -6453,6 +6477,10 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
   const normalizedInvoiceHideVatMention = hideVatMention ? 1 : 0;
   const normalizedInvoiceTemplateLayoutJson = normalizeInvoiceTemplateLayoutJson(invoiceTemplateLayoutJson);
   const normalizedConsultationProfiles = normalizeOfficeConsultationProfiles(consultationProfiles);
+  const normalizedPaymentReminderLetterTitle = normalizeOfficeLetterTitle(paymentReminderLetterTemplate?.title);
+  const normalizedPaymentReminderLetterContent = normalizeOfficeLetterContent(paymentReminderLetterTemplate?.content);
+  const normalizedPatientLetterTitle = normalizeOfficeLetterTitle(patientLetterTemplate?.title);
+  const normalizedPatientLetterContent = normalizeOfficeLetterContent(patientLetterTemplate?.content);
 
   try {
     const maxOrder = db.prepare(`SELECT MAX(display_order) as maxOrder FROM offices`).get() || {};
@@ -6462,8 +6490,9 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
       INSERT INTO offices (name, default_session_duration_minutes, country, devise, invoice_number_format, invoice_numbering_configuration,
                            invoice_show_insurance_fields, invoice_hide_vat_mention, invoice_template_layout_json, address_line1, address_line2, postal_code, city, phone_mobile,
                            phone_landline, phone_fax, email, website, vat_number, logo_data, opening_hours_json,
-                           consultation_profiles_json, display_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                           consultation_profiles_json, payment_reminder_letter_title, payment_reminder_letter_content,
+                           patient_letter_title, patient_letter_content, display_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = insert.run(
@@ -6473,7 +6502,12 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
       addressLine1 || null, addressLine2 || null, postalCode || null, city || null,
       phoneMobile || null, phoneLandline || null, phoneFax || null, email || null,
       website || null, vatNumber || null, logoData || null, JSON.stringify(normalizedOpeningHours),
-      JSON.stringify(normalizedConsultationProfiles), displayOrder
+      JSON.stringify(normalizedConsultationProfiles),
+      normalizedPaymentReminderLetterTitle,
+      normalizedPaymentReminderLetterContent,
+      normalizedPatientLetterTitle,
+      normalizedPatientLetterContent,
+      displayOrder
     );
 
     const createdOfficeId = Number(result.lastInsertRowid);
@@ -6501,7 +6535,12 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
              postal_code as postalCode, city, phone_mobile as phoneMobile,
              phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
              vat_number as vatNumber, logo_data as logoData, opening_hours_json as openingHoursJson,
-             consultation_profiles_json as consultationProfilesJson, is_active as isActive,
+             consultation_profiles_json as consultationProfilesJson,
+             payment_reminder_letter_title as paymentReminderLetterTitle,
+             payment_reminder_letter_content as paymentReminderLetterContent,
+             patient_letter_title as patientLetterTitle,
+             patient_letter_content as patientLetterContent,
+             is_active as isActive,
              display_order as displayOrder, created_at as createdAt, updated_at as updatedAt
       FROM offices WHERE id = ?
     `).get(result.lastInsertRowid);
@@ -6535,6 +6574,8 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
     website,
     vatNumber,
     logoData,
+    paymentReminderLetterTemplate,
+    patientLetterTemplate,
     invoiceTemplateLayoutJson,
     openingHours,
     consultationProfiles,
@@ -6558,6 +6599,10 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
   const normalizedInvoiceHideVatMention = hideVatMention ? 1 : 0;
   const normalizedInvoiceTemplateLayoutJson = normalizeInvoiceTemplateLayoutJson(invoiceTemplateLayoutJson);
   const normalizedConsultationProfiles = normalizeOfficeConsultationProfiles(consultationProfiles);
+  const normalizedPaymentReminderLetterTitle = normalizeOfficeLetterTitle(paymentReminderLetterTemplate?.title);
+  const normalizedPaymentReminderLetterContent = normalizeOfficeLetterContent(paymentReminderLetterTemplate?.content);
+  const normalizedPatientLetterTitle = normalizeOfficeLetterTitle(patientLetterTemplate?.title);
+  const normalizedPatientLetterContent = normalizeOfficeLetterContent(patientLetterTemplate?.content);
 
   try {
     const update = db.prepare(`
@@ -6565,7 +6610,10 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
         SET name = ?, default_session_duration_minutes = ?, country = ?, devise = ?, invoice_number_format = ?,
           invoice_numbering_configuration = ?, invoice_show_insurance_fields = ?, invoice_hide_vat_mention = ?, invoice_template_layout_json = ?, address_line1 = ?, address_line2 = ?, postal_code = ?, city = ?,
           phone_mobile = ?, phone_landline = ?, phone_fax = ?, email = ?, website = ?,
-          vat_number = ?, logo_data = ?, opening_hours_json = ?, consultation_profiles_json = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+          vat_number = ?, logo_data = ?, opening_hours_json = ?, consultation_profiles_json = ?,
+          payment_reminder_letter_title = ?, payment_reminder_letter_content = ?,
+          patient_letter_title = ?, patient_letter_content = ?,
+          is_active = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `);
 
@@ -6576,7 +6624,13 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
       addressLine1 || null, addressLine2 || null, postalCode || null, city || null,
       phoneMobile || null, phoneLandline || null, phoneFax || null, email || null,
       website || null, vatNumber || null, logoData || null, JSON.stringify(normalizedOpeningHours),
-      JSON.stringify(normalizedConsultationProfiles), isActive ? 1 : 0, officeId
+      JSON.stringify(normalizedConsultationProfiles),
+      normalizedPaymentReminderLetterTitle,
+      normalizedPaymentReminderLetterContent,
+      normalizedPatientLetterTitle,
+      normalizedPatientLetterContent,
+      isActive ? 1 : 0,
+      officeId
     );
 
     replaceOfficeBusinessSettings(officeId, serviceTypes, paymentMethods);
@@ -6593,7 +6647,12 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
              postal_code as postalCode, city, phone_mobile as phoneMobile,
              phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
              vat_number as vatNumber, logo_data as logoData, opening_hours_json as openingHoursJson,
-             consultation_profiles_json as consultationProfilesJson, is_active as isActive,
+                  consultation_profiles_json as consultationProfilesJson,
+                  payment_reminder_letter_title as paymentReminderLetterTitle,
+                  payment_reminder_letter_content as paymentReminderLetterContent,
+                  patient_letter_title as patientLetterTitle,
+                  patient_letter_content as patientLetterContent,
+                  is_active as isActive,
              display_order as displayOrder, created_at as createdAt, updated_at as updatedAt
       FROM offices WHERE id = ?
     `).get(officeId);

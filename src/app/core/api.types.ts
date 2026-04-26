@@ -1244,6 +1244,11 @@ export type OfficeUserDelegationPayload = {
   profileId: string;
 };
 
+export type OfficeLetterTemplate = {
+  title: string;
+  content: string;
+};
+
 export type Office = {
   id: number;
   name: string;
@@ -1268,6 +1273,8 @@ export type Office = {
   invoiceTemplateLayoutJson: string;
   openingHours?: OfficeOpeningHours;
   consultationProfiles: OfficeConsultationProfile[];
+  paymentReminderLetterTemplate: OfficeLetterTemplate;
+  patientLetterTemplate: OfficeLetterTemplate;
   officeUserDelegations: OfficeUserDelegation[];
   serviceTypes: ServiceTypeSetting[];
   paymentMethods: PaymentMethodSetting[];
@@ -1300,6 +1307,8 @@ export type CreateOfficePayload = {
   invoiceTemplateLayoutJson: string;
   openingHours?: OfficeOpeningHours;
   consultationProfiles: OfficeConsultationProfile[];
+  paymentReminderLetterTemplate: OfficeLetterTemplate;
+  patientLetterTemplate: OfficeLetterTemplate;
   officeUserDelegations: OfficeUserDelegationPayload[];
   serviceTypes: ServiceTypeSetting[];
   paymentMethods: PaymentMethodSetting[];

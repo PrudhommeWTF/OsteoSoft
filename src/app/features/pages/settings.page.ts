@@ -95,6 +95,12 @@ type EditableOfficeUserDelegation = {
   profileId: string;
 };
 
+type OfficeLetterControlName =
+  | 'paymentReminderLetterTitle'
+  | 'paymentReminderLetterContent'
+  | 'patientLetterTitle'
+  | 'patientLetterContent';
+
 type InvoiceTemplateBlockId =
   | 'logo'
   | 'practitioner'
@@ -118,7 +124,6 @@ type OfficeModalTabId =
   | 'general'
   | 'contact-details'
   | 'billing'
-  | 'opening-hours'
   | 'agendas'
   | 'users-profiles'
   | 'consultation-reasons'
@@ -315,6 +320,10 @@ export class SettingsPage implements OnDestroy {
     website: ['', [Validators.maxLength(200)]],
     vatNumber: ['', [Validators.maxLength(30)]],
     logoData: [''],
+    paymentReminderLetterTitle: ['', [Validators.maxLength(200)]],
+    paymentReminderLetterContent: ['', [Validators.maxLength(20_000)]],
+    patientLetterTitle: ['', [Validators.maxLength(200)]],
+    patientLetterContent: ['', [Validators.maxLength(20_000)]],
     invoiceTemplateLayoutJson: ['', [Validators.maxLength(20_000)]],
     openingHoursJson: ['']
   });
@@ -393,6 +402,7 @@ export class SettingsPage implements OnDestroy {
   readonly isServiceTypeModalOpen = signal(false);
   readonly isOfficeDelegationModalOpen = signal(false);
   readonly officeDelegationModalError = signal('');
+  readonly editingOfficeDelegationTempKey = signal<string | null>(null);
   readonly showRgpdPatientPicker = signal(false);
   readonly rgpdPatientSearch = signal('');
   readonly rgpdSearchResults = signal<Patient[]>([]);
@@ -446,7 +456,7 @@ export class SettingsPage implements OnDestroy {
   readonly calendarOptions = ['Tous les calendriers', 'Calendrier personnel'];
   readonly calendarVisibilityOptions = [
     { value: 'all' as const, label: 'Tout le monde' },
-    { value: 'selected' as const, label: 'Comptes sélectionnés' }
+    { value: 'selected' as const, label: 'Selon le profil de l\'utilisateur' }
   ];
   readonly patientRemarksDisplayOptions = [
     { value: 'hidden' as const, label: 'Ne pas afficher' },
@@ -497,6 +507,25 @@ export class SettingsPage implements OnDestroy {
     { key: 'payment', label: 'Moyen de paiement' },
     { key: 'mentions', label: 'Mentions légales' },
     { key: 'signature', label: 'Zone signature' }
+  ];
+  readonly officeLetterCommonVariables: Array<{ token: string; description: string }> = [
+    { token: '{$DATE}', description: 'Date du jour' },
+    { token: '{$CIVILITE}', description: 'Civilite du patient (Monsieur ou Madame)' },
+    { token: '{$NOM}', description: 'Nom du patient' },
+    { token: '{$PRENOM}', description: 'Prenom du patient' },
+    { token: '{$AGE}', description: 'Age du patient' },
+    { token: '{$DATE_NAISSANCE}', description: 'Date de naissance du patient' },
+    { token: '{$DATE_DERNIERE_CONSULTATION}', description: 'Date de la derniere consultation enregistree' },
+    { token: '{$NOMPRATICIEN}', description: 'Nom du praticien connecte' },
+    { token: '{$PRENOMPRATICIEN}', description: 'Prenom du praticien connecte' }
+  ];
+  readonly officeLetterConsultationVariables: Array<{ token: string; description: string }> = [
+    { token: '{$DATECONSULTATION}', description: 'Date de la consultation' },
+    { token: '{$MOTIFSCONSULTATION}', description: 'Motifs de la consultation' },
+    { token: '{$TESTCONSULTATION}', description: 'Tests effectues lors de la consultation' },
+    { token: '{$SCHEMADYSFONCTIONNEL}', description: 'Schema dysfonctionnel de la consultation' },
+    { token: '{$TRAITEMENTCONSULTATION}', description: 'Traitement effectue lors de la consultation' },
+    { token: '{$REMARQUECONSULTATION}', description: 'Remarques et conseils sur la consultation' }
   ];
   readonly officeWeekDays: OfficeWeekDay[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
@@ -706,36 +735,74 @@ export class SettingsPage implements OnDestroy {
       return [] as Array<{ id: number; label: string }>;
     }
 
-    const linkedUsers = this.users().filter((user) => {
-      const linkedOfficeIds = Array.isArray(user.officeIds)
-        ? user.officeIds
-          .map((id) => Number(id))
-          .filter((id) => Number.isInteger(id) && id > 0)
-        : [];
-      const legacyOfficeId = user.officeId != null ? Number(user.officeId) : null;
-      return linkedOfficeIds.includes(officeId) || legacyOfficeId === officeId;
-    });
+    const optionsById = new Map<number, { id: number; label: string }>();
 
-    const sourceUsers = linkedUsers.length > 0
-      ? linkedUsers
-      : this.users().filter((user) => user.isActive);
-
-    return sourceUsers
-      .map((user) => ({
+    // Include all active users
+    for (const user of this.users().filter((u) => u.isActive)) {
+      optionsById.set(user.id, {
         id: user.id,
         label: this.getUserDisplayName(user)
-      }))
+      });
+    }
+
+    // Keep existing delegations displayable even if a user is inactive or no longer linked to this office.
+    for (const delegation of this.officeUserDelegations()) {
+      const delegatedUserId = Number(delegation.userId);
+      if (!Number.isInteger(delegatedUserId) || delegatedUserId <= 0 || optionsById.has(delegatedUserId)) {
+        continue;
+      }
+
+      const user = this.users().find((item) => item.id === delegatedUserId);
+      optionsById.set(delegatedUserId, {
+        id: delegatedUserId,
+        label: user ? this.getUserDisplayName(user) : `Utilisateur #${delegatedUserId} (introuvable)`
+      });
+    }
+
+    return Array.from(optionsById.values())
       .sort((a, b) => a.label.localeCompare(b.label, 'fr'));
   });
 
   readonly officeDelegationProfileOptions = computed(() => {
-    return this.profiles()
-      .map((profile) => ({
+    const optionsById = new Map<string, { id: string; label: string }>();
+
+    for (const profile of this.profiles()) {
+      optionsById.set(profile.id, {
         id: profile.id,
         label: profile.label
-      }))
+      });
+    }
+
+    // Keep existing delegations displayable if a profile was removed from the active list.
+    for (const delegation of this.officeUserDelegations()) {
+      const delegatedProfileId = String(delegation.profileId ?? '').trim();
+      if (!delegatedProfileId || optionsById.has(delegatedProfileId)) {
+        continue;
+      }
+
+      optionsById.set(delegatedProfileId, {
+        id: delegatedProfileId,
+        label: `Profil ${delegatedProfileId} (archivé)`
+      });
+    }
+
+    return Array.from(optionsById.values())
       .sort((a, b) => a.label.localeCompare(b.label, 'fr'));
   });
+
+  /** Users available to receive a new delegation (excludes users who already have one). */
+  readonly officeDelegationAvailableUserOptions = computed(() => {
+    const usedUserIds = new Set(
+      this.officeUserDelegations()
+        .map((item) => Number(item.userId))
+        .filter((id) => Number.isInteger(id) && id > 0)
+    );
+
+    return this.officeDelegationUserOptions()
+      .filter((option) => !usedUserIds.has(option.id));
+  });
+
+  readonly isEditingOfficeDelegation = computed(() => this.editingOfficeDelegationTempKey() !== null);
 
   readonly selectedEditableUser = computed(() => {
     const userId = this.selectedUserId();
@@ -1158,12 +1225,7 @@ export class SettingsPage implements OnDestroy {
       return 'Tout le monde';
     }
 
-    const optionsById = new Map(this.agendaUserVisibilityOptions().map((option) => [option.id, option.label]));
-    const labels = calendar.visibleUserIds
-      .map((id) => optionsById.get(id))
-      .filter((label): label is string => Boolean(label));
-
-    return labels.length > 0 ? labels.join(', ') : 'Aucun compte';
+    return 'Selon le profil de l\'utilisateur';
   }
 
   async saveAgendaSettings(): Promise<void> {
@@ -2862,6 +2924,10 @@ export class SettingsPage implements OnDestroy {
           website: office.website || '',
           vatNumber: office.vatNumber || '',
           logoData: office.logoData || '',
+          paymentReminderLetterTitle: office.paymentReminderLetterTemplate?.title || '',
+          paymentReminderLetterContent: office.paymentReminderLetterTemplate?.content || '',
+          patientLetterTitle: office.patientLetterTemplate?.title || '',
+          patientLetterContent: office.patientLetterTemplate?.content || '',
           invoiceTemplateLayoutJson: this.stringifyInvoiceTemplateLayout(invoiceTemplateLayout),
           openingHoursJson: JSON.stringify(openingHours)
         });
@@ -2897,6 +2963,10 @@ export class SettingsPage implements OnDestroy {
         website: '',
         vatNumber: '',
         logoData: '',
+        paymentReminderLetterTitle: '',
+        paymentReminderLetterContent: '',
+        patientLetterTitle: '',
+        patientLetterContent: '',
         invoiceTemplateLayoutJson: this.stringifyInvoiceTemplateLayout(invoiceTemplateLayout),
         openingHoursJson: JSON.stringify(openingHours)
       });
@@ -2934,6 +3004,7 @@ export class SettingsPage implements OnDestroy {
     this.isOfficeModalOpen.set(false);
     this.isOfficeDelegationModalOpen.set(false);
     this.officeDelegationModalError.set('');
+    this.editingOfficeDelegationTempKey.set(null);
     this.editingOfficeId.set(null);
     this.officeModalTab.set('general');
     this.officeCreateStep.set(1);
@@ -2978,16 +3049,11 @@ export class SettingsPage implements OnDestroy {
 
   addOfficeUserDelegation(): void {
     const profileOptions = this.officeDelegationProfileOptions();
-    const userOptions = this.officeDelegationUserOptions();
-    const usedUserIds = new Set(
-      this.officeUserDelegations()
-        .map((item) => Number(item.userId))
-        .filter((id) => Number.isInteger(id) && id > 0)
-    );
-    const firstAvailableUser = userOptions.find((option) => !usedUserIds.has(option.id))?.id ?? userOptions[0]?.id ?? 0;
+    const availableUsers = this.officeDelegationAvailableUserOptions();
+    this.editingOfficeDelegationTempKey.set(null);
 
     this.officeDelegationForm.reset({
-      userId: firstAvailableUser,
+      userId: availableUsers[0]?.id ?? 0,
       profileId: profileOptions[0]?.id ?? this.superAdminId
     });
     this.officeDelegationModalError.set('');
@@ -2997,6 +3063,22 @@ export class SettingsPage implements OnDestroy {
   closeOfficeDelegationModal(): void {
     this.isOfficeDelegationModalOpen.set(false);
     this.officeDelegationModalError.set('');
+    this.editingOfficeDelegationTempKey.set(null);
+  }
+
+  editOfficeUserDelegation(tempKey: string): void {
+    const delegation = this.officeUserDelegations().find((item) => item.tempKey === tempKey);
+    if (!delegation) {
+      return;
+    }
+
+    this.editingOfficeDelegationTempKey.set(tempKey);
+    this.officeDelegationForm.reset({
+      userId: Number(delegation.userId) || 0,
+      profileId: String(delegation.profileId ?? '').trim() || this.superAdminId
+    });
+    this.officeDelegationModalError.set('');
+    this.isOfficeDelegationModalOpen.set(true);
   }
 
   saveOfficeDelegationFromModal(): void {
@@ -3012,6 +3094,20 @@ export class SettingsPage implements OnDestroy {
 
     if (!Number.isInteger(userId) || userId <= 0 || !profileId) {
       this.officeDelegationModalError.set('Veuillez sélectionner un utilisateur et un profil valides.');
+      return;
+    }
+
+    const editingTempKey = this.editingOfficeDelegationTempKey();
+    if (editingTempKey) {
+      this.officeUserDelegations.update((items) =>
+        items.map((item) =>
+          item.tempKey === editingTempKey
+            ? { ...item, userId, profileId }
+            : item
+        )
+      );
+
+      this.closeOfficeDelegationModal();
       return;
     }
 
@@ -3037,19 +3133,24 @@ export class SettingsPage implements OnDestroy {
     this.officeUserDelegations.update((items) => items.filter((item) => item.tempKey !== tempKey));
   }
 
-  updateOfficeUserDelegationUser(tempKey: string, value: string): void {
-    const parsed = Number(value);
-    const userId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-    this.officeUserDelegations.update((items) =>
-      items.map((item) => (item.tempKey === tempKey ? { ...item, userId } : item))
-    );
+  getOfficeDelegationUserLabel(delegation: EditableOfficeUserDelegation): string {
+    const userId = Number(delegation.userId);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return 'Utilisateur non defini';
+    }
+
+    const userOption = this.officeDelegationUserOptions().find((option) => option.id === userId);
+    return userOption?.label ?? `Utilisateur #${userId} (introuvable)`;
   }
 
-  updateOfficeUserDelegationProfile(tempKey: string, value: string): void {
-    const profileId = String(value ?? '').trim();
-    this.officeUserDelegations.update((items) =>
-      items.map((item) => (item.tempKey === tempKey ? { ...item, profileId } : item))
-    );
+  getOfficeDelegationProfileLabel(delegation: EditableOfficeUserDelegation): string {
+    const profileId = String(delegation.profileId ?? '').trim();
+    if (!profileId) {
+      return 'Profil non defini';
+    }
+
+    const profileOption = this.officeDelegationProfileOptions().find((option) => option.id === profileId);
+    return profileOption?.label ?? `Profil ${profileId} (archivé)`;
   }
 
   removeConsultationProfile(profileTempKey: string): void {
@@ -3445,6 +3546,10 @@ export class SettingsPage implements OnDestroy {
       website: String(payload.website ?? ''),
       vatNumber: '',
       logoData: String(payload.logoData ?? ''),
+      paymentReminderLetterTitle: String(payload.paymentReminderLetterTemplate?.title ?? ''),
+      paymentReminderLetterContent: String(payload.paymentReminderLetterTemplate?.content ?? ''),
+      patientLetterTitle: String(payload.patientLetterTemplate?.title ?? ''),
+      patientLetterContent: String(payload.patientLetterTemplate?.content ?? ''),
       invoiceTemplateLayoutJson: this.stringifyInvoiceTemplateLayout(
         this.parseInvoiceTemplateLayout(payload.invoiceTemplateLayoutJson)
       ),
@@ -3648,6 +3753,29 @@ export class SettingsPage implements OnDestroy {
     this.officeForm.patchValue({ openingHoursJson: JSON.stringify(next) });
   }
 
+  insertOfficeLetterVariable(controlName: OfficeLetterControlName, token: string, elementId: string): void {
+    const control = this.officeForm.controls[controlName];
+    const currentValue = String(control.value ?? '');
+    const element = document.getElementById(elementId) as HTMLInputElement | HTMLTextAreaElement | null;
+
+    if (element && typeof element.selectionStart === 'number' && typeof element.selectionEnd === 'number') {
+      const start = element.selectionStart;
+      const end = element.selectionEnd;
+      const nextValue = `${currentValue.slice(0, start)}${token}${currentValue.slice(end)}`;
+      control.setValue(nextValue);
+
+      setTimeout(() => {
+        element.focus();
+        const nextCaret = start + token.length;
+        element.setSelectionRange(nextCaret, nextCaret);
+      });
+      return;
+    }
+
+    const separator = currentValue.length > 0 && !currentValue.endsWith(' ') ? ' ' : '';
+    control.setValue(`${currentValue}${separator}${token}`);
+  }
+
   officeOpeningHoursSummary(hours?: OfficeOpeningHours): string {
     const openingHours = this.ensureOfficeOpeningHours(hours);
     const daysWithRanges = this.officeWeekDays.filter((day) => openingHours[day].length > 0);
@@ -3689,6 +3817,14 @@ export class SettingsPage implements OnDestroy {
       website: raw.website.trim(),
       vatNumber: raw.vatNumber.trim(),
       logoData: raw.logoData.trim(),
+      paymentReminderLetterTemplate: {
+        title: String(raw.paymentReminderLetterTitle ?? '').trim(),
+        content: String(raw.paymentReminderLetterContent ?? '').trim()
+      },
+      patientLetterTemplate: {
+        title: String(raw.patientLetterTitle ?? '').trim(),
+        content: String(raw.patientLetterContent ?? '').trim()
+      },
       invoiceTemplateLayoutJson: this.stringifyInvoiceTemplateLayout(invoiceTemplateLayout),
       openingHours: this.officeOpeningHoursDraft(),
       consultationProfiles: this.toOfficeConsultationProfiles(),
