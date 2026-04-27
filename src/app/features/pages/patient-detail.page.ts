@@ -1786,7 +1786,11 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     this.isGeneratingConsultationPdf.set(true);
 
     try {
-      const profile = await this.api.getMyUserProfile();
+      const [profile, offices] = await Promise.all([
+        this.api.getMyUserProfile(),
+        this.api.getOffices().catch(() => [] as Office[])
+      ]);
+      const office = this.resolveConsultationBillingOffice(offices);
       const raw = this.consultationEditForm.getRawValue();
       const startedAtIso = this.fromDateTimeLocalValue(raw.startedAtLocal) ?? new Date().toISOString();
       const consultationDate = this.formatConsultationDate(startedAtIso);
@@ -1807,16 +1811,17 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
         y = margin;
       };
 
-      const writeParagraph = (text: string, fontSize = 11, spacingAfter = 4): void => {
+      const writeParagraph = (text: string, fontSize = 10.8, spacingAfter = 4): void => {
         const normalized = this.normalizeMultilineText(text);
         if (!normalized) {
           return;
         }
 
+        pdf.setFont('helvetica', 'normal');
         pdf.setFontSize(fontSize);
-        const lines = pdf.splitTextToSize(normalized, contentWidth) as string[];
+        const lines = pdf.splitTextToSize(normalized, contentWidth - 2) as string[];
         ensureSpace(lines.length * 5 + spacingAfter);
-        pdf.text(lines, margin, y);
+        pdf.text(lines, margin + 2, y);
         y += lines.length * 5 + spacingAfter;
       };
 
@@ -1828,20 +1833,50 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
         ensureSpace(12);
         pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(12);
-        pdf.text(title, margin, y);
+        pdf.setFontSize(11);
+        pdf.text(title, margin + 2, y);
         y += 6;
 
-        pdf.setFont('helvetica', 'normal');
-        writeParagraph(normalized, 11, 6);
+        writeParagraph(normalized, 10.8, 6);
       };
 
-      const letterHeader = this.normalizeMultilineText(profile.letterHeader);
-      const cabinetName = this.normalizeMultilineText(profile.cabinetName || this.consultationOfficeName() || 'Cabinet');
-      const headerText = letterHeader || cabinetName;
+      const officeName = String(office?.name ?? this.consultationOfficeName() ?? 'Cabinet').trim() || 'Cabinet';
+      const officeHeading = `Cabinet de ${officeName}`;
+      const writerName = `${String(profile.lastName ?? '').trim().toUpperCase()} ${String(profile.firstName ?? '').trim()}`.trim();
+      const writerNameSuffix = String(profile.nameSuffixText ?? '').trim();
+      const writerLine = [writerName, writerNameSuffix].filter(Boolean).join(' ');
+      const officePhone = String(office?.phoneMobile ?? '').trim() || String(office?.phoneLandline ?? '').trim();
+      const officeEmail = String(office?.email ?? '').trim();
+      const officeWebsite = String(office?.website ?? '').trim().replace(/^https?:\/\//i, '');
 
-      pdf.setFont('helvetica', 'bold');
-      writeParagraph(headerText, 11, 2);
+      const officeLines = [
+        officeHeading,
+        writerLine,
+        String(office?.addressLine1 ?? '').trim(),
+        `${String(office?.postalCode ?? '').trim()} ${String(office?.city ?? '').trim()}`.trim(),
+        officePhone ? `Port. : ${officePhone}` : '',
+        officeEmail,
+        officeWebsite
+      ].filter(Boolean);
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(11);
+      let officeY = y;
+      for (const line of officeLines) {
+        if (line === officeHeading) {
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(12.5);
+        } else if (line === writerLine) {
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(11);
+        } else {
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(10.5);
+        }
+        pdf.text(line, margin + 2, officeY);
+        officeY += 6;
+      }
+      y = officeY + 6;
 
       ensureSpace(8);
       pdf.setDrawColor(210, 219, 230);
@@ -1854,10 +1889,10 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       y += 8;
 
       pdf.setFont('helvetica', 'normal');
-      writeParagraph(`Patient : ${this.normalizeMultilineText(patient.fullName)}`, 11, 1);
-      writeParagraph(`Date de consultation : ${consultationDate}`, 11, 1);
-      writeParagraph(`Praticien : ${this.normalizeMultilineText(raw.practitioner || '-')}`, 11, 1);
-      writeParagraph(`Titre : ${this.normalizeMultilineText(raw.title || '-')}`, 11, 4);
+      writeParagraph(`Patient : ${this.normalizeMultilineText(patient.fullName)}`, 10.5, 1);
+      writeParagraph(`Date de consultation : ${consultationDate}`, 10.5, 1);
+      writeParagraph(`Praticien : ${this.normalizeMultilineText(raw.practitioner || '-')}`, 10.5, 1);
+      writeParagraph(`Titre : ${this.normalizeMultilineText(raw.title || '-')}`, 10.5, 4);
 
       const selectedReasons = this.consultationSelectedReasonItems()
         .map((item) => {
