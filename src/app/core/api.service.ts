@@ -816,6 +816,13 @@ export class ApiService {
     await firstValueFrom(this.http.delete<void>(`${this.baseUrl}/users/${userId}`));
   }
 
+  async resetUserPassword(userId: number): Promise<string> {
+    const response = await firstValueFrom(
+      this.http.post<{ tempPassword: string }>(`${this.baseUrl}/users/${userId}/reset-password`, {})
+    );
+    return response.tempPassword;
+  }
+
   async downloadDataBackup(): Promise<Blob> {
     return firstValueFrom(
       this.http.get(`${this.baseUrl}/data-management/backup`, {
@@ -853,6 +860,19 @@ export class ApiService {
     const params = new HttpParams().set('limit', String(limit));
     const response = await firstValueFrom(
       this.http.get<{ logs: SystemAuditLog[] }>(`${this.baseUrl}/audit-logs`, { params })
+    );
+
+    return response.logs;
+  }
+
+  async getSetupSecurityAuditLogs(limit = 100, event = ''): Promise<SystemAuditLog[]> {
+    let params = new HttpParams().set('limit', String(limit));
+    if (event.trim().length > 0 && event !== 'all') {
+      params = params.set('event', event.trim());
+    }
+
+    const response = await firstValueFrom(
+      this.http.get<{ logs: SystemAuditLog[] }>(`${this.baseUrl}/audit-logs/security/setup`, { params })
     );
 
     return response.logs;

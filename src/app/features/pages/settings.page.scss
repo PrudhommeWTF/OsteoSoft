@@ -328,8 +328,46 @@
 	color: var(--bs-secondary-color);
 }
 
+.settings-security-panel {
+	border: 1px solid rgba(var(--bs-danger-rgb), 0.28);
+	border-radius: 0.75rem;
+	background: linear-gradient(180deg, rgba(var(--bs-danger-rgb), 0.05), rgba(var(--bs-danger-rgb), 0.02));
+	padding: 1rem;
+}
+
+.settings-security-badge {
+	font-weight: 600;
+	padding: 0.4rem 0.55rem;
+}
+
+.settings-security-table thead th {
+	background: rgba(var(--bs-danger-rgb), 0.08);
+}
+
+.settings-audit-split {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	gap: 1rem;
+}
+
+.settings-audit-subpanel {
+	border: 1px solid var(--bs-border-color);
+	border-radius: 0.75rem;
+	padding: 0.85rem;
+	background: var(--bs-body-bg);
+}
+
+.settings-audit-security-subpanel {
+	border-color: rgba(var(--bs-danger-rgb), 0.3);
+	background: linear-gradient(180deg, rgba(var(--bs-danger-rgb), 0.05), rgba(var(--bs-danger-rgb), 0.02));
+}
+
 @media (max-width: 991px) {
 	.settings-profiles-layout {
+		grid-template-columns: 1fr;
+	}
+
+	.settings-audit-split {
 		grid-template-columns: 1fr;
 	}
 

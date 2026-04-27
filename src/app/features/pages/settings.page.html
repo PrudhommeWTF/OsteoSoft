@@ -431,6 +431,77 @@
             </div>
           </div>
 
+          <article class="settings-security-panel mb-4" aria-label="Incidents de securite setup">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+              <div>
+                <p class="settings-card-status mb-1">Securite setup</p>
+                <h4 class="h6 mb-0">Incidents de configuration initiale</h4>
+              </div>
+
+              <div class="d-flex flex-wrap align-items-center gap-2">
+                <div class="input-group input-group-sm">
+                  <label class="input-group-text" for="setup-security-event">Evenement</label>
+                  <select
+                    id="setup-security-event"
+                    class="form-select"
+                    [value]="selectedSetupSecurityEvent()"
+                    [disabled]="isSetupSecurityLogsLoading()"
+                    (change)="onSetupSecurityEventChange($any($event.target).value || '')"
+                  >
+                    @for (option of setupSecurityEventOptions; track option.value) {
+                      <option [value]="option.value">{{ option.label }}</option>
+                    }
+                  </select>
+                </div>
+
+                <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="isSetupSecurityLogsLoading()" (click)="refreshSetupSecurityLogs()">
+                  <i class="fa-solid fa-rotate me-1"></i>Actualiser incidents
+                </button>
+              </div>
+            </div>
+
+            @if (isSetupSecurityLogsLoading()) {
+              <p class="text-secondary mb-0">Chargement des incidents setup...</p>
+            } @else if (setupSecurityLogsError()) {
+              <div class="alert alert-danger py-2 mb-0" role="alert">{{ setupSecurityLogsError() }}</div>
+            } @else if (setupSecurityLogs().length === 0) {
+              <p class="text-secondary mb-0">Aucun incident setup sur la fenetre selectionnee.</p>
+            } @else {
+              <div class="d-flex flex-wrap gap-2 mb-3">
+                @for (item of setupSecurityIncidentSummary(); track item.event) {
+                  <span class="badge text-bg-light border settings-security-badge">
+                    {{ item.count }} - {{ getSetupSecurityEventLabelByKey(item.event) }}
+                  </span>
+                }
+              </div>
+
+              <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0 settings-security-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Date</th>
+                      <th scope="col">Evenement</th>
+                      <th scope="col">Detail</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (log of setupSecurityLogs(); track log.id) {
+                      <tr>
+                        <td>{{ formatAuditLogDateTime(log.createdAt) }}</td>
+                        <td>
+                          <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle">
+                            {{ getSetupSecurityEventLabel(log.metadata) }}
+                          </span>
+                        </td>
+                        <td class="settings-audit-details">{{ getSetupSecurityPrimaryDetail(log.metadata) }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </article>
+
           @if (isAuditLogsLoading()) {
             <p class="text-secondary mb-0">Chargement des logs d'audit...</p>
           } @else if (auditLogsError()) {
@@ -438,34 +509,126 @@
           } @else if (auditLogs().length === 0) {
             <p class="text-secondary mb-0">Aucun log d'audit disponible.</p>
           } @else {
-            <div class="table-responsive">
-              <table class="table table-sm align-middle settings-audit-table mb-0">
-                <thead>
-                  <tr>
-                    <th scope="col">Date</th>
-                    <th scope="col">Utilisateur</th>
-                    <th scope="col">Action</th>
-                    <th scope="col">Entité</th>
-                    <th scope="col">Détails</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (log of auditLogs(); track log.id) {
-                    <tr>
-                      <td>{{ formatAuditLogDateTime(log.createdAt) }}</td>
-                      <td>{{ log.username }}</td>
-                      <td><span class="badge bg-body-tertiary text-body border">{{ log.action }}</span></td>
-                      <td>
-                        <span class="fw-semibold">{{ log.entity }}</span>
-                        @if (log.entityId) {
-                          <span class="text-secondary">#{{ log.entityId }}</span>
+            <div class="settings-audit-split">
+              <article class="settings-audit-subpanel" aria-label="Journal d'activite">
+                <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                  <p class="settings-card-status mb-0">Activite utilisateur</p>
+                  <span class="badge text-bg-light border">{{ activityAuditLogs().length }}</span>
+                </div>
+
+                @if (activityAuditLogs().length === 0) {
+                  <p class="text-secondary mb-0">Aucune activite utilisateur sur la fenetre selectionnee.</p>
+                } @else {
+                  <div class="table-responsive">
+                    <table class="table table-sm align-middle settings-audit-table mb-0">
+                      <thead>
+                        <tr>
+                          <th scope="col">Date</th>
+                          <th scope="col">Utilisateur</th>
+                          <th scope="col">Action</th>
+                          <th scope="col">Entité</th>
+                          <th scope="col">Détails</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (log of activityAuditLogs(); track log.id) {
+                          <tr>
+                            <td>{{ formatAuditLogDateTime(log.createdAt) }}</td>
+                            <td>{{ log.username }}</td>
+                            <td><span class="badge bg-body-tertiary text-body border">{{ log.action }}</span></td>
+                            <td>
+                              <span class="fw-semibold">{{ log.entity }}</span>
+                              @if (log.entityId) {
+                                <span class="text-secondary">#{{ log.entityId }}</span>
+                              }
+                            </td>
+                            <td class="settings-audit-details">{{ formatAuditLogMetadata(log.metadata) }}</td>
+                          </tr>
                         }
-                      </td>
-                      <td class="settings-audit-details">{{ formatAuditLogMetadata(log.metadata) }}</td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
+                      </tbody>
+                    </table>
+                  </div>
+                }
+              </article>
+
+              <article class="settings-audit-subpanel settings-audit-security-subpanel" aria-label="Journal de securite">
+                <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                  <p class="settings-card-status mb-0">Securite</p>
+                  <span class="badge text-bg-danger-subtle border border-danger-subtle text-danger-emphasis">{{ filteredSecurityAuditLogs().length }}</span>
+                </div>
+
+                <div class="btn-group btn-group-sm mb-3" role="group" aria-label="Filtre par type d'evenement securite">
+                  <button
+                    type="button"
+                    class="btn"
+                    [class.btn-secondary]="selectedSecurityJournalFilter() === 'all'"
+                    [class.btn-outline-secondary]="selectedSecurityJournalFilter() !== 'all'"
+                    (click)="selectedSecurityJournalFilter.set('all')"
+                  >Tous <span class="badge text-bg-light ms-1">{{ securityAuditLogs().length }}</span></button>
+                  <button
+                    type="button"
+                    class="btn"
+                    [class.btn-secondary]="selectedSecurityJournalFilter() === 'auth'"
+                    [class.btn-outline-secondary]="selectedSecurityJournalFilter() !== 'auth'"
+                    (click)="selectedSecurityJournalFilter.set('auth')"
+                  >Auth</button>
+                  <button
+                    type="button"
+                    class="btn"
+                    [class.btn-secondary]="selectedSecurityJournalFilter() === 'setup'"
+                    [class.btn-outline-secondary]="selectedSecurityJournalFilter() !== 'setup'"
+                    (click)="selectedSecurityJournalFilter.set('setup')"
+                  >Setup</button>
+                </div>
+
+                @if (filteredSecurityAuditLogs().length === 0) {
+                  <p class="text-secondary mb-0">Aucun evenement securite sur la fenetre selectionnee.</p>
+                } @else {
+                  <div class="table-responsive">
+                    <table class="table table-sm align-middle settings-audit-table mb-0">
+                      <thead>
+                        <tr>
+                          <th scope="col">Date</th>
+                          <th scope="col">Utilisateur</th>
+                          <th scope="col">Action</th>
+                          <th scope="col">Entité</th>
+                          <th scope="col">Détails</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (log of filteredSecurityAuditLogs(); track log.id) {
+                          @let severity = getSecurityEventSeverity(log.metadata);
+                          <tr [class.table-success]="severity === 'success'" [class.table-warning]="severity === 'warning'" [class.table-danger]="severity === 'danger'">
+                            <td>{{ formatAuditLogDateTime(log.createdAt) }}</td>
+                            <td>{{ log.username }}</td>
+                            <td>
+                              <span
+                                class="badge border"
+                                [class.bg-success-subtle]="severity === 'success'"
+                                [class.text-success-emphasis]="severity === 'success'"
+                                [class.border-success-subtle]="severity === 'success'"
+                                [class.bg-warning-subtle]="severity === 'warning'"
+                                [class.text-warning-emphasis]="severity === 'warning'"
+                                [class.border-warning-subtle]="severity === 'warning'"
+                                [class.bg-danger-subtle]="severity === 'danger'"
+                                [class.text-danger-emphasis]="severity === 'danger'"
+                                [class.border-danger-subtle]="severity === 'danger'"
+                              >{{ log.action }}</span>
+                            </td>
+                            <td>
+                              <span class="fw-semibold">{{ log.entity }}</span>
+                              @if (log.entityId) {
+                                <span class="text-secondary">#{{ log.entityId }}</span>
+                              }
+                            </td>
+                            <td class="settings-audit-details">{{ formatAuditLogMetadata(log.metadata) }}</td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                }
+              </article>
             </div>
           }
         </section>
@@ -654,6 +817,9 @@
                       <th scope="col">Cabinet</th>
                       <th scope="col">Créé le</th>
                       <th scope="col">Actif</th>
+                      @if (isCurrentUserSuperAdmin()) {
+                        <th scope="col" class="text-end">MDP</th>
+                      }
                       <th scope="col" class="text-end">Supprimer</th>
                     </tr>
                   </thead>
@@ -677,6 +843,32 @@
                             {{ user.isActive ? 'Oui' : 'Non' }}
                           </span>
                         </td>
+                        @if (isCurrentUserSuperAdmin()) {
+                          <td class="text-end">
+                            @if (resetPasswordTempResult()?.userId === user.id) {
+                              <div class="d-flex align-items-center justify-content-end gap-1">
+                                <code class="text-danger-emphasis bg-danger-subtle border border-danger-subtle rounded px-2 py-1 small">{{ resetPasswordTempResult()!.tempPassword }}</code>
+                                <button
+                                  type="button"
+                                  class="btn btn-sm btn-outline-secondary"
+                                  title="Effacer"
+                                  (click)="resetPasswordTempResult.set(null)"
+                                ><i class="fa-solid fa-xmark"></i></button>
+                              </div>
+                            } @else {
+                              <button
+                                type="button"
+                                class="btn btn-sm btn-outline-warning"
+                                [disabled]="resettingPasswordUserId() === user.id || !canResetUserPassword(user)"
+                                (click)="resetUserPassword(user)"
+                                title="Réinitialiser le mot de passe"
+                                aria-label="Réinitialiser le mot de passe"
+                              >
+                                <i class="fa-solid fa-key"></i>
+                              </button>
+                            }
+                          </td>
+                        }
                         <td class="text-end">
                           <button
                             type="button"

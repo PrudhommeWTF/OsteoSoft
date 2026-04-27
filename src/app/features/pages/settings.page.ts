@@ -57,6 +57,13 @@ type AccessDomain = {
 
 type AccessDomainId = AccessDomain['id'];
 
+type SetupSecurityEventFilter =
+  | 'all'
+  | 'setup_guard_blocked'
+  | 'setup_rate_limit_blocked'
+  | 'setup_restore_blocked'
+  | 'setup_restore_rejected';
+
 type AccessProfile = {
   id: string;
   label: string;
@@ -361,6 +368,7 @@ export class SettingsPage implements OnDestroy {
   readonly isSearchingRgpdPatients = signal(false);
   readonly isExportingRgpdPatient = signal(false);
   readonly isAuditLogsLoading = signal(false);
+  readonly isSetupSecurityLogsLoading = signal(false);
   readonly isUsersLoading = signal(false);
   readonly isSavingUserProfile = signal(false);
   readonly isCreatingUserAccount = signal(false);
@@ -369,12 +377,15 @@ export class SettingsPage implements OnDestroy {
   readonly isUserModalOpen = signal(false);
   readonly userModalTab = signal<UserModalTabId>('identity');
   readonly deletingUserId = signal<number | null>(null);
+  readonly resettingPasswordUserId = signal<number | null>(null);
+  readonly resetPasswordTempResult = signal<{ userId: number; tempPassword: string } | null>(null);
   readonly userProfileLinkError = signal('');
   readonly userProfileLinkSuccess = signal('');
   readonly userSignatureError = signal('');
   readonly dataManagementError = signal('');
   readonly dataManagementSuccess = signal('');
   readonly auditLogsError = signal('');
+  readonly setupSecurityLogsError = signal('');
   readonly backupReminderError = signal('');
   readonly backupReminderSuccess = signal('');
   readonly selectedBackupFileName = signal('');
@@ -401,6 +412,7 @@ export class SettingsPage implements OnDestroy {
     { id: 'done', label: 'Restauration terminee' }
   ];
   readonly selectedAuditLogLimit = signal(100);
+  readonly selectedSetupSecurityEvent = signal<SetupSecurityEventFilter>('all');
   readonly isServiceTypeModalOpen = signal(false);
   readonly isOfficeDelegationModalOpen = signal(false);
   readonly officeDelegationModalError = signal('');
@@ -416,6 +428,7 @@ export class SettingsPage implements OnDestroy {
   readonly userModalBaselinePayload = signal<UserAccountPayload | null>(null);
   readonly userModalBaselineOfficeIds = signal<number[]>([]);
   readonly auditLogs = signal<SystemAuditLog[]>([]);
+  readonly setupSecurityLogs = signal<SystemAuditLog[]>([]);
   readonly offices = signal<Office[]>([]);
   readonly isOfficesLoading = signal(false);
   readonly isCreatingOffice = signal(false);
@@ -482,6 +495,13 @@ export class SettingsPage implements OnDestroy {
     { id: 'application-rights', label: 'Droits Application' }
   ];
   readonly auditLogLimitOptions = [50, 100, 200, 500];
+  readonly setupSecurityEventOptions: Array<{ value: SetupSecurityEventFilter; label: string }> = [
+    { value: 'all', label: 'Tous les incidents' },
+    { value: 'setup_guard_blocked', label: 'Acces setup bloque' },
+    { value: 'setup_rate_limit_blocked', label: 'Rate-limit setup' },
+    { value: 'setup_restore_blocked', label: 'Restore setup non autorise' },
+    { value: 'setup_restore_rejected', label: 'Restore setup invalide' }
+  ];
   readonly generalDeviseOptions = ['EUR', 'USD', 'CHF', 'GBP', 'CAD'];
   readonly backupReminderOptions = ['Toutes les semaines', 'Tous les 15 jours', 'Tous les mois', 'Tous les 2 mois'] as const;
   readonly dataImportFormatOptions: Array<{ value: DataImportFormat; label: string }> = [
@@ -570,6 +590,47 @@ export class SettingsPage implements OnDestroy {
     return `Brouillon enregistre il y a ${elapsedHours} h`;
   });
 
+  readonly setupSecurityIncidentSummary = computed(() => {
+    const logs = this.setupSecurityLogs();
+    const byEvent = new Map<string, number>();
+
+    for (const log of logs) {
+      const event = String(log.metadata?.['event'] ?? '').trim() || 'inconnu';
+      byEvent.set(event, (byEvent.get(event) ?? 0) + 1);
+    }
+
+    return [...byEvent.entries()]
+      .map(([event, count]) => ({ event, count }))
+      .sort((left, right) => right.count - left.count)
+      .slice(0, 4);
+  });
+
+  readonly activityAuditLogs = computed(() =>
+    this.auditLogs().filter((log) => String(log.action ?? '').toUpperCase() !== 'SECURITY')
+  );
+
+  readonly securityAuditLogs = computed(() =>
+    this.auditLogs().filter((log) => String(log.action ?? '').toUpperCase() === 'SECURITY')
+  );
+
+  readonly selectedSecurityJournalFilter = signal<'all' | 'auth' | 'setup'>('all');
+
+  readonly filteredSecurityAuditLogs = computed(() => {
+    const filter = this.selectedSecurityJournalFilter();
+    const logs = this.securityAuditLogs();
+    if (filter === 'all') return logs;
+    return logs.filter((log) => {
+      const event = String(log.metadata?.['event'] ?? '');
+      if (filter === 'auth') {
+        return event.startsWith('login_') || event.startsWith('unauthenticated_');
+      }
+      if (filter === 'setup') {
+        return event.startsWith('setup_');
+      }
+      return true;
+    });
+  });
+
   private readonly superAdminId = 'super-admin';
   private rightsPersistTimer: ReturnType<typeof setTimeout> | null = null;
   private rgpdSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
@@ -592,6 +653,10 @@ export class SettingsPage implements OnDestroy {
 
   readonly selectedProfileId = signal(this.superAdminId);
   readonly currentUserProfileId = signal(this.superAdminId);
+
+  readonly isCurrentUserSuperAdmin = computed(
+    () => this.currentUserProfileId() === this.superAdminId
+  );
 
   readonly selectedProfile = computed(() => {
     return this.profiles().find((profile) => profile.id === this.selectedProfileId()) ?? this.profiles()[0];
@@ -902,6 +967,10 @@ export class SettingsPage implements OnDestroy {
     if (sectionId === 'audit-logs' && this.auditLogs().length === 0 && !this.isAuditLogsLoading()) {
       void this.loadAuditLogs();
     }
+
+    if (sectionId === 'audit-logs' && this.setupSecurityLogs().length === 0 && !this.isSetupSecurityLogsLoading()) {
+      void this.loadSetupSecurityLogs();
+    }
   }
 
   selectDataManagementTab(tabId: DataManagementTabId): void {
@@ -920,6 +989,22 @@ export class SettingsPage implements OnDestroy {
 
   refreshAuditLogs(): void {
     void this.loadAuditLogs();
+    void this.loadSetupSecurityLogs();
+  }
+
+  onSetupSecurityEventChange(value: string): void {
+    const normalized = String(value ?? '').trim() as SetupSecurityEventFilter;
+    const allowed = this.setupSecurityEventOptions.some((option) => option.value === normalized);
+    if (!allowed) {
+      return;
+    }
+
+    this.selectedSetupSecurityEvent.set(normalized);
+    void this.loadSetupSecurityLogs();
+  }
+
+  refreshSetupSecurityLogs(): void {
+    void this.loadSetupSecurityLogs();
   }
 
   toggleAccordion(accordionId: string): void {
@@ -2153,8 +2238,89 @@ export class SettingsPage implements OnDestroy {
       .join(' | ');
   }
 
+  getSetupSecurityEventLabel(metadata: Record<string, unknown> | null): string {
+    const raw = String(metadata?.['event'] ?? '').trim();
+    if (!raw) {
+      return 'Evenement inconnu';
+    }
+
+    const found = this.setupSecurityEventOptions.find((option) => option.value === raw);
+    return found?.label ?? raw;
+  }
+
+  getSetupSecurityEventLabelByKey(eventKey: string): string {
+    const raw = String(eventKey ?? '').trim();
+    if (!raw) {
+      return 'Evenement inconnu';
+    }
+
+    const found = this.setupSecurityEventOptions.find((option) => option.value === raw);
+    return found?.label ?? raw;
+  }
+
+  getSecurityEventSeverity(metadata: Record<string, unknown> | null): 'success' | 'warning' | 'danger' {
+    const event = String(metadata?.['event'] ?? '').trim();
+    const SUCCESS_EVENTS = new Set(['login_attempt_succeeded']);
+    const WARNING_EVENTS = new Set([
+      'unauthenticated_request_blocked',
+      'login_rate_limit_blocked',
+      'setup_rate_limit_blocked',
+    ]);
+    if (SUCCESS_EVENTS.has(event)) return 'success';
+    if (WARNING_EVENTS.has(event)) return 'warning';
+    return 'danger';
+  }
+
+  getSetupSecurityPrimaryDetail(metadata: Record<string, unknown> | null): string {
+    if (!metadata || !this.isRecord(metadata)) {
+      return '-';
+    }
+
+    const reason = String(metadata['reason'] ?? '').trim();
+    const route = String(metadata['route'] ?? '').trim();
+    const method = String(metadata['method'] ?? '').trim();
+    const remoteAddress = String(metadata['remoteAddress'] ?? '').trim();
+
+    const reasonText = reason || 'raison inconnue';
+    const routeText = route ? `${method || 'METHOD'} ${route}` : '';
+    const addressText = remoteAddress ? `IP: ${remoteAddress}` : '';
+
+    return [reasonText, routeText, addressText].filter((part) => part.length > 0).join(' | ');
+  }
+
   canDeleteUser(user: AccessManagedUser): boolean {
     return user.username !== 'admin';
+  }
+
+  canResetUserPassword(user: AccessManagedUser): boolean {
+    return this.isCurrentUserSuperAdmin() && user.username !== 'admin' && user.id !== this.currentUser()?.id;
+  }
+
+  async resetUserPassword(user: AccessManagedUser): Promise<void> {
+    if (!this.canResetUserPassword(user)) {
+      return;
+    }
+
+    const confirmation = globalThis.confirm(
+      `Réinitialiser le mot de passe de ${user.username} ?\n\nUn mot de passe temporaire sera généré et affiché une seule fois.`
+    );
+    if (!confirmation) {
+      return;
+    }
+
+    this.userProfileLinkError.set('');
+    this.userProfileLinkSuccess.set('');
+    this.resetPasswordTempResult.set(null);
+    this.resettingPasswordUserId.set(user.id);
+
+    try {
+      const tempPassword = await this.api.resetUserPassword(user.id);
+      this.resetPasswordTempResult.set({ userId: user.id, tempPassword });
+    } catch {
+      this.userProfileLinkError.set('Impossible de réinitialiser le mot de passe de ce compte.');
+    } finally {
+      this.resettingPasswordUserId.set(null);
+    }
   }
 
   async deleteUser(user: AccessManagedUser): Promise<void> {
@@ -2577,6 +2743,23 @@ export class SettingsPage implements OnDestroy {
       this.auditLogsError.set('Impossible de charger les logs d\'audit.');
     } finally {
       this.isAuditLogsLoading.set(false);
+    }
+  }
+
+  private async loadSetupSecurityLogs(): Promise<void> {
+    this.isSetupSecurityLogsLoading.set(true);
+    this.setupSecurityLogsError.set('');
+
+    try {
+      const logs = await this.api.getSetupSecurityAuditLogs(
+        this.selectedAuditLogLimit(),
+        this.selectedSetupSecurityEvent()
+      );
+      this.setupSecurityLogs.set(logs);
+    } catch {
+      this.setupSecurityLogsError.set('Impossible de charger les incidents de securite setup.');
+    } finally {
+      this.isSetupSecurityLogsLoading.set(false);
     }
   }
 

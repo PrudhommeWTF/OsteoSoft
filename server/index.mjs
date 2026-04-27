@@ -22,8 +22,25 @@ const port = Number(process.env.API_PORT ?? 3000);
 const dataDir = path.resolve(process.cwd(), 'server/data');
 const dbPath = path.resolve(dataDir, 'osteo.db');
 const jwtSecret = process.env.JWT_SECRET ?? 'dev-only-jwt-secret-change-me';
+const isProduction = process.env.NODE_ENV === 'production';
+const allowRemoteSetup = /^(1|true|yes)$/i.test(String(process.env.ALLOW_REMOTE_SETUP ?? 'false'));
 const SUPER_ADMIN_PROFILE_ID = 'super-admin';
 const requestBodyLimit = process.env.API_BODY_LIMIT ?? '60mb';
+const MAX_PATIENT_DOCUMENT_BYTES = Number(process.env.MAX_PATIENT_DOCUMENT_BYTES ?? 15 * 1024 * 1024);
+const SESSION_COOKIE_NAME = 'os_session';
+const SESSION_COOKIE_PATH = '/';
+const SESSION_REMEMBER_MAX_AGE_MS = Number(process.env.SESSION_REMEMBER_MAX_AGE_MS ?? 12 * 60 * 60 * 1000);
+const SESSION_DEFAULT_MAX_AGE_MS = Number(process.env.SESSION_DEFAULT_MAX_AGE_MS ?? 2 * 60 * 60 * 1000);
+const SESSION_REMEMBER_TTL = process.env.SESSION_REMEMBER_TTL ?? '12h';
+const SESSION_DEFAULT_TTL = process.env.SESSION_DEFAULT_TTL ?? '2h';
+
+if (isProduction && jwtSecret === 'dev-only-jwt-secret-change-me') {
+  throw new Error('JWT_SECRET must be configured in production.');
+}
+
+if (!isProduction && jwtSecret === 'dev-only-jwt-secret-change-me') {
+  console.warn('WARNING: Using development JWT secret. Set JWT_SECRET for safer local environments.');
+}
 
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
@@ -654,9 +671,29 @@ function decryptSensitiveField(cipherText) {
   return decipher.update(encrypted, undefined, 'utf8') + decipher.final('utf8');
 }
 
-function signToken(user) {
+function signTokenForSession(user, remember) {
+  const tokenTtl = remember ? SESSION_REMEMBER_TTL : SESSION_DEFAULT_TTL;
   return jwt.sign({ sub: user.id, role: user.role, username: user.username }, jwtSecret, {
-    expiresIn: '12h'
+    expiresIn: tokenTtl
+  });
+}
+
+function buildSessionCookieOptions(remember) {
+  return {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: isProduction,
+    path: SESSION_COOKIE_PATH,
+    maxAge: remember ? SESSION_REMEMBER_MAX_AGE_MS : SESSION_DEFAULT_MAX_AGE_MS
+  };
+}
+
+function clearSessionCookie(res) {
+  res.clearCookie(SESSION_COOKIE_NAME, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: isProduction,
+    path: SESSION_COOKIE_PATH
   });
 }
 
@@ -757,6 +794,67 @@ function writeAuditLog(userId, action, entity, entityId, metadata = null) {
   db.prepare(
     'INSERT INTO audit_logs (user_id, action, entity, entity_id, metadata) VALUES (?, ?, ?, ?, ?)'
   ).run(userId ?? null, action, entity, entityId ?? null, metadata ? JSON.stringify(metadata) : null);
+}
+
+function shouldAutoTraceRequest(req) {
+  const method = String(req.method ?? '').toUpperCase();
+  if (['OPTIONS', 'HEAD'].includes(method)) {
+    return false;
+  }
+
+  const route = String(req.originalUrl ?? '').split('?')[0];
+  if (!route.startsWith('/api/')) {
+    return false;
+  }
+
+  // Avoid noisy self-referential traces when reading audit endpoints.
+  if (route === '/api/audit-logs' || route === '/api/audit-logs/security/setup') {
+    return false;
+  }
+
+  return true;
+}
+
+function writeAuthSecurityLog(req, event, details = {}) {
+  try {
+    const route = String(req.originalUrl ?? '').split('?')[0] || null;
+    const remoteAddress = String(req.socket?.remoteAddress ?? req.ip ?? '').trim() || null;
+    const forwardedFor = String(req.headers?.['x-forwarded-for'] ?? '').trim() || null;
+    const userAgent = String(req.headers?.['user-agent'] ?? '').trim() || null;
+
+    writeAuditLog(null, 'SECURITY', 'auth', null, {
+      event,
+      method: String(req.method ?? '').toUpperCase(),
+      route,
+      remoteAddress,
+      forwardedFor,
+      userAgent,
+      ...details
+    });
+  } catch (error) {
+    console.warn('Unable to write auth security log:', error instanceof Error ? error.message : error);
+  }
+}
+
+function mapAuditLogRow(row) {
+  let metadata = null;
+
+  try {
+    const parsed = row.metadata ? JSON.parse(row.metadata) : null;
+    metadata = parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    metadata = null;
+  }
+
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    username: row.username ?? 'system',
+    action: row.action,
+    entity: row.entity,
+    entityId: row.entity_id ?? null,
+    metadata
+  };
 }
 
 function getConfigValue(key, fallback) {
@@ -2743,6 +2841,36 @@ function ensureDefaultLocalCalendars() {
 
 const BACKUP_MANIFEST_FORMAT = 'osteosoft-backup';
 const BACKUP_MANIFEST_VERSION = 1;
+const MAX_BACKUP_RESTORE_PAYLOAD_BYTES = Number(process.env.MAX_BACKUP_RESTORE_PAYLOAD_BYTES ?? 35 * 1024 * 1024);
+const MAX_BACKUP_DOCUMENT_PAYLOAD_BYTES = Number(process.env.MAX_BACKUP_DOCUMENT_PAYLOAD_BYTES ?? 20 * 1024 * 1024);
+const BACKUP_COLLECTION_LIMITS = {
+  accessProfiles: Number(process.env.MAX_BACKUP_ACCESS_PROFILES ?? 200),
+  users: Number(process.env.MAX_BACKUP_USERS ?? 500),
+  userOffices: Number(process.env.MAX_BACKUP_USER_OFFICES ?? 3000),
+  officeUserDelegations: Number(process.env.MAX_BACKUP_OFFICE_DELEGATIONS ?? 3000),
+  patients: Number(process.env.MAX_BACKUP_PATIENTS ?? 150000),
+  appointments: Number(process.env.MAX_BACKUP_APPOINTMENTS ?? 300000),
+  invoices: Number(process.env.MAX_BACKUP_INVOICES ?? 300000),
+  invoiceLineItems: Number(process.env.MAX_BACKUP_INVOICE_LINE_ITEMS ?? 1000000),
+  invoicePayments: Number(process.env.MAX_BACKUP_INVOICE_PAYMENTS ?? 500000),
+  accountingExpenses: Number(process.env.MAX_BACKUP_ACCOUNTING_EXPENSES ?? 200000),
+  accountingDeposits: Number(process.env.MAX_BACKUP_ACCOUNTING_DEPOSITS ?? 200000),
+  accountingDepositItems: Number(process.env.MAX_BACKUP_ACCOUNTING_DEPOSIT_ITEMS ?? 500000),
+  accountingOperationMeta: Number(process.env.MAX_BACKUP_ACCOUNTING_META ?? 500000),
+  consultations: Number(process.env.MAX_BACKUP_CONSULTATIONS ?? 300000),
+  consultationReasonItems: Number(process.env.MAX_BACKUP_CONSULTATION_REASON_ITEMS ?? 1200000),
+  consultationSections: Number(process.env.MAX_BACKUP_CONSULTATION_SECTIONS ?? 1500000),
+  antecedentTypes: Number(process.env.MAX_BACKUP_ANTECEDENT_TYPES ?? 200),
+  patientAntecedents: Number(process.env.MAX_BACKUP_PATIENT_ANTECEDENTS ?? 600000),
+  serviceTypes: Number(process.env.MAX_BACKUP_SERVICE_TYPES ?? 5000),
+  paymentMethods: Number(process.env.MAX_BACKUP_PAYMENT_METHODS ?? 5000),
+  localCalendars: Number(process.env.MAX_BACKUP_LOCAL_CALENDARS ?? 5000),
+  directoryContacts: Number(process.env.MAX_BACKUP_DIRECTORY_CONTACTS ?? 300000),
+  patientDocuments: Number(process.env.MAX_BACKUP_PATIENT_DOCUMENTS ?? 150000),
+  config: Number(process.env.MAX_BACKUP_CONFIG_ITEMS ?? 5000),
+  patientDrafts: Number(process.env.MAX_BACKUP_PATIENT_DRAFTS ?? 10000),
+  auditLogs: Number(process.env.MAX_BACKUP_AUDIT_LOGS ?? 1000000)
+};
 
 function parseMajorVersion(version) {
   const normalized = String(version ?? '').trim();
@@ -2789,6 +2917,32 @@ function normalizeBackupEnvelope(backupPayload) {
   const data = backupPayload?.data;
   if (!data || typeof data !== 'object') {
     throw new Error('Format de sauvegarde invalide');
+  }
+
+  const payloadSizeBytes = Buffer.byteLength(JSON.stringify(data), 'utf8');
+  if (payloadSizeBytes > MAX_BACKUP_RESTORE_PAYLOAD_BYTES) {
+    throw new Error('Sauvegarde trop volumineuse pour restauration');
+  }
+
+  for (const [collectionKey, maxItems] of Object.entries(BACKUP_COLLECTION_LIMITS)) {
+    const rows = data[collectionKey];
+    if (!Array.isArray(rows)) {
+      continue;
+    }
+
+    if (rows.length > maxItems) {
+      throw new Error(`Sauvegarde invalide: volume excessif pour ${collectionKey}`);
+    }
+  }
+
+  if (Array.isArray(data.patientDocuments)) {
+    const documentsPayloadBytes = data.patientDocuments.reduce(
+      (total, row) => total + Buffer.byteLength(String(row?.content_cipher ?? ''), 'utf8'),
+      0
+    );
+    if (documentsPayloadBytes > MAX_BACKUP_DOCUMENT_PAYLOAD_BYTES) {
+      throw new Error('Sauvegarde invalide: volume de documents excessif');
+    }
   }
 
   const manifest = backupPayload?.manifest && typeof backupPayload.manifest === 'object'
@@ -5639,6 +5793,30 @@ function normalizeAuditValue(value) {
   return String(value ?? '').trim();
 }
 
+function normalizeBase64Payload(rawValue) {
+  const raw = String(rawValue ?? '').trim();
+  if (!raw) {
+    return '';
+  }
+
+  const marker = 'base64,';
+  const markerIndex = raw.indexOf(marker);
+  const payload = markerIndex >= 0 ? raw.slice(markerIndex + marker.length) : raw;
+  return payload.replace(/\s+/g, '');
+}
+
+function getBase64DecodedByteLength(base64Payload) {
+  if (!base64Payload) {
+    return 0;
+  }
+
+  try {
+    return Buffer.from(base64Payload, 'base64').length;
+  } catch {
+    return 0;
+  }
+}
+
 function buildPatientUpdateChanges(beforeSnapshot, afterSnapshot) {
   const labels = {
     fullName: 'Nom complet',
@@ -5685,9 +5863,13 @@ function buildPatientUpdateChanges(beforeSnapshot, afterSnapshot) {
 }
 
 function authMiddleware(req, res, next) {
-  const token = req.cookies.os_session;
+  const token = req.cookies[SESSION_COOKIE_NAME];
 
   if (!token) {
+    writeAuthSecurityLog(req, 'unauthenticated_request_blocked', {
+      reason: 'missing_session_cookie',
+      statusCode: 401
+    });
     return res.status(401).json({ message: 'Session absente' });
   }
 
@@ -5696,6 +5878,10 @@ function authMiddleware(req, res, next) {
     req.user = payload;
     return next();
   } catch {
+    writeAuthSecurityLog(req, 'unauthenticated_request_blocked', {
+      reason: 'invalid_session_cookie',
+      statusCode: 401
+    });
     return res.status(401).json({ message: 'Session invalide' });
   }
 }
@@ -5713,6 +5899,64 @@ function adminOnlyMiddleware(req, res, next) {
 
   if (req.user.role !== 'admin') {
     return res.status(403).json({ message: 'Acces refuse' });
+  }
+
+  return next();
+}
+
+function isLoopbackAddress(address) {
+  const value = String(address ?? '').trim();
+  if (!value) {
+    return false;
+  }
+
+  return value === '::1' || value === '127.0.0.1' || value === '::ffff:127.0.0.1';
+}
+
+function writeSetupSecurityLog(req, event, details = {}) {
+  try {
+    const remoteAddress = String(req.socket?.remoteAddress ?? req.ip ?? '').trim() || null;
+    const forwardedFor = String(req.headers?.['x-forwarded-for'] ?? '').trim() || null;
+    const userAgent = String(req.headers?.['user-agent'] ?? '').trim() || null;
+
+    writeAuditLog(null, 'SECURITY', 'setup', null, {
+      event,
+      method: req.method,
+      route: req.originalUrl,
+      remoteAddress,
+      forwardedFor,
+      userAgent,
+      ...details
+    });
+  } catch (error) {
+    console.warn('Unable to write setup security log:', error instanceof Error ? error.message : error);
+  }
+}
+
+function setupBootstrapGuard(req, res, next) {
+  const setupStatus = getSetupStatusSnapshot();
+  if (!setupStatus.requiresSetup) {
+    writeSetupSecurityLog(req, 'setup_guard_blocked', {
+      reason: 'setup_not_required',
+      requiresSetup: false,
+      canRestoreWithoutAuth: setupStatus.canRestoreWithoutAuth
+    });
+    return res.status(403).json({ message: 'La configuration initiale n\'est disponible qu\'au premier demarrage' });
+  }
+
+  if (allowRemoteSetup) {
+    return next();
+  }
+
+  const remoteAddress = req.socket?.remoteAddress ?? req.ip;
+  if (!isLoopbackAddress(remoteAddress)) {
+    writeSetupSecurityLog(req, 'setup_guard_blocked', {
+      reason: 'remote_access_forbidden',
+      allowRemoteSetup
+    });
+    return res.status(403).json({
+      message: 'Configuration initiale autorisee uniquement en local. Definissez ALLOW_REMOTE_SETUP=true pour autoriser l\'acces distant.'
+    });
   }
 
   return next();
@@ -6128,7 +6372,54 @@ app.use(cookieParser());
 const loginLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 15,
-  message: { message: 'Trop de tentatives de connexion. Reessayez plus tard.' }
+  handler: (req, res) => {
+    writeAuthSecurityLog(req, 'login_rate_limit_blocked', {
+      reason: 'rate_limit',
+      statusCode: 429,
+      windowMs: 10 * 60 * 1000,
+      maxAttempts: 15,
+      attemptedUsername: String(req.body?.username ?? '').trim().slice(0, 120) || null
+    });
+    return res.status(429).json({ message: 'Trop de tentatives de connexion. Reessayez plus tard.' });
+  }
+});
+
+const setupLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  handler: (req, res) => {
+    writeSetupSecurityLog(req, 'setup_rate_limit_blocked', {
+      reason: 'rate_limit',
+      windowMs: 10 * 60 * 1000,
+      maxAttempts: 10
+    });
+    return res.status(429).json({ message: 'Trop de tentatives de configuration initiale. Reessayez plus tard.' });
+  }
+});
+
+app.use((req, res, next) => {
+  const startedAt = Date.now();
+
+  res.on('finish', () => {
+    if (!req.user?.sub || !shouldAutoTraceRequest(req)) {
+      return;
+    }
+
+    const route = String(req.originalUrl ?? '').split('?')[0];
+    const durationMs = Math.max(0, Date.now() - startedAt);
+    const statusCode = Number(res.statusCode) || 0;
+
+    writeAuditLog(req.user.sub, 'REQUEST', 'user-action', null, {
+      source: 'auto',
+      method: String(req.method ?? '').toUpperCase(),
+      route,
+      statusCode,
+      success: statusCode > 0 && statusCode < 400,
+      durationMs
+    });
+  });
+
+  return next();
 });
 
 app.get('/api/health', (_req, res) => {
@@ -7471,14 +7762,22 @@ app.get('/api/data-management/backup', authMiddleware, adminOnlyMiddleware, asyn
   return res.status(200).send(archive);
 });
 
-app.post('/api/setup/restore', (req, res) => {
+app.post('/api/setup/restore', setupLimiter, setupBootstrapGuard, (req, res) => {
   const setupStatus = getSetupStatusSnapshot();
   if (!setupStatus.canRestoreWithoutAuth) {
+    writeSetupSecurityLog(req, 'setup_restore_blocked', {
+      reason: 'restore_not_allowed_without_auth',
+      canRestoreWithoutAuth: setupStatus.canRestoreWithoutAuth
+    });
     return res.status(403).json({ message: 'La restauration initiale n\'est disponible qu\'au premier demarrage' });
   }
 
   const parsed = dataRestoreSchema.safeParse(req.body);
   if (!parsed.success) {
+    writeSetupSecurityLog(req, 'setup_restore_rejected', {
+      reason: 'invalid_backup_payload',
+      issuesCount: parsed.error.issues.length
+    });
     return res.status(400).json({ message: 'Fichier de sauvegarde invalide' });
   }
 
@@ -7487,15 +7786,15 @@ app.post('/api/setup/restore', (req, res) => {
     return res.status(204).send();
   } catch (error) {
     const message = error instanceof Error ? error.message : 'La restauration de la sauvegarde a echoue';
+    writeSetupSecurityLog(req, 'setup_restore_rejected', {
+      reason: 'restore_failed',
+      errorMessage: message
+    });
     return res.status(400).json({ message });
   }
 });
 
-app.post('/api/setup/office', async (req, res) => {
-  const setupStatus = getSetupStatusSnapshot();
-  if (!setupStatus.requiresSetup) {
-    return res.status(403).json({ message: 'La configuration initiale n\'est disponible qu\'au premier demarrage' });
-  }
+app.post('/api/setup/office', setupLimiter, setupBootstrapGuard, async (req, res) => {
 
   const {
     name,
@@ -7606,11 +7905,7 @@ app.post('/api/setup/office', async (req, res) => {
   }
 });
 
-app.post('/api/setup/demo', async (_req, res) => {
-  const setupStatus = getSetupStatusSnapshot();
-  if (!setupStatus.requiresSetup) {
-    return res.status(403).json({ message: 'La configuration de demonstration n\'est disponible qu\'au premier demarrage' });
-  }
+app.post('/api/setup/demo', setupLimiter, setupBootstrapGuard, async (_req, res) => {
 
   try {
     const result = await installDemoInstanceData();
@@ -7660,28 +7955,33 @@ app.get('/api/audit-logs', authMiddleware, adminOnlyMiddleware, (req, res) => {
     )
     .all(limit);
 
-  const logs = rows.map((row) => {
-    let metadata = null;
-
-    try {
-      const parsed = row.metadata ? JSON.parse(row.metadata) : null;
-      metadata = parsed && typeof parsed === 'object' ? parsed : null;
-    } catch {
-      metadata = null;
-    }
-
-    return {
-      id: row.id,
-      createdAt: row.created_at,
-      username: row.username ?? 'system',
-      action: row.action,
-      entity: row.entity,
-      entityId: row.entity_id ?? null,
-      metadata
-    };
-  });
+  const logs = rows.map(mapAuditLogRow);
 
   return res.json({ logs });
+});
+
+app.get('/api/audit-logs/security/setup', authMiddleware, adminOnlyMiddleware, (req, res) => {
+  const rawLimit = Number(req.query.limit ?? 100);
+  const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.trunc(rawLimit), 1), 500) : 100;
+  const eventFilter = String(req.query.event ?? '').trim();
+
+  const rows = db
+    .prepare(
+      `SELECT l.id, l.created_at, l.action, l.entity, l.entity_id, l.metadata, u.username
+       FROM audit_logs l
+       LEFT JOIN users u ON u.id = l.user_id
+       WHERE l.action = 'SECURITY' AND l.entity = 'setup'
+       ORDER BY datetime(l.created_at) DESC, l.id DESC
+       LIMIT ?`
+    )
+    .all(Math.min(Math.max(limit * 5, 100), 2000));
+
+  const filteredLogs = rows
+    .map(mapAuditLogRow)
+    .filter((log) => (eventFilter ? String(log.metadata?.event ?? '') === eventFilter : true))
+    .slice(0, limit);
+
+  return res.json({ logs: filteredLogs });
 });
 
 app.get('/api/patient-drafts/new-patient', authMiddleware, (req, res) => {
@@ -8519,6 +8819,38 @@ app.delete('/api/users/:id', authMiddleware, adminOnlyMiddleware, (req, res) => 
   return res.status(204).send();
 });
 
+app.post('/api/users/:id/reset-password', authMiddleware, adminOnlyMiddleware, async (req, res) => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ message: 'ID utilisateur invalide' });
+  }
+
+  const targetUser = db.prepare('SELECT id, username, role FROM users WHERE id = ?').get(userId);
+  if (!targetUser) {
+    return res.status(404).json({ message: 'Utilisateur introuvable' });
+  }
+
+  if (targetUser.username === 'admin') {
+    return res.status(403).json({ message: 'Le mot de passe du compte admin ne peut pas être réinitialisé via cette interface' });
+  }
+
+  if (req.user.sub === userId) {
+    return res.status(403).json({ message: 'Vous ne pouvez pas réinitialiser votre propre mot de passe via cette interface' });
+  }
+
+  const tempPassword = crypto.randomBytes(8).toString('hex');
+  const hashedPassword = await argon2.hash(tempPassword);
+
+  db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashedPassword, userId);
+
+  writeAuditLog(req.user.sub, 'UPDATE', 'users', String(userId), {
+    action: 'admin_password_reset',
+    targetUsername: targetUser.username,
+  });
+
+  return res.status(200).json({ tempPassword });
+});
+
 app.put('/api/users/:id/access-profile', authMiddleware, adminOnlyMiddleware, (req, res) => {
   const userId = Number(req.params.id);
   if (!Number.isInteger(userId) || userId <= 0) {
@@ -8699,8 +9031,16 @@ app.put('/api/auth/me/access-profile', authMiddleware, adminOnlyMiddleware, (req
 app.post('/api/auth/login', loginLimiter, async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
+    writeAuthSecurityLog(req, 'login_attempt_rejected', {
+      reason: 'invalid_payload',
+      statusCode: 400,
+      attemptedUsername: String(req.body?.username ?? '').trim().slice(0, 120) || null,
+      issuesCount: parsed.error.issues.length
+    });
     return res.status(400).json({ message: 'Payload invalide' });
   }
+
+  const attemptedUsername = parsed.data.username.trim().slice(0, 120);
 
   const user = db
     .prepare(
@@ -8712,27 +9052,45 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
     .get(parsed.data.username);
 
   if (!user) {
+    writeAuthSecurityLog(req, 'login_attempt_failed', {
+      reason: 'unknown_user',
+      statusCode: 401,
+      attemptedUsername
+    });
     return res.status(401).json({ message: 'Identifiants invalides' });
   }
 
   if (!user.is_active) {
+    writeAuthSecurityLog(req, 'login_attempt_failed', {
+      reason: 'inactive_user',
+      statusCode: 403,
+      attemptedUsername,
+      userId: Number(user.id)
+    });
     return res.status(403).json({ message: 'Compte desactive' });
   }
 
   const validPassword = await argon2.verify(user.password_hash, parsed.data.password);
   if (!validPassword) {
+    writeAuthSecurityLog(req, 'login_attempt_failed', {
+      reason: 'invalid_password',
+      statusCode: 401,
+      attemptedUsername,
+      userId: Number(user.id)
+    });
     return res.status(401).json({ message: 'Identifiants invalides' });
   }
 
-  const token = signToken(user);
-  res.cookie('os_session', token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: parsed.data.remember ? 12 * 60 * 60 * 1000 : undefined
-  });
+  const token = signTokenForSession(user, Boolean(parsed.data.remember));
+  res.cookie(SESSION_COOKIE_NAME, token, buildSessionCookieOptions(Boolean(parsed.data.remember)));
 
   writeAuditLog(user.id, 'LOGIN', 'auth', String(user.id));
+  writeAuthSecurityLog(req, 'login_attempt_succeeded', {
+    reason: 'authenticated',
+    statusCode: 200,
+    attemptedUsername,
+    userId: Number(user.id)
+  });
 
   const access = getUserAccessContext(user.id);
 
@@ -8751,7 +9109,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
 });
 
 app.post('/api/auth/logout', authMiddleware, (req, res) => {
-  res.clearCookie('os_session');
+  clearSessionCookie(res);
   writeAuditLog(req.user.sub, 'LOGOUT', 'auth', String(req.user.sub));
   res.status(204).send();
 });
@@ -9556,17 +9914,19 @@ app.get('/api/patient-documents/:documentRef', authMiddleware, requirePermission
     return res.status(404).json({ message: 'Document introuvable' });
   }
 
-  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(Number(row.patient_id));
+  const patient = db.prepare('SELECT id, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(Number(row.patient_id));
   if (!patient) {
     return res.status(404).json({ message: 'Patient introuvable' });
   }
 
+  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
   const documentOfficeId = row.office_id != null ? Number(row.office_id) : null;
-  if (documentOfficeId !== null) {
+  const effectiveOfficeId = documentOfficeId ?? patientOfficeId;
+  if (effectiveOfficeId !== null) {
     const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
     if (!isAdmin) {
       const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
-      if (!accessibleOfficeIds.includes(documentOfficeId)) {
+      if (!accessibleOfficeIds.includes(effectiveOfficeId)) {
         return res.status(403).json({ message: 'Accès refusé - document d\'un autre cabinet' });
       }
     }
@@ -9614,18 +9974,44 @@ app.post('/api/patients/:id/documents', authMiddleware, requirePermission('creat
 
   const fileName = String(req.body?.fileName ?? '').trim();
   const mimeType = String(req.body?.mimeType ?? 'application/octet-stream').trim() || 'application/octet-stream';
-  const sizeBytes = Math.max(0, Number(req.body?.sizeBytes) || 0);
+  const declaredSizeBytes = Math.max(0, Number(req.body?.sizeBytes) || 0);
   const title = String(req.body?.title ?? '').trim();
   const comment = String(req.body?.comment ?? '').trim();
-  const contentBase64 = String(req.body?.contentBase64 ?? '').trim();
+  const contentBase64 = normalizeBase64Payload(req.body?.contentBase64);
   const officeIdRaw = Number(req.body?.officeId);
   const consultationIdRaw = Number(req.body?.consultationId);
-  const officeId = Number.isInteger(officeIdRaw) && officeIdRaw > 0 ? officeIdRaw : null;
+  const requestedOfficeId = Number.isInteger(officeIdRaw) && officeIdRaw > 0 ? officeIdRaw : null;
   const consultationId = Number.isInteger(consultationIdRaw) && consultationIdRaw > 0 ? consultationIdRaw : null;
 
   if (!fileName || !contentBase64) {
     return res.status(400).json({ message: 'Fichier invalide' });
   }
+
+  if (fileName.length > 255) {
+    return res.status(400).json({ message: 'Nom de fichier invalide' });
+  }
+
+  const contentSizeBytes = getBase64DecodedByteLength(contentBase64);
+  if (contentSizeBytes <= 0) {
+    return res.status(400).json({ message: 'Contenu du fichier invalide' });
+  }
+
+  if (contentSizeBytes > MAX_PATIENT_DOCUMENT_BYTES) {
+    return res.status(413).json({ message: `Fichier trop volumineux (max ${Math.floor(MAX_PATIENT_DOCUMENT_BYTES / (1024 * 1024))} Mo)` });
+  }
+
+  if (declaredSizeBytes > 0) {
+    const delta = Math.abs(declaredSizeBytes - contentSizeBytes);
+    if (delta > 2048) {
+      return res.status(400).json({ message: 'Taille de fichier incoherente' });
+    }
+  }
+
+  if (requestedOfficeId !== null && patientOfficeId !== null && requestedOfficeId !== patientOfficeId) {
+    return res.status(400).json({ message: 'Cabinet du document incoherent avec le patient' });
+  }
+
+  const officeId = patientOfficeId ?? requestedOfficeId;
 
   if (consultationId !== null) {
     const consultation = db
@@ -9650,7 +10036,7 @@ app.post('/api/patients/:id/documents', authMiddleware, requirePermission('creat
     req.user.sub,
     fileName,
     mimeType,
-    sizeBytes,
+    contentSizeBytes,
     title ? encryptSensitiveField(title) : null,
     comment ? encryptSensitiveField(comment) : null,
     encryptSensitiveField(contentBase64)
@@ -9664,7 +10050,7 @@ app.post('/api/patients/:id/documents', authMiddleware, requirePermission('creat
       officeId,
       fileName,
       mimeType,
-      sizeBytes,
+      sizeBytes: contentSizeBytes,
       title,
       comment,
       createdAt: new Date().toISOString(),
@@ -9680,7 +10066,7 @@ app.patch('/api/patient-documents/:documentRef', authMiddleware, requirePermissi
   }
 
   const row = db.prepare(
-    `SELECT id, document_ref, consultation_id, office_id, file_name, mime_type, size_bytes, created_at
+    `SELECT id, document_ref, patient_id, consultation_id, office_id, file_name, mime_type, size_bytes, created_at
      FROM patient_documents
      WHERE document_ref = ?
      LIMIT 1`
@@ -9690,12 +10076,19 @@ app.patch('/api/patient-documents/:documentRef', authMiddleware, requirePermissi
     return res.status(404).json({ message: 'Document introuvable' });
   }
 
+  const patient = db.prepare('SELECT id, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(Number(row.patient_id));
+  if (!patient) {
+    return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
   const documentOfficeId = row.office_id != null ? Number(row.office_id) : null;
-  if (documentOfficeId !== null) {
+  const effectiveOfficeId = documentOfficeId ?? patientOfficeId;
+  if (effectiveOfficeId !== null) {
     const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
     if (!isAdmin) {
       const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
-      if (!accessibleOfficeIds.includes(documentOfficeId)) {
+      if (!accessibleOfficeIds.includes(effectiveOfficeId)) {
         return res.status(403).json({ message: 'Accès refusé - document d\'un autre cabinet' });
       }
     }
@@ -9738,18 +10131,25 @@ app.delete('/api/patient-documents/:documentRef', authMiddleware, requirePermiss
   }
 
   const existing = db
-    .prepare('SELECT id, office_id FROM patient_documents WHERE document_ref = ? LIMIT 1')
+    .prepare('SELECT id, patient_id, office_id FROM patient_documents WHERE document_ref = ? LIMIT 1')
     .get(documentRef);
   if (!existing) {
     return res.status(404).json({ message: 'Document introuvable' });
   }
 
+  const patient = db.prepare('SELECT id, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(Number(existing.patient_id));
+  if (!patient) {
+    return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
   const documentOfficeId = existing.office_id != null ? Number(existing.office_id) : null;
-  if (documentOfficeId !== null) {
+  const effectiveOfficeId = documentOfficeId ?? patientOfficeId;
+  if (effectiveOfficeId !== null) {
     const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
     if (!isAdmin) {
       const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
-      if (!accessibleOfficeIds.includes(documentOfficeId)) {
+      if (!accessibleOfficeIds.includes(effectiveOfficeId)) {
         return res.status(403).json({ message: 'Accès refusé - document d\'un autre cabinet' });
       }
     }
