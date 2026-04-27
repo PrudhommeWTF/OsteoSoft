@@ -8841,7 +8841,7 @@ app.post('/api/users/:id/reset-password', authMiddleware, adminOnlyMiddleware, a
   const tempPassword = crypto.randomBytes(8).toString('hex');
   const hashedPassword = await argon2.hash(tempPassword);
 
-  db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashedPassword, userId);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashedPassword, userId);
 
   writeAuditLog(req.user.sub, 'UPDATE', 'users', String(userId), {
     action: 'admin_password_reset',
