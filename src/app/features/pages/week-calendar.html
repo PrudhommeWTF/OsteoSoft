@@ -392,15 +392,15 @@
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
           <div class="modal-header">
-            <h3 id="consultation-conflict-modal-title" class="modal-title h5 mb-0">Consultation existante detectee</h3>
+            <h3 id="consultation-conflict-modal-title" class="modal-title h5 mb-0">Consultation existante détectée</h3>
             <button type="button" class="btn-close" aria-label="Fermer" title="Annuler" bsTooltip (click)="closeConsultationConflictModal()" [disabled]="isSavingConsultationMeta()"></button>
           </div>
 
           <div class="modal-body">
-            <p class="mb-2">Une consultation existe deja pour ce patient autour de ce creneau.</p>
+            <p class="mb-2">Une consultation existe déjà pour ce patient autour de ce créneau.</p>
             <div class="alert alert-secondary py-2 mb-0">
               <div><strong>Titre:</strong> {{ conflict.title || 'Sans titre' }}</div>
-              <div><strong>Praticien:</strong> {{ conflict.practitioner || 'Non renseigne' }}</div>
+              <div><strong>Praticien:</strong> {{ conflict.practitioner || 'Non renseigné' }}</div>
               <div><strong>Date:</strong> {{ formatConflictConsultationDate(conflict.startedAt) }}</div>
             </div>
           </div>
@@ -410,7 +410,7 @@
               Annuler
             </button>
             <button type="button" class="btn btn-outline-primary" title="Créer une nouvelle consultation indépendante" bsTooltip (click)="resolveConsultationConflict(false)" [disabled]="isSavingConsultationMeta()">
-              Non, creer une nouvelle consultation
+              Non, créer une nouvelle consultation
             </button>
             <button type="button" class="btn btn-success" title="Rattacher le rendez-vous à la consultation existante" bsTooltip (click)="resolveConsultationConflict(true)" [disabled]="isSavingConsultationMeta()">
               Oui, rattacher l'existante

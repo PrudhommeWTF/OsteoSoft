@@ -1,41 +1,41 @@
 # OsteoSoft
 
-OsteoSoft est une application web de gestion de cabinet (orientation osteopathie et professions de soin) qui centralise le suivi patient, l'agenda, la facturation, les statistiques, le repertoire de contacts et l'administration du cabinet.
+OsteoSoft est une application web de gestion de cabinet (orientation ostéopathie et professions de soin) qui centralise le suivi patient, l'agenda, la facturation, les statistiques, le répertoire de contacts et l'administration du cabinet.
 
-Le projet est compose de:
+Le projet est composé de:
 - un frontend Angular (SPA) dans `src/`
 - une API Node.js/Express dans `server/index.mjs`
 - une base SQLite locale (`server/data/osteo.db`)
 
-## Fonctionnalites principales
+## Fonctionnalités principales
 
-- Installation guidee au premier demarrage (creation du cabinet ou restauration)
+- Installation guidée au premier démarrage (création du cabinet ou restauration)
 - Authentification et gestion de session utilisateur
-- Gestion avancee des droits d'acces (profils, permissions fines par module)
+- Gestion avancée des droits d'accès (profils, permissions fines par module)
 - Tableau de bord d'accueil
 - Agenda des rendez-vous
-- Gestion des patients (liste, creation, fiche detaillee)
+- Gestion des patients (liste, création, fiche détaillée)
 - Dossier patient avec sections de consultation et documents
-- Facturation (suivi, paiements, operations associees)
-- Statistiques et indicateurs d'activite
-- Repertoire (contacts professionnels, annuaire interne)
-- Espace aide integre
-- Parametrage global du cabinet et administration
+- Facturation (suivi, paiements, opérations associées)
+- Statistiques et indicateurs d'activité
+- Répertoire (contacts professionnels, annuaire interne)
+- Espace aide intégré
+- Paramétrage global du cabinet et administration
 
 ## Avantages concurrentiels
 
-- Confidentialite des donnees sensibles: chiffrement applicatif des champs critiques (ex: informations patients et notes), en plus des controles d'acces.
-- Controle d'acces granulaire: securisation par roles et permissions par fonctionnalite (agenda, patients, facturation, statistiques, administration).
-- Sauvegarde/restauration robuste: format de sauvegarde structure avec manifest, checksum d'integrite, limites de volume et verification de compatibilite de version.
-- Experience de mise en route rapide: parcours d'installation integre avec options de creation initiale ou restauration des donnees.
-- Architecture full web simple a deployer: frontend Angular + API Node.js + SQLite, adaptee aux environnements legers et aux installations progressives.
+- Confidentialité des données sensibles: chiffrement applicatif des champs critiques (ex: informations patients et notes), en plus des contrôles d'accès.
+- Contrôle d'accès granulaire: sécurisation par rôles et permissions par fonctionnalité (agenda, patients, facturation, statistiques, administration).
+- Sauvegarde/restauration robuste: format de sauvegarde structuré avec manifest, checksum d'intégrité, limites de volume et vérification de compatibilité de version.
+- Expérience de mise en route rapide: parcours d'installation intégré avec options de création initiale ou restauration des données.
+- Architecture full web simple à déployer: frontend Angular + API Node.js + SQLite, adaptée aux environnements légers et aux installations progressives.
 
 ## Stack technique
 
 - Frontend: Angular 21, Bootstrap 5, Chart.js
 - Backend: Node.js, Express
-- Base de donnees: SQLite (`better-sqlite3`)
-- Securite: JWT, Argon2 (hash mots de passe), Helmet, rate limiting
+- Base de données: SQLite (`better-sqlite3`)
+- Sécurité: JWT, Argon2 (hash mots de passe), Helmet, rate limiting
 
 ## Prerequis
 
@@ -52,7 +52,7 @@ git clone https://github.com/PrudhommeWTF/OsteoSoft.git
 cd OsteoSoft
 ```
 
-### 2) Installer les dependances
+### 2) Installer les dépendances
 
 ```bash
 npm install
@@ -60,7 +60,7 @@ npm install
 
 ### 3) Configurer l'environnement
 
-Creer un fichier `.env` a la racine du projet. Exemple minimal:
+Créer un fichier `.env` à la racine du projet. Exemple minimal:
 
 ```env
 API_PORT=3000
@@ -69,13 +69,13 @@ NODE_ENV=development
 ```
 
 Variables utiles:
-- `ALLOW_REMOTE_SETUP=false` (recommande par defaut)
+- `ALLOW_REMOTE_SETUP=false` (recommandé par défaut)
 - `MAX_PATIENT_DOCUMENT_BYTES` (limite upload documents patient)
 - `MAX_BACKUP_RESTORE_PAYLOAD_BYTES` (limite restauration)
 
 ## Lancement de l'application
 
-### Option A - Demarrage complet (frontend + API)
+### Option A - Démarrage complet (frontend + API)
 
 ```bash
 npm run start:full
@@ -85,7 +85,7 @@ Ensuite:
 - Frontend: http://localhost:4200
 - API: http://localhost:3000
 
-### Option B - Demarrage separe
+### Option B - Démarrage séparé
 
 Terminal 1:
 
@@ -101,7 +101,7 @@ npm start
 
 ### Option C - Docker Compose
 
-Prerequis: Docker Desktop (macOS/Windows) ou Docker Engine + Compose plugin (Linux).
+Prérequis: Docker Desktop (macOS/Windows) ou Docker Engine + Compose plugin (Linux).
 
 ```bash
 docker compose up -d --build
@@ -110,15 +110,15 @@ docker compose up -d --build
 - Frontend: http://localhost:4200
 - API: http://localhost:3000
 
-Les donnees SQLite sont conservees dans le volume Docker `osteosoft_data` entre les redemarrages.
+Les données SQLite sont conservées dans le volume Docker `osteosoft_data` entre les redémarrages.
 
-Arreter les conteneurs:
+Arrêter les conteneurs:
 
 ```bash
 docker compose down
 ```
 
-Arreter et supprimer les donnees persistantes:
+Arrêter et supprimer les données persistantes:
 
 ```bash
 docker compose down -v
@@ -128,24 +128,24 @@ docker compose down -v
 
 ## Scripts utiles
 
-- `npm start`: lance Angular en developpement
+- `npm start`: lance Angular en développement
 - `npm run start:api`: lance l'API backend
-- `npm run start:full`: lance frontend + API en parallele
+- `npm run start:full`: lance frontend + API en parallèle
 - `npm run build`: build de production
 - `npm test`: tests unitaires headless
 - `npm run test:watch`: tests unitaires en mode watch
-- `npm run e2e:backup`: scenario e2e sauvegarde/restauration
-- `npm run e2e:rights`: scenario e2e droits d'acces
-- `npm run seed:directory`: injection jeu de donnees repertoire
-- `npm run seed:fakename`: generation/import de patients de test
+- `npm run e2e:backup`: scénario e2e sauvegarde/restauration
+- `npm run e2e:rights`: scénario e2e droits d'accès
+- `npm run seed:directory`: injection jeu de données répertoire
+- `npm run seed:fakename`: génération/import de patients de test
 
 ## Installation en production (recommandations)
 
-- Definir un `JWT_SECRET` fort et unique
+- Définir un `JWT_SECRET` fort et unique
 - Positionner `NODE_ENV=production`
 - Garder `ALLOW_REMOTE_SETUP=false` sauf besoin explicite
-- Placer l'application derriere un reverse proxy HTTPS (Nginx/Caddy)
-- Mettre en place une strategie de sauvegardes regulieres et tests de restauration
+- Placer l'application derrière un reverse proxy HTTPS (Nginx/Caddy)
+- Mettre en place une stratégie de sauvegardes régulières et tests de restauration
 
 ## Build de production
 
@@ -153,31 +153,31 @@ docker compose down -v
 npm run build
 ```
 
-Les artefacts frontend sont generes dans `dist/`.
+Les artefacts frontend sont générés dans `dist/`.
 
-## Qualite et tests
+## Qualité et tests
 
 - Tests unitaires via Angular/Karma
-- Scenarios e2e scripts pour points critiques:
-	- droits d'acces
+- Scénarios e2e scripts pour points critiques:
+	- droits d'accès
 	- sauvegarde/restauration
 
 ## Structure du projet
 
 - `src/`: application Angular
 - `server/`: API Express et scripts techniques
-- `server/data/`: base SQLite et donnees locales
+- `server/data/`: base SQLite et données locales
 - `public/help/`: contenus d'aide statiques
 
 ## Roadmap documentaire possible
 
-- Guide utilisateur (secretaire/praticien/admin)
-- Politique de sauvegarde et reprise d'activite
-- Procedure de migration de version
+- Guide utilisateur (secrétaire/praticien/admin)
+- Politique de sauvegarde et reprise d'activité
+- Procédure de migration de version
 
 ---
 
-## Documentation complementaire
+## Documentation complémentaire
 
 - Guide d'installation complet: `INSTALLATION.md`
-- Deploiement Docker: `docker-compose.yml`
+- Déploiement Docker: `docker-compose.yml`

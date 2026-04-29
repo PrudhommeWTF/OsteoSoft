@@ -39,11 +39,11 @@
       </div>
 
       <div class="col-12 col-md-2">
-        <label class="form-label mb-1">Granularite consultations</label>
+        <label class="form-label mb-1">Granularité consultations</label>
         <select class="form-select" [value]="consultationGranularity()" (change)="onGranularityChange($any($event.target).value)">
           <option value="month">Mois</option>
           <option value="quarter">Trimestre</option>
-          <option value="year">Annee</option>
+          <option value="year">Année</option>
         </select>
       </div>
 
@@ -58,7 +58,7 @@
     </div>
 
     @if (!canViewPeerStatistics()) {
-      <p class="small text-secondary mt-3 mb-0">Le bloc Utilisateurs reste borne a votre propre perimetre de statistiques.</p>
+      <p class="small text-secondary mt-3 mb-0">Le bloc Utilisateurs reste borné à votre propre périmètre de statistiques.</p>
     }
   </div>
 </section>
@@ -320,7 +320,7 @@
                 @if (hasYearSeriesData(consultationStats()?.monthlyByYear ?? EMPTY_YEAR_SERIES)) {
                   <div class="chart-wrap"><canvas data-chart-key="consultations-monthly-combined" aria-label="Consultations mensuelles multi annees"></canvas></div>
                 } @else {
-                  <p class="text-secondary mb-0">Aucune serie mensuelle a afficher.</p>
+                  <p class="text-secondary mb-0">Aucune série mensuelle à afficher.</p>
                 }
               }
               @case ('consultations-type') {

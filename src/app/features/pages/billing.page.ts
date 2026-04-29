@@ -693,7 +693,7 @@ export class BillingPage implements OnDestroy {
 
   openConsultationSelectionModal(mode: 'bulk-update' | 'payment'): void {
     if (!this.canManageBilling()) {
-      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilité.');
       return;
     }
 
@@ -719,7 +719,7 @@ export class BillingPage implements OnDestroy {
 
   openExpenseModal(): void {
     if (!this.canManageBilling()) {
-      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilité.');
       return;
     }
 
@@ -740,7 +740,7 @@ export class BillingPage implements OnDestroy {
 
   async saveExpense(): Promise<void> {
     if (!this.canManageBilling()) {
-      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilité.');
       return;
     }
 
@@ -777,7 +777,7 @@ export class BillingPage implements OnDestroy {
 
   async openDepositModal(type: 'cheque' | 'especes'): Promise<void> {
     if (!this.canManageBilling()) {
-      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilité.');
       return;
     }
 
@@ -799,7 +799,7 @@ export class BillingPage implements OnDestroy {
 
   async openDepositEditorModal(mode: 'create' | 'edit', deposit?: BillingDepositListItem): Promise<void> {
     if (!this.canManageBilling()) {
-      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilité.');
       return;
     }
 
@@ -973,13 +973,13 @@ export class BillingPage implements OnDestroy {
 
   async saveDepositEditor(): Promise<void> {
     if (!this.canManageBilling()) {
-      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilité.');
       return;
     }
 
     const isEditing = this.editingDepositId() != null;
     if (!isEditing && this.depositEditorCandidateIds().length === 0) {
-      this.errorMessage.set('Selectionnez au moins un paiement a pointer.');
+      this.errorMessage.set('Sélectionnez au moins un paiement à pointer.');
       return;
     }
     if (!isEditing && this.hasIncompatibleSelectedDepositCandidates()) {
@@ -1012,7 +1012,7 @@ export class BillingPage implements OnDestroy {
           amount,
           operationIds: this.depositEditorCandidateIds()
         });
-        this.successMessage.set('Bordereau mis a jour.');
+        this.successMessage.set('Bordereau mis à jour.');
       } else {
         await this.api.createBillingDeposit({
           occurredAt: this.fromDateTimeLocalValue(this.depositOccurredAt()) ?? new Date().toISOString(),
@@ -1041,7 +1041,7 @@ export class BillingPage implements OnDestroy {
 
   async deleteDeposit(depositId: number): Promise<void> {
     if (!this.canManageBilling()) {
-      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilité.');
       return;
     }
 
@@ -1069,7 +1069,7 @@ export class BillingPage implements OnDestroy {
       const pdf = this.buildDepositPdf(detail, JsPdf);
       pdf.save(fileName);
     } catch {
-      this.errorMessage.set('Impossible de generer le PDF du bordereau.');
+      this.errorMessage.set('Impossible de générer le PDF du bordereau.');
     }
   }
 
@@ -1216,7 +1216,7 @@ export class BillingPage implements OnDestroy {
 
   async applyBulkUpdate(): Promise<void> {
     if (!this.canManageBilling()) {
-      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilité.');
       return;
     }
 
@@ -1236,11 +1236,11 @@ export class BillingPage implements OnDestroy {
         retrocessionPercent: retroPercent.length > 0 ? Number(retroPercent) : null,
         retrocessionRecipient: this.bulkRetrocessionRecipient().trim() || null
       });
-      this.successMessage.set('Operations mises a jour.');
+      this.successMessage.set('Opérations mises à jour.');
       this.closeConsultationSelectionModal();
       await this.load();
     } catch {
-      this.errorMessage.set('Impossible de mettre a jour les operations.');
+      this.errorMessage.set('Impossible de mettre à jour les opérations.');
     } finally {
       this.isSaving.set(false);
     }
@@ -1248,7 +1248,7 @@ export class BillingPage implements OnDestroy {
 
   async deleteSelectedOperations(): Promise<void> {
     if (!this.canManageBilling()) {
-      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilité.');
       return;
     }
 
@@ -1265,11 +1265,11 @@ export class BillingPage implements OnDestroy {
         operationIds: this.selectedOperationIds(),
         delete: true
       });
-      this.successMessage.set('Operations supprimees.');
+      this.successMessage.set('Opérations supprimées.');
       this.selectedOperationIds.set([]);
       await this.load();
     } catch {
-      this.errorMessage.set('Impossible de supprimer les operations.');
+      this.errorMessage.set('Impossible de supprimer les opérations.');
     } finally {
       this.isSaving.set(false);
     }
@@ -1277,12 +1277,12 @@ export class BillingPage implements OnDestroy {
 
   async applyPrototypeGroupedPayment(): Promise<void> {
     if (!this.canManageBilling()) {
-      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilité.');
       return;
     }
 
     if (!this.canRunPrototypeGroupedPayment()) {
-      this.errorMessage.set('Renseignez un paiement valide et selectionnez des consultations impayees.');
+      this.errorMessage.set('Renseignez un paiement valide et sélectionnez des consultations impayées.');
       return;
     }
 
@@ -1311,7 +1311,7 @@ export class BillingPage implements OnDestroy {
       this.closeConsultationSelectionModal();
       await this.load();
     } catch {
-      this.errorMessage.set('Impossible d\'appliquer le paiement groupe.');
+      this.errorMessage.set('Impossible d\'appliquer le paiement groupé.');
     } finally {
       this.isSaving.set(false);
     }
@@ -1320,7 +1320,7 @@ export class BillingPage implements OnDestroy {
   async exportOperations(format: 'json' | 'excel', mode: 'standard' | 'analytical' = 'standard'): Promise<void> {
     this.closeActionMenus();
     if (!this.canExportBilling()) {
-      this.errorMessage.set('Vous n\'avez pas le droit d\'exporter la comptabilite.');
+      this.errorMessage.set('Vous n\'avez pas le droit d\'exporter la comptabilité.');
       return;
     }
 
@@ -1335,9 +1335,9 @@ export class BillingPage implements OnDestroy {
       const extension = format === 'json' ? 'json' : 'csv';
       const fileName = `comptabilite-${mode}-${new Date().toISOString().slice(0, 10)}.${extension}`;
       this.downloadBlob(blob, fileName);
-      this.successMessage.set('Export termine.');
+      this.successMessage.set('Export terminé.');
     } catch {
-      this.errorMessage.set('Impossible d\'exporter la comptabilite.');
+      this.errorMessage.set('Impossible d\'exporter la comptabilité.');
     } finally {
       this.isSaving.set(false);
     }
@@ -1354,13 +1354,13 @@ export class BillingPage implements OnDestroy {
   async exportSnapshotPack(format: 'json' | 'excel'): Promise<void> {
     this.closeActionMenus();
     if (!this.canExportBilling()) {
-      this.errorMessage.set('Vous n\'avez pas le droit d\'exporter la comptabilite.');
+      this.errorMessage.set('Vous n\'avez pas le droit d\'exporter la comptabilité.');
       this.showExportToast('Export non autorise.', 'error');
       return;
     }
     if (this.isSnapshotExporting()) {
-      this.errorMessage.set('Un pack export est deja en cours.');
-      this.showExportToast('Un pack est deja en cours.', 'error');
+      this.errorMessage.set('Un pack export est déjà en cours.');
+      this.showExportToast('Un pack est déjà en cours.', 'error');
       return;
     }
 
@@ -1381,8 +1381,8 @@ export class BillingPage implements OnDestroy {
       const extension = format === 'json' ? 'json' : 'csv';
       const datePart = new Date().toISOString().slice(0, 10);
       this.downloadBlob(blob, `snapshot-comptabilite-analytical-${datePart}-${sessionId}.${extension}`);
-      this.successMessage.set(`Pack export telecharge (${label.toLowerCase()}).`);
-      this.showExportToast('Pack export termine.', 'success');
+      this.successMessage.set(`Pack export téléchargé (${label.toLowerCase()}).`);
+      this.showExportToast('Pack export terminé.', 'success');
       this.pushExportHistory({
         id: `${createdAt}-success-${Math.random().toString(36).slice(2, 8)}`,
         sessionId,
@@ -1393,7 +1393,7 @@ export class BillingPage implements OnDestroy {
       });
     } catch {
       this.errorMessage.set('Impossible d\'exporter le pack.');
-      this.showExportToast('Echec du pack export.', 'error');
+      this.showExportToast('Échec du pack export.', 'error');
       this.pushExportHistory({
         id: `${createdAt}-error-${Math.random().toString(36).slice(2, 8)}`,
         sessionId,
@@ -1569,7 +1569,7 @@ export class BillingPage implements OnDestroy {
       this.persistExportHistory(cleaned);
       this.showExportToast(`${removed} ancien(s) export(s) supprime(s).`, 'success');
     } else {
-      this.showExportToast('Aucun export ancien a nettoyer.', 'success');
+      this.showExportToast('Aucun export ancien à nettoyer.', 'success');
     }
   }
 
@@ -1582,7 +1582,7 @@ export class BillingPage implements OnDestroy {
 
     try {
       await navigator.clipboard.writeText(normalized);
-      this.showExportToast(`Session ${normalized} copiee.`, 'success');
+      this.showExportToast(`Session ${normalized} copiée.`, 'success');
     } catch {
       this.showExportToast('Impossible de copier la session.', 'error');
     }
@@ -1615,7 +1615,7 @@ export class BillingPage implements OnDestroy {
   async copySelectedExportSessionIds(): Promise<void> {
     const selected = this.selectedExportIds();
     if (selected.size === 0) {
-      this.showExportToast('Aucun export selectione.', 'error');
+      this.showExportToast('Aucun export sélectionné.', 'error');
       return;
     }
 
@@ -1628,7 +1628,7 @@ export class BillingPage implements OnDestroy {
 
     try {
       await navigator.clipboard.writeText(sessionIds);
-      this.showExportToast(`${selected.size} session(s) copiee(s).`, 'success');
+      this.showExportToast(`${selected.size} session(s) copiée(s).`, 'success');
     } catch {
       this.showExportToast('Impossible de copier les sessions.', 'error');
     }
@@ -1637,7 +1637,7 @@ export class BillingPage implements OnDestroy {
   showDeleteExportConfirm(): void {
     const count = this.selectedExportIds().size;
     if (count === 0) {
-      this.showExportToast('Aucun export selectione.', 'error');
+      this.showExportToast('Aucun export sélectionné.', 'error');
       return;
     }
     this.deleteExportConfirmCount.set(count);
@@ -1674,7 +1674,7 @@ export class BillingPage implements OnDestroy {
     this.persistExportHistory(remaining);
     this.selectedExportIds.set(new Set());
     this.cancelDeleteExportConfirm();
-    this.showExportToast(`${removed} export(s) dans la corbeille. Recuperables pendant 7 jours.`, 'success');
+    this.showExportToast(`${removed} export(s) dans la corbeille. Récupérables pendant 7 jours.`, 'success');
   }
 
   toggleExportTrash(): void {
@@ -1766,7 +1766,7 @@ export class BillingPage implements OnDestroy {
   private emptyTrashNow(): void {
     this.exportTrash.set([]);
     this.persistExportTrash([]);
-    this.showExportToast('Corbeille videe definitivement.', 'success');
+    this.showExportToast('Corbeille vidée définitivement.', 'success');
   }
 
   private calculateRelevanceScore(item: ExportHistoryItem, query: string): number {
@@ -1800,7 +1800,7 @@ export class BillingPage implements OnDestroy {
   exportHistoryCsv(): void {
     const rows = this.searchedExportHistory();
     if (rows.length === 0) {
-      this.showExportToast('Aucun element a exporter.', 'error');
+      this.showExportToast('Aucun élément à exporter.', 'error');
       return;
     }
 
@@ -1824,7 +1824,7 @@ export class BillingPage implements OnDestroy {
   exportHistoryJson(): void {
     const rows = this.searchedExportHistory();
     if (rows.length === 0) {
-      this.showExportToast('Aucun element a exporter.', 'error');
+      this.showExportToast('Aucun élément à exporter.', 'error');
       return;
     }
 
@@ -1845,13 +1845,13 @@ export class BillingPage implements OnDestroy {
   exportSelectedHistoryCsv(): void {
     const selected = this.selectedExportIds();
     if (selected.size === 0) {
-      this.showExportToast('Aucun element selectione.', 'error');
+      this.showExportToast('Aucun élément sélectionné.', 'error');
       return;
     }
 
     const rows = this.searchedExportHistory().filter((item) => selected.has(item.id));
     if (rows.length === 0) {
-      this.showExportToast('Aucun element a exporter.', 'error');
+      this.showExportToast('Aucun élément à exporter.', 'error');
       return;
     }
 
@@ -1869,19 +1869,19 @@ export class BillingPage implements OnDestroy {
 
     const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
     this.downloadBlob(blob, `export-history-selected-${new Date().toISOString().slice(0, 10)}.csv`);
-    this.showExportToast(`${rows.length} export(s) selectione(s) en CSV.`, 'success');
+    this.showExportToast(`${rows.length} export(s) sélectionné(s) en CSV.`, 'success');
   }
 
   exportSelectedHistoryJson(): void {
     const selected = this.selectedExportIds();
     if (selected.size === 0) {
-      this.showExportToast('Aucun element selectione.', 'error');
+      this.showExportToast('Aucun élément sélectionné.', 'error');
       return;
     }
 
     const rows = this.searchedExportHistory().filter((item) => selected.has(item.id));
     if (rows.length === 0) {
-      this.showExportToast('Aucun element a exporter.', 'error');
+      this.showExportToast('Aucun élément à exporter.', 'error');
       return;
     }
 
@@ -1896,7 +1896,7 @@ export class BillingPage implements OnDestroy {
     const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
     this.downloadBlob(blob, `export-history-selected-${new Date().toISOString().slice(0, 10)}.json`);
-    this.showExportToast(`${rows.length} export(s) selectione(s) en JSON.`, 'success');
+    this.showExportToast(`${rows.length} export(s) sélectionné(s) en JSON.`, 'success');
   }
 
   private showExportToast(message: string, type: 'success' | 'error'): void {

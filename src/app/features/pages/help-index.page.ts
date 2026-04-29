@@ -10,21 +10,21 @@ import { HELP_GUIDES } from './help-content';
   template: `
     <section class="help-hero card mb-3 border-0 shadow-sm">
       <div class="card-body p-4 p-lg-5">
-        <p class="help-eyebrow mb-2">Centre d aide</p>
-        <h1 class="h3 mb-2">Aide par ecran</h1>
+        <p class="help-eyebrow mb-2">Centre d'aide</p>
+        <h1 class="h3 mb-2">Aide par écran</h1>
         <p class="text-secondary mb-0">
-          Selectionnez un ecran pour ouvrir une page d aide dediee avec les manipulations et cas d usage.
+          Sélectionnez un écran pour ouvrir une page d'aide dédiée avec les manipulations et cas d'usage.
         </p>
       </div>
     </section>
 
-    <section class="help-grid" aria-label="Liste des ecrans de l application">
+    <section class="help-grid" aria-label="Liste des écrans de l'application">
       @for (screen of screens; track screen.slug) {
         <article class="help-card card border-0 shadow-sm">
           <div class="help-card-image">
             <img
               [ngSrc]="screen.screenshot"
-              [alt]="'Capture d ecran - ' + screen.title"
+              [alt]="'Capture d’écran - ' + screen.title"
               width="2880"
               height="1800"
               priority
@@ -38,7 +38,7 @@ import { HELP_GUIDES } from './help-content';
             </div>
 
             <p class="text-secondary mb-3">{{ screen.summary }}</p>
-            <a class="btn btn-outline-primary btn-sm" [routerLink]="['/aide', screen.slug]">Voir la page dediee</a>
+            <a class="btn btn-outline-primary btn-sm" [routerLink]="['/aide', screen.slug]">Voir la page dédiée</a>
           </div>
         </article>
       }

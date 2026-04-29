@@ -1,10 +1,10 @@
 # Guide d'installation
 
-Ce document decrit les options d'installation de OsteoSoft:
+Ce document décrit les options d'installation d'OsteoSoft:
 - Installation locale Node.js
 - Installation avec Docker Compose
 
-## Prerequis
+## Prérequis
 
 ### Option locale
 
@@ -25,16 +25,16 @@ Ce document decrit les options d'installation de OsteoSoft:
 
 - `OSTEOSOFT_DATA_KEY`
 - `JWT_SECRET`
-- `API_PORT` (par defaut: 3000)
-- `CLIENT_ORIGIN` (par defaut: http://localhost:4200)
+- `API_PORT` (par défaut: 3000)
+- `CLIENT_ORIGIN` (par défaut: http://localhost:4200)
 
-Generation rapide d'une cle de chiffrement (32 bytes base64):
+Génération rapide d'une clé de chiffrement (32 bytes base64):
 
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 ## Option A - Installation locale Node.js
 
-1. Installer les dependances:
+1. Installer les dépendances:
 
    npm install
 
@@ -42,51 +42,51 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
    npm run start:full
 
-3. Acceder a l'application:
+3. Accéder à l'application:
 
 - Frontend: http://localhost:4200
 - API: http://localhost:3000
 
 ## Option B - Installation Docker Compose
 
-### 1) Demarrage
+### 1) Démarrage
 
 Depuis la racine du projet:
 
 docker compose up -d --build
 
-### 2) Verification
+### 2) Vérification
 
 - Frontend: http://localhost:4200
 - API: http://localhost:3000/api/config
 
-### 3) Arret
+### 3) Arrêt
 
 docker compose down
 
-### 4) Arret avec suppression des donnees persistantes
+### 4) Arrêt avec suppression des données persistantes
 
-Attention: supprime la base SQLite et les donnees du volume Docker.
+Attention: supprime la base SQLite et les données du volume Docker.
 
 docker compose down -v
 
-## Donnees persistantes
+## Données persistantes
 
-En mode Docker, les donnees SQLite sont conservees dans le volume nomme:
+En mode Docker, les données SQLite sont conservées dans le volume nommé:
 
 - `osteosoft_data`
 
-Cela permet de redemarrer les conteneurs sans perdre les donnees du cabinet.
+Cela permet de redémarrer les conteneurs sans perdre les données du cabinet.
 
-## Depannage rapide
+## Dépannage rapide
 
 - Le frontend ne charge pas l'API:
-  - verifier que le service `api` est bien demarre
-  - verifier `CLIENT_ORIGIN=http://localhost:4200` dans `.env`
+  - vérifier que le service `api` est bien démarré
+  - vérifier `CLIENT_ORIGIN=http://localhost:4200` dans `.env`
 - Erreur de JWT en production:
-  - definir un `JWT_SECRET` fort et unique
+  - définir un `JWT_SECRET` fort et unique
 - Erreur de chiffrement:
-  - renseigner `OSTEOSOFT_DATA_KEY` avec une cle base64 valide de 32 bytes
+  - renseigner `OSTEOSOFT_DATA_KEY` avec une clé base64 valide de 32 bytes
 
 ## Commandes utiles
 

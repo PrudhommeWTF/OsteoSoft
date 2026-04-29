@@ -37,29 +37,29 @@
 
       @if (flowMode() === 'welcome') {
         <div class="welcome-panel welcome-panel-commercial mb-3">
-          <p class="welcome-panel-kicker mb-2">Le cabinet osteopathique, en plus simple</p>
-          <h2 class="h5 mb-3">OsteoSoft centralise la gestion de votre activite clinique et administrative.</h2>
+          <p class="welcome-panel-kicker mb-2">Le cabinet ostéopathique, en plus simple</p>
+          <h2 class="h5 mb-3">OsteoSoft centralise la gestion de votre activité clinique et administrative.</h2>
           <p class="mb-3 text-secondary">
-            Concue pour les osteopathes, l'application vous aide a structurer le suivi patient, piloter l'agenda,
-            retrouver l'historique des consultations, suivre la facturation et garder un repertoire professionnel exploitable.
+            Conçue pour les ostéopathes, l'application vous aide à structurer le suivi patient, piloter l'agenda,
+            retrouver l'historique des consultations, suivre la facturation et garder un répertoire professionnel exploitable.
           </p>
           <div class="row g-3 small">
             <div class="col-12 col-md-4">
               <div class="welcome-benefit">
                 <strong class="d-block mb-1">Gagner du temps au quotidien</strong>
-                <span class="text-secondary">Moins de ressaisie, plus de fluidite entre prise de rendez-vous, consultation et facturation.</span>
+                <span class="text-secondary">Moins de ressaisie, plus de fluidité entre prise de rendez-vous, consultation et facturation.</span>
               </div>
             </div>
             <div class="col-12 col-md-4">
               <div class="welcome-benefit">
                 <strong class="d-block mb-1">Mieux suivre vos patients</strong>
-                <span class="text-secondary">Historique, liens de parente, motifs et observations restent accessibles au meme endroit.</span>
+                <span class="text-secondary">Historique, liens de parenté, motifs et observations restent accessibles au même endroit.</span>
               </div>
             </div>
             <div class="col-12 col-md-4">
               <div class="welcome-benefit">
                 <strong class="d-block mb-1">Structurer votre cabinet</strong>
-                <span class="text-secondary">Cabinets, profils de consultation, moyens de paiement et contacts sont prets des l'installation.</span>
+                <span class="text-secondary">Cabinets, profils de consultation, moyens de paiement et contacts sont prêts dès l'installation.</span>
               </div>
             </div>
           </div>
@@ -196,13 +196,13 @@
                   autocomplete="new-password"
                   formControlName="adminPassword"
                 />
-                <div class="form-text">Au moins 12 caracteres avec majuscule, minuscule, chiffre et caractere special.</div>
+                <div class="form-text">Au moins 12 caractères avec majuscule, minuscule, chiffre et caractère spécial.</div>
                 <ul class="small mt-2 mb-0 ps-3">
-                  <li [class.text-success]="adminPasswordHasMinLength()">12 caracteres minimum</li>
+                  <li [class.text-success]="adminPasswordHasMinLength()">12 caractères minimum</li>
                   <li [class.text-success]="adminPasswordHasUppercase()">Au moins une majuscule</li>
                   <li [class.text-success]="adminPasswordHasLowercase()">Au moins une minuscule</li>
                   <li [class.text-success]="adminPasswordHasDigit()">Au moins un chiffre</li>
-                  <li [class.text-success]="adminPasswordHasSpecialCharacter()">Au moins un caractere special</li>
+                  <li [class.text-success]="adminPasswordHasSpecialCharacter()">Au moins un caractère spécial</li>
                 </ul>
               </div>
               <div class="mb-3">

@@ -104,8 +104,8 @@ export class InstallationPage {
     { value: 'AAAA-XXXXXX', label: 'Compteur continu annuel (AAAA-XXXXXX)' },
     { value: 'AAAAMM-XXXXXX', label: 'Compteur continu mensuel (AAAAMM-XXXXXX)' },
     { value: 'AAAAMMJJ-XXXXXX', label: 'Compteur continu journalier (AAAAMMJJ-XXXXXX)' },
-    { value: 'AAAAMM-XXXX : RAZ mensuelle (déconseillé)', label: 'Remise a zero mensuelle (AAAAMM-XXXX)' },
-    { value: 'AAAA-XXXX : RAZ annuel', label: 'Remise a zero annuelle (AAAA-XXXX)' }
+    { value: 'AAAAMM-XXXX : RAZ mensuelle (déconseillé)', label: 'Remise à zéro mensuelle (AAAAMM-XXXX)' },
+    { value: 'AAAA-XXXX : RAZ annuel', label: 'Remise à zéro annuelle (AAAA-XXXX)' }
   ];
   readonly numberingConfigurationOptions = [
     'Numérotation globale au cabinet',
@@ -537,17 +537,17 @@ export class InstallationPage {
       const requiresSetup = await this.setupService.ensureChecked();
 
       if (requiresSetup) {
-        this.restoreSuccess.set('La sauvegarde a ete importee. Vous pouvez maintenant creer le premier cabinet.');
+        this.restoreSuccess.set('La sauvegarde a été importée. Vous pouvez maintenant créer le premier cabinet.');
         this.flowMode.set('create');
         this.step.set(1);
         return;
       }
 
       this.setupService.markComplete();
-      this.restoreSuccess.set('Sauvegarde restauree avec succes. Redirection vers la connexion...');
+      this.restoreSuccess.set('Sauvegarde restaurée avec succès. Redirection vers la connexion...');
       await this.router.navigateByUrl('/login');
     } catch {
-      this.error.set('La restauration a echoue. Verifiez le fichier de sauvegarde.');
+      this.error.set('La restauration a échoué. Vérifiez le fichier de sauvegarde.');
     } finally {
       this.isRestoring.set(false);
     }

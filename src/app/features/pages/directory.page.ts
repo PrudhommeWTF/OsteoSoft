@@ -324,7 +324,7 @@ export class DirectoryPage {
       const editingId = this.editingContactId();
       if (editingId !== null) {
         await this.api.updateDirectoryContact(editingId, payload);
-        this.successMessage.set('Contact mis a jour.');
+        this.successMessage.set('Contact mis à jour.');
       } else {
         await this.api.createDirectoryContact(payload);
         this.successMessage.set('Contact ajoute au repertoire.');

@@ -12,10 +12,10 @@ import { HELP_GUIDES } from './help-content';
       <section class="help-detail-hero card mb-3 border-0 shadow-sm">
         <div class="card-body p-4 p-lg-5">
           <a class="btn btn-sm btn-outline-secondary mb-3" routerLink="/aide">
-            <i class="fa-solid fa-arrow-left me-2"></i>Retour a l index de l aide
+            <i class="fa-solid fa-arrow-left me-2"></i>Retour à l'index de l'aide
           </a>
 
-          <p class="help-detail-eyebrow mb-2">Aide detaillee</p>
+          <p class="help-detail-eyebrow mb-2">Aide détaillée</p>
           <h1 class="h3 mb-2">{{ currentGuide.title }}</h1>
           <p class="text-secondary mb-0">{{ currentGuide.summary }}</p>
         </div>
@@ -25,7 +25,7 @@ import { HELP_GUIDES } from './help-content';
         <img
           class="detail-screenshot"
           [ngSrc]="currentGuide.screenshot"
-          [alt]="'Capture d ecran - ' + currentGuide.title"
+          [alt]="'Capture d’écran - ' + currentGuide.title"
           width="2880"
           height="1800"
           priority
@@ -49,7 +49,7 @@ import { HELP_GUIDES } from './help-content';
                 </section>
 
                 <section>
-                  <h3 class="h6 text-secondary mb-2">Cas d usage</h3>
+                  <h3 class="h6 text-secondary mb-2">Cas d'usage</h3>
                   <ul class="help-list mb-0">
                     @for (usage of action.useCases; track usage) {
                       <li>{{ usage }}</li>
@@ -64,11 +64,11 @@ import { HELP_GUIDES } from './help-content';
     } @else {
       <section class="card border-0 shadow-sm">
         <div class="card-body p-4">
-          <h1 class="h4 mb-2">Ecran d aide introuvable</h1>
+          <h1 class="h4 mb-2">Écran d'aide introuvable</h1>
           <p class="text-secondary mb-3">
-            L ecran demande n existe pas dans la documentation actuelle.
+            L'écran demandé n'existe pas dans la documentation actuelle.
           </p>
-          <a class="btn btn-outline-primary btn-sm" routerLink="/aide">Retour a l index de l aide</a>
+          <a class="btn btn-outline-primary btn-sm" routerLink="/aide">Retour à l'index de l'aide</a>
         </div>
       </section>
     }

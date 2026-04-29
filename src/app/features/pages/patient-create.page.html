@@ -1407,11 +1407,11 @@
       aria-labelledby="consultationLinkStrategyModalTitle"
       (click)="$event.stopPropagation()">
       <div class="antecedent-modal-header">
-        <h3 id="consultationLinkStrategyModalTitle" class="mb-0">Consultation deja trouvee sur ce creneau</h3>
+        <h3 id="consultationLinkStrategyModalTitle" class="mb-0">Consultation déjà trouvée sur ce créneau</h3>
         <button type="button" class="btn-close" aria-label="Fermer" (click)="closeConsultationLinkStrategyModal()" title="Fermer" bsTooltip></button>
       </div>
       <div class="antecedent-modal-body">
-        <p class="mb-2">Une consultation existe deja a la meme date/heure (ou tres proche).</p>
+        <p class="mb-2">Une consultation existe déjà à la même date/heure (ou très proche).</p>
         @if (getConsultationLinkConflictSummary()) {
           <div class="alert alert-warning py-2">
             <i class="fa-solid fa-triangle-exclamation me-2"></i>{{ getConsultationLinkConflictSummary() }}
@@ -1419,13 +1419,13 @@
         }
         <p class="mb-2">Choisissez comment lier cette creation de patient :</p>
         <div class="alert alert-secondary py-2 mb-0">
-          <div><strong>Rattacher l'existante</strong> : utiliser la consultation deja presente pour ce creneau.</div>
-          <div><strong>Creer une nouvelle consultation</strong> : ajouter une deuxieme consultation distincte.</div>
+          <div><strong>Rattacher l'existante</strong> : utiliser la consultation déjà présente pour ce créneau.</div>
+          <div><strong>Créer une nouvelle consultation</strong> : ajouter une deuxième consultation distincte.</div>
         </div>
       </div>
       <div class="antecedent-modal-footer">
         <button type="button" class="btn btn-outline-secondary" (click)="closeConsultationLinkStrategyModal()" title="Fermer" bsTooltip>Annuler</button>
-        <button type="button" class="btn btn-outline-primary" (click)="chooseConsultationLinkStrategy(false)" title="Créer une nouvelle consultation" bsTooltip>Creer une nouvelle consultation</button>
+        <button type="button" class="btn btn-outline-primary" (click)="chooseConsultationLinkStrategy(false)" title="Créer une nouvelle consultation" bsTooltip>Créer une nouvelle consultation</button>
         <button type="button" class="btn btn-success" (click)="chooseConsultationLinkStrategy(true)" title="Rattacher à la consultation existante" bsTooltip>Rattacher la consultation existante</button>
       </div>
     </div>

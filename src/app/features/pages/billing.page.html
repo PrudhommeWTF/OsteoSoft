@@ -1,6 +1,6 @@
 <section class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
   <div>
-    <h1 class="h3 mb-1"><i class="fa-solid fa-file-invoice-dollar text-primary me-2"></i>Comptabilite</h1>
+    <h1 class="h3 mb-1"><i class="fa-solid fa-file-invoice-dollar text-primary me-2"></i>Comptabilité</h1>
     <p class="text-secondary mb-0">Suivi des operations debit/credit du cabinet et des praticiens.</p>
   </div>
 
@@ -273,7 +273,7 @@
       </div>
 
       <div class="small text-muted mb-2">
-        Les exports sont recuperables pendant 7 jours apres suppression.
+        Les exports sont récupérables pendant 7 jours après suppression.
       </div>
 
       <ul class="list-group list-group-flush small">
@@ -288,7 +288,7 @@
                 <span class="text-secondary">({{ item.operationsFormat.toUpperCase() }})</span>
               </div>
               <div class="text-muted small">
-                Supprime le: {{ item.deletedAt | date: 'dd/MM/yyyy HH:mm:ss' }}
+                Supprimé le: {{ item.deletedAt | date: 'dd/MM/yyyy HH:mm:ss' }}
               </div>
             </div>
             <button type="button" class="btn btn-outline-warning btn-sm" (click)="restoreFromTrash(item)" title="Restaurer cet élément" bsTooltip>
@@ -307,7 +307,7 @@
                 <div>Vous allez restaurer {{ activeExportTrash().length }} export(s) depuis la corbeille.</div>
               } @else {
                 <strong>Confirmer le vidage</strong>
-                <div>Cette action supprime definitivement {{ activeExportTrash().length }} export(s).</div>
+                <div>Cette action supprime définitivement {{ activeExportTrash().length }} export(s).</div>
               }
             </div>
             <div class="d-flex gap-2">
@@ -384,7 +384,7 @@
         <h5 class="card-header">Evolution credits</h5>
         <div class="card-body">
           <p class="fs-5 fw-bold mb-1">{{ formatPercent(insights.kpis.trends.creditsPercent) }}</p>
-          <p class="text-secondary mb-0">vs periode precedente</p>
+          <p class="text-secondary mb-0">vs période précédente</p>
         </div>
       </div>
     </article>
@@ -460,7 +460,7 @@
       <div class="card h-100">
         <div class="card-header">
           <div class="d-flex flex-wrap justify-content-between align-items-center">
-            <h5 class="mb-0">Top debiteurs</h5>
+            <h5 class="mb-0">Top débiteurs</h5>
             <input
               type="search"
               class="form-control form-control-sm"
@@ -495,7 +495,7 @@
               <tbody>
                 @if (pagedTopDebtors().length === 0) {
                   <tr>
-                    <td colspan="3" class="text-center text-secondary py-3">Aucun debiteur sur les filtres actuels.</td>
+                    <td colspan="3" class="text-center text-secondary py-3">Aucun débiteur sur les filtres actuels.</td>
                   </tr>
                 } @else {
                   @for (debtor of pagedTopDebtors(); track debtor.patientName) {
@@ -513,7 +513,7 @@
           <div class="d-flex justify-content-between align-items-center mt-3">
             <small class="text-secondary">Page {{ debtorPage() }} / {{ debtorTotalPages() }}</small>
             <div class="btn-group btn-group-sm">
-              <button type="button" class="btn btn-outline-secondary" [disabled]="debtorPage() <= 1" (click)="previousDebtorPage()" title="Revenir" bsTooltip>Precedent</button>
+              <button type="button" class="btn btn-outline-secondary" [disabled]="debtorPage() <= 1" (click)="previousDebtorPage()" title="Revenir" bsTooltip>Précédent</button>
               <button type="button" class="btn btn-outline-secondary" [disabled]="debtorPage() >= debtorTotalPages()" (click)="nextDebtorPage()" title="Naviguer" bsTooltip>Suivant</button>
             </div>
           </div>
@@ -528,13 +528,13 @@
     <div class="d-flex flex-wrap align-items-center gap-2">
       <h5 class="mb-0">Consultations</h5>
       @if (selectedCount() > 0) {
-        <span class="badge text-bg-secondary">{{ selectedCount() }} selectionnee(s)</span>
+        <span class="badge text-bg-secondary">{{ selectedCount() }} sélectionnée(s)</span>
       }
     </div>
     @if (selectedCount() > 0 && canManageBilling()) {
       <div class="d-flex flex-wrap gap-2">
         <button type="button" class="btn btn-outline-primary btn-sm" (click)="openConsultationSelectionModal('bulk-update')" title="Ouvrir la consultation" bsTooltip>
-          Modifier la selection
+          Modifier la sélection
         </button>
         @if (selectedUnpaidInvoiceIds().length > 0) {
           <button type="button" class="btn btn-primary btn-sm" (click)="openConsultationSelectionModal('payment')" title="Ouvrir la consultation" bsTooltip>
@@ -588,7 +588,7 @@
             </tr>
           } @else if (operations().length === 0) {
             <tr>
-              <td colspan="8" class="text-center py-4 text-secondary">Aucune operation sur cette periode.</td>
+              <td colspan="8" class="text-center py-4 text-secondary">Aucune opération sur cette période.</td>
             </tr>
           } @else {
             @for (operation of operations(); track operation.id) {
@@ -640,12 +640,12 @@
         <div class="modal-header">
           <div>
             <h5 id="billing-consultation-selection-title" class="modal-title mb-1">
-              {{ consultationSelectionModal() === 'payment' ? 'Ajouter un paiement' : 'Modifier la selection' }}
+              {{ consultationSelectionModal() === 'payment' ? 'Ajouter un paiement' : 'Modifier la sélection' }}
             </h5>
             <p class="text-secondary small mb-0">
-              {{ selectedCount() }} consultation(s) selectionnee(s)
+              {{ selectedCount() }} consultation(s) sélectionnée(s)
               @if (consultationSelectionModal() === 'payment') {
-                <span class="ms-2">{{ selectedUnpaidInvoiceIds().length }} impayee(s) ciblee(s)</span>
+                <span class="ms-2">{{ selectedUnpaidInvoiceIds().length }} impayée(s) ciblée(s)</span>
               }
             </p>
           </div>
@@ -674,7 +674,7 @@
             </div>
           } @else {
             <div class="alert alert-warning py-2">
-              Un seul paiement sera reparti sur les consultations impayees selectionnees.
+              Un seul paiement sera réparti sur les consultations impayées sélectionnées.
             </div>
             <div class="row g-3">
               <div class="col-12 col-md-4">
@@ -684,18 +684,18 @@
               <div class="col-12 col-md-4">
                 <label class="form-label mb-1">Montant (EUR)</label>
                 <input type="number" min="0" step="0.01" class="form-control" [value]="prototypePaymentAmount()" (input)="prototypePaymentAmount.set($any($event.target).value || '')" />
-                <div class="form-text">Reste a regler selectionne: {{ formatCurrency(selectedUnpaidAmountCents(), 'EUR') }}</div>
+                <div class="form-text">Reste à régler sélectionné: {{ formatCurrency(selectedUnpaidAmountCents(), 'EUR') }}</div>
               </div>
               <div class="col-12 col-md-4">
                 <label class="form-label mb-1">Moyen de paiement</label>
                 <select class="form-select" [value]="prototypePaymentMethod()" (change)="prototypePaymentMethod.set($any($event.target).value || '')">
-                  <option value="">Selectionner un moyen de paiement</option>
+                  <option value="">Sélectionner un moyen de paiement</option>
                   @for (method of consultationPaymentMethodOptions(); track method) {
                     <option [value]="method">{{ method }}</option>
                   }
                 </select>
                 @if (consultationPaymentMethodOptions().length === 0) {
-                  <div class="form-text text-warning">Aucun moyen de paiement actif n'est configure pour le cabinet actif.</div>
+                  <div class="form-text text-warning">Aucun moyen de paiement actif n'est configuré pour le cabinet actif.</div>
                 }
               </div>
               <div class="col-12 col-md-6">

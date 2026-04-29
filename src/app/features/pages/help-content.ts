@@ -19,32 +19,32 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
     title: 'Accueil',
     appRoute: '/accueil',
     screenshot: '/help/accueil.png',
-    summary: 'Vue synthese des activites du cabinet, des patients recents et des paiements en attente.',
+    summary: 'Vue synthèse des activités du cabinet, des patients récents et des paiements en attente.',
     actions: [
       {
         title: 'Consulter les indicateurs du tableau de bord',
         manipulations: [
-          'Ouvrir le menu lateral puis cliquer sur Accueil.',
-          'Lire les blocs des patients recents et des paiements en attente.',
-          'Verifier les tendances globales avant de demarrer la journee.'
+          'Ouvrir le menu latéral puis cliquer sur Accueil.',
+          'Lire les blocs des patients récents et des paiements en attente.',
+          'Vérifier les tendances globales avant de démarrer la journée.'
         ],
         useCases: [
-          'Prendre une decision rapide sur les priorites du jour.',
-          'Identifier les factures ou relances a traiter en premier.',
-          'Verifier l activite generale du cabinet sur la periode.'
+          'Prendre une décision rapide sur les priorités du jour.',
+          'Identifier les factures ou relances à traiter en premier.',
+          'Vérifier l\'activité générale du cabinet sur la période.'
         ]
       },
       {
         title: 'Piloter le mini calendrier de consultation',
         manipulations: [
-          'Utiliser les boutons periode precedente / suivante.',
-          'Cliquer sur Aujourd hui pour recentrer la vue.',
+          'Utiliser les boutons période précédente / suivante.',
+          'Cliquer sur Aujourd\'hui pour recentrer la vue.',
           'Basculer entre les modes Mois, Semaine, 3 jours et Jour.'
         ],
         useCases: [
-          'Reperer rapidement les plages chargees.',
-          'Verifier la disponibilite avant de proposer un rendez-vous.',
-          'Presenter une vision planning claire a un secretaire.'
+          'Repérer rapidement les plages chargées.',
+          'Vérifier la disponibilité avant de proposer un rendez-vous.',
+          'Présenter une vision planning claire à un secrétaire.'
         ]
       }
     ]
@@ -57,29 +57,29 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
     summary: 'Planification des rendez-vous et navigation fine par date, praticien et statut.',
     actions: [
       {
-        title: 'Creer un rendez-vous',
+        title: 'Créer un rendez-vous',
         manipulations: [
-          'Aller sur Agenda puis choisir un creneau horaire libre.',
-          'Saisir patient, motif et duree puis valider.',
-          'Verifier que le rendez-vous apparait dans la bonne colonne de date.'
+          'Aller sur Agenda puis choisir un créneau horaire libre.',
+          'Saisir patient, motif et durée puis valider.',
+          'Vérifier que le rendez-vous apparaît dans la bonne colonne de date.'
         ],
         useCases: [
-          'Programmer une premiere consultation patient.',
-          'Ajouter un controle de suivi apres une seance.',
-          'Bloquer un creneau interne non medical.'
+          'Programmer une première consultation patient.',
+          'Ajouter un contrôle de suivi après une séance.',
+          'Bloquer un créneau interne non médical.'
         ]
       },
       {
-        title: 'Modifier ou deplacer un rendez-vous',
+        title: 'Modifier ou déplacer un rendez-vous',
         manipulations: [
           'Cliquer sur un rendez-vous existant.',
-          'Mettre a jour heure, duree, statut ou commentaire.',
-          'Enregistrer puis verifier la coherence dans la vue.'
+          'Mettre à jour heure, durée, statut ou commentaire.',
+          'Enregistrer puis vérifier la cohérence dans la vue.'
         ],
         useCases: [
-          'Decaler un patient suite a un retard.',
-          'Passer un rendez-vous en confirme, annule ou a confirmer.',
-          'Ajouter des details utiles pour la consultation.'
+          'Décaler un patient suite à un retard.',
+          'Passer un rendez-vous en confirmé, annulé ou à confirmer.',
+          'Ajouter des détails utiles pour la consultation.'
         ]
       }
     ]
@@ -95,12 +95,12 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
         title: 'Rechercher un patient',
         manipulations: [
           'Saisir le nom dans la barre de recherche.',
-          'Utiliser la pagination pour parcourir les resultats.',
+          'Utiliser la pagination pour parcourir les résultats.',
           'Ajuster le nombre de lignes affichees par page.'
         ],
         useCases: [
           'Retrouver une fiche en quelques secondes a l accueil du cabinet.',
-          'Verifier si un patient existe deja avant creation.',
+          'Vérifier si un patient existe déjà avant création.',
           'Preparer un appel de confirmation de rendez-vous.'
         ]
       },
@@ -112,9 +112,9 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
           'Naviguer ensuite vers les consultations ou documents associes.'
         ],
         useCases: [
-          'Mettre a jour les coordonnees avant une visite.',
-          'Acceder a l historique clinique.',
-          'Verifier les informations administratives pour la facturation.'
+          'Mettre à jour les coordonnées avant une visite.',
+          'Accéder a l historique clinique.',
+          'Vérifier les informations administratives pour la facturation.'
         ]
       }
     ]
@@ -124,13 +124,13 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
     title: 'Fiche patient',
     appRoute: '/patients/:id',
     screenshot: '/help/fiche-patient.png',
-    summary: 'Dossier complet patient: identite, contexte clinique, suivi et actes.',
+    summary: 'Dossier complet patient: identité, contexte clinique, suivi et actes.',
     actions: [
       {
-        title: 'Mettre a jour la fiche administrative',
+        title: 'Mettre à jour la fiche administrative',
         manipulations: [
           'Ouvrir la fiche puis modifier les champs utiles.',
-          'Verifier les informations de contact et les remarques importantes.',
+          'Vérifier les informations de contact et les remarques importantes.',
           'Enregistrer les changements et valider l affichage.'
         ],
         useCases: [
@@ -142,21 +142,21 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
       {
         title: 'Suivre les consultations et actes',
         manipulations: [
-          'Acceder a la section consultations depuis la fiche.',
-          'Ouvrir une consultation existante pour lecture ou mise a jour.',
-          'Creer une nouvelle consultation si necessaire.'
+          'Accéder a la section consultations depuis la fiche.',
+          'Ouvrir une consultation existante pour lecture ou mise à jour.',
+          'Créer une nouvelle consultation si necessaire.'
         ],
         useCases: [
-          'Continuer une prise en charge deja engagee.',
+          'Continuer une prise en charge déjà engagee.',
           'Comparer l evolution des symptomes dans le temps.',
-          'Documenter une nouvelle seance apres rendez-vous.'
+          'Documenter une nouvelle séance apres rendez-vous.'
         ]
       }
     ]
   },
   {
     slug: 'repertoire',
-    title: 'Repertoire',
+    title: 'Répertoire',
     appRoute: '/repertoire',
     screenshot: '/help/repertoire.png',
     summary: 'Annuaire des correspondants et contacts du cabinet (medecins, partenaires, etc.).',
@@ -164,22 +164,22 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
       {
         title: 'Consulter et filtrer les contacts',
         manipulations: [
-          'Ouvrir Repertoire puis utiliser la recherche ou les filtres disponibles.',
+          'Ouvrir Répertoire puis utiliser la recherche ou les filtres disponibles.',
           'Cliquer sur une fiche contact pour afficher les details.',
-          'Verifier email, telephone et categorie avant action.'
+          'Vérifier email, telephone et categorie avant action.'
         ],
         useCases: [
           'Retrouver rapidement un medecin adresseur.',
-          'Verifier les coordonnees avant un courrier.',
+          'Vérifier les coordonnées avant un courrier.',
           'Identifier un contact par specialite.'
         ]
       },
       {
-        title: 'Creer ou modifier un contact',
+        title: 'Créer ou modifier un contact',
         manipulations: [
           'Utiliser le bouton d ajout ou d edition.',
           'Saisir les champs obligatoires puis enregistrer.',
-          'Controler la presence du contact dans la liste apres sauvegarde.'
+          'Contrôler la presence du contact dans la liste apres sauvegarde.'
         ],
         useCases: [
           'Ajouter un nouveau partenaire local.',
@@ -201,25 +201,25 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
         manipulations: [
           'Ouvrir Facturation puis consulter les indicateurs de suivi.',
           'Filtrer les lignes par statut ou periode.',
-          'Verifier les montants, echeances et moyens de paiement.'
+          'Vérifier les montants, echeances et moyens de paiement.'
         ],
         useCases: [
           'Prioriser les relances de factures impayees.',
           'Preparer une vue synthese en fin de semaine.',
-          'Controler la coherence des reglements saisis.'
+          'Contrôler la coherence des règlements saisis.'
         ]
       },
       {
-        title: 'Mettre a jour le statut de reglement',
+        title: 'Mettre à jour le statut de règlement',
         manipulations: [
           'Ouvrir la ligne de facture concernee.',
-          'Saisir la date et le moyen de reglement.',
-          'Valider puis controler la mise a jour du tableau de suivi.'
+          'Saisir la date et le moyen de règlement.',
+          'Valider puis contrôler la mise à jour du tableau de suivi.'
         ],
         useCases: [
           'Marquer une facture comme reglee apres reception du paiement.',
           'Corriger un statut errone.',
-          'Fiabiliser la comptabilite courante du cabinet.'
+          'Fiabiliser la comptabilité courante du cabinet.'
         ]
       }
     ]
@@ -236,7 +236,7 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
         manipulations: [
           'Choisir une periode depuis les controles de la page.',
           'Lire les courbes et les histogrammes associes.',
-          'Comparer les resultats avec la periode precedente.'
+          'Comparer les résultats avec la periode precedente.'
         ],
         useCases: [
           'Mesurer la croissance ou baisse d activite.',
@@ -247,7 +247,7 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
       {
         title: 'Exploiter les indicateurs de pilotage',
         manipulations: [
-          'Repeter l analyse sur differents filtres.',
+          'Répéter l analyse sur différents filtres.',
           'Noter les indicateurs clefs pour le reporting interne.',
           'Revenir a une vue globale pour valider la tendance generale.'
         ],
@@ -270,11 +270,11 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
         title: 'Modifier les informations du compte',
         manipulations: [
           'Ouvrir Mon profil puis selectionner l onglet concerne.',
-          'Mettre a jour les champs (identite, contact, mot de passe).',
+          'Mettre à jour les champs (identité, contact, mot de passe).',
           'Enregistrer et verifier le message de confirmation.'
         ],
         useCases: [
-          'Mise a jour d email professionnel.',
+          'Mise à jour d\'email professionnel.',
           'Changement de mot de passe utilisateur.',
           'Correction d informations personnelles.'
         ]
@@ -282,7 +282,7 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
       {
         title: 'Ajuster les preferences d interface',
         manipulations: [
-          'Acceder aux reglages interface et agenda.',
+          'Accéder aux reglages interface et agenda.',
           'Choisir theme, mode PDF, options d affichage.',
           'Sauvegarder pour appliquer la personnalisation.'
         ],

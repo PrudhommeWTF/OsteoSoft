@@ -497,8 +497,8 @@ export class StatistiquesPage implements AfterViewInit, OnDestroy {
 
   getUserCardEmptyMessage(): string {
     return this.canViewPeerStatistics()
-      ? 'Aucune statistique utilisateur disponible pour la selection courante.'
-      : 'Les statistiques utilisateur sont limitees a votre propre perimetre.';
+      ? 'Aucune statistique utilisateur disponible pour la sélection courante.'
+      : 'Les statistiques utilisateur sont limitées à votre propre périmètre.';
   }
 
   private async initialize(): Promise<void> {

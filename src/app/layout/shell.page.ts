@@ -81,11 +81,11 @@ export class ShellPage implements OnInit, OnDestroy {
     { path: '/patients/nouveau', label: 'Nouveau patient', icon: 'fa-solid fa-user-plus', exact: true, requiredPermission: 'create-patient-record' },
     { path: '/agenda', label: 'Agenda', icon: 'fa-solid fa-calendar-days', exact: true, requiredPermission: 'read-agenda' },
     { path: '/patients', label: 'Listing patients', icon: 'fa-solid fa-list-ul', badge: '...', exact: true, requiredPermission: 'read-patient-list' },
-    { path: '/repertoire', label: 'Repertoire', icon: 'fa-solid fa-address-book', badge: '...', exact: true, requiredPermission: 'read-directory' },
-    { path: '/facturation', label: 'Comptabilite', icon: 'fa-solid fa-file-invoice-dollar', badge: '...', requiredPermission: 'read-billing-kpis' },
+    { path: '/repertoire', label: 'Répertoire', icon: 'fa-solid fa-address-book', badge: '...', exact: true, requiredPermission: 'read-directory' },
+    { path: '/facturation', label: 'Comptabilité', icon: 'fa-solid fa-file-invoice-dollar', badge: '...', requiredPermission: 'read-billing-kpis' },
     { path: '/statistiques', label: 'Statistiques', icon: 'fa-solid fa-chart-column', requiredPermission: 'read-advanced-statistics' },
     { path: '/administration-cabinet', label: 'Administration cabinet', icon: 'fa-solid fa-building', exact: true, requiredPermission: 'read-office-settings' },
-    { path: '/parametres', label: 'Parametres', icon: 'fa-solid fa-gear', exact: true, adminOnly: true }
+    { path: '/parametres', label: 'Paramètres', icon: 'fa-solid fa-gear', exact: true, adminOnly: true }
   ]);
 
   readonly visibleNavItems = computed(() => {
@@ -132,7 +132,7 @@ export class ShellPage implements OnInit, OnDestroy {
     this.api.getDirectoryContactCount().then((count) => {
       this.navItems.update((items) =>
         items.map((item) =>
-          item.label === 'Repertoire' ? { ...item, badge: String(count) } : item
+          item.label === 'Répertoire' ? { ...item, badge: String(count) } : item
         )
       );
     }).catch(async () => {
@@ -142,13 +142,13 @@ export class ShellPage implements OnInit, OnDestroy {
         const count = Number(payload?.contacts?.length ?? 0);
         this.navItems.update((items) =>
           items.map((item) =>
-            item.label === 'Repertoire' ? { ...item, badge: String(count) } : item
+            item.label === 'Répertoire' ? { ...item, badge: String(count) } : item
           )
         );
       } catch {
         this.navItems.update((items) =>
           items.map((item) =>
-            item.label === 'Repertoire' ? { ...item, badge: '?' } : item
+            item.label === 'Répertoire' ? { ...item, badge: '?' } : item
           )
         );
       }
@@ -327,7 +327,7 @@ export class ShellPage implements OnInit, OnDestroy {
 
   formatSidebarPatientAge(age: number | null): string {
     if (age === null || age < 0) {
-      return 'Age non renseigne';
+      return 'Âge non renseigné';
     }
 
     return `${age} ans`;
@@ -365,13 +365,13 @@ export class ShellPage implements OnInit, OnDestroy {
       const roundedAmount = Math.round(Number(revenue.amountCents ?? 0) / 100);
       this.navItems.update((items) =>
         items.map((item) =>
-          item.label === 'Comptabilite' ? { ...item, badge: String(roundedAmount) } : item
+          item.label === 'Comptabilité' ? { ...item, badge: String(roundedAmount) } : item
         )
       );
     } catch {
       this.navItems.update((items) =>
         items.map((item) =>
-          item.label === 'Comptabilite' ? { ...item, badge: '?' } : item
+          item.label === 'Comptabilité' ? { ...item, badge: '?' } : item
         )
       );
     }

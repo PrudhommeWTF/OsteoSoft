@@ -1,14 +1,14 @@
 <div class="shell" [class.shell-mobile-open]="isMenuOpen()">
   <aside class="sidebar" aria-label="Menu principal">
     <div class="logo-block">
-      <a class="logo-link" routerLink="/accueil" (click)="closeMenu()" aria-label="Aller a la page d'accueil">
+      <a class="logo-link" routerLink="/accueil" (click)="closeMenu()" aria-label="Aller à la page d'accueil">
         <p class="brand-lockup mb-0">
           <span class="brand-mark">
             <img src="/logo-osteosoft.svg" alt="Logo OsteoSoft" loading="eager" decoding="async" />
           </span>
           <span>
             <span class="title">OsteoSoft</span>
-            <span class="subtitle">logiciel pour osteopathes</span>
+            <span class="subtitle">logiciel pour ostéopathes</span>
           </span>
         </p>
       </a>
@@ -107,7 +107,7 @@
 
     <div class="sidebar-footer">
       <section class="account-block" aria-label="Compte utilisateur">
-        <p class="account-caption">Connecte(e) en tant que <span class="account-name">{{ username() || 'admin' }}</span></p>
+        <p class="account-caption">Connecté(e) en tant que <span class="account-name">{{ username() || 'admin' }}</span></p>
       </section>
 
       <nav class="utility-nav" aria-label="Actions secondaires">
@@ -152,7 +152,7 @@
 
         <button type="button" class="utility-button logout-link" title="Se déconnecter de l'application" bsTooltip (click)="logout()">
           <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-right-from-bracket fa-fw"></i></span>
-          <span>Deconnexion</span>
+          <span>Déconnexion</span>
         </button>
       </nav>
 
@@ -161,7 +161,7 @@
         <button
           type="button"
           class="credits-inline-btn"
-          aria-label="Afficher les credits"
+          aria-label="Afficher les crédits"
           title="Afficher les crédits et les dépendances"
           bsTooltip
           (click)="openCreditsModal()"
