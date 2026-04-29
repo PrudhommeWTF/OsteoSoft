@@ -4764,15 +4764,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     appendLegalCode(practitionerParts, 'APE', profile?.apeNafCode);
     appendLegalCode(practitionerParts, 'ADELI', profile?.adeliCode);
 
-    const officeParts: string[] = [];
-    appendLegalCode(officeParts, 'SIRET', office?.siret);
-    appendLegalCode(officeParts, 'RPPS', office?.rppsCode);
-    appendLegalCode(officeParts, 'APE', office?.apeNafCode);
-    appendLegalCode(officeParts, 'ADELI', office?.adeliCode);
-
     const sections = [
-      `Praticien - ${practitionerParts.length ? practitionerParts.join(' | ') : 'Aucun code renseigne'}`,
-      `Cabinet - ${officeParts.length ? officeParts.join(' | ') : 'Aucun code renseigne'}`
+      `Praticien - ${practitionerParts.length ? practitionerParts.join(' | ') : 'Aucun code renseigne'}`
     ];
 
     if (includeVatMention && !office?.hideVatMention) {
