@@ -644,6 +644,18 @@ db.exec(`
 `);
 
 const rawDataKey = process.env.OSTEOSOFT_DATA_KEY;
+
+if (isProduction && !rawDataKey) {
+  throw new Error(
+    'OSTEOSOFT_DATA_KEY must be configured in production. ' +
+    'Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"'
+  );
+}
+
+if (!isProduction && !rawDataKey) {
+  console.warn('WARNING: Using development encryption key. Set OSTEOSOFT_DATA_KEY.');
+}
+
 let dataKey;
 
 if (rawDataKey) {
