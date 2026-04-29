@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 
@@ -701,6 +702,7 @@ export class SettingsPage implements OnDestroy {
   readonly canUpdateOfficeSettings = computed(() => this.auth.hasPermission('update-office-settings'));
   readonly canDeleteOffice = computed(() => this.isApplicationSuperAdmin() && this.auth.hasPermission('delete-office'));
   readonly canReorderOffices = computed(() => this.auth.hasPermission('reorder-offices'));
+  readonly canResetDemoInstance = computed(() => this.isApplicationSuperAdmin());
 
   readonly visibleSections = computed(() => {
     if (this.isOfficeAdminOnlyMode()) {
@@ -1977,6 +1979,11 @@ export class SettingsPage implements OnDestroy {
   }
 
   async resetDemoInstance(): Promise<void> {
+    if (!this.canResetDemoInstance()) {
+      this.dataManagementError.set('Acces reserve aux super administrateurs application.');
+      return;
+    }
+
     const confirmation = globalThis.confirm(
       'Cette operation remplacera les donnees actuelles par une instance de demonstration complete. Continuer ?'
     );
@@ -1995,8 +2002,13 @@ export class SettingsPage implements OnDestroy {
       await this.loadUsers();
       await this.loadAccessProfiles();
       await this.loadCurrentUser();
-    } catch {
-      this.dataManagementError.set('Impossible de reinitialiser l\'instance de demonstration.');
+    } catch (error) {
+      if (error instanceof HttpErrorResponse) {
+        const apiMessage = String(error.error?.message ?? '').trim();
+        this.dataManagementError.set(apiMessage || 'Impossible de reinitialiser l\'instance de demonstration.');
+      } else {
+        this.dataManagementError.set('Impossible de reinitialiser l\'instance de demonstration.');
+      }
     } finally {
       this.isResettingDemo.set(false);
     }

@@ -2059,6 +2059,32 @@ function resetDatabaseForDemoInstance() {
       .get(String(tableName ?? '').trim())
   );
 
+  // Purge child tables first to satisfy FK constraints on users/offices.
+  if (hasTable('patient_payment_credit_allocations')) {
+    db.exec('DELETE FROM patient_payment_credit_allocations');
+  }
+  if (hasTable('patient_payment_credits')) {
+    db.exec('DELETE FROM patient_payment_credits');
+  }
+  if (hasTable('invoice_line_items')) {
+    db.exec('DELETE FROM invoice_line_items');
+  }
+  if (hasTable('invoice_payments')) {
+    db.exec('DELETE FROM invoice_payments');
+  }
+  if (hasTable('consultation_reason_items')) {
+    db.exec('DELETE FROM consultation_reason_items');
+  }
+  if (hasTable('consultation_sections')) {
+    db.exec('DELETE FROM consultation_sections');
+  }
+  if (hasTable('patient_antecedents')) {
+    db.exec('DELETE FROM patient_antecedents');
+  }
+  if (hasTable('accounting_deposit_items')) {
+    db.exec('DELETE FROM accounting_deposit_items');
+  }
+
   db.exec('DELETE FROM patient_documents');
   db.exec('DELETE FROM appointments');
   db.exec('DELETE FROM consultations');
@@ -2073,6 +2099,9 @@ function resetDatabaseForDemoInstance() {
   db.exec('DELETE FROM accounting_operation_meta');
   db.exec('DELETE FROM accounting_expenses');
   db.exec('DELETE FROM accounting_deposits');
+  if (hasTable('audit_logs')) {
+    db.exec('DELETE FROM audit_logs');
+  }
   db.exec('DELETE FROM office_user_delegations');
   db.exec('DELETE FROM user_offices');
   db.exec('DELETE FROM local_calendars');

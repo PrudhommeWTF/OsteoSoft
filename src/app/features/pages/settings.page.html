@@ -382,13 +382,17 @@
                   impayés, consultations non facturées et cas métier de validation.
                 </p>
 
-                <button type="button" class="btn btn-outline-warning" [disabled]="isResettingDemo()" (click)="resetDemoInstance()" title="Réinitialiser" bsTooltip>
-                  @if (isResettingDemo()) {
-                    <i class="fa-solid fa-circle-notch fa-spin me-1"></i>Réinitialisation de la démo...
-                  } @else {
-                    <i class="fa-solid fa-flask me-1"></i>Réinitialiser l'instance de démonstration
-                  }
-                </button>
+                @if (canResetDemoInstance()) {
+                  <button type="button" class="btn btn-outline-warning" [disabled]="isResettingDemo()" (click)="resetDemoInstance()" title="Réinitialiser" bsTooltip>
+                    @if (isResettingDemo()) {
+                      <i class="fa-solid fa-circle-notch fa-spin me-1"></i>Réinitialisation de la démo...
+                    } @else {
+                      <i class="fa-solid fa-flask me-1"></i>Réinitialiser l'instance de démonstration
+                    }
+                  </button>
+                } @else {
+                  <p class="small text-secondary mb-0">Action réservée aux super administrateurs application.</p>
+                }
               </article>
             </div>
           </section>
