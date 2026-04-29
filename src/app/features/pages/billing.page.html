@@ -574,7 +574,17 @@
         <tbody>
           @if (isLoading()) {
             <tr>
-              <td colspan="8" class="text-center py-4 text-secondary">Chargement des operations...</td>
+              <td colspan="8" class="py-4">
+                <div class="d-flex align-items-center justify-content-center gap-2 mb-3 text-secondary">
+                  <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                  <p class="mb-0">Chargement des opérations...</p>
+                </div>
+                <div class="placeholder-glow">
+                  <span class="placeholder col-12 mb-2"></span>
+                  <span class="placeholder col-10 mb-2"></span>
+                  <span class="placeholder col-8"></span>
+                </div>
+              </td>
             </tr>
           } @else if (operations().length === 0) {
             <tr>

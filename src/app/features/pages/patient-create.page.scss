@@ -496,7 +496,6 @@
 	overflow: auto;
 }
 
-/* Keep calendar popover above modal/backdrop stack. */
 :host ::ng-deep .datepicker-dropdown {
 	z-index: 1120 !important;
 }

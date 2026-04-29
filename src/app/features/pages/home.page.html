@@ -7,7 +7,17 @@
 
 @if (isLoading()) {
   <section class="card">
-    <div class="card-body py-4">Chargement du tableau de bord...</div>
+    <div class="card-body py-4">
+      <div class="d-flex align-items-center gap-2 mb-3" role="status" aria-live="polite">
+        <div class="spinner-border spinner-border-sm text-primary" aria-hidden="true"></div>
+        <span>Chargement du tableau de bord...</span>
+      </div>
+      <div class="placeholder-glow">
+        <span class="placeholder col-12 mb-2"></span>
+        <span class="placeholder col-10 mb-2"></span>
+        <span class="placeholder col-8"></span>
+      </div>
+    </div>
   </section>
 } @else {
   <section class="card mb-3">
@@ -108,7 +118,7 @@
                     <td>{{ payment.invoiceNumber }}</td>
                     <td>{{ payment.patientName }}</td>
                     <td>{{ payment.dueAt }}</td>
-                    <td class="text-end">{{ payment.amountEur.toFixed(2) }} EUR</td>
+                    <td class="text-end">{{ payment.amountLabel }}</td>
                   </tr>
                 } @empty {
                   <tr>
@@ -118,7 +128,7 @@
               </tbody>
             </table>
           </div>
-          @if (pendingPayments().length > 10) {
+          @if (hasPendingPaymentsPagination()) {
             <nav class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3" aria-label="Pagination paiements en attente">
               <span class="small text-secondary">Page {{ pendingPaymentsPage() }} / {{ pendingPaymentsTotalPages() }}</span>
               <ul class="pagination pagination-sm mb-0">

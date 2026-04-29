@@ -177,6 +177,7 @@ export class SettingsPage implements OnDestroy {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
+  private readonly eurFormatter = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
 
   readonly accessDomains: AccessDomain[] = [
     {
@@ -1423,7 +1424,7 @@ export class SettingsPage implements OnDestroy {
   }
 
   formatCurrency(value: number): string {
-    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value);
+    return this.eurFormatter.format(value);
   }
 
   openCreateLocalCalendarModal(officeId?: number): void {

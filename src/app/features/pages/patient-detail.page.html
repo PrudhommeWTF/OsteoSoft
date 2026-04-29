@@ -1,7 +1,13 @@
 @if (isLoading()) {
   <div class="d-flex justify-content-center py-5">
-    <div class="spinner-border text-primary" role="status">
-      <span class="visually-hidden">Chargement...</span>
+    <div>
+      <div class="spinner-border text-primary mb-3" role="status" aria-hidden="true"></div>
+      <p class="text-center text-muted mb-0">Chargement des informations du patient...</p>
+      <div class="placeholder-glow mt-3">
+        <span class="placeholder col-12 mb-2"></span>
+        <span class="placeholder col-10 mb-2"></span>
+        <span class="placeholder col-8"></span>
+      </div>
     </div>
   </div>
 } @else if (!patient()) {
@@ -430,9 +436,12 @@
           </div>
 
           @if (isLoadingDocuments()) {
-            <div class="d-flex justify-content-center py-4">
-              <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Chargement...</span>
+            <div class="d-flex flex-column align-items-center justify-content-center py-4 gap-3">
+              <div class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></div>
+              <span class="small text-muted">Chargement des documents...</span>
+              <div class="placeholder-glow w-100">
+                <span class="placeholder col-12 mb-2"></span>
+                <span class="placeholder col-9"></span>
               </div>
             </div>
           } @else if (patientDocuments().length === 0) {
@@ -633,10 +642,9 @@
           </div>
           <div class="modal-body">
             @if (isLoadingAuditLogs()) {
-              <div class="d-flex justify-content-center py-4">
-                <div class="spinner-border text-primary" role="status">
-                  <span class="visually-hidden">Chargement...</span>
-                </div>
+              <div class="d-flex flex-column align-items-center justify-content-center py-4 gap-2">
+                <div class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></div>
+                <span class="small text-muted">Chargement de l'historique...</span>
               </div>
             } @else if (auditLoadError()) {
               <div class="alert alert-danger mb-0">{{ auditLoadError() }}</div>

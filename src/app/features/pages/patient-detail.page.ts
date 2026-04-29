@@ -137,6 +137,10 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   private readonly fb = inject(FormBuilder);
   private readonly topbar = inject(TopbarService);
   private readonly cdr = inject(ChangeDetectorRef);
+  private readonly amountFormatter = new Intl.NumberFormat('fr-FR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
 
   private readonly birthDateInputRef = viewChild<ElementRef<HTMLInputElement>>('birthDateInput');
   private readonly antecedentDateInputRef = viewChild<ElementRef<HTMLInputElement>>('antecedentDateInputRef');
@@ -3746,10 +3750,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
   private formatAmountFr(amount: number): string {
     const normalized = Number.isFinite(amount) ? amount : 0;
-    return new Intl.NumberFormat('fr-FR', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(normalized);
+    return this.amountFormatter.format(normalized);
   }
 
   private hydrateConsultationReasonsFromRecord(reasonItems: ConsultationReasonItem[]): void {

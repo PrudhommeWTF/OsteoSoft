@@ -118,9 +118,16 @@
 <section class="card">
   <div class="card-body">
     @if (isLoading()) {
-      <div class="d-flex align-items-center gap-2 text-secondary">
-        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-        Chargement du repertoire...
+      <div>
+        <div class="d-flex align-items-center gap-2 mb-3 text-secondary">
+          <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+          <p class="mb-0">Chargement du répertoire...</p>
+        </div>
+        <div class="placeholder-glow">
+          <span class="placeholder col-12 mb-2"></span>
+          <span class="placeholder col-10 mb-2"></span>
+          <span class="placeholder col-8"></span>
+        </div>
       </div>
     } @else {
       <div class="table-responsive">

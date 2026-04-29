@@ -13,7 +13,21 @@ import {
   viewChild
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import Chart from 'chart.js/auto';
+import {
+  ArcElement,
+  BarController,
+  BarElement,
+  CategoryScale,
+  Chart as ChartJs,
+  DoughnutController,
+  Filler,
+  Legend,
+  LinearScale,
+  LineController,
+  LineElement,
+  PointElement,
+  Tooltip
+} from 'chart.js';
 
 import {
   DistributionPoint,
@@ -158,6 +172,21 @@ const CHART_CARD_IDS: ReadonlySet<StatisticsCardId> = new Set<StatisticsCardId>(
   'user-payment-methods'
 ]);
 
+ChartJs.register(
+  LineController,
+  DoughnutController,
+  BarController,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  ArcElement,
+  BarElement,
+  Tooltip,
+  Legend,
+  Filler
+);
+
 @Component({
   selector: 'app-statistiques-page',
   imports: [RouterLink, BsTooltipDirective],
@@ -169,6 +198,11 @@ export class StatistiquesPage implements AfterViewInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly injector = inject(Injector);
+  private readonly eurFormatter = new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 2
+  });
 
   readonly pageRoot = viewChild<ElementRef<HTMLElement>>('pageRoot');
 
@@ -230,7 +264,7 @@ export class StatistiquesPage implements AfterViewInit, OnDestroy {
   readonly EMPTY_YEAR_SERIES = EMPTY_YEAR_SERIES;
   readonly EMPTY_AGE_POINTS = EMPTY_AGE_POINTS;
 
-  private readonly charts = new Map<string, Chart>();
+  private readonly charts = new Map<string, ChartJs>();
   private readonly activeOfficeSyncEffect = effect(() => {
     if (this.scopeMode() !== 'active-office') {
       return;
@@ -434,11 +468,7 @@ export class StatistiquesPage implements AfterViewInit, OnDestroy {
   }
 
   formatCurrency(cents: number): string {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 2
-    }).format(cents / 100);
+    return this.eurFormatter.format(cents / 100);
   }
 
   isYearSelected(year: number): boolean {
@@ -556,7 +586,7 @@ export class StatistiquesPage implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const chart = new Chart(canvas, {
+    const chart = new ChartJs(canvas, {
       type: 'doughnut',
       data: {
         labels: points.map((point) => point.label),
@@ -590,7 +620,7 @@ export class StatistiquesPage implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const chart = new Chart(canvas, {
+    const chart = new ChartJs(canvas, {
       type: 'line',
       data: {
         labels: points.map((point) => point.label),
@@ -635,7 +665,7 @@ export class StatistiquesPage implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const chart = new Chart(canvas, {
+    const chart = new ChartJs(canvas, {
       type: 'bar',
       data: {
         labels: points.map((point) => point.label),
@@ -688,7 +718,7 @@ export class StatistiquesPage implements AfterViewInit, OnDestroy {
       tension: 0.3
     }));
 
-    const chart = new Chart(canvas, {
+    const chart = new ChartJs(canvas, {
       type: 'line',
       data: {
         labels,
@@ -721,7 +751,7 @@ export class StatistiquesPage implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const chart = new Chart(canvas, {
+    const chart = new ChartJs(canvas, {
       type: 'bar',
       data: {
         labels: points.map((point) => point.label),

@@ -11,7 +11,19 @@ import {
   signal,
   viewChild
 } from '@angular/core';
-import Chart from 'chart.js/auto';
+import {
+  BarController,
+  BarElement,
+  CategoryScale,
+  Chart as ChartJs,
+  Filler,
+  Legend,
+  LinearScale,
+  LineController,
+  LineElement,
+  PointElement,
+  Tooltip
+} from 'chart.js';
 import { RouterLink } from '@angular/router';
 
 import { ApiService } from '../../core/api.service';
@@ -21,6 +33,21 @@ import { WeekCalendar } from './week-calendar';
 type PaginationItem =
   | { key: string; kind: 'page'; page: number }
   | { key: string; kind: 'ellipsis' };
+type PendingPayment = DashboardPayload['pendingPayments'][number];
+type PendingPaymentRow = PendingPayment & { amountLabel: string };
+
+ChartJs.register(
+  LineController,
+  BarController,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Tooltip,
+  Legend,
+  Filler
+);
 
 @Component({
   selector: 'app-home-page',
@@ -35,6 +62,10 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   private readonly api = inject(ApiService);
   private readonly injector = inject(Injector);
+  private readonly eurFormatter = new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: 'EUR'
+  });
 
   readonly monthlyChartHost = viewChild<ElementRef<HTMLCanvasElement>>('monthlyChartHost');
   readonly ageChartHost = viewChild<ElementRef<HTMLCanvasElement>>('ageChartHost');
@@ -49,11 +80,17 @@ export class HomePage implements AfterViewInit, OnDestroy {
   readonly pendingPaymentsTotalPages = computed(() =>
     Math.max(1, Math.ceil(this.pendingPayments().length / HomePage.PENDING_PAYMENTS_PAGE_SIZE))
   );
-  readonly pendingPaymentsPageItems = computed(() => {
+  readonly pendingPaymentsPageItems = computed<PendingPaymentRow[]>(() => {
     const page = this.pendingPaymentsPage();
     const start = (page - 1) * HomePage.PENDING_PAYMENTS_PAGE_SIZE;
-    return this.pendingPayments().slice(start, start + HomePage.PENDING_PAYMENTS_PAGE_SIZE);
+    return this.pendingPayments()
+      .slice(start, start + HomePage.PENDING_PAYMENTS_PAGE_SIZE)
+      .map((payment) => ({
+        ...payment,
+        amountLabel: this.eurFormatter.format(payment.amountEur)
+      }));
   });
+  readonly hasPendingPaymentsPagination = computed(() => this.pendingPaymentsTotalPages() > 1);
   readonly pendingPaymentsPaginationItems = computed<PaginationItem[]>(() => {
     const total = this.pendingPaymentsTotalPages();
     const current = this.pendingPaymentsPage();
@@ -107,8 +144,8 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   private readonly pendingPayload = signal<DashboardPayload | null>(null);
 
-  private monthlyChart: Chart<'line'> | null = null;
-  private ageChart: Chart<'bar'> | null = null;
+  private monthlyChart: ChartJs<'line'> | null = null;
+  private ageChart: ChartJs<'bar'> | null = null;
 
   async ngAfterViewInit(): Promise<void> {
     await this.load();
@@ -157,7 +194,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
     const ageEl = this.ageChartHost()?.nativeElement;
 
     if (this.hasMonthlyChartData() && monthlyEl) {
-      this.monthlyChart = new Chart(monthlyEl, {
+      this.monthlyChart = new ChartJs(monthlyEl, {
         type: 'line',
         data: {
           labels: payload.monthlyConsultations.map((point) => point.month),
@@ -189,7 +226,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
     if (this.hasAgeChartData() && ageEl) {
       const points = this.normalizeAgeSexPoints(payload);
-      this.ageChart = new Chart(ageEl, {
+      this.ageChart = new ChartJs(ageEl, {
         type: 'bar',
         data: {
           labels: points.map((point) => point.label),
