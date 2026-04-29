@@ -16,7 +16,7 @@ export class HtmlSanitizerService {
   private readonly allowedAttr = ['style', 'class'];
 
   sanitize(html: string): string {
-    return DOMPurify.sanitize(html ?? '', {
+    return DOMPurify.sanitize(html, {
       ALLOWED_TAGS: this.allowedTags,
       ALLOWED_ATTR: this.allowedAttr
     });
