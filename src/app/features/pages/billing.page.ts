@@ -77,6 +77,7 @@ export class BillingPage implements OnDestroy {
   readonly fromDate = signal('');
   readonly toDate = signal('');
   readonly selectedOfficeId = signal<number | null>(this.authService.activeOfficeId());
+  readonly isAllOfficesOverride = signal(false);
   readonly selectedUserId = signal<number | null>(null);
 
   readonly selectedOperationIds = signal<string[]>([]);
@@ -152,6 +153,10 @@ export class BillingPage implements OnDestroy {
   readonly canManageBilling = computed(() => this.authService.hasPermission('mark-payment'));
   private readonly activeOfficeSyncEffect = effect(() => {
     const activeOfficeId = this.authService.activeOfficeId();
+    if (this.isAllOfficesOverride()) {
+      return;
+    }
+
     if (this.selectedOfficeId() === activeOfficeId) {
       return;
     }
@@ -596,7 +601,29 @@ export class BillingPage implements OnDestroy {
   async onOfficeChange(value: string): Promise<void> {
     const parsed = Number(value);
     const nextOfficeId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-    if (nextOfficeId === this.selectedOfficeId()) {
+    if (nextOfficeId === null) {
+      if (this.isAllOfficesOverride() && this.selectedOfficeId() === null) {
+        return;
+      }
+
+      this.isAllOfficesOverride.set(true);
+      this.selectedOfficeId.set(null);
+      this.selectedUserId.set(null);
+      this.debtorPage.set(1);
+      await this.load();
+      return;
+    }
+
+    this.isAllOfficesOverride.set(false);
+    if (nextOfficeId === this.selectedOfficeId() && this.authService.activeOfficeId() === nextOfficeId) {
+      return;
+    }
+
+    if (this.authService.activeOfficeId() === nextOfficeId) {
+      this.selectedOfficeId.set(nextOfficeId);
+      this.selectedUserId.set(null);
+      this.debtorPage.set(1);
+      await this.load();
       return;
     }
 

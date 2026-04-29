@@ -38,6 +38,7 @@ export class AgendaPage implements OnDestroy {
   readonly appointments = signal<Appointment[]>([]);
   readonly officeOptions = signal<OfficeOption[]>([]);
   readonly selectedOfficeId = signal<number | null>(this.authService.activeOfficeId());
+  readonly isAllOfficesOverride = signal(false);
   readonly defaultAgendaView = signal<string>('Semaine');
   readonly events = signal<DashboardEvent[]>([]);
   readonly officeOpeningHoursById = signal<Record<number, OfficeOpeningHours>>({});
@@ -77,6 +78,10 @@ export class AgendaPage implements OnDestroy {
   private createPatientSearchRequestId = 0;
   private readonly activeOfficeSyncEffect = effect(() => {
     const activeOfficeId = this.authService.activeOfficeId();
+    if (this.isAllOfficesOverride()) {
+      return;
+    }
+
     if (this.selectedOfficeId() === activeOfficeId) {
       return;
     }
@@ -107,7 +112,27 @@ export class AgendaPage implements OnDestroy {
   async onSelectedOfficeChange(value: string): Promise<void> {
     const parsed = Number(value);
     const nextOfficeId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-    if (nextOfficeId === this.selectedOfficeId()) {
+    if (nextOfficeId === null) {
+      if (this.isAllOfficesOverride() && this.selectedOfficeId() === null) {
+        return;
+      }
+
+      this.isAllOfficesOverride.set(true);
+      this.selectedOfficeId.set(null);
+      this.selectedCalendarIds.set([]);
+      await this.load();
+      return;
+    }
+
+    this.isAllOfficesOverride.set(false);
+    if (nextOfficeId === this.selectedOfficeId() && this.authService.activeOfficeId() === nextOfficeId) {
+      return;
+    }
+
+    if (this.authService.activeOfficeId() === nextOfficeId) {
+      this.selectedOfficeId.set(nextOfficeId);
+      this.selectedCalendarIds.set([]);
+      await this.load();
       return;
     }
 
@@ -125,7 +150,7 @@ export class AgendaPage implements OnDestroy {
     const offices = Array.isArray(me.offices) ? me.offices : [];
     this.officeOptions.set(offices);
 
-    const hasCurrentOffice = offices.some((office) => office.id === this.selectedOfficeId());
+    const hasCurrentOffice = this.selectedOfficeId() === null || offices.some((office) => office.id === this.selectedOfficeId());
     if (!hasCurrentOffice) {
       const activeOfficeId = this.authService.activeOfficeId();
       const hasActiveOffice = Number.isInteger(activeOfficeId) && offices.some((office) => office.id === activeOfficeId);

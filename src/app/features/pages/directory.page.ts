@@ -39,6 +39,7 @@ export class DirectoryPage {
 
   readonly search = signal('');
   readonly selectedOfficeId = signal<number | null>(this.auth.activeOfficeId());
+  readonly isAllOfficesOverride = signal(false);
   readonly kindFilter = signal<ContactKindFilter>('all');
 
   readonly isModalOpen = signal(false);
@@ -101,6 +102,10 @@ export class DirectoryPage {
   readonly pageSizeOptions = [10, 25, 50, 100];
   private readonly activeOfficeSyncEffect = effect(() => {
     const activeOfficeId = this.auth.activeOfficeId();
+    if (this.isAllOfficesOverride()) {
+      return;
+    }
+
     if (this.selectedOfficeId() === activeOfficeId) {
       return;
     }
@@ -163,10 +168,6 @@ export class DirectoryPage {
 
       this.contacts.set(payload.contacts);
       this.offices.set(payload.offices);
-
-      if (this.selectedOfficeId() === null && payload.selectedOfficeId != null) {
-        this.selectedOfficeId.set(Number(payload.selectedOfficeId));
-      }
     } catch (error) {
       if (error instanceof HttpErrorResponse) {
         if (error.status === 403) {
@@ -194,7 +195,27 @@ export class DirectoryPage {
   async onOfficeChange(value: string): Promise<void> {
     const parsed = Number(value);
     const nextOfficeId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-    if (nextOfficeId === this.selectedOfficeId()) {
+    if (nextOfficeId === null) {
+      if (this.isAllOfficesOverride() && this.selectedOfficeId() === null) {
+        return;
+      }
+
+      this.isAllOfficesOverride.set(true);
+      this.selectedOfficeId.set(null);
+      this.currentPage.set(1);
+      await this.loadContacts();
+      return;
+    }
+
+    this.isAllOfficesOverride.set(false);
+    if (nextOfficeId === this.selectedOfficeId() && this.auth.activeOfficeId() === nextOfficeId) {
+      return;
+    }
+
+    if (this.auth.activeOfficeId() === nextOfficeId) {
+      this.selectedOfficeId.set(nextOfficeId);
+      this.currentPage.set(1);
+      await this.loadContacts();
       return;
     }
 
