@@ -3,7 +3,7 @@ import { RouterLink } from '@angular/router';
 
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
-import { Patient } from '../../core/api.types';
+import { OfficeOption, Patient } from '../../core/api.types';
 import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 
 @Component({
@@ -20,6 +20,8 @@ export class PatientsPage {
   readonly search = signal('');
   readonly patients = signal<Patient[]>([]);
   readonly selectedOfficeId = signal<number | null>(this.authService.activeOfficeId());
+  readonly isAllOfficesOverride = signal(false);
+  readonly officeOptions = computed<OfficeOption[]>(() => this.authService.offices());
   readonly canExportPatients = computed(() => this.authService.hasPermission('export-patient-list'));
   readonly canCreatePatient = computed(() => this.authService.hasPermission('create-patient-record'));
   readonly isExportModalOpen = signal(false);
@@ -27,6 +29,10 @@ export class PatientsPage {
   readonly exportPatientsError = signal('');
   private readonly activeOfficeSyncEffect = effect(() => {
     const activeOfficeId = this.authService.activeOfficeId();
+    if (this.isAllOfficesOverride()) {
+      return;
+    }
+
     if (this.selectedOfficeId() === activeOfficeId) {
       return;
     }
@@ -95,6 +101,36 @@ export class PatientsPage {
     const query = target?.value ?? '';
     this.search.set(query);
     this.currentPage.set(1);
+  }
+
+  async onOfficeChange(value: string): Promise<void> {
+    const parsed = Number(value);
+    const nextOfficeId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+    if (nextOfficeId === null) {
+      if (this.isAllOfficesOverride() && this.selectedOfficeId() === null) {
+        return;
+      }
+
+      this.isAllOfficesOverride.set(true);
+      this.selectedOfficeId.set(null);
+      this.currentPage.set(1);
+      await this.load();
+      return;
+    }
+
+    this.isAllOfficesOverride.set(false);
+    if (nextOfficeId === this.selectedOfficeId() && this.authService.activeOfficeId() === nextOfficeId) {
+      return;
+    }
+
+    if (this.authService.activeOfficeId() === nextOfficeId) {
+      this.selectedOfficeId.set(nextOfficeId);
+      this.currentPage.set(1);
+      await this.load();
+      return;
+    }
+
+    this.authService.setActiveOfficeId(nextOfficeId);
   }
 
   sexIcon(sex: Patient['sex']): string | null {

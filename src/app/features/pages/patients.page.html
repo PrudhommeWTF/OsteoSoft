@@ -56,17 +56,36 @@
 
 <section class="card mb-3">
   <div class="card-body">
-    <label class="form-label" for="search-input">Rechercher un patient</label>
-    <div class="input-group">
-      <span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
-      <input
-        id="search-input"
-        class="form-control"
-        type="search"
-        [value]="search()"
-        (input)="onSearch($event)"
-        placeholder="Nom du patient"
-      />
+    <div class="row g-3">
+      <div class="col-12 col-lg-6">
+        <label class="form-label" for="search-input">Rechercher un patient</label>
+        <div class="input-group">
+          <span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
+          <input
+            id="search-input"
+            class="form-control"
+            type="search"
+            [value]="search()"
+            (input)="onSearch($event)"
+            placeholder="Nom du patient"
+          />
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-6">
+        <label class="form-label" for="patients-office-select">Filtrer par cabinet</label>
+        <select
+          id="patients-office-select"
+          class="form-select"
+          [value]="selectedOfficeId() ?? ''"
+          (change)="onOfficeChange($any($event.target).value)"
+        >
+          <option value="">Tous les cabinets</option>
+          @for (office of officeOptions(); track office.id) {
+            <option [value]="office.id">{{ office.name }}</option>
+          }
+        </select>
+      </div>
     </div>
   </div>
 </section>

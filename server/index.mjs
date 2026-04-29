@@ -11059,27 +11059,6 @@ app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-lis
   const query = String(req.query.search ?? '').trim().toLowerCase();
   const requestedOfficeId = Number(req.query.officeId);
 
-  const rows = db
-    .prepare(
-      `SELECT p.id,
-              p.cipher_full_name,
-              p.cipher_phone,
-              p.cipher_medical_notes,
-              p.last_visit,
-              p.sex,
-              p.birth_date,
-              p.office_id,
-              COALESCE(a.consultation_count, 0) AS consultation_count
-       FROM patients p
-       LEFT JOIN (
-         SELECT patient_id, COUNT(*) AS consultation_count
-         FROM appointments
-         GROUP BY patient_id
-       ) a ON a.patient_id = p.id
-       WHERE p.is_deleted = 0`
-    )
-    .all();
-
   const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
   const accessibleOfficeIds = isAdmin ? null : getAccessibleBillingOfficeIds(req.userAccess);
   const selectedOfficeId = Number.isInteger(requestedOfficeId)
@@ -11088,13 +11067,66 @@ app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-lis
     ? requestedOfficeId
     : null;
 
+  const scopedOfficeIds = selectedOfficeId !== null
+    ? [selectedOfficeId]
+    : (isAdmin ? null : accessibleOfficeIds);
+
+  const consultationCountByPatientId = new Map();
+  if (scopedOfficeIds === null) {
+    const rows = db
+      .prepare(
+        `SELECT patient_id, COUNT(*) AS consultation_count
+         FROM appointments
+         WHERE office_id IS NOT NULL
+         GROUP BY patient_id`
+      )
+      .all();
+
+    for (const row of rows) {
+      const patientId = Number(row.patient_id);
+      const consultationCount = Number(row.consultation_count ?? 0);
+      if (Number.isInteger(patientId) && patientId > 0 && consultationCount > 0) {
+        consultationCountByPatientId.set(patientId, consultationCount);
+      }
+    }
+  } else if (scopedOfficeIds.length > 0) {
+    const placeholders = scopedOfficeIds.map(() => '?').join(', ');
+    const rows = db
+      .prepare(
+        `SELECT patient_id, COUNT(*) AS consultation_count
+         FROM appointments
+         WHERE office_id IN (${placeholders})
+         GROUP BY patient_id`
+      )
+      .all(...scopedOfficeIds);
+
+    for (const row of rows) {
+      const patientId = Number(row.patient_id);
+      const consultationCount = Number(row.consultation_count ?? 0);
+      if (Number.isInteger(patientId) && patientId > 0 && consultationCount > 0) {
+        consultationCountByPatientId.set(patientId, consultationCount);
+      }
+    }
+  }
+
+  const rows = db
+    .prepare(
+      `SELECT id,
+              cipher_full_name,
+              cipher_phone,
+              cipher_medical_notes,
+              last_visit,
+              sex,
+              birth_date
+       FROM patients
+       WHERE is_deleted = 0`
+    )
+    .all();
+
   const patients = [];
   for (const row of rows) {
-    const patientOfficeId = row.office_id != null ? Number(row.office_id) : null;
-    if (patientOfficeId !== null && !isAdmin && !accessibleOfficeIds.includes(patientOfficeId)) {
-      continue;
-    }
-    if (selectedOfficeId !== null && patientOfficeId !== selectedOfficeId) {
+    const consultationCount = Number(consultationCountByPatientId.get(Number(row.id)) ?? 0);
+    if (consultationCount <= 0) {
       continue;
     }
 
@@ -11121,7 +11153,7 @@ app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-lis
       sex: row.sex === 'F' ? 'Femme' : row.sex === 'M' ? 'Homme' : 'Non renseigne',
       age: getAgeFromBirthDate(row.birth_date),
       city,
-      consultationCount: Number(row.consultation_count ?? 0)
+      consultationCount
     });
   }
 
