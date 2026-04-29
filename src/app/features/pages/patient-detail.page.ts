@@ -39,6 +39,7 @@ import {
 } from '../../core/api.types';
 import { AuthService } from '../../core/auth.service';
 import { TopbarService } from '../../core/topbar.service';
+import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 
 declare const $: any;
 declare const bootstrap: any;
@@ -123,7 +124,7 @@ Je vous remercie par avance, et vous prie d'agréer mes sincères salutations.`;
 
 @Component({
   selector: 'app-patient-detail-page',
-  imports: [RouterLink, ReactiveFormsModule],
+  imports: [RouterLink, ReactiveFormsModule, BsTooltipDirective],
   templateUrl: './patient-detail.page.html',
   styleUrl: './patient-detail.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush

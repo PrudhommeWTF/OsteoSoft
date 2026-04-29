@@ -3,6 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 
 import { ApiService } from '../../core/api.service';
+import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 import { AgendaSettings, DashboardEvent, LocalAgendaCalendar, OfficeOpeningHours, OfficeWeekDay, Practitioner } from '../../core/api.types';
 
 type ConsultationConflictCandidate = {
@@ -63,6 +64,7 @@ interface MonthDayCell extends CalendarDay {
 @Component({
   selector: 'app-week-calendar',
   standalone: true,
+  imports: [BsTooltipDirective],
   templateUrl: './week-calendar.html',
   styleUrl: './week-calendar.scss',
   changeDetection: ChangeDetectionStrategy.OnPush

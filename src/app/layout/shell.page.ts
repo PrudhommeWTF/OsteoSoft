@@ -7,6 +7,7 @@ import { AuthService } from '../core/auth.service';
 import { ConfigService } from '../core/config.service';
 import { ThemeService } from '../core/theme.service';
 import { TopbarService } from '../core/topbar.service';
+import { BsTooltipDirective } from '../core/bs-tooltip.directive';
 
 type NavItem = {
   label: string;
@@ -34,7 +35,7 @@ type DependencyCredit = {
 
 @Component({
   selector: 'app-shell-page',
-  imports: [RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet, BsTooltipDirective],
   templateUrl: './shell.page.html',
   styleUrl: './shell.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush

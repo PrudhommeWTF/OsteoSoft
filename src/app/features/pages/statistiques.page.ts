@@ -30,6 +30,7 @@ import {
 } from '../../core/api.types';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
+import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 
 type StatisticsCardId =
   | 'patients-sex'
@@ -158,7 +159,7 @@ const CHART_CARD_IDS: ReadonlySet<StatisticsCardId> = new Set<StatisticsCardId>(
 
 @Component({
   selector: 'app-statistiques-page',
-  imports: [RouterLink],
+  imports: [RouterLink, BsTooltipDirective],
   templateUrl: './statistiques.page.html',
   styleUrl: './statistiques.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush

@@ -5,13 +5,14 @@ import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { DirectoryContact, DirectoryContactPayload, OfficeOption } from '../../core/api.types';
+import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 
 type ContactKindFilter = 'all' | 'person' | 'company';
 
 @Component({
   selector: 'app-directory-page',
   standalone: true,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, BsTooltipDirective],
   templateUrl: './directory.page.html',
   styleUrl: './directory.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush

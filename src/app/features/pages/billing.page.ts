@@ -17,6 +17,7 @@ import {
   OfficeOption
 } from '../../core/api.types';
 import { AuthService } from '../../core/auth.service';
+import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 
 type ExportHistoryItem = {
   id: string;
@@ -43,7 +44,7 @@ type DepositCandidateGroup = {
 
 @Component({
   selector: 'app-billing-page',
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, BsTooltipDirective],
   templateUrl: './billing.page.html',
   styleUrl: './billing.page.scss',
   host: {

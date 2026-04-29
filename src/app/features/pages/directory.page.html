@@ -6,13 +6,13 @@
 
   <div class="d-flex align-items-center gap-2 flex-wrap">
     @if (canExport()) {
-      <button type="button" class="btn btn-outline-primary" (click)="openExportModal()">
+      <button type="button" class="btn btn-outline-primary" title="Exporter les contacts" bsTooltip (click)="openExportModal()">
         <i class="fa-solid fa-file-export me-2"></i>Exporter
       </button>
     }
 
     @if (canCreate()) {
-      <button type="button" class="btn btn-primary" (click)="openCreateModal()">
+      <button type="button" class="btn btn-primary" title="Ajouter un nouveau contact" bsTooltip (click)="openCreateModal()">
         <i class="fa-solid fa-user-plus me-2"></i>Nouveau contact
       </button>
     }
@@ -25,7 +25,7 @@
       <div class="modal-content">
         <div class="modal-header">
           <h3 id="export-directory-modal-title" class="modal-title h5 mb-0">Exporter le répertoire</h3>
-          <button type="button" class="btn-close" aria-label="Fermer" (click)="closeExportModal()" [disabled]="isExporting()"></button>
+          <button type="button" class="btn-close" aria-label="Fermer" title="Fermer" bsTooltip (click)="closeExportModal()" [disabled]="isExporting()"></button>
         </div>
 
         <div class="modal-body">
@@ -39,13 +39,13 @@
         </div>
 
         <div class="modal-footer gap-2">
-          <button type="button" class="btn btn-secondary" (click)="closeExportModal()" [disabled]="isExporting()">
+          <button type="button" class="btn btn-secondary" title="Annuler" bsTooltip (click)="closeExportModal()" [disabled]="isExporting()">
             Annuler
           </button>
-          <button type="button" class="btn btn-outline-primary" (click)="exportContacts('json')" [disabled]="isExporting()">
+          <button type="button" class="btn btn-outline-primary" title="Télécharger en format JSON" bsTooltip (click)="exportContacts('json')" [disabled]="isExporting()">
             <i class="fa-solid fa-file-code me-2"></i>JSON
           </button>
-          <button type="button" class="btn btn-primary" (click)="exportContacts('excel')" [disabled]="isExporting()">
+          <button type="button" class="btn btn-primary" title="Télécharger en format Excel" bsTooltip (click)="exportContacts('excel')" [disabled]="isExporting()">
             <i class="fa-solid fa-file-excel me-2"></i>Excel
           </button>
         </div>
@@ -169,6 +169,7 @@
                         type="button"
                         class="btn btn-outline-primary"
                         title="Modifier"
+                        bsTooltip
                         (click)="$event.stopPropagation(); openEditModal(contact)"
                       >
                         <i class="fa-solid fa-pen" aria-hidden="true"></i>
@@ -180,6 +181,7 @@
                         type="button"
                         class="btn btn-outline-danger"
                         title="Supprimer"
+                        bsTooltip
                         [disabled]="isDeletingId() === contact.id"
                         (click)="$event.stopPropagation(); deleteContact(contact)"
                       >
@@ -227,7 +229,7 @@
           <nav aria-label="Pagination répertoire">
             <ul class="pagination pagination-sm mb-0">
               <li class="page-item" [class.disabled]="safeCurrentPage() === 1">
-                <button type="button" class="page-link" (click)="goToPrevPage()" aria-label="Page précédente">
+                <button type="button" class="page-link" title="Page précédente" bsTooltip (click)="goToPrevPage()" aria-label="Page précédente">
                   <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
                 </button>
               </li>
@@ -235,7 +237,7 @@
                 <span class="page-link">{{ safeCurrentPage() }} / {{ totalPages() }}</span>
               </li>
               <li class="page-item" [class.disabled]="safeCurrentPage() === totalPages()">
-                <button type="button" class="page-link" (click)="goToNextPage()" aria-label="Page suivante">
+                <button type="button" class="page-link" title="Page suivante" bsTooltip (click)="goToNextPage()" aria-label="Page suivante">
                   <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
                 </button>
               </li>
@@ -255,7 +257,7 @@
           <h2 id="directory-contact-modal-title" class="modal-title h5 mb-0">
             {{ editingContactId() !== null ? 'Modifier le contact' : 'Nouveau contact' }}
           </h2>
-          <button type="button" class="btn-close" aria-label="Fermer" (click)="closeModal()" [disabled]="isSaving()"></button>
+          <button type="button" class="btn-close" aria-label="Fermer" title="Fermer" bsTooltip (click)="closeModal()" [disabled]="isSaving()"></button>
         </div>
 
         <div class="modal-body">
@@ -345,8 +347,8 @@
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" (click)="closeModal()" [disabled]="isSaving()">Annuler</button>
-          <button type="button" class="btn btn-primary" (click)="saveContact()" [disabled]="isSaving() || (editingContactId() !== null ? !canEdit() : !canCreate())">
+          <button type="button" class="btn btn-secondary" title="Annuler les modifications" bsTooltip (click)="closeModal()" [disabled]="isSaving()">Annuler</button>
+          <button type="button" class="btn btn-primary" title="Enregistrer le contact" bsTooltip (click)="saveContact()" [disabled]="isSaving() || (editingContactId() !== null ? !canEdit() : !canCreate())">
             {{ isSaving() ? 'Enregistrement...' : 'Enregistrer' }}
           </button>
         </div>

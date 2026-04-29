@@ -23,6 +23,8 @@
               type="button"
               class="nav-link"
               [class.active]="isTabActive('identite')"
+              title="Modifier mon identité et mes coordonnées"
+              bsTooltip
               (click)="toggleTab('identite')"
               role="tab"
             >
@@ -32,6 +34,8 @@
               type="button"
               class="nav-link"
               [class.active]="isTabActive('pro')"
+              title="Informations professionnelles et de facturation"
+              bsTooltip
               (click)="toggleTab('pro')"
               role="tab"
             >
@@ -41,6 +45,8 @@
               type="button"
               class="nav-link"
               [class.active]="isTabActive('documents')"
+              title="Modèles de documents et entêtes"
+              bsTooltip
               (click)="toggleTab('documents')"
               role="tab"
             >
@@ -50,6 +56,8 @@
               type="button"
               class="nav-link"
               [class.active]="isTabActive('compta')"
+              title="Préférences comptables et statistiques"
+              bsTooltip
               (click)="toggleTab('compta')"
               role="tab"
             >
@@ -59,6 +67,8 @@
               type="button"
               class="nav-link"
               [class.active]="isTabActive('agenda')"
+              title="Paramètres de l'agenda et des rendez-vous"
+              bsTooltip
               (click)="toggleTab('agenda')"
               role="tab"
             >
@@ -68,6 +78,8 @@
               type="button"
               class="nav-link"
               [class.active]="isTabActive('consultation')"
+              title="Paramètres d'affichage des consultations"
+              bsTooltip
               (click)="toggleTab('consultation')"
               role="tab"
             >
@@ -77,6 +89,8 @@
               type="button"
               class="nav-link"
               [class.active]="isTabActive('interface')"
+              title="Préférences d'interface et de thème"
+              bsTooltip
               (click)="toggleTab('interface')"
               role="tab"
             >
@@ -86,6 +100,8 @@
               type="button"
               class="nav-link"
               [class.active]="isTabActive('securite')"
+              title="Modifier mon mot de passe et les paramètres de sécurité"
+              bsTooltip
               (click)="toggleTab('securite')"
               role="tab"
             >
@@ -649,7 +665,7 @@
         }
 
         <div class="d-flex justify-content-end gap-2 mb-4">
-          <button type="button" class="btn btn-primary px-4" (click)="save()" [disabled]="isSaving()">
+          <button type="button" class="btn btn-primary px-4" title="Enregistrer tous mes paramètres de profil" bsTooltip (click)="save()" [disabled]="isSaving()">
             @if (isSaving()) {
               <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
             }

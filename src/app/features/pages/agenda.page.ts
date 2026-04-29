@@ -13,11 +13,12 @@ import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { AgendaSettings, Appointment, DashboardEvent, LocalAgendaCalendar, OfficeOpeningHours, OfficeOption, Patient, Practitioner } from '../../core/api.types';
 import { WeekCalendar } from './week-calendar';
+import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 
 @Component({
   selector: 'app-agenda-page',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, WeekCalendar],
+  imports: [CommonModule, ReactiveFormsModule, WeekCalendar, BsTooltipDirective],
   templateUrl: './agenda.page.html',
   styleUrl: './agenda.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush

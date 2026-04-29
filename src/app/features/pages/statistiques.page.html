@@ -78,6 +78,8 @@
             [class.active]="isSectionActive(tab.section)"
             [attr.aria-selected]="isSectionActive(tab.section)"
             [attr.aria-controls]="'stats-section-' + tab.section"
+            [title]="'Afficher la section ' + tab.section"
+            title="Ouvrir" bsTooltip
             (click)="showSection(tab.section)">
             <i [class]="tab.icon + ' me-2'" aria-hidden="true"></i>
             {{ tab.section }}
@@ -139,6 +141,7 @@
                 class="btn btn-outline-secondary btn-sm"
                 [title]="isCardMaximized(card.id) ? 'Reduire le graphique' : 'Maximiser le graphique aux bords'"
                 [attr.aria-label]="isCardMaximized(card.id) ? 'Reduire le graphique' : 'Maximiser le graphique aux bords'"
+                title="Basculer" bsTooltip
                 (click)="toggleCardMaximization(card.id)">
                 <i [class]="isCardMaximized(card.id) ? 'fa-solid fa-compress' : 'fa-solid fa-expand'"></i>
               </button>
@@ -420,6 +423,8 @@
         type="button"
         class="position-fixed top-0 start-0 w-100 h-100 border-0 p-0 m-0 bg-dark opacity-50 z-2"
         aria-label="Fermer la vue maximisee"
+        title="Fermer la vue maximisée"
+        bsTooltip
         (click)="clearCardMaximization()"></button>
     }
   </section>

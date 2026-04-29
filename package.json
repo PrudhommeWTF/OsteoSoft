@@ -52,6 +52,7 @@
     "@angular/build": "^21.2.7",
     "@angular/cli": "^21.2.7",
     "@angular/compiler-cli": "^21.2.0",
+    "@types/bootstrap": "^5.2.10",
     "@types/jasmine": "^6.0.0",
     "concurrently": "^9.2.1",
     "jasmine-core": "^6.2.0",

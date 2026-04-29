@@ -4,10 +4,11 @@ import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { Patient } from '../../core/api.types';
+import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 
 @Component({
   selector: 'app-patients-page',
-  imports: [RouterLink],
+  imports: [RouterLink, BsTooltipDirective],
   templateUrl: './patients.page.html',
   styleUrl: './patients.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush

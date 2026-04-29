@@ -2,11 +2,11 @@
   <!-- Toolbar -->
   <div class="wc-toolbar d-flex align-items-center flex-wrap gap-2 mb-2">
     <div class="btn-group btn-group-sm" role="group" aria-label="Navigation calendrier">
-      <button type="button" class="btn btn-outline-secondary" (click)="goToPrev()" aria-label="Période précédente">
+      <button type="button" class="btn btn-outline-secondary" title="Aller à la période précédente" bsTooltip (click)="goToPrev()" aria-label="Période précédente">
         <i class="fa-solid fa-chevron-left"></i>
       </button>
-      <button type="button" class="btn btn-outline-secondary" (click)="goToToday()">Aujourd'hui</button>
-      <button type="button" class="btn btn-outline-secondary" (click)="goToNext()" aria-label="Période suivante">
+      <button type="button" class="btn btn-outline-secondary" title="Revenir à aujourd'hui" bsTooltip (click)="goToToday()">Aujourd'hui</button>
+      <button type="button" class="btn btn-outline-secondary" title="Aller à la période suivante" bsTooltip (click)="goToNext()" aria-label="Période suivante">
         <i class="fa-solid fa-chevron-right"></i>
       </button>
     </div>
@@ -18,24 +18,32 @@
         type="button"
         class="btn btn-outline-primary"
         [class.active]="viewMode() === 'month'"
+        title="Afficher la vue mensuelle"
+        bsTooltip
         (click)="viewMode.set('month')"
       >Mois</button>
       <button
         type="button"
         class="btn btn-outline-primary"
         [class.active]="viewMode() === 'week'"
+        title="Afficher la vue hebdomadaire"
+        bsTooltip
         (click)="viewMode.set('week')"
       >Semaine</button>
       <button
         type="button"
         class="btn btn-outline-primary"
         [class.active]="viewMode() === 'three-days'"
+        title="Afficher les 3 prochains jours"
+        bsTooltip
         (click)="viewMode.set('three-days')"
       >3 jours</button>
       <button
         type="button"
         class="btn btn-outline-primary"
         [class.active]="viewMode() === 'day'"
+        title="Afficher la vue journalière"
+        bsTooltip
         (click)="viewMode.set('day')"
       >Jour</button>
     </div>
@@ -88,6 +96,8 @@
                     <button
                       type="button"
                       class="wc-month-more"
+                      title="Voir tous les rendez-vous de cette journée"
+                      bsTooltip
                       (click)="openMonthDayModal(day)"
                       [attr.aria-label]="'Afficher les ' + (day.events.length - 3) + ' rendez-vous supplémentaires du ' + day.longLabel + ' ' + day.dayNum"
                     >
@@ -211,7 +221,7 @@
             <h3 id="month-day-modal-title" class="modal-title h5 mb-0">
               Rendez-vous du {{ getMonthDayModalTitle(day) }}
             </h3>
-            <button type="button" class="btn-close" aria-label="Fermer" (click)="closeMonthDayModal()"></button>
+            <button type="button" class="btn-close" aria-label="Fermer" title="Fermer" bsTooltip (click)="closeMonthDayModal()"></button>
           </div>
 
           <div class="modal-body">
@@ -223,6 +233,8 @@
                   <button
                     type="button"
                     class="list-group-item list-group-item-action wc-day-modal-item"
+                    title="Ouvrir le détail de ce rendez-vous"
+                    bsTooltip
                     (click)="openAppointmentFromMonthDay(ev.event)"
                   >
                     <div class="d-flex align-items-center justify-content-between gap-3">
@@ -246,7 +258,7 @@
           </div>
 
           <div class="modal-footer">
-            <button type="button" class="btn btn-outline-secondary" (click)="closeMonthDayModal()">Fermer</button>
+            <button type="button" class="btn btn-outline-secondary" title="Fermer" bsTooltip (click)="closeMonthDayModal()">Fermer</button>
           </div>
         </div>
       </div>
@@ -263,7 +275,7 @@
             <h3 id="appointment-detail-modal-title" class="modal-title h5 mb-0">
               Détail du rendez-vous
             </h3>
-            <button type="button" class="btn-close" aria-label="Fermer" (click)="closeAppointmentModal()"></button>
+            <button type="button" class="btn-close" aria-label="Fermer" title="Fermer le détail" bsTooltip (click)="closeAppointmentModal()"></button>
           </div>
 
           <div class="modal-body">
@@ -341,7 +353,8 @@
                 class="btn btn-outline-primary"
                 (click)="openPatientRecord()"
                 aria-label="Voir la fiche patient"
-                title="Voir la fiche patient">
+                title="Voir la fiche patient"
+                bsTooltip>
                 <i class="fa-solid fa-user"></i>
               </button>
             }
@@ -351,7 +364,8 @@
                 class="btn btn-outline-success"
                 (click)="openConsultationRecord()"
                 aria-label="Voir la consultation"
-                title="Voir la consultation">
+                title="Voir la consultation"
+                bsTooltip>
                 <i class="fa-solid fa-notes-medical"></i>
               </button>
             }
@@ -361,10 +375,11 @@
               [disabled]="isSavingConsultationMeta()"
               (click)="saveConsultationMeta()"
               aria-label="Enregistrer"
-              title="Enregistrer">
+              title="Enregistrer les modifications"
+              bsTooltip>
               <i class="fa-solid fa-floppy-disk"></i>
             </button>
-            <button type="button" class="btn btn-outline-secondary" (click)="closeAppointmentModal()">Fermer</button>
+            <button type="button" class="btn btn-outline-secondary" title="Fermer le détail" bsTooltip (click)="closeAppointmentModal()">Fermer</button>
           </div>
         </div>
       </div>
@@ -378,7 +393,7 @@
         <div class="modal-content">
           <div class="modal-header">
             <h3 id="consultation-conflict-modal-title" class="modal-title h5 mb-0">Consultation existante detectee</h3>
-            <button type="button" class="btn-close" aria-label="Fermer" (click)="closeConsultationConflictModal()" [disabled]="isSavingConsultationMeta()"></button>
+            <button type="button" class="btn-close" aria-label="Fermer" title="Annuler" bsTooltip (click)="closeConsultationConflictModal()" [disabled]="isSavingConsultationMeta()"></button>
           </div>
 
           <div class="modal-body">
@@ -391,13 +406,13 @@
           </div>
 
           <div class="modal-footer">
-            <button type="button" class="btn btn-outline-secondary" (click)="closeConsultationConflictModal()" [disabled]="isSavingConsultationMeta()">
+            <button type="button" class="btn btn-outline-secondary" title="Annuler sans créer de consultation" bsTooltip (click)="closeConsultationConflictModal()" [disabled]="isSavingConsultationMeta()">
               Annuler
             </button>
-            <button type="button" class="btn btn-outline-primary" (click)="resolveConsultationConflict(false)" [disabled]="isSavingConsultationMeta()">
+            <button type="button" class="btn btn-outline-primary" title="Créer une nouvelle consultation indépendante" bsTooltip (click)="resolveConsultationConflict(false)" [disabled]="isSavingConsultationMeta()">
               Non, creer une nouvelle consultation
             </button>
-            <button type="button" class="btn btn-success" (click)="resolveConsultationConflict(true)" [disabled]="isSavingConsultationMeta()">
+            <button type="button" class="btn btn-success" title="Rattacher le rendez-vous à la consultation existante" bsTooltip (click)="resolveConsultationConflict(true)" [disabled]="isSavingConsultationMeta()">
               Oui, rattacher l'existante
             </button>
           </div>

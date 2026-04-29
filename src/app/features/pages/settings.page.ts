@@ -4,6 +4,7 @@ import { ActivatedRoute } from '@angular/router';
 
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
+import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 import {
   AccessManagedUser,
   AgendaSettingsPayload,
@@ -156,7 +157,7 @@ Je vous remercie par avance, et vous prie d'agréer mes sincères salutations.`;
 
 @Component({
   selector: 'app-settings-page',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, BsTooltipDirective],
   templateUrl: './settings.page.html',
   styleUrl: './settings.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush

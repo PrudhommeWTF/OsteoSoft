@@ -48,14 +48,14 @@
     </div>
 
     <div class="d-flex align-items-center gap-2 flex-wrap">
-      <button type="button" class="btn btn-outline-primary" (click)="openPatientLetterComposeModal()">
+      <button type="button" class="btn btn-outline-primary" (click)="openPatientLetterComposeModal()" title="Ouvrir" bsTooltip>
         <i class="fa-solid fa-pen-fancy me-2"></i>Rédiger un courier patient
       </button>
-      <button type="button" class="btn btn-outline-secondary" (click)="openAuditModal()">
+      <button type="button" class="btn btn-outline-secondary" (click)="openAuditModal()" title="Ouvrir" bsTooltip>
         <i class="fa-solid fa-clock-rotate-left me-2"></i>Historique
       </button>
       @if (canCreateConsultation()) {
-        <button type="button" class="btn btn-primary" (click)="openNewConsultationModal()">
+        <button type="button" class="btn btn-primary" (click)="openNewConsultationModal()" title="Créer une nouvelle consultation" bsTooltip>
           <i class="fa-solid fa-plus me-2"></i>Nouvelle consultation
         </button>
       }
@@ -65,7 +65,7 @@
   <div class="accordion patient-accordion" id="patientDetailAccordion">
     <div class="accordion-item">
       <h2 class="accordion-header" id="headingIdentity">
-        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-identity" aria-expanded="true" aria-controls="patient-accordion-identity">
+        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-identity" aria-expanded="true" aria-controls="patient-accordion-identity" title="Déplier / replier cette section" bsTooltip>
           <i class="fa-solid fa-id-card text-primary me-2"></i>État civil
         </button>
       </h2>
@@ -78,15 +78,15 @@
                   <div class="col-12">
                     <label class="form-label fw-semibold">Sexe</label>
                     <div class="sex-cards">
-                      <button type="button" class="sex-card" [class.active]="editSexValue() === 'Non renseigne'" (click)="setEditSex('Non renseigne')">
+                      <button type="button" class="sex-card" [class.active]="editSexValue() === 'Non renseigne'" (click)="setEditSex('Non renseigne')" title="Modifier" bsTooltip>
                         <i class="fa-solid fa-circle-question"></i>
                         <span>Indéterminé</span>
                       </button>
-                      <button type="button" class="sex-card" [class.active]="editSexValue() === 'Femme'" (click)="setEditSex('Femme')">
+                      <button type="button" class="sex-card" [class.active]="editSexValue() === 'Femme'" (click)="setEditSex('Femme')" title="Modifier" bsTooltip>
                         <i class="fa-solid fa-venus"></i>
                         <span>Femme</span>
                       </button>
-                      <button type="button" class="sex-card" [class.active]="editSexValue() === 'Homme'" (click)="setEditSex('Homme')">
+                      <button type="button" class="sex-card" [class.active]="editSexValue() === 'Homme'" (click)="setEditSex('Homme')" title="Modifier" bsTooltip>
                         <i class="fa-solid fa-mars"></i>
                         <span>Homme</span>
                       </button>
@@ -166,7 +166,7 @@
                   <div class="col-12">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                       <label class="form-label fw-semibold mb-0">Liens de parenté avec d'autres patients</label>
-                      <button type="button" class="btn btn-outline-primary btn-sm" (click)="toggleRelatedPicker()">
+                      <button type="button" class="btn btn-outline-primary btn-sm" (click)="toggleRelatedPicker()" title="Lier un patient existant" bsTooltip>
                         <i class="fa-solid fa-user-plus me-1"></i>{{ showRelatedPicker() ? 'Fermer' : 'Ajouter' }}
                       </button>
                     </div>
@@ -180,13 +180,13 @@
                               <button
                                 type="button"
                                 class="btn btn-link btn-sm p-0 text-decoration-none related-pill-link"
-                                (click)="openRelatedPatient(person.id)">
+                                (click)="openRelatedPatient(person.id)" title="Ouvrir" bsTooltip>
                                 {{ formatRelatedPatientLabel(person) }}
                               </button>
                             } @else {
                               <span>{{ formatRelatedPatientLabel(person) }}</span>
                             }
-                            <button type="button" class="btn-close btn-close-xs ms-1" aria-label="Retirer" (click)="removeRelatedPatient(person.id)"></button>
+                            <button type="button" class="btn-close btn-close-xs ms-1" aria-label="Retirer" (click)="removeRelatedPatient(person.id)" title="Retirer" bsTooltip></button>
                           </span>
                         }
                       </div>
@@ -236,7 +236,7 @@
 
     <div class="accordion-item">
       <h2 class="accordion-header" id="headingPatientInfo">
-        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-patient-info" aria-expanded="false" aria-controls="patient-accordion-patient-info">
+        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-patient-info" aria-expanded="false" aria-controls="patient-accordion-patient-info" title="Déplier / replier cette section" bsTooltip>
           <i class="fa-solid fa-user-pen text-primary me-2"></i>Informations sur le patient
         </button>
       </h2>
@@ -329,7 +329,7 @@
 
     <div class="accordion-item">
       <h2 class="accordion-header" id="headingAntecedents">
-        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-antecedents" aria-expanded="false" aria-controls="patient-accordion-antecedents">
+        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-antecedents" aria-expanded="false" aria-controls="patient-accordion-antecedents" title="Déplier / replier cette section" bsTooltip>
           <i class="fa-solid fa-heart-pulse text-primary me-2"></i>Antécédents
           @if (antecedents().length) {
             <span class="badge text-bg-secondary ms-2">{{ antecedents().length }}</span>
@@ -340,7 +340,7 @@
         <div class="accordion-body bg-body">
           <div class="d-flex justify-content-end mb-3">
             @if (canEditPatient()) {
-              <button type="button" class="btn btn-primary btn-sm" (click)="openAntecedentModal()">
+              <button type="button" class="btn btn-primary btn-sm" (click)="openAntecedentModal()" title="Ajouter un antécédent médical" bsTooltip>
                 <i class="fa-solid fa-plus me-1"></i>Ajouter un antécédent
               </button>
             }
@@ -368,11 +368,11 @@
                         @if (item.dateDisplay) {
                           <span class="small text-muted">{{ getAntecedentDateLabel(item) }}</span>
                         }
-                        <button type="button" class="btn btn-link text-primary p-0" (click)="openAntecedentEditModal(item.id)" aria-label="Modifier cet antécédent">
+                        <button type="button" class="btn btn-link text-primary p-0" (click)="openAntecedentEditModal(item.id)" aria-label="Modifier cet antécédent" title="Modifier cet antécédent" bsTooltip>
                           <i class="fa-solid fa-pen-to-square"></i>
                         </button>
                         @if (canEditPatient()) {
-                          <button type="button" class="btn btn-link text-danger p-0" (click)="removeAntecedent(item.id)" aria-label="Supprimer cet antécédent">
+                          <button type="button" class="btn btn-link text-danger p-0" (click)="removeAntecedent(item.id)" aria-label="Supprimer cet antécédent" title="Supprimer cet antécédent" bsTooltip>
                             <i class="fa-solid fa-trash"></i>
                           </button>
                         }
@@ -390,7 +390,7 @@
 
     <div class="accordion-item">
       <h2 class="accordion-header" id="headingDocuments">
-        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-documents" aria-expanded="false" aria-controls="patient-accordion-documents">
+        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-documents" aria-expanded="false" aria-controls="patient-accordion-documents" title="Déplier / replier cette section" bsTooltip>
           <i class="fa-regular fa-folder-open text-primary me-2"></i>Documents du patient
           @if (patientDocuments().length) {
             <span class="badge text-bg-secondary ms-2">{{ patientDocuments().length }}</span>
@@ -453,10 +453,10 @@
                       }
                     </div>
                     <div class="d-flex flex-wrap gap-2">
-                      <button type="button" class="btn btn-outline-primary btn-sm" (click)="openPatientDocument(document)">
+                      <button type="button" class="btn btn-outline-primary btn-sm" (click)="openPatientDocument(document)" title="Ouvrir" bsTooltip>
                         <i class="fa-solid fa-up-right-from-square me-1"></i>Ouvrir
                       </button>
-                      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="openPatientDocument(document, true)">
+                      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="openPatientDocument(document, true)" title="Ouvrir" bsTooltip>
                         <i class="fa-solid fa-download me-1"></i>Télécharger
                       </button>
                     </div>
@@ -471,7 +471,7 @@
 
     <div class="accordion-item">
       <h2 class="accordion-header" id="headingConsultations">
-        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-consultations" aria-expanded="false" aria-controls="patient-accordion-consultations">
+        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-consultations" aria-expanded="false" aria-controls="patient-accordion-consultations" title="Déplier / replier cette section" bsTooltip>
           <i class="fa-solid fa-stethoscope text-primary me-2"></i>Consultations
           @if (totalConsultationCount()) {
             <span class="badge text-bg-primary ms-2">{{ totalConsultationCount() }}</span>
@@ -491,7 +491,7 @@
                 <section class="timeline-group mb-3">
                   @if (!group.isRecent) {
                     <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
-                      <button class="btn btn-light border btn-sm timeline-year-toggle" type="button" data-bs-toggle="collapse" [attr.data-bs-target]="'#' + group.collapseId" [attr.aria-expanded]="group.initiallyOpen ? 'true' : 'false'" [attr.aria-controls]="group.collapseId">
+                      <button class="btn btn-light border btn-sm timeline-year-toggle" type="button" data-bs-toggle="collapse" [attr.data-bs-target]="'#' + group.collapseId" [attr.aria-expanded]="group.initiallyOpen ? 'true' : 'false'" [attr.aria-controls]="group.collapseId" title="Déplier / replier" bsTooltip>
                         <i class="fa-solid fa-calendar-days me-2"></i>{{ group.label }}
                         <span class="badge text-bg-secondary ms-2">{{ group.consultations.length }}</span>
                       </button>
@@ -500,7 +500,7 @@
                     <div [id]="group.collapseId" class="collapse" [class.show]="group.initiallyOpen">
                       <div class="consultation-timeline">
                         @for (consultation of group.consultations; track consultation.id) {
-                            <button type="button" class="consultation-timeline-item" [class.bg-warning]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'" (click)="openConsultationModal(consultation)">
+                            <button type="button" class="consultation-timeline-item" [class.bg-warning]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'" (click)="openConsultationModal(consultation)" title="Ouvrir la consultation" bsTooltip>
                               <span class="consultation-timeline-date" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'">{{ formatConsultationDate(consultation.startedAt) }}</span>
                               <span class="consultation-timeline-title" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'">{{ consultation.title || 'Consultation sans titre' }}</span>
                           </button>
@@ -510,7 +510,7 @@
                   } @else {
                     <div class="consultation-timeline">
                       @for (consultation of group.consultations; track consultation.id) {
-                            <button type="button" class="consultation-timeline-item" [class.bg-warning]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'" (click)="openConsultationModal(consultation)">
+                            <button type="button" class="consultation-timeline-item" [class.bg-warning]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'" (click)="openConsultationModal(consultation)" title="Ouvrir la consultation" bsTooltip>
                               <span class="consultation-timeline-date" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'">{{ formatConsultationDate(consultation.startedAt) }}</span>
                               <span class="consultation-timeline-title" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'">{{ consultation.title || 'Consultation sans titre' }}</span>
                         </button>
@@ -542,15 +542,15 @@
             Ajouter un antécédent
           }
         </h3>
-        <button type="button" class="btn-close" aria-label="Fermer" (click)="closeAntecedentModal()"></button>
+        <button type="button" class="btn-close" aria-label="Fermer" (click)="closeAntecedentModal()" title="Fermer" bsTooltip></button>
       </div>
       <div class="antecedent-modal-body">
         <div class="mb-3">
           <label class="form-label">Précision de date</label>
           <div class="btn-group w-100" role="group">
-            <button type="button" class="btn" [class.btn-primary]="antecedentDatePrecision() === 'date'" [class.btn-outline-primary]="antecedentDatePrecision() !== 'date'" (click)="setAntecedentPrecision('date')">Date précise</button>
-            <button type="button" class="btn" [class.btn-primary]="antecedentDatePrecision() === 'month'" [class.btn-outline-primary]="antecedentDatePrecision() !== 'month'" (click)="setAntecedentPrecision('month')">Mois / année</button>
-            <button type="button" class="btn" [class.btn-primary]="antecedentDatePrecision() === 'year'" [class.btn-outline-primary]="antecedentDatePrecision() !== 'year'" (click)="setAntecedentPrecision('year')">Année</button>
+            <button type="button" class="btn" [class.btn-primary]="antecedentDatePrecision() === 'date'" [class.btn-outline-primary]="antecedentDatePrecision() !== 'date'" (click)="setAntecedentPrecision('date')" title="Précision : date exacte" bsTooltip>Date précise</button>
+            <button type="button" class="btn" [class.btn-primary]="antecedentDatePrecision() === 'month'" [class.btn-outline-primary]="antecedentDatePrecision() !== 'month'" (click)="setAntecedentPrecision('month')" title="Précision : mois / année" bsTooltip>Mois / année</button>
+            <button type="button" class="btn" [class.btn-primary]="antecedentDatePrecision() === 'year'" [class.btn-outline-primary]="antecedentDatePrecision() !== 'year'" (click)="setAntecedentPrecision('year')" title="Précision : année" bsTooltip>Année</button>
           </div>
         </div>
 
@@ -609,9 +609,9 @@
         }
       </div>
       <div class="antecedent-modal-footer">
-        <button type="button" class="btn btn-outline-secondary" (click)="closeAntecedentModal()">Annuler</button>
+        <button type="button" class="btn btn-outline-secondary" (click)="closeAntecedentModal()" title="Fermer" bsTooltip>Annuler</button>
         @if (canEditPatient()) {
-          <button type="button" class="btn btn-primary" (click)="addAntecedent()">
+          <button type="button" class="btn btn-primary" (click)="addAntecedent()" title="Ajouter l'antécédent" bsTooltip>
             @if (editingAntecedentId()) {
               Enregistrer les modifications
             } @else {
@@ -629,7 +629,7 @@
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title">Historique des modifications</h5>
-            <button type="button" class="btn-close" aria-label="Fermer" (click)="closeAuditModal()"></button>
+            <button type="button" class="btn-close" aria-label="Fermer" (click)="closeAuditModal()" title="Fermer" bsTooltip></button>
           </div>
           <div class="modal-body">
             @if (isLoadingAuditLogs()) {
@@ -670,7 +670,7 @@
             }
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" (click)="closeAuditModal()">Fermer</button>
+            <button type="button" class="btn btn-secondary" (click)="closeAuditModal()" title="Fermer" bsTooltip>Fermer</button>
           </div>
         </div>
       </div>
@@ -693,7 +693,7 @@
               <span class="badge" [class]="consultationAutosaveBadgeClass()">{{ consultationAutosaveStatusText() }}</span>
             </div>
           </div>
-          <button type="button" class="btn-close" aria-label="Fermer" (click)="closeConsultationModal()"></button>
+          <button type="button" class="btn-close" aria-label="Fermer" (click)="closeConsultationModal()" title="Fermer" bsTooltip></button>
         </div>
 
         <div class="modal-body">
@@ -705,7 +705,7 @@
               role="tab"
               [attr.aria-selected]="consultationActiveTab() === 'consultation'"
               (click)="setConsultationTab('consultation')"
-            >
+             title="Action" bsTooltip>
               Consultation
             </button>
             <button
@@ -715,7 +715,7 @@
               role="tab"
               [attr.aria-selected]="consultationActiveTab() === 'documents'"
               (click)="setConsultationTab('documents')"
-            >
+             title="Action" bsTooltip>
               Documents patient
             </button>
             <button
@@ -725,7 +725,7 @@
               role="tab"
               [attr.aria-selected]="consultationActiveTab() === 'courriers'"
               (click)="setConsultationTab('courriers')"
-            >
+             title="Action" bsTooltip>
               Courriers sortants
             </button>
             <button
@@ -736,7 +736,7 @@
               role="tab"
               [attr.aria-selected]="consultationActiveTab() === 'paiement'"
               (click)="setConsultationTab('paiement')"
-            >
+             title="Action" bsTooltip>
               Paiement
             </button>
           </nav>
@@ -884,7 +884,7 @@
                             [class.btn-outline-warning]="!item.important"
                             [class.btn-warning]="item.important"
                             [attr.aria-label]="'Marquer le motif ' + item.reason + ' comme important'"
-                            (click)="setConsultationReasonImportant(item.reason, !item.important)">
+                            (click)="setConsultationReasonImportant(item.reason, !item.important)" title="Importer" bsTooltip>
                             <i class="fa-solid fa-triangle-exclamation"></i>
                           </button>
                         </div>
@@ -913,11 +913,11 @@
             <div class="mb-3">
               <label class="form-label fw-semibold">Motif principal</label>
               <div class="wysiwyg-toolbar">
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'bold')"><i class="fa-solid fa-bold"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'italic')"><i class="fa-solid fa-italic"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'underline')"><i class="fa-solid fa-underline"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'bold')" title="Modifier" bsTooltip><i class="fa-solid fa-bold"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'italic')" title="Modifier" bsTooltip><i class="fa-solid fa-italic"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'underline')" title="Modifier" bsTooltip><i class="fa-solid fa-underline"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'insertUnorderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ul"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'insertOrderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ol"></i></button>
               </div>
               <div #consultationMotifMainEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('motifMainHtml', $event)"></div>
             </div>
@@ -925,11 +925,11 @@
             <div class="mb-3">
               <label class="form-label fw-semibold">Tests</label>
               <div class="wysiwyg-toolbar">
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'bold')"><i class="fa-solid fa-bold"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'italic')"><i class="fa-solid fa-italic"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'underline')"><i class="fa-solid fa-underline"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'bold')" title="Modifier" bsTooltip><i class="fa-solid fa-bold"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'italic')" title="Modifier" bsTooltip><i class="fa-solid fa-italic"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'underline')" title="Modifier" bsTooltip><i class="fa-solid fa-underline"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'insertUnorderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ul"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'insertOrderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ol"></i></button>
               </div>
               <div #consultationTestsEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('testsHtml', $event)"></div>
             </div>
@@ -937,11 +937,11 @@
             <div class="mb-3">
               <label class="form-label fw-semibold">Schema</label>
               <div class="wysiwyg-toolbar">
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'bold')"><i class="fa-solid fa-bold"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'italic')"><i class="fa-solid fa-italic"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'underline')"><i class="fa-solid fa-underline"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'bold')" title="Modifier" bsTooltip><i class="fa-solid fa-bold"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'italic')" title="Modifier" bsTooltip><i class="fa-solid fa-italic"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'underline')" title="Modifier" bsTooltip><i class="fa-solid fa-underline"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'insertUnorderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ul"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'insertOrderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ol"></i></button>
               </div>
               <div #consultationSchemaEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('schemaHtml', $event)"></div>
             </div>
@@ -949,11 +949,11 @@
             <div class="mb-3">
               <label class="form-label fw-semibold">Traitements proposes</label>
               <div class="wysiwyg-toolbar">
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'bold')"><i class="fa-solid fa-bold"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'italic')"><i class="fa-solid fa-italic"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'underline')"><i class="fa-solid fa-underline"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'bold')" title="Modifier" bsTooltip><i class="fa-solid fa-bold"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'italic')" title="Modifier" bsTooltip><i class="fa-solid fa-italic"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'underline')" title="Modifier" bsTooltip><i class="fa-solid fa-underline"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'insertUnorderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ul"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'insertOrderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ol"></i></button>
               </div>
               <div #consultationTreatmentsEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('treatmentsHtml', $event)"></div>
             </div>
@@ -961,11 +961,11 @@
             <div class="mb-0">
               <label class="form-label fw-semibold">Remarques</label>
               <div class="wysiwyg-toolbar">
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'bold')"><i class="fa-solid fa-bold"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'italic')"><i class="fa-solid fa-italic"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'underline')"><i class="fa-solid fa-underline"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'bold')" title="Modifier" bsTooltip><i class="fa-solid fa-bold"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'italic')" title="Modifier" bsTooltip><i class="fa-solid fa-italic"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'underline')" title="Modifier" bsTooltip><i class="fa-solid fa-underline"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'insertUnorderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ul"></i></button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'insertOrderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ol"></i></button>
               </div>
               <div #consultationRemarksEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('remarksHtml', $event)"></div>
             </div>
@@ -1018,7 +1018,7 @@
                         <button
                           type="button"
                           class="btn btn-outline-danger btn-sm"
-                          (click)="removePendingConsultationDocument(document.tempKey)">
+                          (click)="removePendingConsultationDocument(document.tempKey)" title="Supprimer" bsTooltip>
                           <i class="fa-solid fa-trash me-1"></i>Supprimer
                         </button>
                       </div>
@@ -1090,13 +1090,13 @@
                           <p class="text-muted small mb-0">{{ document.mimeType || 'Type inconnu' }} · {{ formatFileSize(document.sizeBytes) }}</p>
                         </div>
                         <div class="btn-group btn-group-sm">
-                          <button type="button" class="btn btn-outline-primary" (click)="openPatientDocument(document)">
+                          <button type="button" class="btn btn-outline-primary" (click)="openPatientDocument(document)" title="Ouvrir" bsTooltip>
                             <i class="fa-solid fa-eye me-1"></i>Ouvrir
                           </button>
-                          <button type="button" class="btn btn-outline-secondary" (click)="openPatientDocument(document, true)">
+                          <button type="button" class="btn btn-outline-secondary" (click)="openPatientDocument(document, true)" title="Ouvrir" bsTooltip>
                             <i class="fa-solid fa-download me-1"></i>Telecharger
                           </button>
-                          <button type="button" class="btn btn-outline-danger" [disabled]="isDocumentSaving(document.documentRef) || !canEditPatient()" (click)="deleteConsultationDocument(document.documentRef)">
+                          <button type="button" class="btn btn-outline-danger" [disabled]="isDocumentSaving(document.documentRef) || !canEditPatient()" (click)="deleteConsultationDocument(document.documentRef)" title="Supprimer la consultation" bsTooltip>
                             <i class="fa-solid fa-trash me-1"></i>Supprimer
                           </button>
                         </div>
@@ -1116,7 +1116,7 @@
                             type="button"
                             class="btn btn-sm btn-outline-success w-100"
                             [disabled]="isDocumentSaving(document.documentRef) || !canEditPatient()"
-                            (click)="saveConsultationDocumentMeta(document.documentRef, docTitleInput.value, docCommentInput.value)">
+                            (click)="saveConsultationDocumentMeta(document.documentRef, docTitleInput.value, docCommentInput.value)" title="Enregistrer" bsTooltip>
                             <i class="fa-solid fa-floppy-disk"></i>
                           </button>
                         </div>
@@ -1135,7 +1135,7 @@
                   <h3 class="h5 mb-1">Courriers sortants</h3>
                   <p class="mb-0 text-secondary">Préparez et suivez les courriers de sortie et comptes-rendus adressés aux correspondants.</p>
                 </div>
-                <button type="button" class="btn btn-primary" (click)="openPatientLetterComposeModal()">
+                <button type="button" class="btn btn-primary" (click)="openPatientLetterComposeModal()" title="Ouvrir" bsTooltip>
                   <i class="fa-solid fa-pen-fancy me-2"></i>Rédiger un courier patient
                 </button>
               </div>
@@ -1159,7 +1159,7 @@
                       data-bs-toggle="collapse"
                       data-bs-target="#consultation-billing-finalized-collapse"
                       aria-expanded="true"
-                      aria-controls="consultation-billing-finalized-collapse">
+                      aria-controls="consultation-billing-finalized-collapse" title="Déplier / replier cette section" bsTooltip>
                       Facture Finalisée n° {{ billing.invoiceNumber }} ({{ billing.totalAmount.toFixed(2) }} {{ billing.currency }}) :
                     </button>
                   </h2>
@@ -1174,7 +1174,7 @@
                       <p class="mb-3">Facture associée au praticien {{ billing.practitionerName }}</p>
 
                       <div class="d-flex flex-wrap gap-2 mb-3">
-                        <button type="button" class="btn btn-outline-primary btn-sm" (click)="downloadFinalizedConsultationInvoice()">
+                        <button type="button" class="btn btn-outline-primary btn-sm" (click)="downloadFinalizedConsultationInvoice()" title="Télécharger la facture finalisée" bsTooltip>
                           @if (isConsultationPdfDownloadPreferred()) {
                             <i class="fa-solid fa-download me-2"></i>
                             Télécharger la facture
@@ -1183,7 +1183,7 @@
                             Afficher la facture
                           }
                         </button>
-                        <button type="button" class="btn btn-outline-danger btn-sm" [disabled]="!canCancelInvoice()" (click)="cancelConsultationInvoice()">
+                        <button type="button" class="btn btn-outline-danger btn-sm" [disabled]="!canCancelInvoice()" (click)="cancelConsultationInvoice()" title="Annuler la facture" bsTooltip>
                           <i class="fa-solid fa-ban me-2"></i>Annuler la facture
                         </button>
                       </div>
@@ -1216,7 +1216,7 @@
                           <li class="d-flex flex-wrap align-items-center gap-2">
                             <span class="text-secondary">Aucun paiement enregistré.</span>
                             @if (canManagePayments()) {
-                              <button type="button" class="btn btn-outline-warning btn-sm" (click)="openConsultationPaymentCreateModal()">
+                              <button type="button" class="btn btn-outline-warning btn-sm" (click)="openConsultationPaymentCreateModal()" title="Ajouter un paiement" bsTooltip>
                                 <i class="fa-solid fa-pen-to-square me-1"></i>Renseigner le moyen de paiement
                               </button>
                             }
@@ -1227,10 +1227,10 @@
                               <div class="d-flex flex-wrap align-items-center gap-2">
                                 <span>Paiement de {{ payment.amount.toFixed(2) }} {{ payment.currency }} par {{ payment.method }} le {{ formatConsultationDate(payment.paidAt) }}</span>
                                 @if (canManagePayments()) {
-                                  <button type="button" class="btn btn-outline-secondary btn-sm" (click)="openConsultationPaymentEditModal(payment.id)">
+                                  <button type="button" class="btn btn-outline-secondary btn-sm" (click)="openConsultationPaymentEditModal(payment.id)" title="Modifier ce paiement" bsTooltip>
                                     <i class="fa-solid fa-pen me-1"></i>Modifier
                                   </button>
-                                  <button type="button" class="btn btn-outline-danger btn-sm" (click)="deleteConsultationPayment(payment.id)">
+                                  <button type="button" class="btn btn-outline-danger btn-sm" (click)="deleteConsultationPayment(payment.id)" title="Supprimer ce paiement" bsTooltip>
                                     <i class="fa-solid fa-trash-can me-1"></i>Supprimer
                                   </button>
                                 }
@@ -1247,7 +1247,7 @@
                           }
                           @if (billing.paymentStatus !== 'paid' && canManagePayments()) {
                             <li class="d-flex flex-wrap align-items-center gap-2 mt-2">
-                              <button type="button" class="btn btn-outline-info btn-sm" (click)="openConsultationPaymentCreateModal()">
+                              <button type="button" class="btn btn-outline-info btn-sm" (click)="openConsultationPaymentCreateModal()" title="Ajouter un paiement" bsTooltip>
                                 <i class="fa-solid fa-plus me-1"></i>Ajouter un paiement
                               </button>
                             </li>
@@ -1263,10 +1263,10 @@
                 <div class="fw-semibold mb-2">Choisissez une option pour cette consultation</div>
                 <p class="mb-3">Définissez maintenant si la consultation doit être facturée ou enregistrée comme acte gratuit.</p>
                 <div class="d-flex flex-wrap gap-2">
-                  <button type="button" class="btn btn-outline-primary" (click)="prepareConsultationInvoice()">
+                  <button type="button" class="btn btn-outline-primary" (click)="prepareConsultationInvoice()" title="Préparer la facture de consultation" bsTooltip>
                     <i class="fa-solid fa-file-invoice-dollar me-2"></i>Facturer cette consultation
                   </button>
-                  <button type="button" class="btn btn-outline-secondary" (click)="markConsultationAsFreeAct()">
+                  <button type="button" class="btn btn-outline-secondary" (click)="markConsultationAsFreeAct()" title="Marquer comme acte gratuit" bsTooltip>
                     <i class="fa-solid fa-hand-holding-heart me-2"></i>Définir comme acte gratuit
                   </button>
                 </div>
@@ -1288,12 +1288,12 @@
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" (click)="closeConsultationModal()">Fermer</button>
+          <button type="button" class="btn btn-outline-secondary" (click)="closeConsultationModal()" title="Fermer" bsTooltip>Fermer</button>
           <button
             type="button"
             class="btn btn-outline-primary"
             [disabled]="isGeneratingConsultationPdf()"
-            (click)="generateConsultationSummaryPdf()">
+            (click)="generateConsultationSummaryPdf()" title="Générer le PDF de la consultation" bsTooltip>
             @if (isGeneratingConsultationPdf()) {
               <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
               Generation PDF...
@@ -1306,7 +1306,7 @@
               type="button"
               class="btn btn-outline-success"
               [disabled]="consultationEditForm.invalid || consultationAutosaveState() === 'saving' || isSavingConsultation()"
-              (click)="saveConsultationDraftNow()">
+              (click)="saveConsultationDraftNow()" title="Enregistrer" bsTooltip>
               @if (consultationAutosaveState() === 'saving') {
                 <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                 Sauvegarde brouillon...
@@ -1315,7 +1315,7 @@
               }
             </button>
           }
-          <button type="button" class="btn btn-primary" [disabled]="isSavingConsultation() || !canCreateConsultation()" (click)="saveConsultation()">
+          <button type="button" class="btn btn-primary" [disabled]="isSavingConsultation() || !canCreateConsultation()" (click)="saveConsultation()" title="Enregistrer" bsTooltip>
             @if (isSavingConsultation()) {
               <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
             }
@@ -1336,7 +1336,7 @@
         <div class="modal-content">
           <div class="modal-header bg-primary text-white">
             <h3 id="consultation-billing-modal-title" class="modal-title h5 mb-0">Facturer une consultation</h3>
-            <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeConsultationBillingModal()"></button>
+            <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeConsultationBillingModal()" title="Fermer" bsTooltip></button>
           </div>
 
           <div class="modal-body" [formGroup]="consultationBillingForm">
@@ -1430,8 +1430,8 @@
           </div>
 
           <div class="modal-footer">
-            <button type="button" class="btn btn-outline-secondary" [disabled]="isGeneratingConsultationInvoice()" (click)="closeConsultationBillingModal()">Annuler</button>
-            <button type="button" class="btn btn-success" [disabled]="isGeneratingConsultationInvoice() || !canInvoiceConsultation()" (click)="saveConsultationBillingDraft()">
+            <button type="button" class="btn btn-outline-secondary" [disabled]="isGeneratingConsultationInvoice()" (click)="closeConsultationBillingModal()" title="Fermer" bsTooltip>Annuler</button>
+            <button type="button" class="btn btn-success" [disabled]="isGeneratingConsultationInvoice() || !canInvoiceConsultation()" (click)="saveConsultationBillingDraft()" title="Enregistrer la facturation" bsTooltip>
               @if (isGeneratingConsultationInvoice()) {
                 <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Génération...
               } @else {
@@ -1451,7 +1451,7 @@
         <div class="modal-content">
           <div class="modal-header bg-primary text-white">
             <h3 id="patient-letter-compose-modal-title" class="modal-title h5 mb-0">Rédiger un courier patient</h3>
-            <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closePatientLetterComposeModal()"></button>
+            <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closePatientLetterComposeModal()" title="Fermer" bsTooltip></button>
           </div>
 
           <div class="modal-body" [formGroup]="patientLetterComposeForm">
@@ -1508,8 +1508,8 @@
           </div>
 
           <div class="modal-footer">
-            <button type="button" class="btn btn-outline-secondary" (click)="closePatientLetterComposeModal()">Fermer</button>
-            <button type="button" class="btn btn-success" [disabled]="isSavingPatientLetterPdf() || !canEditPatient()" (click)="savePatientLetterAsPdfDocument()">
+            <button type="button" class="btn btn-outline-secondary" (click)="closePatientLetterComposeModal()" title="Fermer" bsTooltip>Fermer</button>
+            <button type="button" class="btn btn-success" [disabled]="isSavingPatientLetterPdf() || !canEditPatient()" (click)="savePatientLetterAsPdfDocument()" title="Enregistrer les modifications" bsTooltip>
               @if (isSavingPatientLetterPdf()) {
                 <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Enregistrement...
               } @else {
@@ -1531,7 +1531,7 @@
             <h3 id="consultation-payment-modal-title" class="modal-title h5 mb-0">
               {{ editingConsultationPaymentId() ? 'Modifier un paiement' : 'Ajouter un paiement' }}
             </h3>
-            <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeConsultationPaymentEditModal()"></button>
+            <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeConsultationPaymentEditModal()" title="Fermer" bsTooltip></button>
           </div>
 
           <div class="modal-body" [formGroup]="consultationPaymentEditForm">
@@ -1580,8 +1580,8 @@
           </div>
 
           <div class="modal-footer">
-            <button type="button" class="btn btn-outline-secondary" [disabled]="isSavingConsultationPayment()" (click)="closeConsultationPaymentEditModal()">Annuler</button>
-            <button type="button" class="btn btn-primary" [disabled]="isSavingConsultationPayment() || !!getConsultationPaymentValidationError() || !canManagePayments()" (click)="saveConsultationPaymentEdit()">
+            <button type="button" class="btn btn-outline-secondary" [disabled]="isSavingConsultationPayment()" (click)="closeConsultationPaymentEditModal()" title="Fermer" bsTooltip>Annuler</button>
+            <button type="button" class="btn btn-primary" [disabled]="isSavingConsultationPayment() || !!getConsultationPaymentValidationError() || !canManagePayments()" (click)="saveConsultationPaymentEdit()" title="Enregistrer le paiement" bsTooltip>
               @if (isSavingConsultationPayment()) {
                 <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
               }

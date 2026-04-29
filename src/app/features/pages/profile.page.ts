@@ -5,10 +5,11 @@ import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { UpdateMyUserProfilePayload } from '../../core/api.types';
 import { ThemeMode, ThemeService } from '../../core/theme.service';
+import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 
 @Component({
   selector: 'app-profile-page',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, BsTooltipDirective],
   templateUrl: './profile.page.html',
   styleUrl: './profile.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush

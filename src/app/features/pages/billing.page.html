@@ -6,7 +6,7 @@
 
   <div class="d-flex flex-wrap gap-2 align-items-center">
     @if (canManageBilling()) {
-      <button type="button" class="btn btn-primary btn-sm" (click)="openExpenseModal()">
+      <button type="button" class="btn btn-primary btn-sm" (click)="openExpenseModal()" title="Ouvrir" bsTooltip>
         <i class="fa-solid fa-plus me-1"></i>Ajouter une depense
       </button>
       <div class="dropdown" (click)="$event.stopPropagation()">
@@ -16,17 +16,17 @@
           [class.show]="isDepositMenuOpen()"
           [attr.aria-expanded]="isDepositMenuOpen()"
           aria-label="Ouvrir le menu des remises"
-          (click)="toggleDepositMenu()">
+          (click)="toggleDepositMenu()" title="Ouvrir le menu des remises" bsTooltip>
           <i class="fa-solid fa-building-columns me-1"></i>Remises
         </button>
         <ul class="dropdown-menu" [class.show]="isDepositMenuOpen()">
           <li>
-            <button type="button" class="dropdown-item" (click)="openDepositModal('cheque')">
+            <button type="button" class="dropdown-item" (click)="openDepositModal('cheque')" title="Ouvrir" bsTooltip>
               <i class="fa-solid fa-money-check-dollar me-2"></i>Remise de cheques
             </button>
           </li>
           <li>
-            <button type="button" class="dropdown-item" (click)="openDepositModal('especes')">
+            <button type="button" class="dropdown-item" (click)="openDepositModal('especes')" title="Ouvrir" bsTooltip>
               <i class="fa-solid fa-money-bill-wave me-2"></i>Remise d'especes
             </button>
           </li>
@@ -42,39 +42,39 @@
           [class.show]="isExportMenuOpen()"
           [attr.aria-expanded]="isExportMenuOpen()"
           aria-label="Ouvrir le menu des exports"
-          (click)="toggleExportMenu()">
+          (click)="toggleExportMenu()" title="Ouvrir le menu des exports" bsTooltip>
           <i class="fa-solid fa-file-export me-1"></i>Exports
         </button>
         <ul class="dropdown-menu dropdown-menu-end" [class.show]="isExportMenuOpen()">
           <li>
-            <button type="button" class="dropdown-item" (click)="exportOperations('excel', 'standard')">
+            <button type="button" class="dropdown-item" (click)="exportOperations('excel', 'standard')" title="Exporter / Télécharger" bsTooltip>
               <i class="fa-solid fa-file-excel me-2"></i>Export Excel
             </button>
           </li>
           <li>
-            <button type="button" class="dropdown-item" (click)="exportOperations('json', 'standard')">
+            <button type="button" class="dropdown-item" (click)="exportOperations('json', 'standard')" title="Exporter / Télécharger" bsTooltip>
               <i class="fa-solid fa-file-code me-2"></i>Export JSON
             </button>
           </li>
           <li><hr class="dropdown-divider" /></li>
           <li>
-            <button type="button" class="dropdown-item" (click)="exportOperations('excel', 'analytical')">
+            <button type="button" class="dropdown-item" (click)="exportOperations('excel', 'analytical')" title="Exporter / Télécharger" bsTooltip>
               <i class="fa-solid fa-chart-line me-2"></i>Export Excel analytique
             </button>
           </li>
           <li>
-            <button type="button" class="dropdown-item" (click)="exportOperations('json', 'analytical')">
+            <button type="button" class="dropdown-item" (click)="exportOperations('json', 'analytical')" title="Exporter / Télécharger" bsTooltip>
               <i class="fa-solid fa-database me-2"></i>Export JSON analytique
             </button>
           </li>
           <li><hr class="dropdown-divider" /></li>
           <li>
-            <button type="button" class="dropdown-item" [disabled]="isSnapshotExporting() || isSaving()" (click)="exportSnapshotPack('excel')">
+            <button type="button" class="dropdown-item" [disabled]="isSnapshotExporting() || isSaving()" (click)="exportSnapshotPack('excel')" title="Exporter / Télécharger" bsTooltip>
               <i class="fa-solid fa-box-archive me-2"></i>Pack export CSV
             </button>
           </li>
           <li>
-            <button type="button" class="dropdown-item" [disabled]="isSnapshotExporting() || isSaving()" (click)="exportSnapshotPack('json')">
+            <button type="button" class="dropdown-item" [disabled]="isSnapshotExporting() || isSaving()" (click)="exportSnapshotPack('json')" title="Exporter / Télécharger" bsTooltip>
               <i class="fa-solid fa-box-open me-2"></i>Pack export JSON
             </button>
           </li>
@@ -111,27 +111,27 @@
             [value]="exportHistorySearch()"
             (input)="onExportHistorySearchInput($any($event.target).value || '')" />
           <div class="btn-group btn-group-sm">
-            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistoryFilter() === 'all'" (click)="setExportHistoryFilter('all')">Tous</button>
-            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistoryFilter() === 'success'" (click)="setExportHistoryFilter('success')">OK</button>
-            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistoryFilter() === 'error'" (click)="setExportHistoryFilter('error')">Erreurs</button>
+            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistoryFilter() === 'all'" (click)="setExportHistoryFilter('all')" title="Exporter / Télécharger" bsTooltip>Tous</button>
+            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistoryFilter() === 'success'" (click)="setExportHistoryFilter('success')" title="Exporter / Télécharger" bsTooltip>OK</button>
+            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistoryFilter() === 'error'" (click)="setExportHistoryFilter('error')" title="Exporter / Télécharger" bsTooltip>Erreurs</button>
           </div>
           <div class="btn-group btn-group-sm">
-            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistoryFormatFilter() === 'all'" (click)="setExportHistoryFormatFilter('all')">Tous formats</button>
-            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistoryFormatFilter() === 'excel'" (click)="setExportHistoryFormatFilter('excel')">CSV</button>
-            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistoryFormatFilter() === 'json'" (click)="setExportHistoryFormatFilter('json')">JSON</button>
+            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistoryFormatFilter() === 'all'" (click)="setExportHistoryFormatFilter('all')" title="Exporter / Télécharger" bsTooltip>Tous formats</button>
+            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistoryFormatFilter() === 'excel'" (click)="setExportHistoryFormatFilter('excel')" title="Exporter / Télécharger" bsTooltip>CSV</button>
+            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistoryFormatFilter() === 'json'" (click)="setExportHistoryFormatFilter('json')" title="Exporter / Télécharger" bsTooltip>JSON</button>
           </div>
           <div class="btn-group btn-group-sm">
-            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistorySort() === 'date-desc'" (click)="setExportHistorySort('date-desc')">Date ↓</button>
-            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistorySort() === 'date-asc'" (click)="setExportHistorySort('date-asc')">Date ↑</button>
-            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistorySort() === 'status'" (click)="setExportHistorySort('status')">Statut</button>
+            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistorySort() === 'date-desc'" (click)="setExportHistorySort('date-desc')" title="Exporter / Télécharger" bsTooltip>Date ↓</button>
+            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistorySort() === 'date-asc'" (click)="setExportHistorySort('date-asc')" title="Exporter / Télécharger" bsTooltip>Date ↑</button>
+            <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistorySort() === 'status'" (click)="setExportHistorySort('status')" title="Exporter / Télécharger" bsTooltip>Statut</button>
             @if (hasActiveExportSearch()) {
-              <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistorySort() === 'relevance'" (click)="setExportHistorySort('relevance')">Pertinence</button>
+              <button type="button" class="btn btn-outline-secondary" [class.active]="exportHistorySort() === 'relevance'" (click)="setExportHistorySort('relevance')" title="Exporter / Télécharger" bsTooltip>Pertinence</button>
             }
           </div>
-          <button type="button" class="btn btn-outline-primary btn-sm" (click)="exportHistoryCsv()">CSV</button>
-          <button type="button" class="btn btn-outline-primary btn-sm" (click)="exportHistoryJson()">JSON</button>
-          <button type="button" class="btn btn-outline-secondary btn-sm" (click)="cleanupOldExportHistory()">Nettoyer</button>
-          <button type="button" class="btn btn-outline-danger btn-sm" (click)="clearExportHistory()">Vider</button>
+          <button type="button" class="btn btn-outline-primary btn-sm" (click)="exportHistoryCsv()" title="Exporter / Télécharger" bsTooltip>CSV</button>
+          <button type="button" class="btn btn-outline-primary btn-sm" (click)="exportHistoryJson()" title="Exporter / Télécharger" bsTooltip>JSON</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" (click)="cleanupOldExportHistory()" title="Exporter / Télécharger" bsTooltip>Nettoyer</button>
+          <button type="button" class="btn btn-outline-danger btn-sm" (click)="clearExportHistory()" title="Exporter / Télécharger" bsTooltip>Vider</button>
           @if (isSnapshotExporting()) {
             <span class="small text-secondary">
               <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
@@ -185,12 +185,12 @@
       }
       @if (selectedExportCount() > 0) {
         <div class="d-flex justify-content-start align-items-center gap-2 mb-2 small">
-          <button type="button" class="btn btn-link btn-sm p-0" (click)="deselectAllVisibleExportIds()">Deselect visible</button>
-          <button type="button" class="btn btn-link btn-sm p-0" (click)="selectAllVisibleExportIds()">Select all</button>
-          <button type="button" class="btn btn-outline-info btn-sm" (click)="copySelectedExportSessionIds()">Copy IDs</button>
-          <button type="button" class="btn btn-outline-primary btn-sm" (click)="exportSelectedHistoryCsv()">Export CSV</button>
-          <button type="button" class="btn btn-outline-primary btn-sm" (click)="exportSelectedHistoryJson()">Export JSON</button>
-          <button type="button" class="btn btn-outline-danger btn-sm" (click)="showDeleteExportConfirm()">Supprimer</button>
+          <button type="button" class="btn btn-link btn-sm p-0" (click)="deselectAllVisibleExportIds()" title="Exporter / Télécharger" bsTooltip>Deselect visible</button>
+          <button type="button" class="btn btn-link btn-sm p-0" (click)="selectAllVisibleExportIds()" title="Exporter / Télécharger" bsTooltip>Select all</button>
+          <button type="button" class="btn btn-outline-info btn-sm" (click)="copySelectedExportSessionIds()" title="Exporter / Télécharger" bsTooltip>Copy IDs</button>
+          <button type="button" class="btn btn-outline-primary btn-sm" (click)="exportSelectedHistoryCsv()" title="Exporter / Télécharger" bsTooltip>Export CSV</button>
+          <button type="button" class="btn btn-outline-primary btn-sm" (click)="exportSelectedHistoryJson()" title="Exporter / Télécharger" bsTooltip>Export JSON</button>
+          <button type="button" class="btn btn-outline-danger btn-sm" (click)="showDeleteExportConfirm()" title="Supprimer" bsTooltip>Supprimer</button>
         </div>
       }
       <ul class="list-group list-group-flush small">
@@ -203,7 +203,7 @@
               <div class="d-flex justify-content-between align-items-center flex-grow-1">
                 <span>
                   {{ item.label }}
-                  <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" (click)="copyExportSessionId(item.sessionId)">
+                  <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" (click)="copyExportSessionId(item.sessionId)" title="Exporter / Télécharger" bsTooltip>
                     #{{ item.sessionId }}
                   </button>
                   <span class="text-secondary">({{ item.operationsFormat.toUpperCase() }})</span>
@@ -228,8 +228,8 @@
             </span>
           </div>
           <div class="btn-group btn-group-sm">
-            <button type="button" class="btn btn-outline-secondary" [disabled]="exportHistoryPage() === 1" (click)="prevExportHistoryPage()">← Prec</button>
-            <button type="button" class="btn btn-outline-secondary" [disabled]="exportHistoryPage() === totalExportHistoryPages()" (click)="nextExportHistoryPage()">Suiv →</button>
+            <button type="button" class="btn btn-outline-secondary" [disabled]="exportHistoryPage() === 1" (click)="prevExportHistoryPage()" title="Exporter / Télécharger" bsTooltip>← Prec</button>
+            <button type="button" class="btn btn-outline-secondary" [disabled]="exportHistoryPage() === totalExportHistoryPages()" (click)="nextExportHistoryPage()" title="Exporter / Télécharger" bsTooltip>Suiv →</button>
           </div>
         </div>
       }
@@ -241,8 +241,8 @@
               <p class="mb-1 mt-2 small">Vous êtes sur le point de supprimer {{ deleteExportConfirmCount() }} export(s). Cette action est irreversible.</p>
             </div>
             <div class="d-flex gap-2">
-              <button type="button" class="btn btn-secondary btn-sm" (click)="cancelDeleteExportConfirm()">Annuler</button>
-              <button type="button" class="btn btn-danger btn-sm" (click)="confirmDeleteSelectedExports()">Supprimer</button>
+              <button type="button" class="btn btn-secondary btn-sm" (click)="cancelDeleteExportConfirm()" title="Annuler" bsTooltip>Annuler</button>
+              <button type="button" class="btn btn-danger btn-sm" (click)="confirmDeleteSelectedExports()" title="Confirmer la suppression" bsTooltip>Supprimer</button>
             </div>
           </div>
         </div>
@@ -263,10 +263,10 @@
           <span class="badge bg-warning text-dark">{{ activeExportTrash().length }}</span>
         </div>
         <div class="d-flex gap-2">
-          <button type="button" class="btn btn-outline-warning btn-sm" (click)="restoreAllFromTrash()">
+          <button type="button" class="btn btn-outline-warning btn-sm" (click)="restoreAllFromTrash()" title="Restaurer tous les éléments de la corbeille" bsTooltip>
             <i class="fa-solid fa-undo me-1"></i>Restaurer tout
           </button>
-          <button type="button" class="btn btn-outline-danger btn-sm" (click)="emptyTrash()">
+          <button type="button" class="btn btn-outline-danger btn-sm" (click)="emptyTrash()" title="Vider définitivement la corbeille" bsTooltip>
             <i class="fa-solid fa-trash me-1"></i>Vider
           </button>
         </div>
@@ -282,7 +282,7 @@
             <div class="flex-grow-1">
               <div>
                 {{ item.label }}
-                <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" (click)="copyExportSessionId(item.sessionId)">
+                <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" (click)="copyExportSessionId(item.sessionId)" title="Exporter / Télécharger" bsTooltip>
                   #{{ item.sessionId }}
                 </button>
                 <span class="text-secondary">({{ item.operationsFormat.toUpperCase() }})</span>
@@ -291,7 +291,7 @@
                 Supprime le: {{ item.deletedAt | date: 'dd/MM/yyyy HH:mm:ss' }}
               </div>
             </div>
-            <button type="button" class="btn btn-outline-warning btn-sm" (click)="restoreFromTrash(item)">
+            <button type="button" class="btn btn-outline-warning btn-sm" (click)="restoreFromTrash(item)" title="Restaurer cet élément" bsTooltip>
               <i class="fa-solid fa-undo me-1"></i>Restaurer
             </button>
           </li>
@@ -311,8 +311,8 @@
               }
             </div>
             <div class="d-flex gap-2">
-              <button type="button" class="btn btn-secondary btn-sm" (click)="cancelTrashActionConfirm()">Annuler</button>
-              <button type="button" class="btn btn-danger btn-sm" (click)="confirmTrashAction()">Confirmer</button>
+              <button type="button" class="btn btn-secondary btn-sm" (click)="cancelTrashActionConfirm()" title="Annuler" bsTooltip>Annuler</button>
+              <button type="button" class="btn btn-danger btn-sm" (click)="confirmTrashAction()" title="Enregistrer" bsTooltip>Confirmer</button>
             </div>
           </div>
         </div>
@@ -353,12 +353,12 @@
     </div>
 
     <div class="d-flex flex-wrap gap-2 mt-3">
-      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('today')">Aujourd'hui</button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('yesterday')">Hier</button>
-      <button type="button" class="btn btn-outline-primary btn-sm" (click)="applyPreset('month')">Ce mois-ci</button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('lastMonth')">Le mois dernier</button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('year')">Cette annee</button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('lastYear')">L'annee derniere</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('today')" title="Filtrer par aujourd'hui" bsTooltip>Aujourd'hui</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('yesterday')" title="Filtrer par hier" bsTooltip>Hier</button>
+      <button type="button" class="btn btn-outline-primary btn-sm" (click)="applyPreset('month')" title="Filtrer par aujourd'hui" bsTooltip>Ce mois-ci</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('lastMonth')" title="Filtrer le mois dernier" bsTooltip>Le mois dernier</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('year')" title="Filtrer par aujourd'hui" bsTooltip>Cette annee</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('lastYear')" title="Filtrer l'année dernière" bsTooltip>L'annee derniere</button>
     </div>
   </div>
 </section>
@@ -476,17 +476,17 @@
               <thead>
                 <tr>
                   <th>
-                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" (click)="setDebtorSort('name')">
+                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" (click)="setDebtorSort('name')" title="Action" bsTooltip>
                       Patient <i class="fa-solid" [class]="'fa-solid ms-1 ' + debtorSortIcon('name')"></i>
                     </button>
                   </th>
                   <th class="text-end">
-                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" (click)="setDebtorSort('invoices')">
+                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" (click)="setDebtorSort('invoices')" title="Action" bsTooltip>
                       Factures <i class="fa-solid" [class]="'fa-solid ms-1 ' + debtorSortIcon('invoices')"></i>
                     </button>
                   </th>
                   <th class="text-end">
-                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" (click)="setDebtorSort('outstanding')">
+                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" (click)="setDebtorSort('outstanding')" title="Action" bsTooltip>
                       Encours <i class="fa-solid" [class]="'fa-solid ms-1 ' + debtorSortIcon('outstanding')"></i>
                     </button>
                   </th>
@@ -513,8 +513,8 @@
           <div class="d-flex justify-content-between align-items-center mt-3">
             <small class="text-secondary">Page {{ debtorPage() }} / {{ debtorTotalPages() }}</small>
             <div class="btn-group btn-group-sm">
-              <button type="button" class="btn btn-outline-secondary" [disabled]="debtorPage() <= 1" (click)="previousDebtorPage()">Precedent</button>
-              <button type="button" class="btn btn-outline-secondary" [disabled]="debtorPage() >= debtorTotalPages()" (click)="nextDebtorPage()">Suivant</button>
+              <button type="button" class="btn btn-outline-secondary" [disabled]="debtorPage() <= 1" (click)="previousDebtorPage()" title="Revenir" bsTooltip>Precedent</button>
+              <button type="button" class="btn btn-outline-secondary" [disabled]="debtorPage() >= debtorTotalPages()" (click)="nextDebtorPage()" title="Naviguer" bsTooltip>Suivant</button>
             </div>
           </div>
         </div>
@@ -533,11 +533,11 @@
     </div>
     @if (selectedCount() > 0 && canManageBilling()) {
       <div class="d-flex flex-wrap gap-2">
-        <button type="button" class="btn btn-outline-primary btn-sm" (click)="openConsultationSelectionModal('bulk-update')">
+        <button type="button" class="btn btn-outline-primary btn-sm" (click)="openConsultationSelectionModal('bulk-update')" title="Ouvrir la consultation" bsTooltip>
           Modifier la selection
         </button>
         @if (selectedUnpaidInvoiceIds().length > 0) {
-          <button type="button" class="btn btn-primary btn-sm" (click)="openConsultationSelectionModal('payment')">
+          <button type="button" class="btn btn-primary btn-sm" (click)="openConsultationSelectionModal('payment')" title="Ouvrir la consultation" bsTooltip>
             Ajouter un paiement
           </button>
         }
@@ -597,7 +597,8 @@
                     <button
                       type="button"
                       class="btn btn-outline-primary btn-sm"
-                      [routerLink]="['/patients', operation.paymentRef.patientId]">
+                      title="Voir la fiche patient"
+                      [routerLink]="['/patients', operation.paymentRef.patientId]" bsTooltip>
                       <i class="fa-solid fa-address-card me-1" aria-hidden="true"></i>
                     </button>
                   } @else {
@@ -608,7 +609,7 @@
                       type="button"
                       class="btn btn-outline-secondary btn-sm ms-1"
                       title="Remise de banque #{{ operation.depositId }}"
-                      (click)="openDepositEditorById(operation.depositId, operation.depositType!)">
+                      (click)="openDepositEditorById(operation.depositId, operation.depositType!)" bsTooltip>
                       <i class="fa-solid fa-building-columns" aria-hidden="true"></i>
                     </button>
                   }
@@ -638,7 +639,7 @@
               }
             </p>
           </div>
-          <button type="button" class="btn-close" (click)="closeConsultationSelectionModal()" aria-label="Fermer"></button>
+          <button type="button" class="btn-close" (click)="closeConsultationSelectionModal()" aria-label="Fermer" title="Fermer" bsTooltip></button>
         </div>
         <div class="modal-body">
           @if (consultationSelectionModal() === 'bulk-update') {
@@ -712,11 +713,11 @@
           }
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" (click)="closeConsultationSelectionModal()">Annuler</button>
+          <button type="button" class="btn btn-outline-secondary" (click)="closeConsultationSelectionModal()" title="Fermer" bsTooltip>Annuler</button>
           @if (consultationSelectionModal() === 'bulk-update') {
-            <button type="button" class="btn btn-primary" [disabled]="isSaving() || !canManageBilling() || selectedCount() === 0" (click)="applyBulkUpdate()">Appliquer</button>
+            <button type="button" class="btn btn-primary" [disabled]="isSaving() || !canManageBilling() || selectedCount() === 0" (click)="applyBulkUpdate()" title="Modifier" bsTooltip>Appliquer</button>
           } @else {
-            <button type="button" class="btn btn-primary" [disabled]="isSaving() || !canManageBilling() || !canRunPrototypeGroupedPayment()" (click)="applyPrototypeGroupedPayment()">
+            <button type="button" class="btn btn-primary" [disabled]="isSaving() || !canManageBilling() || !canRunPrototypeGroupedPayment()" (click)="applyPrototypeGroupedPayment()" title="Appliquer" bsTooltip>
               Ajouter le paiement
             </button>
           }
@@ -733,7 +734,7 @@
       <div class="modal-content">
         <div class="modal-header">
           <h5 id="billing-expense-modal-title" class="modal-title">Ajouter une depense</h5>
-          <button type="button" class="btn-close" (click)="closeExpenseModal()" aria-label="Fermer"></button>
+          <button type="button" class="btn-close" (click)="closeExpenseModal()" aria-label="Fermer" title="Fermer" bsTooltip></button>
         </div>
         <div class="modal-body">
           <div class="mb-2">
@@ -758,8 +759,8 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" (click)="closeExpenseModal()">Annuler</button>
-          <button type="button" class="btn btn-primary" [disabled]="isSaving() || !canManageBilling()" (click)="saveExpense()">Enregistrer</button>
+          <button type="button" class="btn btn-outline-secondary" (click)="closeExpenseModal()" title="Fermer" bsTooltip>Annuler</button>
+          <button type="button" class="btn btn-primary" [disabled]="isSaving() || !canManageBilling()" (click)="saveExpense()" title="Enregistrer la dépense" bsTooltip>Enregistrer</button>
         </div>
       </div>
     </div>
@@ -775,11 +776,11 @@
           <h5 id="billing-deposit-list-title" class="modal-title">
             {{ depositModalType() === 'especes' ? "Remises d'especes" : 'Remises de cheques' }}
           </h5>
-          <button type="button" class="btn-close" (click)="closeDepositListModal()" aria-label="Fermer"></button>
+          <button type="button" class="btn-close" (click)="closeDepositListModal()" aria-label="Fermer" title="Fermer" bsTooltip></button>
         </div>
         <div class="modal-body">
           <div class="d-flex justify-content-end mb-3">
-            <button type="button" class="btn btn-primary btn-sm" [disabled]="!canManageBilling()" (click)="openDepositEditorModal('create')">
+            <button type="button" class="btn btn-primary btn-sm" [disabled]="!canManageBilling()" (click)="openDepositEditorModal('create')" title="Ouvrir" bsTooltip>
               <i class="fa-solid fa-plus me-1"></i>
               Ajouter un bordereau de remise {{ depositModalType() === 'especes' ? "d'especes" : 'de cheques' }}
             </button>
@@ -812,13 +813,13 @@
                       <td>{{ depositModalType() === 'cheque' ? deposit.chequeCount : '-' }}</td>
                       <td class="text-end">{{ formatCurrency(deposit.amountCents, deposit.currency) }}</td>
                       <td class="text-end">
-                        <button type="button" class="btn btn-outline-secondary btn-sm me-1" [disabled]="!canManageBilling()" (click)="openDepositEditorModal('edit', deposit)">
+                        <button type="button" class="btn btn-outline-secondary btn-sm me-1" [disabled]="!canManageBilling()" (click)="openDepositEditorModal('edit', deposit)" title="Ouvrir" bsTooltip>
                           <i class="fa-solid fa-pen"></i>
                         </button>
-                        <button type="button" class="btn btn-outline-primary btn-sm me-1" (click)="downloadDepositPdf(deposit.id)">
+                        <button type="button" class="btn btn-outline-primary btn-sm me-1" (click)="downloadDepositPdf(deposit.id)" title="Exporter / Télécharger" bsTooltip>
                           <i class="fa-solid fa-file-pdf"></i>
                         </button>
-                        <button type="button" class="btn btn-outline-danger btn-sm" [disabled]="!canManageBilling()" (click)="deleteDeposit(deposit.id)">
+                        <button type="button" class="btn btn-outline-danger btn-sm" [disabled]="!canManageBilling()" (click)="deleteDeposit(deposit.id)" title="Supprimer" bsTooltip>
                           <i class="fa-solid fa-trash-can"></i>
                         </button>
                       </td>
@@ -843,7 +844,7 @@
           <h5 id="billing-deposit-editor-title" class="modal-title">
             {{ editingDepositId() ? 'Modifier le bordereau' : "Ajouter un bordereau" }}
           </h5>
-          <button type="button" class="btn-close" (click)="closeDepositEditorModal()" aria-label="Fermer"></button>
+          <button type="button" class="btn-close" (click)="closeDepositEditorModal()" aria-label="Fermer" title="Fermer" bsTooltip></button>
         </div>
         <div class="modal-body">
           @if (editingDepositId()) {
@@ -1024,12 +1025,12 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" (click)="closeDepositEditorModal()">Annuler</button>
+          <button type="button" class="btn btn-outline-secondary" (click)="closeDepositEditorModal()" title="Fermer" bsTooltip>Annuler</button>
           <button
             type="button"
             class="btn btn-primary"
             [disabled]="isSaving() || !canManageBilling() || (!editingDepositId() && selectedDepositCandidateCount() === 0)"
-            (click)="saveDepositEditor()">
+            (click)="saveDepositEditor()" title="Enregistrer" bsTooltip>
             {{ editingDepositId() ? 'Enregistrer' : 'Generer le bordereau' }}
           </button>
         </div>

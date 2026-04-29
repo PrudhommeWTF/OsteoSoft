@@ -20,7 +20,7 @@
               [attr.aria-controls]="section.id + '-panel'"
               [id]="section.id + '-tab'"
               (click)="selectSection(section.id)"
-            >
+             title="Sélectionner" bsTooltip>
               {{ section.label }}
             </button>
           }
@@ -56,7 +56,7 @@
                 [attr.aria-controls]="'data-management-' + tab.id + '-panel'"
                 [id]="'data-management-' + tab.id + '-tab'"
                 (click)="selectDataManagementTab(tab.id)"
-              >
+               title="Sélectionner" bsTooltip>
                 {{ tab.label }}
               </button>
             }
@@ -70,7 +70,7 @@
                 <p class="settings-card-status mb-2">Sauvegarde</p>
                 <h3 class="settings-card-title">Télécharger une sauvegarde</h3>
                 <p class="settings-card-copy mb-3">Exportez l'intégralité des données dans une archive ZIP (manifest + data) pour archivage ou transfert.</p>
-                <button type="button" class="btn btn-primary" [disabled]="isDownloadingBackup()" (click)="downloadBackup()">
+                <button type="button" class="btn btn-primary" [disabled]="isDownloadingBackup()" (click)="downloadBackup()" title="Exporter / Télécharger" bsTooltip>
                   <i class="fa-solid fa-download me-1"></i>Télécharger la sauvegarde
                 </button>
               </article>
@@ -102,7 +102,7 @@
                   class="btn btn-outline-primary"
                   [disabled]="isRestoringBackup() || !selectedBackupPayload()"
                   (click)="restoreBackup()"
-                >
+                 title="Revenir" bsTooltip>
                   <i class="fa-solid fa-rotate-left me-1"></i>Restaurer la sauvegarde
                 </button>
 
@@ -163,7 +163,7 @@
                 <div class="mb-3">
                   <div class="d-flex justify-content-between align-items-center mb-2">
                     <label class="form-label fw-semibold mb-0">Patient concerné</label>
-                    <button type="button" class="btn btn-outline-primary btn-sm" [disabled]="isExportingRgpdPatient()" (click)="toggleRgpdPatientPicker()">
+                    <button type="button" class="btn btn-outline-primary btn-sm" [disabled]="isExportingRgpdPatient()" (click)="toggleRgpdPatientPicker()" title="Basculer" bsTooltip>
                       <i class="fa-solid fa-user-plus me-1"></i>
                       {{ showRgpdPatientPicker() ? 'Fermer' : 'Ajouter' }}
                     </button>
@@ -180,7 +180,7 @@
                           aria-label="Retirer"
                           [disabled]="isExportingRgpdPatient()"
                           (click)="clearRgpdPatientSelection()"
-                        ></button>
+                         title="Retirer" bsTooltip></button>
                       </span>
                     </div>
                   }
@@ -227,7 +227,7 @@
                     class="btn btn-outline-primary"
                     [disabled]="isSearchingRgpdPatients() || isExportingRgpdPatient() || !selectedRgpdPatient()"
                     (click)="exportSelectedPatientRgpd()"
-                  >
+                   title="Exporter / Télécharger" bsTooltip>
                     <i class="fa-solid fa-file-export me-1"></i>Exporter
                   </button>
                 </div>
@@ -316,7 +316,7 @@
                         class="btn btn-outline-primary"
                         [disabled]="isDownloadingImportTemplate() || isImportingDataFile()"
                         (click)="downloadDataImportTemplate()"
-                      >
+                       title="Exporter / Télécharger" bsTooltip>
                         @if (isDownloadingImportTemplate()) {
                           <i class="fa-solid fa-circle-notch fa-spin me-1"></i>Téléchargement...
                         } @else {
@@ -329,7 +329,7 @@
                         class="btn btn-primary"
                         [disabled]="isImportingDataFile() || !selectedDataImportFileBase64() || !dataImportTargetOfficeId()"
                         (click)="runDataImport()"
-                      >
+                       title="Importer" bsTooltip>
                         @if (isImportingDataFile()) {
                           <i class="fa-solid fa-circle-notch fa-spin me-1"></i>Import en cours...
                         } @else {
@@ -382,7 +382,7 @@
                   impayés, consultations non facturées et cas métier de validation.
                 </p>
 
-                <button type="button" class="btn btn-outline-warning" [disabled]="isResettingDemo()" (click)="resetDemoInstance()">
+                <button type="button" class="btn btn-outline-warning" [disabled]="isResettingDemo()" (click)="resetDemoInstance()" title="Réinitialiser" bsTooltip>
                   @if (isResettingDemo()) {
                     <i class="fa-solid fa-circle-notch fa-spin me-1"></i>Réinitialisation de la démo...
                   } @else {
@@ -425,7 +425,7 @@
                 </select>
               </div>
 
-              <button type="button" class="btn btn-sm btn-outline-primary" [disabled]="isAuditLogsLoading()" (click)="refreshAuditLogs()">
+              <button type="button" class="btn btn-sm btn-outline-primary" [disabled]="isAuditLogsLoading()" (click)="refreshAuditLogs()" title="Rafraîchir les journaux d'audit" bsTooltip>
                 <i class="fa-solid fa-rotate me-1"></i>Actualiser
               </button>
             </div>
@@ -454,7 +454,7 @@
                   </select>
                 </div>
 
-                <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="isSetupSecurityLogsLoading()" (click)="refreshSetupSecurityLogs()">
+                <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="isSetupSecurityLogsLoading()" (click)="refreshSetupSecurityLogs()" title="Rafraîchir" bsTooltip>
                   <i class="fa-solid fa-rotate me-1"></i>Actualiser incidents
                 </button>
               </div>
@@ -564,21 +564,21 @@
                     [class.btn-secondary]="selectedSecurityJournalFilter() === 'all'"
                     [class.btn-outline-secondary]="selectedSecurityJournalFilter() !== 'all'"
                     (click)="selectedSecurityJournalFilter.set('all')"
-                  >Tous <span class="badge text-bg-light ms-1">{{ securityAuditLogs().length }}</span></button>
+                   title="Sélectionner" bsTooltip>Tous <span class="badge text-bg-light ms-1">{{ securityAuditLogs().length }}</span></button>
                   <button
                     type="button"
                     class="btn"
                     [class.btn-secondary]="selectedSecurityJournalFilter() === 'auth'"
                     [class.btn-outline-secondary]="selectedSecurityJournalFilter() !== 'auth'"
                     (click)="selectedSecurityJournalFilter.set('auth')"
-                  >Auth</button>
+                   title="Sélectionner" bsTooltip>Auth</button>
                   <button
                     type="button"
                     class="btn"
                     [class.btn-secondary]="selectedSecurityJournalFilter() === 'setup'"
                     [class.btn-outline-secondary]="selectedSecurityJournalFilter() !== 'setup'"
                     (click)="selectedSecurityJournalFilter.set('setup')"
-                  >Setup</button>
+                   title="Sélectionner" bsTooltip>Setup</button>
                 </div>
 
                 @if (filteredSecurityAuditLogs().length === 0) {
@@ -651,7 +651,7 @@
             </div>
 
             <div>
-              <button type="button" class="btn btn-primary" (click)="openCreateProfileModal()" [disabled]="isProfilesLoading()">
+              <button type="button" class="btn btn-primary" (click)="openCreateProfileModal()" [disabled]="isProfilesLoading()" title="Ouvrir" bsTooltip>
                 <i class="fa-solid fa-plus me-1"></i>Nouveau profil
               </button>
             </div>
@@ -685,7 +685,7 @@
                         (click)="setDomainAll(domain, !isDomainFullyEnabled(domain))"
                         [attr.aria-checked]="isDomainFullyEnabled(domain)"
                         [attr.aria-label]="'Activer ou désactiver tous les droits du domaine ' + domain.label"
-                      >
+                       title="Action" bsTooltip>
                         <span class="settings-switch-knob" aria-hidden="true"></span>
                       </button>
                     </div>
@@ -704,7 +704,7 @@
                         (click)="setPermission(domain.id, permission.id, !isPermissionEnabled(domain.id, permission.id))"
                         [attr.aria-checked]="isPermissionEnabled(domain.id, permission.id)"
                         [attr.aria-label]="'Basculer le droit ' + permission.label + ' pour le profil ' + selectedProfile().label"
-                      >
+                       title="Action" bsTooltip>
                         <span class="settings-switch-knob" aria-hidden="true"></span>
                       </button>
                     </li>
@@ -725,7 +725,7 @@
               <div class="modal-content">
                 <div class="modal-header">
                   <h3 id="create-access-profile-modal-title" class="modal-title h5 mb-0">Créer un profil d'accès</h3>
-                  <button type="button" class="btn-close" aria-label="Fermer" (click)="closeCreateProfileModal()"></button>
+                  <button type="button" class="btn-close" aria-label="Fermer" (click)="closeCreateProfileModal()" title="Fermer" bsTooltip></button>
                 </div>
 
                 <form [formGroup]="profileForm" (ngSubmit)="createProfile()" novalidate>
@@ -758,10 +758,10 @@
                   </div>
 
                   <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" (click)="closeCreateProfileModal()" [disabled]="isCreatingProfile()">
+                    <button type="button" class="btn btn-outline-secondary" (click)="closeCreateProfileModal()" [disabled]="isCreatingProfile()" title="Fermer" bsTooltip>
                       Annuler
                     </button>
-                    <button type="submit" class="btn btn-primary" [disabled]="isCreatingProfile()">
+                    <button type="submit" class="btn btn-primary" [disabled]="isCreatingProfile()" bsTooltip>
                       <i class="fa-solid fa-plus me-1"></i>Créer le profil
                     </button>
                   </div>
@@ -777,10 +777,10 @@
             <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
               <h3 class="h6 mb-0">Comptes utilisateurs</h3>
               <div class="d-flex flex-wrap gap-2">
-                <button type="button" class="btn btn-sm btn-outline-primary" (click)="openCurrentUserProfileModal()">
+                <button type="button" class="btn btn-sm btn-outline-primary" (click)="openCurrentUserProfileModal()" title="Ouvrir" bsTooltip>
                   <i class="fa-solid fa-id-card me-1"></i>Éditer mon profil
                 </button>
-                <button type="button" class="btn btn-sm btn-primary" (click)="openCreateUserModal()">
+                <button type="button" class="btn btn-sm btn-primary" (click)="openCreateUserModal()" title="Créer un nouvel utilisateur" bsTooltip>
                   <i class="fa-solid fa-user-plus me-1"></i>Nouveau compte
                 </button>
               </div>
@@ -818,7 +818,7 @@
                     @for (user of users(); track user.id) {
                       <tr>
                         <td>
-                          <button type="button" class="btn btn-link p-0 text-decoration-none" (click)="openEditUserModal(user.id)">
+                          <button type="button" class="btn btn-link p-0 text-decoration-none" (click)="openEditUserModal(user.id)" title="Modifier l'utilisateur" bsTooltip>
                             {{ user.username }}
                           </button>
                         </td>
@@ -844,7 +844,7 @@
                                   class="btn btn-sm btn-outline-secondary"
                                   title="Effacer"
                                   (click)="resetPasswordTempResult.set(null)"
-                                ><i class="fa-solid fa-xmark"></i></button>
+                                 bsTooltip><i class="fa-solid fa-xmark"></i></button>
                               </div>
                             } @else {
                               <button
@@ -854,7 +854,7 @@
                                 (click)="resetUserPassword(user)"
                                 title="Réinitialiser le mot de passe"
                                 aria-label="Réinitialiser le mot de passe"
-                              >
+                               bsTooltip>
                                 <i class="fa-solid fa-key"></i>
                               </button>
                             }
@@ -867,7 +867,7 @@
                             [disabled]="deletingUserId() === user.id || !canDeleteUser(user)"
                             (click)="deleteUser(user)"
                             aria-label="Supprimer ce compte"
-                          >
+                           title="Supprimer ce compte" bsTooltip>
                             <i class="fa-solid fa-trash"></i>
                           </button>
                         </td>
@@ -888,7 +888,7 @@
                   <h4 id="user-account-modal-title" class="modal-title h5 mb-0">
                     {{ isCreatingUserMode() ? 'Créer un utilisateur' : (isEditingOwnProfile() ? 'Éditer mon profil' : 'Modifier un utilisateur') }}
                   </h4>
-                  <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeUserModal()"></button>
+                  <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeUserModal()" title="Fermer" bsTooltip></button>
                 </div>
 
                 <form class="settings-user-modal-form" [formGroup]="userForm" (ngSubmit)="saveUserAccount()" novalidate>
@@ -903,7 +903,7 @@
                           [attr.aria-selected]="userModalTab() === tab.id"
                           [attr.aria-controls]="'user-tab-' + tab.id"
                           (click)="selectUserModalTab(tab.id)"
-                        >
+                         title="Sélectionner" bsTooltip>
                           <span>{{ tab.label }}</span>
                           @if (isUserModalTabDirty(tab.id)) {
                             <span class="badge rounded-pill text-bg-warning ms-2">Modifié</span>
@@ -990,7 +990,7 @@
                               </div>
                             }
 
-                            <button type="button" class="btn btn-outline-primary btn-sm" (click)="openCabinetDelegationsSection()">
+                            <button type="button" class="btn btn-outline-primary btn-sm" (click)="openCabinetDelegationsSection()" title="Ouvrir" bsTooltip>
                               Gérer les profils cabinet
                             </button>
                           </div>
@@ -1127,7 +1127,7 @@
                             <p class="small text-secondary mt-1 mb-0">Nouveau fichier: {{ selectedUserSignatureFileName() }}</p>
                           }
 
-                          <button type="button" class="btn btn-sm btn-outline-secondary mt-2" (click)="clearUserSignature()">
+                          <button type="button" class="btn btn-sm btn-outline-secondary mt-2" (click)="clearUserSignature()" title="Action" bsTooltip>
                             Effacer la signature
                           </button>
 
@@ -1207,20 +1207,20 @@
                   </div>
 
                   <div class="modal-footer settings-user-modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" (click)="closeUserModal()">Annuler</button>
+                    <button type="button" class="btn btn-outline-secondary" (click)="closeUserModal()" title="Fermer" bsTooltip>Annuler</button>
                     <button
                       type="button"
                       class="btn btn-outline-dark"
                       [disabled]="!isUserModalTabDirty(userModalTab())"
                       (click)="resetCurrentUserModalTab()"
-                    >
+                     title="Réinitialiser" bsTooltip>
                       Réinitialiser cette section
                     </button>
                     <button
                       type="submit"
                       class="btn btn-success"
                       [disabled]="isCreatingUserAccount() || isSavingUserAccount() || (!isCreatingUserMode() && !hasUserFormUnsavedChanges())"
-                    >
+                     bsTooltip>
                       <i class="fa-solid fa-check me-1"></i>{{ isCreatingUserMode() ? 'Créer le compte' : 'Enregistrer' }}
                     </button>
                   </div>
@@ -1253,7 +1253,7 @@
           } @else {
             @if (canCreateOffice()) {
               <div class="mb-3">
-                <button type="button" class="btn btn-primary" (click)="openOfficeModal()">
+                <button type="button" class="btn btn-primary" (click)="openOfficeModal()" title="Ouvrir" bsTooltip>
                   <i class="fa-solid fa-plus me-1"></i>Ajouter un cabinet
                 </button>
               </div>
@@ -1294,7 +1294,7 @@
                               class="btn btn-sm btn-outline-danger"
                               (click)="$event.stopPropagation(); deleteOffice(office.id)"
                               [disabled]="isDeletingOffice() === office.id"
-                            >
+                             title="Supprimer" bsTooltip>
                               @if (isDeletingOffice() === office.id) {
                                 <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
                               } @else {
@@ -1324,7 +1324,7 @@
                         Ajouter un cabinet
                       }
                     </h5>
-                    <button type="button" class="btn-close" (click)="closeOfficeModal()"></button>
+                    <button type="button" class="btn-close" (click)="closeOfficeModal()" title="Fermer" bsTooltip></button>
                   </div>
 
                   <div class="modal-body pb-0">
@@ -1389,7 +1389,7 @@
                           [attr.aria-selected]="officeModalTab() === 'general'"
                           [attr.aria-controls]="'office-tab-general'"
                           (click)="selectOfficeModalTab('general')"
-                        >
+                         title="Sélectionner" bsTooltip>
                           Identité
                         </button>
                         <button
@@ -1400,7 +1400,7 @@
                           [attr.aria-selected]="officeModalTab() === 'contact-details'"
                           [attr.aria-controls]="'office-tab-contact-details'"
                           (click)="selectOfficeModalTab('contact-details')"
-                        >
+                         title="Sélectionner" bsTooltip>
                           Coordonnées
                         </button>
                         <button
@@ -1411,7 +1411,7 @@
                           [attr.aria-selected]="officeModalTab() === 'billing'"
                           [attr.aria-controls]="'office-tab-billing'"
                           (click)="selectOfficeModalTab('billing')"
-                        >
+                         title="Sélectionner" bsTooltip>
                           Facturation
                         </button>
                         <button
@@ -1422,7 +1422,7 @@
                           [attr.aria-selected]="officeModalTab() === 'agendas'"
                           [attr.aria-controls]="'office-tab-agendas'"
                           (click)="selectOfficeModalTab('agendas')"
-                        >
+                         title="Sélectionner" bsTooltip>
                           Agenda & horaires
                         </button>
                         <button
@@ -1433,7 +1433,7 @@
                           [attr.aria-selected]="officeModalTab() === 'users-profiles'"
                           [attr.aria-controls]="'office-tab-users-profiles'"
                           (click)="selectOfficeModalTab('users-profiles')"
-                        >
+                         title="Sélectionner" bsTooltip>
                           Utilisateurs & accès
                         </button>
                         <button
@@ -1444,7 +1444,7 @@
                           [attr.aria-selected]="officeModalTab() === 'consultation-reasons'"
                           [attr.aria-controls]="'office-tab-consultation-reasons'"
                           (click)="selectOfficeModalTab('consultation-reasons')"
-                        >
+                         title="Sélectionner" bsTooltip>
                           Profils de consult. & motifs
                         </button>
                         <button
@@ -1455,7 +1455,7 @@
                           [attr.aria-selected]="officeModalTab() === 'patient-letters'"
                           [attr.aria-controls]="'office-tab-patient-letters'"
                           (click)="selectOfficeModalTab('patient-letters')"
-                        >
+                         title="Sélectionner" bsTooltip>
                           Lettres types
                         </button>
                       </nav>
@@ -1551,7 +1551,7 @@
                                     data-bs-target="#office-create-billing-services"
                                     aria-expanded="true"
                                     aria-controls="office-create-billing-services"
-                                  >
+                                   title="Déplier / replier cette section" bsTooltip>
                                     Prestations proposées
                                   </button>
                                 </h2>
@@ -1559,7 +1559,7 @@
                                   <div class="accordion-body">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
                                       <h6 class="mb-0">Catalogue des prestations</h6>
-                                      <button type="button" class="btn btn-sm btn-outline-primary" (click)="addServiceTypeRow()">
+                                      <button type="button" class="btn btn-sm btn-outline-primary" (click)="addServiceTypeRow()" title="Créer / Ajouter" bsTooltip>
                                         <i class="fa-solid fa-plus me-1"></i>Ajouter
                                       </button>
                                     </div>
@@ -1582,7 +1582,7 @@
                                                 <input type="number" class="form-control form-control-sm" step="0.01" min="0" [value]="serviceType.amountHt" (input)="updateServiceTypeAmount(serviceType.tempKey, $any($event.target).value || '0')" />
                                               </td>
                                               <td class="text-end">
-                                                <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeServiceType(serviceType.tempKey)">
+                                                <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeServiceType(serviceType.tempKey)" title="Supprimer" bsTooltip>
                                                   <i class="fa-solid fa-trash"></i>
                                                 </button>
                                               </td>
@@ -1604,7 +1604,7 @@
                                     data-bs-target="#office-create-billing-payments"
                                     aria-expanded="false"
                                     aria-controls="office-create-billing-payments"
-                                  >
+                                   title="Déplier / replier cette section" bsTooltip>
                                     Moyens de paiement
                                   </button>
                                 </h2>
@@ -1612,7 +1612,7 @@
                                   <div class="accordion-body">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
                                       <h6 class="mb-0">Modes acceptés</h6>
-                                      <button type="button" class="btn btn-sm btn-outline-primary" (click)="addPaymentMethod()">
+                                      <button type="button" class="btn btn-sm btn-outline-primary" (click)="addPaymentMethod()" title="Créer / Ajouter" bsTooltip>
                                         <i class="fa-solid fa-plus me-1"></i>Ajouter
                                       </button>
                                     </div>
@@ -1635,7 +1635,7 @@
                                                 <input type="checkbox" class="form-check-input" [checked]="paymentMethod.isActive" (change)="togglePaymentMethodActive(paymentMethod.tempKey)" />
                                               </td>
                                               <td class="text-end">
-                                                <button type="button" class="btn btn-sm btn-outline-danger" [disabled]="paymentMethod.isSystem" (click)="removePaymentMethod(paymentMethod.tempKey)">
+                                                <button type="button" class="btn btn-sm btn-outline-danger" [disabled]="paymentMethod.isSystem" (click)="removePaymentMethod(paymentMethod.tempKey)" title="Supprimer" bsTooltip>
                                                   <i class="fa-solid fa-trash"></i>
                                                 </button>
                                               </td>
@@ -1657,7 +1657,7 @@
                                     data-bs-target="#office-create-billing-settings"
                                     aria-expanded="false"
                                     aria-controls="office-create-billing-settings"
-                                  >
+                                   title="Déplier / replier cette section" bsTooltip>
                                     Paramètres de facture
                                   </button>
                                 </h2>
@@ -1717,7 +1717,7 @@
                                               <input type="time" class="form-control form-control-sm" [value]="range.start" (input)="updateOfficeOpeningRange(day, rangeIndex, 'start', $any($event.target).value || '')" />
                                               <span class="text-secondary">a</span>
                                               <input type="time" class="form-control form-control-sm" [value]="range.end" (input)="updateOfficeOpeningRange(day, rangeIndex, 'end', $any($event.target).value || '')" />
-                                              <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeOfficeOpeningRange(day, rangeIndex)">
+                                              <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeOfficeOpeningRange(day, rangeIndex)" title="Supprimer" bsTooltip>
                                                 <i class="fa-solid fa-trash"></i>
                                               </button>
                                             </div>
@@ -1728,7 +1728,7 @@
                                         </div>
                                       </td>
                                       <td class="text-end">
-                                        <button type="button" class="btn btn-sm btn-outline-primary" (click)="addOfficeOpeningRange(day)">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" (click)="addOfficeOpeningRange(day)" title="Ouvrir" bsTooltip>
                                           <i class="fa-solid fa-plus me-1"></i>Ajouter
                                         </button>
                                       </td>
@@ -1748,7 +1748,7 @@
                                   Définissez les profils types et leurs motifs directement lors de la création du cabinet.
                                 </p>
                               </div>
-                              <button type="button" class="btn btn-primary" (click)="addConsultationProfile()">
+                              <button type="button" class="btn btn-primary" (click)="addConsultationProfile()" title="Créer / Ajouter" bsTooltip>
                                 <i class="fa-solid fa-plus me-2"></i>
                                 Ajouter un profil
                               </button>
@@ -1757,7 +1757,7 @@
                             @if (consultationProfiles().length === 0) {
                               <div class="border rounded-3 p-4 text-center bg-light-subtle">
                                 <p class="mb-3 text-muted">Aucun profil configuré pour ce cabinet.</p>
-                                <button type="button" class="btn btn-outline-primary" (click)="addConsultationProfile()">
+                                <button type="button" class="btn btn-outline-primary" (click)="addConsultationProfile()" title="Créer / Ajouter" bsTooltip>
                                   <i class="fa-solid fa-plus me-2"></i>
                                   Créer le premier profil
                                 </button>
@@ -1775,7 +1775,7 @@
                                           (input)="updateConsultationProfileName(profile.tempKey, $any($event.target).value)"
                                           placeholder="Ex: Adulte sportif"
                                         />
-                                        <button type="button" class="btn btn-outline-primary btn-sm flex-shrink-0" (click)="addConsultationReason(profile.tempKey)" title="Ajouter un motif">
+                                        <button type="button" class="btn btn-outline-primary btn-sm flex-shrink-0" (click)="addConsultationReason(profile.tempKey)" title="Ajouter un motif" bsTooltip>
                                           <i class="fa-solid fa-plus"></i>
                                         </button>
                                         <button
@@ -1783,7 +1783,7 @@
                                           class="btn btn-outline-danger btn-sm flex-shrink-0"
                                           (click)="removeConsultationProfile(profile.tempKey)"
                                           title="Supprimer le profil"
-                                        >
+                                         bsTooltip>
                                           <i class="fa-solid fa-trash-can"></i>
                                         </button>
                                       </div>
@@ -1817,7 +1817,7 @@
                                                   class="btn btn-sm btn-outline-danger"
                                                   (click)="removeConsultationReason(profile.tempKey, reason.tempKey)"
                                                   title="Supprimer le motif"
-                                                >
+                                                 bsTooltip>
                                                   <i class="fa-solid fa-trash-can"></i>
                                                 </button>
                                               </div>
@@ -2014,7 +2014,7 @@
                                   data-bs-target="#office-edit-billing-services"
                                   aria-expanded="true"
                                   aria-controls="office-edit-billing-services"
-                                >
+                                 title="Déplier / replier cette section" bsTooltip>
                                   Prestations proposées
                                 </button>
                               </h2>
@@ -2022,7 +2022,7 @@
                                 <div class="accordion-body">
                                   <div class="d-flex justify-content-between align-items-center mb-2">
                                     <h6 class="mb-0">Catalogue des prestations</h6>
-                                    <button type="button" class="btn btn-sm btn-outline-primary" (click)="openServiceTypeModal()">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" (click)="openServiceTypeModal()" title="Ouvrir" bsTooltip>
                                       <i class="fa-solid fa-plus me-1"></i>Ajouter une prestation
                                     </button>
                                   </div>
@@ -2055,10 +2055,10 @@
                                             </td>
                                             <td class="text-end">
                                               <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-outline-secondary" aria-label="Réorganiser la ligne">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" aria-label="Réorganiser la ligne" title="Réorganiser la ligne" bsTooltip>
                                                   <i class="fa-solid fa-grip-vertical"></i>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeServiceType(serviceType.tempKey)" aria-label="Supprimer la prestation">
+                                                <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeServiceType(serviceType.tempKey)" aria-label="Supprimer la prestation" title="Supprimer la prestation" bsTooltip>
                                                   <i class="fa-solid fa-trash"></i>
                                                 </button>
                                               </div>
@@ -2081,7 +2081,7 @@
                                   data-bs-target="#office-edit-billing-payments"
                                   aria-expanded="false"
                                   aria-controls="office-edit-billing-payments"
-                                >
+                                 title="Déplier / replier cette section" bsTooltip>
                                   Moyens de paiement
                                 </button>
                               </h2>
@@ -2089,7 +2089,7 @@
                                 <div class="accordion-body">
                                   <div class="d-flex justify-content-between align-items-center mb-2">
                                     <h6 class="mb-0">Modes acceptés</h6>
-                                    <button type="button" class="btn btn-sm btn-outline-primary" (click)="addPaymentMethod()">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" (click)="addPaymentMethod()" title="Créer / Ajouter" bsTooltip>
                                       <i class="fa-solid fa-plus me-1"></i>Ajouter un moyen
                                     </button>
                                   </div>
@@ -2116,10 +2116,10 @@
                                             </td>
                                             <td class="text-end">
                                               <div class="d-inline-flex gap-1">
-                                                <button type="button" class="btn btn-sm btn-outline-secondary" aria-label="Réorganiser la ligne">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" aria-label="Réorganiser la ligne" title="Réorganiser la ligne" bsTooltip>
                                                   <i class="fa-solid fa-grip-vertical"></i>
                                                 </button>
-                                                <button type="button" class="btn btn-sm btn-outline-danger" [disabled]="paymentMethod.isSystem" (click)="removePaymentMethod(paymentMethod.tempKey)" aria-label="Supprimer le moyen de paiement">
+                                                <button type="button" class="btn btn-sm btn-outline-danger" [disabled]="paymentMethod.isSystem" (click)="removePaymentMethod(paymentMethod.tempKey)" aria-label="Supprimer le moyen de paiement" title="Supprimer le moyen de paiement" bsTooltip>
                                                   <i class="fa-solid fa-trash"></i>
                                                 </button>
                                               </div>
@@ -2142,7 +2142,7 @@
                                   data-bs-target="#office-edit-billing-settings"
                                   aria-expanded="false"
                                   aria-controls="office-edit-billing-settings"
-                                >
+                                 title="Déplier / replier cette section" bsTooltip>
                                   Paramètres de facture
                                 </button>
                               </h2>
@@ -2301,7 +2301,7 @@
                                                 class="btn btn-sm btn-outline-danger"
                                                 (click)="removeOfficeOpeningRange(day, rangeIndex)"
                                                 aria-label="Supprimer cette plage"
-                                              >
+                                               title="Supprimer cette plage" bsTooltip>
                                                 <i class="fa-solid fa-trash"></i>
                                               </button>
                                             </div>
@@ -2316,7 +2316,7 @@
                                           type="button"
                                           class="btn btn-sm btn-outline-primary"
                                           (click)="addOfficeOpeningRange(day)"
-                                        >
+                                         title="Ouvrir" bsTooltip>
                                           <i class="fa-solid fa-plus me-1"></i>Ajouter
                                         </button>
                                       </td>
@@ -2381,7 +2381,7 @@
                               }
 
                               <div class="col-12 d-flex justify-content-end">
-                                <button type="button" class="btn btn-primary" [disabled]="isSavingAgendaSettings() || localCalendarForm.invalid" (click)="saveInlineOfficeAgenda()">
+                                <button type="button" class="btn btn-primary" [disabled]="isSavingAgendaSettings() || localCalendarForm.invalid" (click)="saveInlineOfficeAgenda()" title="Enregistrer" bsTooltip>
                                   @if (isSavingAgendaSettings()) {
                                     <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                                   }
@@ -2410,7 +2410,7 @@
                             </div>
                             <div class="d-flex gap-2">
                               @if (officeUserDelegations().length > 0) {
-                                <button type="button" class="btn btn-outline-secondary" (click)="exportOfficeDelegations()" [disabled]="isExportingDelegations()">
+                                <button type="button" class="btn btn-outline-secondary" (click)="exportOfficeDelegations()" [disabled]="isExportingDelegations()" title="Exporter / Télécharger" bsTooltip>
                                   @if (isExportingDelegations()) {
                                     <span class="spinner-border spinner-border-sm me-2" role="status"></span>
                                   } @else {
@@ -2419,7 +2419,7 @@
                                   Exporter
                                 </button>
                               }
-                              <button type="button" class="btn btn-primary" (click)="addOfficeUserDelegation()">
+                              <button type="button" class="btn btn-primary" (click)="addOfficeUserDelegation()" title="Créer / Ajouter" bsTooltip>
                                 <i class="fa-solid fa-plus me-2"></i>
                                 Ajouter une delegation
                               </button>
@@ -2433,7 +2433,7 @@
                           } @else if (officeUserDelegations().length === 0) {
                             <div class="border rounded-3 p-4 text-center bg-light-subtle">
                               <p class="mb-3 text-muted">Aucune delegation definie pour ce cabinet.</p>
-                              <button type="button" class="btn btn-outline-primary" (click)="addOfficeUserDelegation()">
+                              <button type="button" class="btn btn-outline-primary" (click)="addOfficeUserDelegation()" title="Créer / Ajouter" bsTooltip>
                                 <i class="fa-solid fa-plus me-2"></i>
                                 Creer la premiere delegation
                               </button>
@@ -2463,7 +2463,7 @@
                                           class="btn btn-sm btn-outline-primary me-2"
                                           (click)="editOfficeUserDelegation(delegation.tempKey)"
                                           title="Modifier le role"
-                                        >
+                                         bsTooltip>
                                           <i class="fa-solid fa-pen"></i>
                                         </button>
                                         <button
@@ -2471,7 +2471,7 @@
                                           class="btn btn-sm btn-outline-danger"
                                           (click)="removeOfficeUserDelegation(delegation.tempKey)"
                                           title="Supprimer la delegation"
-                                        >
+                                         bsTooltip>
                                           <i class="fa-solid fa-trash-can"></i>
                                         </button>
                                       </td>
@@ -2491,7 +2491,7 @@
                                 Définissez les profils types et leurs motifs directement dans ce cabinet.
                               </p>
                             </div>
-                            <button type="button" class="btn btn-primary" (click)="addConsultationProfile()">
+                            <button type="button" class="btn btn-primary" (click)="addConsultationProfile()" title="Créer / Ajouter" bsTooltip>
                               <i class="fa-solid fa-plus me-2"></i>
                               Ajouter un profil
                             </button>
@@ -2500,7 +2500,7 @@
                           @if (consultationProfiles().length === 0) {
                             <div class="border rounded-3 p-4 text-center bg-light-subtle">
                               <p class="mb-3 text-muted">Aucun profil configuré pour ce cabinet.</p>
-                              <button type="button" class="btn btn-outline-primary" (click)="addConsultationProfile()">
+                              <button type="button" class="btn btn-outline-primary" (click)="addConsultationProfile()" title="Créer / Ajouter" bsTooltip>
                                 <i class="fa-solid fa-plus me-2"></i>
                                 Créer le premier profil
                               </button>
@@ -2518,7 +2518,7 @@
                                         (input)="updateConsultationProfileName(profile.tempKey, $any($event.target).value)"
                                         placeholder="Ex: Adulte sportif"
                                       />
-                                      <button type="button" class="btn btn-outline-primary btn-sm flex-shrink-0" (click)="addConsultationReason(profile.tempKey)" title="Ajouter un motif">
+                                      <button type="button" class="btn btn-outline-primary btn-sm flex-shrink-0" (click)="addConsultationReason(profile.tempKey)" title="Ajouter un motif" bsTooltip>
                                         <i class="fa-solid fa-plus"></i>
                                       </button>
                                       <button
@@ -2526,7 +2526,7 @@
                                         class="btn btn-outline-danger btn-sm flex-shrink-0"
                                         (click)="removeConsultationProfile(profile.tempKey)"
                                         title="Supprimer le profil"
-                                      >
+                                       bsTooltip>
                                         <i class="fa-solid fa-trash-can"></i>
                                       </button>
                                     </div>
@@ -2560,7 +2560,7 @@
                                                 class="btn btn-sm btn-outline-danger"
                                                 (click)="removeConsultationReason(profile.tempKey, reason.tempKey)"
                                                 title="Supprimer le motif"
-                                              >
+                                               bsTooltip>
                                                 <i class="fa-solid fa-trash-can"></i>
                                               </button>
                                             </div>
@@ -2605,7 +2605,7 @@
                                   [class.active]="activeLetterSubTab() === 'payment-reminder'"
                                   (click)="activeLetterSubTab.set('payment-reminder')"
                                   role="tab"
-                                >
+                                 title="Action" bsTooltip>
                                   Lettres de relance paiements
                                 </button>
                               </li>
@@ -2616,7 +2616,7 @@
                                   [class.active]="activeLetterSubTab() === 'patient-letters'"
                                   (click)="activeLetterSubTab.set('patient-letters')"
                                   role="tab"
-                                >
+                                 title="Action" bsTooltip>
                                   Lettres type aux patients
                                 </button>
                               </li>
@@ -2642,7 +2642,7 @@
                                           class="btn btn-sm btn-outline-secondary"
                                           [title]="variable.description"
                                           (click)="insertOfficeLetterVariable('paymentReminderLetterTitle', variable.token, 'office-payment-reminder-title')"
-                                        >
+                                         title="Action" bsTooltip>
                                           {{ variable.token }}
                                         </button>
                                       }
@@ -2664,7 +2664,7 @@
                                           class="btn btn-sm btn-outline-secondary"
                                           [title]="variable.description"
                                           (click)="insertOfficeLetterVariable('paymentReminderLetterContent', variable.token, 'office-payment-reminder-content')"
-                                        >
+                                         title="Action" bsTooltip>
                                           {{ variable.token }}
                                         </button>
                                       }
@@ -2674,7 +2674,7 @@
                                           class="btn btn-sm btn-outline-primary"
                                           [title]="variable.description"
                                           (click)="insertOfficeLetterVariable('paymentReminderLetterContent', variable.token, 'office-payment-reminder-content')"
-                                        >
+                                         title="Action" bsTooltip>
                                           {{ variable.token }}
                                         </button>
                                       }
@@ -2705,7 +2705,7 @@
                                       class="btn btn-outline-danger flex-shrink-0"
                                       [title]="'Supprimer cette lettre'"
                                       (click)="removePatientLetterTemplate(activePatientLetterIndex())"
-                                    >
+                                     title="Supprimer" bsTooltip>
                                       <i class="fa-solid fa-trash"></i>
                                     </button>
                                   }
@@ -2713,7 +2713,7 @@
                                     type="button"
                                     class="btn btn-outline-primary flex-shrink-0"
                                     (click)="addPatientLetterTemplate()"
-                                  >
+                                   title="Créer / Ajouter" bsTooltip>
                                     <i class="fa-solid fa-plus me-1"></i>
                                     Nouvelle lettre
                                   </button>
@@ -2722,7 +2722,7 @@
                                 @if (patientLetterTemplates().length === 0) {
                                   <div class="border rounded-3 p-4 text-center bg-light-subtle">
                                     <p class="mb-3 text-muted">Aucune lettre type définie.</p>
-                                    <button type="button" class="btn btn-outline-primary" (click)="addPatientLetterTemplate()">
+                                    <button type="button" class="btn btn-outline-primary" (click)="addPatientLetterTemplate()" title="Créer / Ajouter" bsTooltip>
                                       <i class="fa-solid fa-plus me-2"></i>
                                       Créer la première lettre
                                     </button>
@@ -2746,7 +2746,7 @@
                                             class="btn btn-sm btn-outline-secondary"
                                             [title]="variable.description"
                                             (click)="insertPatientLetterVariable(variable.token, 'title', 'office-patient-letter-title')"
-                                          >
+                                           title="Action" bsTooltip>
                                             {{ variable.token }}
                                           </button>
                                         }
@@ -2769,7 +2769,7 @@
                                             class="btn btn-sm btn-outline-secondary"
                                             [title]="variable.description"
                                             (click)="insertPatientLetterVariable(variable.token, 'content', 'office-patient-letter-content')"
-                                          >
+                                           title="Action" bsTooltip>
                                             {{ variable.token }}
                                           </button>
                                         }
@@ -2779,7 +2779,7 @@
                                             class="btn btn-sm btn-outline-primary"
                                             [title]="variable.description"
                                             (click)="insertPatientLetterVariable(variable.token, 'content', 'office-patient-letter-content')"
-                                          >
+                                           title="Action" bsTooltip>
                                             {{ variable.token }}
                                           </button>
                                         }
@@ -2796,15 +2796,15 @@
                     </div>
 
                     <div class="modal-footer">
-                      <button type="button" class="btn btn-outline-secondary" (click)="closeOfficeModal()">Annuler</button>
+                      <button type="button" class="btn btn-outline-secondary" (click)="closeOfficeModal()" title="Fermer" bsTooltip>Annuler</button>
                       @if (!editingOfficeId()) {
-                        <button type="button" class="btn btn-outline-primary" [disabled]="officeCreateStep() <= 1" (click)="previousOfficeCreateStep()">
+                        <button type="button" class="btn btn-outline-primary" [disabled]="officeCreateStep() <= 1" (click)="previousOfficeCreateStep()" title="Créer / Ajouter" bsTooltip>
                           Precedent
                         </button>
                         @if (officeCreateStep() < 6) {
-                          <button type="button" class="btn btn-primary" (click)="nextOfficeCreateStep()">Suivant</button>
+                          <button type="button" class="btn btn-primary" (click)="nextOfficeCreateStep()" title="Créer / Ajouter" bsTooltip>Suivant</button>
                         } @else {
-                          <button type="submit" class="btn btn-success" [disabled]="isCreatingOffice()">
+                          <button type="submit" class="btn btn-success" [disabled]="isCreatingOffice()" bsTooltip>
                             @if (isCreatingOffice()) {
                               <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                             }
@@ -2816,7 +2816,7 @@
                           type="submit"
                           class="btn btn-primary"
                           [disabled]="isCreatingOffice() || isUpdatingOffice() !== null || !officeForm.valid"
-                        >
+                         bsTooltip>
                           @if (isCreatingOffice() || isUpdatingOffice() !== null) {
                             <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                           }
@@ -2838,7 +2838,7 @@
                     <h4 id="office-delegation-modal-title" class="modal-title h6 mb-0">
                       {{ isEditingOfficeDelegation() ? 'Modifier le role de cabinet' : 'Ajouter une délégation' }}
                     </h4>
-                    <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeOfficeDelegationModal()"></button>
+                    <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeOfficeDelegationModal()" title="Fermer" bsTooltip></button>
                   </div>
 
                   <form [formGroup]="officeDelegationForm" (ngSubmit)="saveOfficeDelegationFromModal()" novalidate>
@@ -2875,8 +2875,8 @@
                     </div>
 
                     <div class="modal-footer">
-                      <button type="button" class="btn btn-outline-secondary" (click)="closeOfficeDelegationModal()">Annuler</button>
-                      <button type="submit" class="btn btn-primary" [disabled]="officeDelegationForm.invalid">
+                      <button type="button" class="btn btn-outline-secondary" (click)="closeOfficeDelegationModal()" title="Fermer" bsTooltip>Annuler</button>
+                      <button type="submit" class="btn btn-primary" [disabled]="officeDelegationForm.invalid" bsTooltip>
                         {{ isEditingOfficeDelegation() ? 'Enregistrer' : 'Ajouter' }}
                       </button>
                     </div>
@@ -2893,7 +2893,7 @@
                 <div class="modal-content">
                   <div class="modal-header bg-primary text-white">
                     <h4 id="service-type-modal-title" class="modal-title h6 mb-0">Ajouter une prestation type</h4>
-                    <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeServiceTypeModal()"></button>
+                    <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeServiceTypeModal()" title="Fermer" bsTooltip></button>
                   </div>
 
                   <form [formGroup]="serviceTypeForm" (ngSubmit)="addServiceType()" novalidate>
@@ -2921,8 +2921,8 @@
                     </div>
 
                     <div class="modal-footer">
-                      <button type="button" class="btn btn-outline-secondary" (click)="closeServiceTypeModal()">Annuler</button>
-                      <button type="submit" class="btn btn-primary">Ajouter</button>
+                      <button type="button" class="btn btn-outline-secondary" (click)="closeServiceTypeModal()" title="Fermer" bsTooltip>Annuler</button>
+                      <button type="submit" class="btn btn-primary" bsTooltip>Ajouter</button>
                     </div>
                   </form>
                 </div>

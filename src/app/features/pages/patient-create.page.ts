@@ -9,6 +9,7 @@ import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { ConsultationReasonItem, LocationPair, MyUserProfile, Office, OfficeConsultationProfile, Patient, PatientDetail, PeoplePickerContact, Practitioner } from '../../core/api.types';
 import { ConsultationDocumentUploadPayload, CreatePatientPayload } from '../../core/api.types';
+import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 
 declare const $: any;
 
@@ -124,7 +125,7 @@ const parentContactFields: ParentContactField[] = [
 
 @Component({
   selector: 'app-patient-create-page',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, BsTooltipDirective],
   templateUrl: './patient-create.page.html',
   styleUrl: './patient-create.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
