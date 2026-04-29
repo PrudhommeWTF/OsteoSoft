@@ -1,59 +1,184 @@
 # OsteoSoft
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.2.7.
+OsteoSoft est une application web de gestion de cabinet (orientation osteopathie et professions de soin) qui centralise le suivi patient, l'agenda, la facturation, les statistiques, le repertoire de contacts et l'administration du cabinet.
 
-## Development server
+Le projet est compose de:
+- un frontend Angular (SPA) dans `src/`
+- une API Node.js/Express dans `server/index.mjs`
+- une base SQLite locale (`server/data/osteo.db`)
 
-To start a local development server, run:
+## Fonctionnalites principales
+
+- Installation guidee au premier demarrage (creation du cabinet ou restauration)
+- Authentification et gestion de session utilisateur
+- Gestion avancee des droits d'acces (profils, permissions fines par module)
+- Tableau de bord d'accueil
+- Agenda des rendez-vous
+- Gestion des patients (liste, creation, fiche detaillee)
+- Dossier patient avec sections de consultation et documents
+- Facturation (suivi, paiements, operations associees)
+- Statistiques et indicateurs d'activite
+- Repertoire (contacts professionnels, annuaire interne)
+- Espace aide integre
+- Parametrage global du cabinet et administration
+
+## Avantages concurrentiels
+
+- Confidentialite des donnees sensibles: chiffrement applicatif des champs critiques (ex: informations patients et notes), en plus des controles d'acces.
+- Controle d'acces granulaire: securisation par roles et permissions par fonctionnalite (agenda, patients, facturation, statistiques, administration).
+- Sauvegarde/restauration robuste: format de sauvegarde structure avec manifest, checksum d'integrite, limites de volume et verification de compatibilite de version.
+- Experience de mise en route rapide: parcours d'installation integre avec options de creation initiale ou restauration des donnees.
+- Architecture full web simple a deployer: frontend Angular + API Node.js + SQLite, adaptee aux environnements legers et aux installations progressives.
+
+## Stack technique
+
+- Frontend: Angular 21, Bootstrap 5, Chart.js
+- Backend: Node.js, Express
+- Base de donnees: SQLite (`better-sqlite3`)
+- Securite: JWT, Argon2 (hash mots de passe), Helmet, rate limiting
+
+## Prerequis
+
+- Node.js 20+
+- npm 10+
+- macOS, Linux ou Windows
+
+## Installation
+
+### 1) Cloner le projet
 
 ```bash
-ng serve
+git clone https://github.com/PrudhommeWTF/OsteoSoft.git
+cd OsteoSoft
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
-
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+### 2) Installer les dependances
 
 ```bash
-ng generate component component-name
+npm install
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+### 3) Configurer l'environnement
+
+Creer un fichier `.env` a la racine du projet. Exemple minimal:
+
+```env
+API_PORT=3000
+JWT_SECRET=change-me-in-production
+NODE_ENV=development
+```
+
+Variables utiles:
+- `ALLOW_REMOTE_SETUP=false` (recommande par defaut)
+- `MAX_PATIENT_DOCUMENT_BYTES` (limite upload documents patient)
+- `MAX_BACKUP_RESTORE_PAYLOAD_BYTES` (limite restauration)
+
+## Lancement de l'application
+
+### Option A - Demarrage complet (frontend + API)
 
 ```bash
-ng generate --help
+npm run start:full
 ```
 
-## Building
+Ensuite:
+- Frontend: http://localhost:4200
+- API: http://localhost:3000
 
-To build the project run:
+### Option B - Demarrage separe
+
+Terminal 1:
 
 ```bash
-ng build
+npm run start:api
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
+Terminal 2:
 
 ```bash
-ng test
+npm start
 ```
 
-## Running end-to-end tests
+### Option C - Docker Compose
 
-For end-to-end (e2e) testing, run:
+Prerequis: Docker Desktop (macOS/Windows) ou Docker Engine + Compose plugin (Linux).
 
 ```bash
-ng e2e
+docker compose up -d --build
 ```
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+- Frontend: http://localhost:4200
+- API: http://localhost:3000
 
-## Additional Resources
+Les donnees SQLite sont conservees dans le volume Docker `osteosoft_data` entre les redemarrages.
 
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+Arreter les conteneurs:
+
+```bash
+docker compose down
+```
+
+Arreter et supprimer les donnees persistantes:
+
+```bash
+docker compose down -v
+```
+
+> Pour les details complets (logs, rebuild, variables d'environnement), voir [docs/INSTALLATION.md](docs/INSTALLATION.md).
+
+## Scripts utiles
+
+- `npm start`: lance Angular en developpement
+- `npm run start:api`: lance l'API backend
+- `npm run start:full`: lance frontend + API en parallele
+- `npm run build`: build de production
+- `npm test`: tests unitaires headless
+- `npm run test:watch`: tests unitaires en mode watch
+- `npm run e2e:backup`: scenario e2e sauvegarde/restauration
+- `npm run e2e:rights`: scenario e2e droits d'acces
+- `npm run seed:directory`: injection jeu de donnees repertoire
+- `npm run seed:fakename`: generation/import de patients de test
+
+## Installation en production (recommandations)
+
+- Definir un `JWT_SECRET` fort et unique
+- Positionner `NODE_ENV=production`
+- Garder `ALLOW_REMOTE_SETUP=false` sauf besoin explicite
+- Placer l'application derriere un reverse proxy HTTPS (Nginx/Caddy)
+- Mettre en place une strategie de sauvegardes regulieres et tests de restauration
+
+## Build de production
+
+```bash
+npm run build
+```
+
+Les artefacts frontend sont generes dans `dist/`.
+
+## Qualite et tests
+
+- Tests unitaires via Angular/Karma
+- Scenarios e2e scripts pour points critiques:
+	- droits d'acces
+	- sauvegarde/restauration
+
+## Structure du projet
+
+- `src/`: application Angular
+- `server/`: API Express et scripts techniques
+- `server/data/`: base SQLite et donnees locales
+- `public/help/`: contenus d'aide statiques
+
+## Roadmap documentaire possible
+
+- Guide utilisateur (secretaire/praticien/admin)
+- Politique de sauvegarde et reprise d'activite
+- Procedure de migration de version
+
+---
+
+## Documentation complementaire
+
+- Version commerciale: `README-commercial.md`
+- Guide d'installation complet: `docs/INSTALLATION.md`
+- Deploiement Docker: `docker-compose.yml`

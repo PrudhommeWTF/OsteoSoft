@@ -1,0 +1,10 @@
+node_modules
+dist
+.angular
+.git
+.github
+.vscode
+tmp
+server/data
+npm-debug.log
+yarn-error.log

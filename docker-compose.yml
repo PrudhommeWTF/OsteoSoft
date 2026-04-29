@@ -1,0 +1,28 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    env_file:
+      - .env
+    environment:
+      API_PORT: 3000
+      CLIENT_ORIGIN: http://localhost:4200
+    ports:
+      - "3000:3000"
+    volumes:
+      - osteosoft_data:/app/server/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "4200:4200"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  osteosoft_data:
