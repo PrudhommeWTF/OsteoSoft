@@ -1886,16 +1886,21 @@ function syncUserOffices(userId, officeIds) {
 }
 
 function getUserOfficeIds(userId) {
-  const rows = db
-    .prepare('SELECT office_id FROM user_offices WHERE user_id = ? ORDER BY office_id ASC')
+  const directRows = db
+    .prepare('SELECT office_id FROM user_offices WHERE user_id = ?')
     .all(userId);
 
-  const ids = rows
-    .map((row) => Number(row.office_id))
-    .filter((id) => Number.isInteger(id) && id > 0);
+  const delegatedRows = db
+    .prepare('SELECT office_id FROM office_user_delegations WHERE user_id = ?')
+    .all(userId);
+
+  const ids = [
+    ...directRows.map((row) => Number(row.office_id)),
+    ...delegatedRows.map((row) => Number(row.office_id))
+  ].filter((id) => Number.isInteger(id) && id > 0);
 
   if (ids.length > 0) {
-    return ids;
+    return [...new Set(ids)].sort((a, b) => a - b);
   }
 
   const legacy = db.prepare('SELECT office_id FROM users WHERE id = ?').get(userId);
@@ -1906,13 +1911,16 @@ function getUserOfficeIds(userId) {
 function getUserOfficeOptions(userId) {
   return db
     .prepare(
-      `SELECT o.id, o.name
-       FROM user_offices uo
-       INNER JOIN offices o ON o.id = uo.office_id
-       WHERE uo.user_id = ?
-       ORDER BY lower(o.name) ASC`
+      `SELECT DISTINCT o.id, o.name
+       FROM offices o
+       WHERE o.id IN (
+         SELECT office_id FROM user_offices WHERE user_id = ?
+         UNION
+         SELECT office_id FROM office_user_delegations WHERE user_id = ?
+       )
+       ORDER BY lower(o.name) ASC, o.id ASC`
     )
-    .all(userId)
+    .all(userId, userId)
     .map((row) => ({ id: Number(row.id), name: String(row.name ?? '').trim() }));
 }
 
@@ -1926,6 +1934,10 @@ function getScopedOfficeOptions(userAccess, isAdmin) {
   }
 
   return Array.isArray(userAccess?.offices) ? userAccess.offices : [];
+}
+
+function isApplicationSuperAdmin(access) {
+  return access?.role === 'admin' || access?.profileId === SUPER_ADMIN_PROFILE_ID;
 }
 
 function mapDirectoryContactRow(row) {
@@ -6785,6 +6797,15 @@ app.get('/api/offices', authMiddleware, requirePermission('read-office-settings'
 });
 
 app.post('/api/offices', authMiddleware, requirePermission('create-office'), (req, res) => {
+  if (!isApplicationSuperAdmin(req.userAccess)) {
+    writeAuthSecurityLog(req, 'authorization_denied', {
+      userId: req.user.sub,
+      permissionId: 'create-office',
+      reason: 'application_super_admin_required'
+    });
+    return res.status(403).json({ message: 'Acces reserve aux super administrateurs application' });
+  }
+
   const {
     name,
     defaultSessionDurationMinutes,
@@ -7053,6 +7074,16 @@ app.put('/api/offices/:id', authMiddleware, requirePermission('update-office-set
 });
 
 app.delete('/api/offices/:id', authMiddleware, requirePermission('delete-office'), (req, res) => {
+  if (!isApplicationSuperAdmin(req.userAccess)) {
+    writeAuthSecurityLog(req, 'authorization_denied', {
+      userId: req.user.sub,
+      permissionId: 'delete-office',
+      officeId: Number(req.params.id),
+      reason: 'application_super_admin_required'
+    });
+    return res.status(403).json({ message: 'Acces reserve aux super administrateurs application' });
+  }
+
   const officeId = Number(req.params.id);
 
   if (!Number.isInteger(officeId) || officeId <= 0) {

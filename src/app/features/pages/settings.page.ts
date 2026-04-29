@@ -696,9 +696,10 @@ export class SettingsPage implements OnDestroy {
   );
 
   readonly canReadOfficeSettings = computed(() => this.auth.hasPermission('read-office-settings'));
-  readonly canCreateOffice = computed(() => this.auth.hasPermission('create-office'));
+  readonly isApplicationSuperAdmin = computed(() => this.auth.role() === 'admin' || this.auth.isSuperAdmin());
+  readonly canCreateOffice = computed(() => this.isApplicationSuperAdmin() && this.auth.hasPermission('create-office'));
   readonly canUpdateOfficeSettings = computed(() => this.auth.hasPermission('update-office-settings'));
-  readonly canDeleteOffice = computed(() => this.auth.hasPermission('delete-office'));
+  readonly canDeleteOffice = computed(() => this.isApplicationSuperAdmin() && this.auth.hasPermission('delete-office'));
   readonly canReorderOffices = computed(() => this.auth.hasPermission('reorder-offices'));
 
   readonly visibleSections = computed(() => {
