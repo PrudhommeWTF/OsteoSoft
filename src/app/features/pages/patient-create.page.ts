@@ -10,6 +10,7 @@ import { AuthService } from '../../core/auth.service';
 import { ConsultationReasonItem, LocationPair, MyUserProfile, Office, OfficeConsultationProfile, Patient, PatientDetail, PeoplePickerContact, Practitioner } from '../../core/api.types';
 import { ConsultationDocumentUploadPayload, CreatePatientPayload } from '../../core/api.types';
 import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
+import { HtmlSanitizerService } from '../../core/html-sanitizer.service';
 
 declare const $: any;
 
@@ -134,6 +135,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   private readonly formBuilder = inject(FormBuilder);
   private readonly api = inject(ApiService);
   private readonly authService = inject(AuthService);
+  private readonly htmlSanitizer = inject(HtmlSanitizerService);
   private readonly router = inject(Router);
 
   private readonly birthDateInputRef = viewChild.required<ElementRef<HTMLInputElement>>('birthDateInput');
@@ -414,31 +416,31 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   private readonly motifMainEditorEffect = effect(() => {
     const html = this.consultationMotifMainHtml();
     const el = this.motifMainEditorRef()?.nativeElement;
-    if (el && document.activeElement !== el) { el.innerHTML = html; }
+    if (el && document.activeElement !== el) { el.innerHTML = this.htmlSanitizer.sanitize(html); }
   });
 
   private readonly testsEditorEffect = effect(() => {
     const html = this.consultationTestsHtml();
     const el = this.testsEditorRef()?.nativeElement;
-    if (el && document.activeElement !== el) { el.innerHTML = html; }
+    if (el && document.activeElement !== el) { el.innerHTML = this.htmlSanitizer.sanitize(html); }
   });
 
   private readonly schemaEditorEffect = effect(() => {
     const html = this.consultationSchemaHtml();
     const el = this.schemaEditorRef()?.nativeElement;
-    if (el && document.activeElement !== el) { el.innerHTML = html; }
+    if (el && document.activeElement !== el) { el.innerHTML = this.htmlSanitizer.sanitize(html); }
   });
 
   private readonly treatmentsEditorEffect = effect(() => {
     const html = this.consultationTreatmentsHtml();
     const el = this.treatmentsEditorRef()?.nativeElement;
-    if (el && document.activeElement !== el) { el.innerHTML = html; }
+    if (el && document.activeElement !== el) { el.innerHTML = this.htmlSanitizer.sanitize(html); }
   });
 
   private readonly remarksEditorEffect = effect(() => {
     const html = this.consultationRemarksHtml();
     const el = this.remarksEditorRef()?.nativeElement;
-    if (el && document.activeElement !== el) { el.innerHTML = html; }
+    if (el && document.activeElement !== el) { el.innerHTML = this.htmlSanitizer.sanitize(html); }
   });
 
   /** ISO date (yyyy-mm-dd) kept in sync by the datepicker */
@@ -2086,7 +2088,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       .replace(/<\s*\/li\s*>/gi, '\n');
 
     const container = globalThis.document.createElement('div');
-    container.innerHTML = withBreaks;
+    container.innerHTML = this.htmlSanitizer.sanitize(withBreaks);
     return this.normalizeMultilineText(container.textContent ?? '');
   }
 
