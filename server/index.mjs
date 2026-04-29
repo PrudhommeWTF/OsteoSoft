@@ -11057,6 +11057,7 @@ app.delete('/api/patient-documents/:documentRef', authMiddleware, requirePermiss
 
 app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-list', 'manage-data-rgpd']), (req, res) => {
   const query = String(req.query.search ?? '').trim().toLowerCase();
+  const requestedOfficeId = Number(req.query.officeId);
 
   const rows = db
     .prepare(
@@ -11081,11 +11082,19 @@ app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-lis
 
   const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
   const accessibleOfficeIds = isAdmin ? null : getAccessibleBillingOfficeIds(req.userAccess);
+  const selectedOfficeId = Number.isInteger(requestedOfficeId)
+    && requestedOfficeId > 0
+    && (isAdmin || accessibleOfficeIds.includes(requestedOfficeId))
+    ? requestedOfficeId
+    : null;
 
   const patients = [];
   for (const row of rows) {
     const patientOfficeId = row.office_id != null ? Number(row.office_id) : null;
     if (patientOfficeId !== null && !isAdmin && !accessibleOfficeIds.includes(patientOfficeId)) {
+      continue;
+    }
+    if (selectedOfficeId !== null && patientOfficeId !== selectedOfficeId) {
       continue;
     }
 
@@ -11116,7 +11125,10 @@ app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-lis
     });
   }
 
-  writeAuditLog(req.user.sub, 'READ_LIST', 'patients', null, { count: patients.length });
+  writeAuditLog(req.user.sub, 'READ_LIST', 'patients', null, {
+    count: patients.length,
+    officeId: selectedOfficeId
+  });
   return res.json({ patients });
 });
 
@@ -12771,14 +12783,18 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
     ['Homme', 0],
     ['Non renseigne', 0]
   ]);
-  const ageMap = new Map([
-    ['0-17', 0],
-    ['18-29', 0],
-    ['30-44', 0],
-    ['45-59', 0],
-    ['60+', 0],
-    ['Non renseigne', 0]
-  ]);
+  const ageRanges = ['0-17', '18-29', '30-44', '45-59', '60+', 'Non renseigne'];
+  const ageMap = new Map(ageRanges.map((label) => [label, 0]));
+  const ageSexMap = new Map(
+    ageRanges.map((label) => [
+      label,
+      {
+        femaleCount: 0,
+        maleCount: 0,
+        unknownCount: 0
+      }
+    ])
+  );
 
   for (const row of patientRows) {
     const normalizedSex = row.sex === 'F' ? 'Femme' : row.sex === 'M' ? 'Homme' : 'Non renseigne';
@@ -12786,10 +12802,31 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
 
     const ageRange = getAgeRangeFromBirthDate(row.birth_date);
     ageMap.set(ageRange, Number(ageMap.get(ageRange)) + 1);
+
+    const rangeEntry = ageSexMap.get(ageRange);
+    if (rangeEntry) {
+      if (normalizedSex === 'Femme') {
+        rangeEntry.femaleCount += 1;
+      } else if (normalizedSex === 'Homme') {
+        rangeEntry.maleCount += 1;
+      } else {
+        rangeEntry.unknownCount += 1;
+      }
+    }
   }
 
   const patientsBySex = Array.from(sexMap.entries()).map(([label, count]) => ({ label, count }));
   const patientsByAgeRange = Array.from(ageMap.entries()).map(([label, count]) => ({ label, count }));
+  const patientsByAgeRangeAndSex = ageRanges.map((label) => {
+    const counts = ageSexMap.get(label) ?? { femaleCount: 0, maleCount: 0, unknownCount: 0 };
+    return {
+      label,
+      femaleCount: counts.femaleCount,
+      maleCount: counts.maleCount,
+      unknownCount: counts.unknownCount,
+      totalCount: counts.femaleCount + counts.maleCount + counts.unknownCount
+    };
+  });
 
   const recentPatients = patientRows
     .filter((row) => Boolean(row.last_visit))
@@ -12916,6 +12953,7 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
     monthlyConsultations,
     patientsBySex,
     patientsByAgeRange,
+    patientsByAgeRangeAndSex,
     recentPatients,
     pendingPayments: allPendingPayments,
     agendaSettings: agendaConfig.settings,

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
@@ -76,7 +76,7 @@ export class BillingPage implements OnDestroy {
 
   readonly fromDate = signal('');
   readonly toDate = signal('');
-  readonly selectedOfficeId = signal<number | null>(null);
+  readonly selectedOfficeId = signal<number | null>(this.authService.activeOfficeId());
   readonly selectedUserId = signal<number | null>(null);
 
   readonly selectedOperationIds = signal<string[]>([]);
@@ -150,6 +150,17 @@ export class BillingPage implements OnDestroy {
 
   readonly canExportBilling = computed(() => this.authService.hasPermission('export-billing'));
   readonly canManageBilling = computed(() => this.authService.hasPermission('mark-payment'));
+  private readonly activeOfficeSyncEffect = effect(() => {
+    const activeOfficeId = this.authService.activeOfficeId();
+    if (this.selectedOfficeId() === activeOfficeId) {
+      return;
+    }
+
+    this.selectedOfficeId.set(activeOfficeId);
+    this.selectedUserId.set(null);
+    this.debtorPage.set(1);
+    void this.load();
+  });
 
   readonly selectedCount = computed(() => this.selectedOperationIds().length);
 
@@ -584,10 +595,12 @@ export class BillingPage implements OnDestroy {
 
   async onOfficeChange(value: string): Promise<void> {
     const parsed = Number(value);
-    this.selectedOfficeId.set(Number.isInteger(parsed) && parsed > 0 ? parsed : null);
-    this.selectedUserId.set(null);
-    this.debtorPage.set(1);
-    await this.load();
+    const nextOfficeId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+    if (nextOfficeId === this.selectedOfficeId()) {
+      return;
+    }
+
+    this.authService.setActiveOfficeId(nextOfficeId);
   }
 
   async onUserChange(value: string): Promise<void> {

@@ -4749,29 +4749,36 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     office: Office | null,
     includeVatMention = false
   ): string {
-    const practitionerParts = [
-      `SIRET: ${String(profile?.siret ?? '').trim() || '-'}`,
-      `RPPS: ${String(profile?.rppsCode ?? '').trim() || '-'}`,
-      `APE: ${String(profile?.apeNafCode ?? '').trim() || '-'}`,
-      `ADELI: ${String(profile?.adeliCode ?? '').trim() || '-'}`
-    ];
-    const officeParts = [
-      `SIRET: ${String(office?.siret ?? '').trim() || '-'}`,
-      `RPPS: ${String(office?.rppsCode ?? '').trim() || '-'}`,
-      `APE: ${String(office?.apeNafCode ?? '').trim() || '-'}`,
-      `ADELI: ${String(office?.adeliCode ?? '').trim() || '-'}`
-    ];
+    const appendLegalCode = (parts: string[], label: string, rawValue: unknown): void => {
+      const value = String(rawValue ?? '').trim();
+      if (!value) {
+        return;
+      }
+      parts.push(`${label}: ${value}`);
+    };
+
+    const practitionerParts: string[] = [];
+    appendLegalCode(practitionerParts, 'SIRET', profile?.siret);
+    appendLegalCode(practitionerParts, 'RPPS', profile?.rppsCode);
+    appendLegalCode(practitionerParts, 'APE', profile?.apeNafCode);
+    appendLegalCode(practitionerParts, 'ADELI', profile?.adeliCode);
+
+    const officeParts: string[] = [];
+    appendLegalCode(officeParts, 'SIRET', office?.siret);
+    appendLegalCode(officeParts, 'RPPS', office?.rppsCode);
+    appendLegalCode(officeParts, 'APE', office?.apeNafCode);
+    appendLegalCode(officeParts, 'ADELI', office?.adeliCode);
 
     const sections = [
-      `Praticien - ${practitionerParts.join(' | ')}`,
-      `Cabinet - ${officeParts.join(' | ')}`
+      `Praticien - ${practitionerParts.length ? practitionerParts.join(' | ') : 'Aucun code renseigne'}`,
+      `Cabinet - ${officeParts.length ? officeParts.join(' | ') : 'Aucun code renseigne'}`
     ];
 
     if (includeVatMention && !office?.hideVatMention) {
       sections.push('TVA non applicable, art. 261-4-1 du CGI');
     }
 
-    return sections.join('  •  ');
+    return sections.join(' || ');
   }
 
   private writePdfLegalFooter(

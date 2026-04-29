@@ -7,6 +7,7 @@ import {
   OnDestroy,
   afterNextRender,
   computed,
+  effect,
   inject,
   signal,
   viewChild
@@ -230,6 +231,19 @@ export class StatistiquesPage implements AfterViewInit, OnDestroy {
   readonly EMPTY_AGE_POINTS = EMPTY_AGE_POINTS;
 
   private readonly charts = new Map<string, Chart>();
+  private readonly activeOfficeSyncEffect = effect(() => {
+    if (this.scopeMode() !== 'active-office') {
+      return;
+    }
+
+    const activeOfficeId = this.auth.activeOfficeId();
+    if (this.selectedOfficeId() === activeOfficeId) {
+      return;
+    }
+
+    this.selectedOfficeId.set(activeOfficeId);
+    void this.loadStatistics();
+  });
 
   async ngAfterViewInit(): Promise<void> {
     await this.initialize();
@@ -256,8 +270,12 @@ export class StatistiquesPage implements AfterViewInit, OnDestroy {
 
   async onOfficeChange(rawValue: string): Promise<void> {
     const value = Number(rawValue);
-    this.selectedOfficeId.set(Number.isInteger(value) && value > 0 ? value : null);
-    await this.loadStatistics();
+    const nextOfficeId = Number.isInteger(value) && value > 0 ? value : null;
+    if (nextOfficeId === this.selectedOfficeId()) {
+      return;
+    }
+
+    this.auth.setActiveOfficeId(nextOfficeId);
   }
 
   async onYearsChange(rawValue: string): Promise<void> {

@@ -165,11 +165,14 @@ export class ApiService {
     return response.appointment;
   }
 
-  async getPatients(search: string): Promise<Patient[]> {
+  async getPatients(search: string, officeId?: number | null): Promise<Patient[]> {
     let params = new HttpParams();
     const query = search.trim();
     if (query) {
       params = params.set('search', query);
+    }
+    if (Number.isInteger(officeId) && Number(officeId) > 0) {
+      params = params.set('officeId', String(officeId));
     }
     const response = await firstValueFrom(
       this.http.get<{ patients: Patient[] }>(`${this.baseUrl}/patients`, { params })

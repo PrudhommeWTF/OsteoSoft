@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { ApiService } from '../../core/api.service';
@@ -19,11 +19,21 @@ export class PatientsPage {
 
   readonly search = signal('');
   readonly patients = signal<Patient[]>([]);
+  readonly selectedOfficeId = signal<number | null>(this.authService.activeOfficeId());
   readonly canExportPatients = computed(() => this.authService.hasPermission('export-patient-list'));
   readonly canCreatePatient = computed(() => this.authService.hasPermission('create-patient-record'));
   readonly isExportModalOpen = signal(false);
   readonly isExportingPatients = signal(false);
   readonly exportPatientsError = signal('');
+  private readonly activeOfficeSyncEffect = effect(() => {
+    const activeOfficeId = this.authService.activeOfficeId();
+    if (this.selectedOfficeId() === activeOfficeId) {
+      return;
+    }
+
+    this.selectedOfficeId.set(activeOfficeId);
+    void this.load();
+  });
 
   constructor() {
     void this.load();
@@ -186,6 +196,6 @@ export class PatientsPage {
   }
 
   private async load(search = ''): Promise<void> {
-    this.patients.set(await this.api.getPatients(search));
+    this.patients.set(await this.api.getPatients(search, this.selectedOfficeId()));
   }
 }

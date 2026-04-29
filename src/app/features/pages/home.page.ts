@@ -15,7 +15,7 @@ import Chart from 'chart.js/auto';
 import { RouterLink } from '@angular/router';
 
 import { ApiService } from '../../core/api.service';
-import { AgendaSettings, DashboardEvent, DashboardPayload } from '../../core/api.types';
+import { AgendaSettings, DashboardEvent, DashboardPayload, StatisticsAgeSexPoint } from '../../core/api.types';
 import { WeekCalendar } from './week-calendar';
 
 @Component({
@@ -30,7 +30,6 @@ export class HomePage implements AfterViewInit, OnDestroy {
   private readonly injector = inject(Injector);
 
   readonly monthlyChartHost = viewChild<ElementRef<HTMLCanvasElement>>('monthlyChartHost');
-  readonly sexChartHost = viewChild<ElementRef<HTMLCanvasElement>>('sexChartHost');
   readonly ageChartHost = viewChild<ElementRef<HTMLCanvasElement>>('ageChartHost');
 
   readonly isLoading = signal(true);
@@ -43,17 +42,13 @@ export class HomePage implements AfterViewInit, OnDestroy {
   readonly hasMonthlyChartData = computed(() =>
     (this.pendingPayload()?.monthlyConsultations ?? []).some((point) => Number(point.count) > 0)
   );
-  readonly hasSexChartData = computed(() =>
-    (this.pendingPayload()?.patientsBySex ?? []).some((point) => Number(point.count) > 0)
-  );
   readonly hasAgeChartData = computed(() =>
-    (this.pendingPayload()?.patientsByAgeRange ?? []).some((point) => Number(point.count) > 0)
+    (this.pendingPayload()?.patientsByAgeRangeAndSex ?? []).some((point) => Number(point.totalCount) > 0)
   );
 
   private readonly pendingPayload = signal<DashboardPayload | null>(null);
 
   private monthlyChart: Chart<'line'> | null = null;
-  private sexChart: Chart<'doughnut'> | null = null;
   private ageChart: Chart<'bar'> | null = null;
 
   async ngAfterViewInit(): Promise<void> {
@@ -62,7 +57,6 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.monthlyChart?.destroy();
-    this.sexChart?.destroy();
     this.ageChart?.destroy();
 
   }
@@ -97,11 +91,9 @@ export class HomePage implements AfterViewInit, OnDestroy {
 
   private renderCharts(payload: DashboardPayload): void {
     this.monthlyChart?.destroy();
-    this.sexChart?.destroy();
     this.ageChart?.destroy();
 
     const monthlyEl = this.monthlyChartHost()?.nativeElement;
-    const sexEl = this.sexChartHost()?.nativeElement;
     const ageEl = this.ageChartHost()?.nativeElement;
 
     if (this.hasMonthlyChartData() && monthlyEl) {
@@ -135,35 +127,27 @@ export class HomePage implements AfterViewInit, OnDestroy {
       });
     }
 
-    if (this.hasSexChartData() && sexEl) {
-      this.sexChart = new Chart(sexEl, {
-        type: 'doughnut',
-        data: {
-          labels: payload.patientsBySex.map((point) => point.label),
-          datasets: [
-            {
-              data: payload.patientsBySex.map((point) => point.count),
-              backgroundColor: ['#4d92d1', '#f08a5d', '#7f8c8d', '#8bc34a']
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false
-        }
-      });
-    }
-
     if (this.hasAgeChartData() && ageEl) {
+      const points = this.normalizeAgeSexPoints(payload);
       this.ageChart = new Chart(ageEl, {
         type: 'bar',
         data: {
-          labels: payload.patientsByAgeRange.map((point) => point.label),
+          labels: points.map((point) => point.label),
           datasets: [
             {
-              label: 'Patients',
-              data: payload.patientsByAgeRange.map((point) => point.count),
-              backgroundColor: '#3ca374'
+              label: 'Femmes',
+              data: points.map((point) => point.femaleCount),
+              backgroundColor: '#f25f5c'
+            },
+            {
+              label: 'Hommes',
+              data: points.map((point) => point.maleCount),
+              backgroundColor: '#3478f6'
+            },
+            {
+              label: 'Non renseigne',
+              data: points.map((point) => point.unknownCount),
+              backgroundColor: '#7f8c8d'
             }
           ]
         },
@@ -171,7 +155,11 @@ export class HomePage implements AfterViewInit, OnDestroy {
           responsive: true,
           maintainAspectRatio: false,
           scales: {
+            x: {
+              stacked: true
+            },
             y: {
+              stacked: true,
               beginAtZero: true,
               ticks: {
                 precision: 0
@@ -181,5 +169,20 @@ export class HomePage implements AfterViewInit, OnDestroy {
         }
       });
     }
+  }
+
+  private normalizeAgeSexPoints(payload: DashboardPayload): StatisticsAgeSexPoint[] {
+    const points = payload.patientsByAgeRangeAndSex ?? [];
+    if (points.length > 0) {
+      return points;
+    }
+
+    return payload.patientsByAgeRange.map((point) => ({
+      label: point.label,
+      femaleCount: 0,
+      maleCount: 0,
+      unknownCount: point.count,
+      totalCount: point.count
+    }));
   }
 }

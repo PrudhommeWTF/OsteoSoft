@@ -774,6 +774,7 @@ export type DashboardPayload = {
   monthlyConsultations: MonthlyConsultationPoint[];
   patientsBySex: DistributionPoint[];
   patientsByAgeRange: DistributionPoint[];
+  patientsByAgeRangeAndSex: StatisticsAgeSexPoint[];
   recentPatients: RecentPatient[];
   pendingPayments: PendingPayment[];
   agendaSettings: AgendaSettings;

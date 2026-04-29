@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 
@@ -38,7 +38,7 @@ export class DirectoryPage {
   readonly offices = signal<OfficeOption[]>([]);
 
   readonly search = signal('');
-  readonly selectedOfficeId = signal<number | null>(null);
+  readonly selectedOfficeId = signal<number | null>(this.auth.activeOfficeId());
   readonly kindFilter = signal<ContactKindFilter>('all');
 
   readonly isModalOpen = signal(false);
@@ -99,6 +99,16 @@ export class DirectoryPage {
   });
 
   readonly pageSizeOptions = [10, 25, 50, 100];
+  private readonly activeOfficeSyncEffect = effect(() => {
+    const activeOfficeId = this.auth.activeOfficeId();
+    if (this.selectedOfficeId() === activeOfficeId) {
+      return;
+    }
+
+    this.selectedOfficeId.set(activeOfficeId);
+    this.currentPage.set(1);
+    void this.loadContacts();
+  });
 
   setPageSize(size: number): void {
     this.pageSize.set(size);
@@ -183,9 +193,12 @@ export class DirectoryPage {
 
   async onOfficeChange(value: string): Promise<void> {
     const parsed = Number(value);
-    this.selectedOfficeId.set(Number.isInteger(parsed) && parsed > 0 ? parsed : null);
-    this.currentPage.set(1);
-    await this.loadContacts();
+    const nextOfficeId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+    if (nextOfficeId === this.selectedOfficeId()) {
+      return;
+    }
+
+    this.auth.setActiveOfficeId(nextOfficeId);
   }
 
   async onKindFilterChange(value: ContactKindFilter): Promise<void> {

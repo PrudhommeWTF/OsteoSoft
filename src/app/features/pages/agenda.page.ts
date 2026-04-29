@@ -3,6 +3,7 @@ import {
   Component,
   OnDestroy,
   computed,
+  effect,
   inject,
   signal
 } from '@angular/core';
@@ -36,7 +37,7 @@ export class AgendaPage implements OnDestroy {
 
   readonly appointments = signal<Appointment[]>([]);
   readonly officeOptions = signal<OfficeOption[]>([]);
-  readonly selectedOfficeId = signal<number | null>(null);
+  readonly selectedOfficeId = signal<number | null>(this.authService.activeOfficeId());
   readonly defaultAgendaView = signal<string>('Semaine');
   readonly events = signal<DashboardEvent[]>([]);
   readonly officeOpeningHoursById = signal<Record<number, OfficeOpeningHours>>({});
@@ -74,6 +75,16 @@ export class AgendaPage implements OnDestroy {
 
   private createPatientSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
   private createPatientSearchRequestId = 0;
+  private readonly activeOfficeSyncEffect = effect(() => {
+    const activeOfficeId = this.authService.activeOfficeId();
+    if (this.selectedOfficeId() === activeOfficeId) {
+      return;
+    }
+
+    this.selectedOfficeId.set(activeOfficeId);
+    this.selectedCalendarIds.set([]);
+    void this.load();
+  });
 
   readonly createAppointmentForm = this.fb.nonNullable.group({
     patientId: [0],
@@ -96,12 +107,11 @@ export class AgendaPage implements OnDestroy {
   async onSelectedOfficeChange(value: string): Promise<void> {
     const parsed = Number(value);
     const nextOfficeId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-    this.selectedOfficeId.set(nextOfficeId);
-    if (nextOfficeId !== null) {
-      this.authService.setActiveOfficeId(nextOfficeId);
+    if (nextOfficeId === this.selectedOfficeId()) {
+      return;
     }
-    this.selectedCalendarIds.set([]);
-    await this.load();
+
+    this.authService.setActiveOfficeId(nextOfficeId);
   }
 
   private async load(): Promise<void> {
