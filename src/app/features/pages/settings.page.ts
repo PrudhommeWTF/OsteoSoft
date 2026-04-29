@@ -275,7 +275,11 @@ export class SettingsPage implements OnDestroy {
         { id: 'create-office', label: 'Créer un cabinet' },
         { id: 'update-office-settings', label: 'Modifier les paramètres d\'un cabinet' },
         { id: 'delete-office', label: 'Supprimer un cabinet' },
-        { id: 'reorder-offices', label: 'Réorganiser l\'ordre des cabinets' }
+        { id: 'reorder-offices', label: 'Réorganiser l\'ordre des cabinets' },
+        { id: 'manage-data-backup-restore', label: 'Gérer la sauvegarde/restauration des données' },
+        { id: 'manage-data-rgpd', label: 'Gérer les exports RGPD' },
+        { id: 'manage-data-import', label: 'Gérer les imports de données' },
+        { id: 'manage-data-cleanup', label: 'Gérer le nettoyage des données' }
       ],
       impactedProfiles: ['Administrateur', 'Direction', 'Responsable cabinet délégué']
     }
@@ -717,13 +721,27 @@ export class SettingsPage implements OnDestroy {
   readonly canDeleteOffice = computed(() => this.isApplicationSuperAdmin() && this.auth.hasPermission('delete-office'));
   readonly canReorderOffices = computed(() => this.auth.hasPermission('reorder-offices'));
   readonly canResetDemoInstance = computed(() => this.isApplicationSuperAdmin());
+  readonly canManageDataBackupRestore = computed(() => this.auth.hasPermission('manage-data-backup-restore'));
+  readonly canManageDataRgpd = computed(() =>
+    this.auth.hasPermission('manage-data-rgpd') || this.auth.hasPermission('export-patient-record')
+  );
+  readonly canManageDataImport = computed(() => this.auth.hasPermission('manage-data-import'));
+  readonly canManageDataCleanup = computed(() => this.auth.hasPermission('manage-data-cleanup'));
+  readonly canAccessDataManagement = computed(() =>
+    this.canManageDataBackupRestore()
+    || this.canManageDataRgpd()
+    || this.canManageDataImport()
+    || this.canManageDataCleanup()
+  );
   readonly isSetupDemoInstance = computed(() =>
     this.offices().some((office) => String(office.name ?? '').toLowerCase().includes('demo'))
   );
 
   readonly visibleSections = computed(() => {
     if (this.isOfficeAdminOnlyMode()) {
-      return this.sections.filter((section) => section.id === 'offices');
+      return this.sections.filter((section) =>
+        section.id === 'offices' || (section.id === 'data-management' && this.canAccessDataManagement())
+      );
     }
 
     return this.sections;
@@ -838,6 +856,23 @@ export class SettingsPage implements OnDestroy {
     { id: 'import', label: 'Import de données' },
     { id: 'cleanup', label: 'Nettoyage des données' }
   ];
+  readonly visibleDataManagementTabs = computed(() =>
+    this.dataManagementTabs.filter((tab) => {
+      if (tab.id === 'backup-restore') {
+        return this.canManageDataBackupRestore();
+      }
+      if (tab.id === 'rgpd') {
+        return this.canManageDataRgpd();
+      }
+      if (tab.id === 'import') {
+        return this.canManageDataImport();
+      }
+      if (tab.id === 'cleanup') {
+        return this.canManageDataCleanup();
+      }
+      return false;
+    })
+  );
   readonly cleanupTabs: Array<{ id: DataCleanupKind; label: string }> = [
     { id: 'cities', label: 'Villes' },
     { id: 'banks', label: 'Banques' },
@@ -1043,6 +1078,17 @@ export class SettingsPage implements OnDestroy {
       void this.loadOffices();
     }
 
+    if (sectionId === 'data-management') {
+      const currentTabId = this.activeDataManagementTabId();
+      const isCurrentTabVisible = this.visibleDataManagementTabs().some((tab) => tab.id === currentTabId);
+      if (!isCurrentTabVisible) {
+        const fallbackTabId = this.visibleDataManagementTabs()[0]?.id ?? null;
+        if (fallbackTabId) {
+          this.activeDataManagementTabId.set(fallbackTabId);
+        }
+      }
+    }
+
 
 
     if (sectionId === 'offices' && this.offices().length === 0 && !this.isOfficesLoading()) {
@@ -1059,6 +1105,12 @@ export class SettingsPage implements OnDestroy {
   }
 
   selectDataManagementTab(tabId: DataManagementTabId): void {
+    const isAllowed = this.visibleDataManagementTabs().some((tab) => tab.id === tabId);
+    if (!isAllowed) {
+      this.dataManagementError.set('Droit insuffisant pour cet onglet de gestion des données.');
+      return;
+    }
+
     this.activeDataManagementTabId.set(tabId);
     if (tabId === 'cleanup') {
       void this.loadCleanupRows();

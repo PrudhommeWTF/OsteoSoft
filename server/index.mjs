@@ -725,7 +725,11 @@ const ACCESS_DOMAIN_DEFINITIONS = {
     'create-office',
     'update-office-settings',
     'delete-office',
-    'reorder-offices'
+    'reorder-offices',
+    'manage-data-backup-restore',
+    'manage-data-rgpd',
+    'manage-data-import',
+    'manage-data-cleanup'
   ]
 };
 
@@ -1940,6 +1944,36 @@ function isApplicationSuperAdmin(access) {
   return access?.role === 'admin' || access?.profileId === SUPER_ADMIN_PROFILE_ID;
 }
 
+function getDataManagementScopedOfficeIds(userAccess) {
+  if (isApplicationSuperAdmin(userAccess)) {
+    return db
+      .prepare('SELECT id FROM offices ORDER BY id ASC')
+      .all()
+      .map((row) => Number(row.id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+  }
+
+  const delegatedSuperAdminOfficeIds = db
+    .prepare(
+      `SELECT office_id
+       FROM office_user_delegations
+       WHERE user_id = ?
+         AND profile_id = ?
+       ORDER BY office_id ASC`
+    )
+    .all(Number(userAccess?.id ?? 0), SUPER_ADMIN_PROFILE_ID)
+    .map((row) => Number(row.office_id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+
+  if (delegatedSuperAdminOfficeIds.length > 0) {
+    return [...new Set(delegatedSuperAdminOfficeIds)];
+  }
+
+  return [...new Set((Array.isArray(userAccess?.officeIds) ? userAccess.officeIds : [])
+    .map((officeId) => Number(officeId))
+    .filter((officeId) => Number.isInteger(officeId) && officeId > 0))];
+}
+
 function mapDirectoryContactRow(row) {
   const firstName = String(row.first_name ?? '').trim();
   const lastName = String(row.last_name ?? '').trim();
@@ -3049,7 +3083,132 @@ function getSetupStatusSnapshot() {
   };
 }
 
-function buildDataBackupSnapshot() {
+function filterBackupDataByOfficeIds(data, officeIds) {
+  const normalizedOfficeIds = [...new Set((Array.isArray(officeIds) ? officeIds : [])
+    .map((officeId) => Number(officeId))
+    .filter((officeId) => Number.isInteger(officeId) && officeId > 0))];
+
+  if (normalizedOfficeIds.length === 0) {
+    return {
+      ...data,
+      accessProfiles: [],
+      users: [],
+      userOffices: [],
+      officeUserDelegations: [],
+      patients: [],
+      appointments: [],
+      invoices: [],
+      invoiceLineItems: [],
+      invoicePayments: [],
+      accountingExpenses: [],
+      accountingDeposits: [],
+      accountingDepositItems: [],
+      accountingOperationMeta: [],
+      consultations: [],
+      consultationReasonItems: [],
+      consultationSections: [],
+      patientDocuments: [],
+      patientAntecedents: [],
+      serviceTypes: [],
+      paymentMethods: [],
+      localCalendars: [],
+      directoryContacts: [],
+      config: [],
+      patientDrafts: [],
+      auditLogs: []
+    };
+  }
+
+  const officeIdSet = new Set(normalizedOfficeIds);
+  const patients = data.patients.filter((row) => officeIdSet.has(Number(row.office_id)));
+  const patientIdSet = new Set(patients.map((row) => Number(row.id)).filter((id) => Number.isInteger(id) && id > 0));
+
+  const consultations = data.consultations.filter(
+    (row) => officeIdSet.has(Number(row.office_id)) || patientIdSet.has(Number(row.patient_id))
+  );
+  const consultationIdSet = new Set(consultations.map((row) => Number(row.id)).filter((id) => Number.isInteger(id) && id > 0));
+
+  const appointments = data.appointments.filter(
+    (row) =>
+      patientIdSet.has(Number(row.patient_id))
+      || officeIdSet.has(Number(row.office_id))
+      || consultationIdSet.has(Number(row.consultation_id))
+  );
+
+  const invoices = data.invoices.filter(
+    (row) => officeIdSet.has(Number(row.office_id)) || patientIdSet.has(Number(row.patient_id))
+  );
+  const invoiceIdSet = new Set(invoices.map((row) => Number(row.id)).filter((id) => Number.isInteger(id) && id > 0));
+
+  const accountingDeposits = data.accountingDeposits.filter((row) => officeIdSet.has(Number(row.office_id)));
+  const depositIdSet = new Set(accountingDeposits.map((row) => Number(row.id)).filter((id) => Number.isInteger(id) && id > 0));
+
+  const accountingExpenses = data.accountingExpenses.filter((row) => officeIdSet.has(Number(row.office_id)));
+  const expenseIdSet = new Set(accountingExpenses.map((row) => Number(row.id)).filter((id) => Number.isInteger(id) && id > 0));
+
+  const userOffices = data.userOffices.filter((row) => officeIdSet.has(Number(row.office_id)));
+  const officeUserDelegations = data.officeUserDelegations.filter((row) => officeIdSet.has(Number(row.office_id)));
+  const userIdSet = new Set(
+    [
+      ...userOffices.map((row) => Number(row.user_id)),
+      ...officeUserDelegations.map((row) => Number(row.user_id))
+    ].filter((id) => Number.isInteger(id) && id > 0)
+  );
+
+  const users = data.users.filter((row) => {
+    const userId = Number(row.id);
+    const legacyOfficeId = Number(row.office_id);
+    return userIdSet.has(userId) || officeIdSet.has(legacyOfficeId);
+  });
+
+  const profileIdSet = new Set(users.map((row) => String(row.profile_id ?? '').trim()).filter((id) => id.length > 0));
+
+  return {
+    ...data,
+    accessProfiles: data.accessProfiles.filter((row) => profileIdSet.has(String(row.id ?? '').trim())),
+    users,
+    userOffices,
+    officeUserDelegations,
+    patients,
+    appointments,
+    invoices,
+    invoiceLineItems: data.invoiceLineItems.filter((row) => invoiceIdSet.has(Number(row.invoice_id))),
+    invoicePayments: data.invoicePayments.filter((row) => invoiceIdSet.has(Number(row.invoice_id))),
+    accountingExpenses,
+    accountingDeposits,
+    accountingDepositItems: data.accountingDepositItems.filter((row) => depositIdSet.has(Number(row.deposit_id))),
+    accountingOperationMeta: data.accountingOperationMeta.filter((row) => {
+      const sourceType = String(row.source_type ?? '').trim();
+      const sourceId = Number(row.source_id);
+      if (!Number.isInteger(sourceId) || sourceId <= 0) {
+        return false;
+      }
+      if (sourceType === 'accounting-deposit') {
+        return depositIdSet.has(sourceId);
+      }
+      if (sourceType === 'accounting-expense') {
+        return expenseIdSet.has(sourceId);
+      }
+      return false;
+    }),
+    consultations,
+    consultationReasonItems: data.consultationReasonItems.filter((row) => consultationIdSet.has(Number(row.consultation_id))),
+    consultationSections: data.consultationSections.filter((row) => consultationIdSet.has(Number(row.consultation_id))),
+    patientDocuments: data.patientDocuments.filter(
+      (row) => patientIdSet.has(Number(row.patient_id)) || officeIdSet.has(Number(row.office_id))
+    ),
+    patientAntecedents: data.patientAntecedents.filter((row) => patientIdSet.has(Number(row.patient_id))),
+    serviceTypes: data.serviceTypes.filter((row) => officeIdSet.has(Number(row.office_id))),
+    paymentMethods: data.paymentMethods.filter((row) => officeIdSet.has(Number(row.office_id))),
+    localCalendars: data.localCalendars.filter((row) => officeIdSet.has(Number(row.office_id))),
+    directoryContacts: data.directoryContacts.filter((row) => officeIdSet.has(Number(row.office_id))),
+    config: [],
+    patientDrafts: [],
+    auditLogs: data.auditLogs.filter((row) => userIdSet.has(Number(row.user_id)))
+  };
+}
+
+function buildDataBackupSnapshot(options = {}) {
   const appName = db.prepare('SELECT value FROM config WHERE key = ?').get('app_name')?.value ?? 'OsteoSoft';
   const appVersion = db.prepare('SELECT value FROM config WHERE key = ?').get('version')?.value ?? '0.0.2';
   const createdAt = new Date().toISOString();
@@ -3208,7 +3367,11 @@ function buildDataBackupSnapshot() {
     ).all()
   };
 
-  const dataSha256 = computeBackupDataSha256(data);
+  const selectedOfficeIds = Array.isArray(options.officeIds) ? options.officeIds : [];
+  const scopedData = selectedOfficeIds.length > 0
+    ? filterBackupDataByOfficeIds(data, selectedOfficeIds)
+    : data;
+  const dataSha256 = computeBackupDataSha256(scopedData);
 
   return {
     manifest: {
@@ -3226,7 +3389,7 @@ function buildDataBackupSnapshot() {
       appName,
       appVersion
     },
-    data
+    data: scopedData
   };
 }
 
@@ -6127,6 +6290,39 @@ function requirePermission(permissionId) {
   };
 }
 
+function requireAnyPermission(permissionIds) {
+  const normalizedPermissionIds = Array.isArray(permissionIds)
+    ? permissionIds.map((permissionId) => String(permissionId ?? '').trim()).filter((permissionId) => permissionId.length > 0)
+    : [];
+
+  return (req, res, next) => {
+    const access = getUserAccessContext(req.user.sub);
+    if (!access) {
+      return res.status(401).json({ message: 'Session invalide' });
+    }
+
+    if (access.role === 'admin' || access.profileId === SUPER_ADMIN_PROFILE_ID) {
+      req.userAccess = access;
+      return next();
+    }
+
+    const hasAnyPermission = normalizedPermissionIds.some((permissionId) => hasPermission(access.rights, permissionId));
+    if (!hasAnyPermission) {
+      writeAuthSecurityLog(req, 'authorization_denied', {
+        userId: access.id,
+        username: access.username,
+        profileId: access.profileId,
+        permissionIds: normalizedPermissionIds,
+        reason: 'missing_any_permission'
+      });
+      return res.status(403).json({ message: 'Droit insuffisant' });
+    }
+
+    req.userAccess = access;
+    return next();
+  };
+}
+
 const loginSchema = z.object({
   username: z.string().min(1).max(100),
   password: z.string().min(1).max(256),
@@ -7762,14 +7958,25 @@ function titleCaseCleanupValue(value) {
     .replace(/\b\p{L}/gu, (char) => char.toUpperCase());
 }
 
-function getDataCleanupItems(kind) {
+function getDataCleanupItems(kind, allowedOfficeIds = []) {
   const normalizedKind = String(kind ?? '').trim();
   if (!DATA_CLEANUP_KINDS.has(normalizedKind)) {
     return [];
   }
 
+  const scopedOfficeIds = [...new Set((Array.isArray(allowedOfficeIds) ? allowedOfficeIds : [])
+    .map((officeId) => Number(officeId))
+    .filter((officeId) => Number.isInteger(officeId) && officeId > 0))];
+  if (scopedOfficeIds.length === 0) {
+    return [];
+  }
+
+  const placeholders = scopedOfficeIds.map(() => '?').join(', ');
+
   if (normalizedKind === 'cities') {
-    const rows = db.prepare('SELECT cipher_medical_notes FROM patients WHERE is_deleted = 0').all();
+    const rows = db
+      .prepare(`SELECT cipher_medical_notes FROM patients WHERE is_deleted = 0 AND office_id IN (${placeholders})`)
+      .all(...scopedOfficeIds);
     const grouped = new Map();
 
     for (const row of rows) {
@@ -7801,9 +8008,33 @@ function getDataCleanupItems(kind) {
   if (normalizedKind === 'banks') {
     const grouped = new Map();
     const sources = [
-      db.prepare('SELECT bank_name AS value FROM users').all(),
-      db.prepare('SELECT bank_name AS value FROM invoice_payments').all(),
-      db.prepare('SELECT bank_name AS value FROM accounting_deposits').all()
+      db
+        .prepare(
+          `SELECT DISTINCT u.bank_name AS value
+           FROM users u
+           WHERE trim(u.bank_name) <> ''
+             AND (
+               u.office_id IN (${placeholders})
+               OR EXISTS (SELECT 1 FROM user_offices uo WHERE uo.user_id = u.id AND uo.office_id IN (${placeholders}))
+             )`
+        )
+        .all(...scopedOfficeIds, ...scopedOfficeIds),
+      db
+        .prepare(
+          `SELECT ip.bank_name AS value
+           FROM invoice_payments ip
+           INNER JOIN invoices i ON i.id = ip.invoice_id
+           INNER JOIN patients p ON p.id = i.patient_id
+           WHERE p.office_id IN (${placeholders})`
+        )
+        .all(...scopedOfficeIds),
+      db
+        .prepare(
+          `SELECT bank_name AS value
+           FROM accounting_deposits
+           WHERE office_id IN (${placeholders})`
+        )
+        .all(...scopedOfficeIds)
     ];
 
     for (const sourceRows of sources) {
@@ -7826,7 +8057,9 @@ function getDataCleanupItems(kind) {
       .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, 'fr', { sensitivity: 'base' }));
   }
 
-  const notesRows = db.prepare('SELECT cipher_medical_notes FROM patients WHERE is_deleted = 0').all();
+  const notesRows = db
+    .prepare(`SELECT cipher_medical_notes FROM patients WHERE is_deleted = 0 AND office_id IN (${placeholders})`)
+    .all(...scopedOfficeIds);
   const grouped = new Map();
   const noteKey = normalizedKind === 'primary-doctors' ? 'primaryDoctor' : 'referredBy';
 
@@ -7849,11 +8082,20 @@ function getDataCleanupItems(kind) {
     .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, 'fr', { sensitivity: 'base' }));
 }
 
-function applyDataCleanupChanges(kind, rawChanges, actorUserId = null) {
+function applyDataCleanupChanges(kind, rawChanges, allowedOfficeIds = [], actorUserId = null) {
   const normalizedKind = String(kind ?? '').trim();
   if (!DATA_CLEANUP_KINDS.has(normalizedKind) || !Array.isArray(rawChanges)) {
     return 0;
   }
+
+  const scopedOfficeIds = [...new Set((Array.isArray(allowedOfficeIds) ? allowedOfficeIds : [])
+    .map((officeId) => Number(officeId))
+    .filter((officeId) => Number.isInteger(officeId) && officeId > 0))];
+  if (scopedOfficeIds.length === 0) {
+    return 0;
+  }
+
+  const placeholders = scopedOfficeIds.map(() => '?').join(', ');
 
   const changes = rawChanges
     .map((item) => ({
@@ -7871,21 +8113,46 @@ function applyDataCleanupChanges(kind, rawChanges, actorUserId = null) {
   let updatedCount = 0;
 
   if (normalizedKind === 'banks') {
-    const updateUserBanks = db.prepare('UPDATE users SET bank_name = ? WHERE lower(trim(bank_name)) = lower(trim(?))');
-    const updateInvoiceBanks = db.prepare('UPDATE invoice_payments SET bank_name = ? WHERE lower(trim(bank_name)) = lower(trim(?))');
-    const updateDepositBanks = db.prepare('UPDATE accounting_deposits SET bank_name = ? WHERE lower(trim(bank_name)) = lower(trim(?))');
+    const updateUserBanks = db.prepare(
+      `UPDATE users
+       SET bank_name = ?
+       WHERE lower(trim(bank_name)) = lower(trim(?))
+         AND (
+           office_id IN (${placeholders})
+           OR EXISTS (SELECT 1 FROM user_offices uo WHERE uo.user_id = users.id AND uo.office_id IN (${placeholders}))
+         )`
+    );
+    const updateInvoiceBanks = db.prepare(
+      `UPDATE invoice_payments
+       SET bank_name = ?
+       WHERE lower(trim(bank_name)) = lower(trim(?))
+         AND invoice_id IN (
+           SELECT i.id
+           FROM invoices i
+           INNER JOIN patients p ON p.id = i.patient_id
+           WHERE p.office_id IN (${placeholders})
+         )`
+    );
+    const updateDepositBanks = db.prepare(
+      `UPDATE accounting_deposits
+       SET bank_name = ?
+       WHERE lower(trim(bank_name)) = lower(trim(?))
+         AND office_id IN (${placeholders})`
+    );
 
     for (const change of changes) {
-      updatedCount += Number(updateUserBanks.run(change.replacementValue, change.sourceValue).changes ?? 0);
-      updatedCount += Number(updateInvoiceBanks.run(change.replacementValue, change.sourceValue).changes ?? 0);
-      updatedCount += Number(updateDepositBanks.run(change.replacementValue, change.sourceValue).changes ?? 0);
+      updatedCount += Number(updateUserBanks.run(change.replacementValue, change.sourceValue, ...scopedOfficeIds, ...scopedOfficeIds).changes ?? 0);
+      updatedCount += Number(updateInvoiceBanks.run(change.replacementValue, change.sourceValue, ...scopedOfficeIds).changes ?? 0);
+      updatedCount += Number(updateDepositBanks.run(change.replacementValue, change.sourceValue, ...scopedOfficeIds).changes ?? 0);
     }
   } else {
     const noteKey = normalizedKind === 'cities'
       ? 'city'
       : (normalizedKind === 'primary-doctors' ? 'primaryDoctor' : 'referredBy');
 
-    const rows = db.prepare('SELECT id, cipher_medical_notes FROM patients WHERE is_deleted = 0').all();
+    const rows = db
+      .prepare(`SELECT id, cipher_medical_notes FROM patients WHERE is_deleted = 0 AND office_id IN (${placeholders})`)
+      .all(...scopedOfficeIds);
     const updateNotes = db.prepare(
       `UPDATE patients
        SET cipher_medical_notes = ?, updated_at = CURRENT_TIMESTAMP
@@ -7950,17 +8217,18 @@ function applyDataCleanupChanges(kind, rawChanges, actorUserId = null) {
   return updatedCount;
 }
 
-app.get('/api/data-management/cleanup', authMiddleware, adminOnlyMiddleware, (req, res) => {
+app.get('/api/data-management/cleanup', authMiddleware, requirePermission('manage-data-cleanup'), (req, res) => {
   const kind = String(req.query.kind ?? '').trim();
   if (!DATA_CLEANUP_KINDS.has(kind)) {
     return res.status(400).json({ message: 'Type de nettoyage invalide' });
   }
 
-  const items = getDataCleanupItems(kind);
+  const allowedOfficeIds = getDataManagementScopedOfficeIds(req.userAccess);
+  const items = getDataCleanupItems(kind, allowedOfficeIds);
   return res.json({ kind, items });
 });
 
-app.post('/api/data-management/cleanup/apply', authMiddleware, adminOnlyMiddleware, (req, res) => {
+app.post('/api/data-management/cleanup/apply', authMiddleware, requirePermission('manage-data-cleanup'), (req, res) => {
   const kind = String(req.body?.kind ?? '').trim();
   const changes = Array.isArray(req.body?.changes) ? req.body.changes : [];
 
@@ -7968,11 +8236,12 @@ app.post('/api/data-management/cleanup/apply', authMiddleware, adminOnlyMiddlewa
     return res.status(400).json({ message: 'Type de nettoyage invalide' });
   }
 
-  const updatedCount = applyDataCleanupChanges(kind, changes, req.user.sub);
+  const allowedOfficeIds = getDataManagementScopedOfficeIds(req.userAccess);
+  const updatedCount = applyDataCleanupChanges(kind, changes, allowedOfficeIds, req.user.sub);
   return res.json({ kind, updatedCount });
 });
 
-app.get('/api/data-management/import-template', authMiddleware, adminOnlyMiddleware, (req, res) => {
+app.get('/api/data-management/import-template', authMiddleware, requirePermission('manage-data-import'), (req, res) => {
   const format = String(req.query.format ?? 'csv').trim().toLowerCase();
   const dataset = String(req.query.dataset ?? 'patients').trim().toLowerCase();
 
@@ -8003,17 +8272,14 @@ app.get('/api/data-management/import-template', authMiddleware, adminOnlyMiddlew
   return res.status(200).send(workbookBuffer);
 });
 
-app.post('/api/data-management/import', authMiddleware, adminOnlyMiddleware, (req, res) => {
+app.post('/api/data-management/import', authMiddleware, requirePermission('manage-data-import'), (req, res) => {
   const parsed = dataImportPayloadSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: 'Payload d\'import invalide' });
   }
 
   const payload = parsed.data;
-  const scopedOffices = getScopedOfficeOptions(req.userAccess, req.user.role === 'admin');
-  const allowedOfficeIds = new Set(
-    scopedOffices.map((office) => Number(office.id)).filter((id) => Number.isInteger(id) && id > 0)
-  );
+  const allowedOfficeIds = new Set(getDataManagementScopedOfficeIds(req.userAccess));
 
   if (!allowedOfficeIds.has(payload.officeId)) {
     return res.status(403).json({ message: 'Acces refuse au cabinet cible' });
@@ -8360,8 +8626,13 @@ app.post('/api/data-management/import', authMiddleware, adminOnlyMiddleware, (re
   }
 });
 
-app.get('/api/data-management/backup', authMiddleware, adminOnlyMiddleware, async (_req, res) => {
-  const snapshot = buildDataBackupSnapshot();
+app.get('/api/data-management/backup', authMiddleware, requirePermission('manage-data-backup-restore'), async (req, res) => {
+  const scopedOfficeIds = getDataManagementScopedOfficeIds(req.userAccess);
+  const snapshot = buildDataBackupSnapshot(
+    isApplicationSuperAdmin(req.userAccess)
+      ? {}
+      : { officeIds: scopedOfficeIds }
+  );
   const now = new Date().toISOString().replace(/[:.]/g, '-');
   const fileName = `osteosoft-backup-${now}.zip`;
 
@@ -8545,7 +8816,13 @@ app.post('/api/data-management/reset-demo', authMiddleware, adminOnlyMiddleware,
   }
 });
 
-app.post('/api/data-management/restore', authMiddleware, adminOnlyMiddleware, (req, res) => {
+app.post('/api/data-management/restore', authMiddleware, requirePermission('manage-data-backup-restore'), (req, res) => {
+  if (!isApplicationSuperAdmin(req.userAccess)) {
+    return res.status(403).json({
+      message: 'Restauration globale reservee au super administrateur application. Utilisez un compte super administrateur application pour restaurer une sauvegarde complete.'
+    });
+  }
+
   const parsed = dataRestoreSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: 'Fichier de sauvegarde invalide' });
@@ -10778,7 +11055,7 @@ app.delete('/api/patient-documents/:documentRef', authMiddleware, requirePermiss
   return res.status(204).send();
 });
 
-app.get('/api/patients', authMiddleware, requirePermission('read-patient-list'), (req, res) => {
+app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-list', 'manage-data-rgpd']), (req, res) => {
   const query = String(req.query.search ?? '').trim().toLowerCase();
 
   const rows = db
@@ -11515,7 +11792,7 @@ app.put('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
   return res.status(204).send();
 });
 
-app.get('/api/patients/:id/export', authMiddleware, requirePermission('export-patient-record'), (req, res) => {
+app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['export-patient-record', 'manage-data-rgpd']), (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
     return res.status(400).json({ message: 'ID invalide' });

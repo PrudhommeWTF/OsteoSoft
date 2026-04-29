@@ -46,7 +46,7 @@
       @if (activeSection().id === 'data-management') {
         <nav class="mb-3" aria-label="Onglets de gestion des données">
           <div class="nav nav-pills flex-row flex-wrap gap-2" role="tablist" aria-orientation="horizontal">
-            @for (tab of dataManagementTabs; track tab.id) {
+            @for (tab of visibleDataManagementTabs(); track tab.id) {
               <button
                 type="button"
                 class="nav-link"
