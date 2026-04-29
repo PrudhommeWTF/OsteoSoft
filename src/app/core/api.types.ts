@@ -1268,6 +1268,10 @@ export type Office = {
   phoneFax?: string;
   email?: string;
   website?: string;
+  siret?: string;
+  adeliCode?: string;
+  rppsCode?: string;
+  apeNafCode?: string;
   vatNumber?: string;
   logoData?: string;
   invoiceTemplateLayoutJson: string;
@@ -1302,6 +1306,10 @@ export type CreateOfficePayload = {
   phoneFax?: string;
   email?: string;
   website?: string;
+  siret?: string;
+  adeliCode?: string;
+  rppsCode?: string;
+  apeNafCode?: string;
   vatNumber?: string;
   logoData?: string;
   invoiceTemplateLayoutJson: string;

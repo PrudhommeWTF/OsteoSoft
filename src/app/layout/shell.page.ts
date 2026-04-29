@@ -170,7 +170,8 @@ export class ShellPage implements OnInit, OnDestroy {
   }
 
   readonly utilityItems = signal<UtilityItem[]>([
-    { label: 'Editer mon profil', icon: 'fa-solid fa-user-pen', path: '/mon-profil' }
+    { label: 'Editer mon profil', icon: 'fa-solid fa-user-pen', path: '/mon-profil' },
+    { label: 'Afficher l\'aide', icon: 'fa-solid fa-circle-question', path: '/aide' }
   ]);
 
   readonly dependencyCredits = signal<DependencyCredit[]>([

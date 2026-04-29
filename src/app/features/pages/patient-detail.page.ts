@@ -1971,6 +1971,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
         setTimeout(() => URL.revokeObjectURL(url), 60_000);
       }
+
+      this.writePdfLegalFooter(pdf, { margin, pageWidth, pageHeight, profile, office });
     } catch {
       if (previewWindow && !previewWindow.closed) {
         previewWindow.close();
@@ -4128,6 +4130,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       pdf.text(footerLines, signatureX + signatureWidth, signatureY + signatureHeight + 5, { align: 'right' });
     }
 
+    this.writePdfLegalFooter(pdf, { margin, pageWidth, pageHeight, profile, office });
+
     return pdf.output('blob');
   }
 
@@ -4735,24 +4739,64 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       writeRight(String(profile.signatureText ?? '').trim(), signatureX + signatureW - 2, y + 18);
     }
 
-    const footerY = pageHeight - 14;
+    this.writePdfLegalFooter(pdf, { margin, pageWidth, pageHeight, profile, office, includeVatMention: true });
+
+    return pdf.output('blob');
+  }
+
+  private buildPdfLegalFooterText(
+    profile: MyUserProfile | null,
+    office: Office | null,
+    includeVatMention = false
+  ): string {
+    const practitionerParts = [
+      `SIRET: ${String(profile?.siret ?? '').trim() || '-'}`,
+      `RPPS: ${String(profile?.rppsCode ?? '').trim() || '-'}`,
+      `APE: ${String(profile?.apeNafCode ?? '').trim() || '-'}`,
+      `ADELI: ${String(profile?.adeliCode ?? '').trim() || '-'}`
+    ];
+    const officeParts = [
+      `SIRET: ${String(office?.siret ?? '').trim() || '-'}`,
+      `RPPS: ${String(office?.rppsCode ?? '').trim() || '-'}`,
+      `APE: ${String(office?.apeNafCode ?? '').trim() || '-'}`,
+      `ADELI: ${String(office?.adeliCode ?? '').trim() || '-'}`
+    ];
+
+    const sections = [
+      `Praticien - ${practitionerParts.join(' | ')}`,
+      `Cabinet - ${officeParts.join(' | ')}`
+    ];
+
+    if (includeVatMention && !office?.hideVatMention) {
+      sections.push('TVA non applicable, art. 261-4-1 du CGI');
+    }
+
+    return sections.join('  •  ');
+  }
+
+  private writePdfLegalFooter(
+    pdf: jsPDF,
+    options: {
+      margin: number;
+      pageWidth: number;
+      pageHeight: number;
+      profile: MyUserProfile | null;
+      office: Office | null;
+      includeVatMention?: boolean;
+    }
+  ): void {
+    const { margin, pageWidth, pageHeight, profile, office, includeVatMention = false } = options;
+    const contentWidth = pageWidth - (margin * 2);
+    const footerText = this.buildPdfLegalFooterText(profile, office, includeVatMention);
+    const footerLines = pdf.splitTextToSize(footerText, contentWidth) as string[];
+    const lineHeight = 3.6;
+    const footerY = pageHeight - 8 - ((footerLines.length - 1) * lineHeight);
+
     pdf.setDrawColor(214, 220, 229);
     pdf.line(margin, footerY - 4, pageWidth - margin, footerY - 4);
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(8);
-
-    const regParts = [
-      `SIRET: ${String(profile.siret ?? '').trim() || '-'}`,
-      `RPPS: ${String(profile.rppsCode ?? '').trim() || '-'}`,
-      `APE: ${String(profile.apeNafCode ?? '').trim() || '-'}`,
-      `ADELI: ${String(profile.adeliCode ?? '').trim() || '-'}`
-    ];
-    const tvaText = 'TVA non applicable, art. 261-4-1 du CGI';
-    const footerText = `${regParts.join(' | ')} | ${tvaText}`;
-    const wrappedFooter = pdf.splitTextToSize(footerText, contentWidth) as string[];
-    pdf.text(wrappedFooter, margin, footerY);
-
-    return pdf.output('blob');
+    pdf.text(footerLines, margin, footerY);
   }
 
   private blobToBase64(blob: Blob): Promise<string> {

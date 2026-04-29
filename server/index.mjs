@@ -409,6 +409,10 @@ db.exec(`
     phone_fax TEXT,
     email TEXT,
     website TEXT,
+    siret TEXT,
+    adeli_code TEXT,
+    rpps_code TEXT,
+    ape_naf_code TEXT,
     vat_number TEXT,
     logo_data TEXT,
     opening_hours_json TEXT NOT NULL DEFAULT '{"monday":[],"tuesday":[],"wednesday":[],"thursday":[],"friday":[],"saturday":[],"sunday":[]}',
@@ -4214,6 +4218,10 @@ async function ensureSeedData() {
   ensureColumn('offices', 'payment_reminder_letter_title', "payment_reminder_letter_title TEXT NOT NULL DEFAULT ''");
   ensureColumn('offices', 'payment_reminder_letter_content', "payment_reminder_letter_content TEXT NOT NULL DEFAULT ''");
   ensureColumn('offices', 'patient_letters_json', "patient_letters_json TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn('offices', 'siret', "siret TEXT NOT NULL DEFAULT ''");
+  ensureColumn('offices', 'adeli_code', "adeli_code TEXT NOT NULL DEFAULT ''");
+  ensureColumn('offices', 'rpps_code', "rpps_code TEXT NOT NULL DEFAULT ''");
+  ensureColumn('offices', 'ape_naf_code', "ape_naf_code TEXT NOT NULL DEFAULT ''");
   ensureColumn('consultations', 'office_id', 'office_id INTEGER');
   ensureColumn('patients', 'office_id', 'office_id INTEGER');
   ensureColumn('patients', 'marital_status', "marital_status TEXT NOT NULL DEFAULT 'Non renseigne'");
@@ -6753,6 +6761,7 @@ app.get('/api/offices', authMiddleware, requirePermission('read-office-settings'
            address_line1 as addressLine1, address_line2 as addressLine2,
            postal_code as postalCode, city, phone_mobile as phoneMobile,
            phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
+           siret, adeli_code as adeliCode, rpps_code as rppsCode, ape_naf_code as apeNafCode,
            vat_number as vatNumber, logo_data as logoData, opening_hours_json as openingHoursJson,
            consultation_profiles_json as consultationProfilesJson,
            payment_reminder_letter_title as paymentReminderLetterTitle,
@@ -6794,6 +6803,10 @@ app.post('/api/offices', authMiddleware, requirePermission('create-office'), (re
     phoneFax,
     email,
     website,
+    siret,
+    adeliCode,
+    rppsCode,
+    apeNafCode,
     vatNumber,
     logoData,
     paymentReminderLetterTemplate,
@@ -6835,10 +6848,10 @@ app.post('/api/offices', authMiddleware, requirePermission('create-office'), (re
     const insert = db.prepare(`
       INSERT INTO offices (name, default_session_duration_minutes, country, devise, invoice_number_format, invoice_numbering_configuration,
                            invoice_show_insurance_fields, invoice_hide_vat_mention, invoice_template_layout_json, address_line1, address_line2, postal_code, city, phone_mobile,
-                           phone_landline, phone_fax, email, website, vat_number, logo_data, opening_hours_json,
+                           phone_landline, phone_fax, email, website, siret, adeli_code, rpps_code, ape_naf_code, vat_number, logo_data, opening_hours_json,
                            consultation_profiles_json, payment_reminder_letter_title, payment_reminder_letter_content,
                            patient_letters_json, display_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = insert.run(
@@ -6847,7 +6860,9 @@ app.post('/api/offices', authMiddleware, requirePermission('create-office'), (re
       normalizedInvoiceTemplateLayoutJson,
       addressLine1 || null, addressLine2 || null, postalCode || null, city || null,
       phoneMobile || null, phoneLandline || null, phoneFax || null, email || null,
-      website || null, vatNumber || null, logoData || null, JSON.stringify(normalizedOpeningHours),
+      website || null, String(siret ?? '').trim() || null, String(adeliCode ?? '').trim() || null,
+      String(rppsCode ?? '').trim() || null, String(apeNafCode ?? '').trim() || null,
+      vatNumber || null, logoData || null, JSON.stringify(normalizedOpeningHours),
       JSON.stringify(normalizedConsultationProfiles),
       normalizedPaymentReminderLetterTitle,
       normalizedPaymentReminderLetterContent,
@@ -6879,6 +6894,7 @@ app.post('/api/offices', authMiddleware, requirePermission('create-office'), (re
             address_line1 as addressLine1, address_line2 as addressLine2,
              postal_code as postalCode, city, phone_mobile as phoneMobile,
              phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
+             siret, adeli_code as adeliCode, rpps_code as rppsCode, ape_naf_code as apeNafCode,
              vat_number as vatNumber, logo_data as logoData, opening_hours_json as openingHoursJson,
              consultation_profiles_json as consultationProfilesJson,
              payment_reminder_letter_title as paymentReminderLetterTitle,
@@ -6940,6 +6956,10 @@ app.put('/api/offices/:id', authMiddleware, requirePermission('update-office-set
     phoneFax,
     email,
     website,
+    siret,
+    adeliCode,
+    rppsCode,
+    apeNafCode,
     vatNumber,
     logoData,
     paymentReminderLetterTemplate,
@@ -6977,7 +6997,7 @@ app.put('/api/offices/:id', authMiddleware, requirePermission('update-office-set
         SET name = ?, default_session_duration_minutes = ?, country = ?, devise = ?, invoice_number_format = ?,
           invoice_numbering_configuration = ?, invoice_show_insurance_fields = ?, invoice_hide_vat_mention = ?, invoice_template_layout_json = ?, address_line1 = ?, address_line2 = ?, postal_code = ?, city = ?,
           phone_mobile = ?, phone_landline = ?, phone_fax = ?, email = ?, website = ?,
-          vat_number = ?, logo_data = ?, opening_hours_json = ?, consultation_profiles_json = ?,
+          siret = ?, adeli_code = ?, rpps_code = ?, ape_naf_code = ?, vat_number = ?, logo_data = ?, opening_hours_json = ?, consultation_profiles_json = ?,
           payment_reminder_letter_title = ?, payment_reminder_letter_content = ?,
           patient_letters_json = ?,
           is_active = ?, updated_at = CURRENT_TIMESTAMP
@@ -6990,7 +7010,9 @@ app.put('/api/offices/:id', authMiddleware, requirePermission('update-office-set
       normalizedInvoiceTemplateLayoutJson,
       addressLine1 || null, addressLine2 || null, postalCode || null, city || null,
       phoneMobile || null, phoneLandline || null, phoneFax || null, email || null,
-      website || null, vatNumber || null, logoData || null, JSON.stringify(normalizedOpeningHours),
+      website || null, String(siret ?? '').trim() || null, String(adeliCode ?? '').trim() || null,
+      String(rppsCode ?? '').trim() || null, String(apeNafCode ?? '').trim() || null,
+      vatNumber || null, logoData || null, JSON.stringify(normalizedOpeningHours),
       JSON.stringify(normalizedConsultationProfiles),
       normalizedPaymentReminderLetterTitle,
       normalizedPaymentReminderLetterContent,
@@ -7012,6 +7034,7 @@ app.put('/api/offices/:id', authMiddleware, requirePermission('update-office-set
             address_line1 as addressLine1, address_line2 as addressLine2,
              postal_code as postalCode, city, phone_mobile as phoneMobile,
              phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
+             siret, adeli_code as adeliCode, rpps_code as rppsCode, ape_naf_code as apeNafCode,
              vat_number as vatNumber, logo_data as logoData, opening_hours_json as openingHoursJson,
                   consultation_profiles_json as consultationProfilesJson,
                   payment_reminder_letter_title as paymentReminderLetterTitle,
@@ -7105,6 +7128,7 @@ app.post('/api/offices/reorder', authMiddleware, requirePermission('reorder-offi
             address_line1 as addressLine1, address_line2 as addressLine2,
              postal_code as postalCode, city, phone_mobile as phoneMobile,
              phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
+             siret, adeli_code as adeliCode, rpps_code as rppsCode, ape_naf_code as apeNafCode,
              vat_number as vatNumber, logo_data as logoData, opening_hours_json as openingHoursJson,
              consultation_profiles_json as consultationProfilesJson, is_active as isActive,
              display_order as displayOrder, created_at as createdAt, updated_at as updatedAt

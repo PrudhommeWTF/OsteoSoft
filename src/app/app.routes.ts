@@ -46,6 +46,16 @@ export const routes: Routes = [
         loadComponent: () => import('./features/pages/profile.page').then((m) => m.ProfilePage)
       },
       {
+        path: 'aide',
+        title: 'Aide',
+        loadComponent: () => import('./features/pages/help-index.page').then((m) => m.HelpIndexPage)
+      },
+      {
+        path: 'aide/:slug',
+        title: 'Aide detaillee',
+        loadComponent: () => import('./features/pages/help-detail.page').then((m) => m.HelpDetailPage)
+      },
+      {
         path: 'patients/nouveau',
         title: 'Nouveau patient',
         canActivate: [permissionGuard('create-patient-record')],
