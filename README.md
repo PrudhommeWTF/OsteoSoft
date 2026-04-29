@@ -179,6 +179,5 @@ Les artefacts frontend sont generes dans `dist/`.
 
 ## Documentation complementaire
 
-- Version commerciale: `README-commercial.md`
-- Guide d'installation complet: `docs/INSTALLATION.md`
+- Guide d'installation complet: `INSTALLATION.md`
 - Deploiement Docker: `docker-compose.yml`
