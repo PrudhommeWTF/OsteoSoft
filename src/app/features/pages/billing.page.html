@@ -5,32 +5,34 @@
   </div>
 
   <div class="d-flex flex-wrap gap-2 align-items-center">
-    <button type="button" class="btn btn-primary btn-sm" (click)="openExpenseModal()">
-      <i class="fa-solid fa-plus me-1"></i>Ajouter une depense
-    </button>
-    <div class="dropdown" (click)="$event.stopPropagation()">
-      <button
-        type="button"
-        class="btn btn-outline-primary btn-sm dropdown-toggle"
-        [class.show]="isDepositMenuOpen()"
-        [attr.aria-expanded]="isDepositMenuOpen()"
-        aria-label="Ouvrir le menu des remises"
-        (click)="toggleDepositMenu()">
-        <i class="fa-solid fa-building-columns me-1"></i>Remises
+    @if (canManageBilling()) {
+      <button type="button" class="btn btn-primary btn-sm" (click)="openExpenseModal()">
+        <i class="fa-solid fa-plus me-1"></i>Ajouter une depense
       </button>
-      <ul class="dropdown-menu" [class.show]="isDepositMenuOpen()">
-        <li>
-          <button type="button" class="dropdown-item" (click)="openDepositModal('cheque')">
-            <i class="fa-solid fa-money-check-dollar me-2"></i>Remise de cheques
-          </button>
-        </li>
-        <li>
-          <button type="button" class="dropdown-item" (click)="openDepositModal('especes')">
-            <i class="fa-solid fa-money-bill-wave me-2"></i>Remise d'especes
-          </button>
-        </li>
-      </ul>
-    </div>
+      <div class="dropdown" (click)="$event.stopPropagation()">
+        <button
+          type="button"
+          class="btn btn-outline-primary btn-sm dropdown-toggle"
+          [class.show]="isDepositMenuOpen()"
+          [attr.aria-expanded]="isDepositMenuOpen()"
+          aria-label="Ouvrir le menu des remises"
+          (click)="toggleDepositMenu()">
+          <i class="fa-solid fa-building-columns me-1"></i>Remises
+        </button>
+        <ul class="dropdown-menu" [class.show]="isDepositMenuOpen()">
+          <li>
+            <button type="button" class="dropdown-item" (click)="openDepositModal('cheque')">
+              <i class="fa-solid fa-money-check-dollar me-2"></i>Remise de cheques
+            </button>
+          </li>
+          <li>
+            <button type="button" class="dropdown-item" (click)="openDepositModal('especes')">
+              <i class="fa-solid fa-money-bill-wave me-2"></i>Remise d'especes
+            </button>
+          </li>
+        </ul>
+      </div>
+    }
     @if (canExportBilling()) {
       <div class="dropdown" (click)="$event.stopPropagation()">
         <button
@@ -529,7 +531,7 @@
         <span class="badge text-bg-secondary">{{ selectedCount() }} selectionnee(s)</span>
       }
     </div>
-    @if (selectedCount() > 0) {
+    @if (selectedCount() > 0 && canManageBilling()) {
       <div class="d-flex flex-wrap gap-2">
         <button type="button" class="btn btn-outline-primary btn-sm" (click)="openConsultationSelectionModal('bulk-update')">
           Modifier la selection
@@ -712,9 +714,9 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" (click)="closeConsultationSelectionModal()">Annuler</button>
           @if (consultationSelectionModal() === 'bulk-update') {
-            <button type="button" class="btn btn-primary" [disabled]="isSaving() || selectedCount() === 0" (click)="applyBulkUpdate()">Appliquer</button>
+            <button type="button" class="btn btn-primary" [disabled]="isSaving() || !canManageBilling() || selectedCount() === 0" (click)="applyBulkUpdate()">Appliquer</button>
           } @else {
-            <button type="button" class="btn btn-primary" [disabled]="isSaving() || !canRunPrototypeGroupedPayment()" (click)="applyPrototypeGroupedPayment()">
+            <button type="button" class="btn btn-primary" [disabled]="isSaving() || !canManageBilling() || !canRunPrototypeGroupedPayment()" (click)="applyPrototypeGroupedPayment()">
               Ajouter le paiement
             </button>
           }
@@ -757,7 +759,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" (click)="closeExpenseModal()">Annuler</button>
-          <button type="button" class="btn btn-primary" [disabled]="isSaving()" (click)="saveExpense()">Enregistrer</button>
+          <button type="button" class="btn btn-primary" [disabled]="isSaving() || !canManageBilling()" (click)="saveExpense()">Enregistrer</button>
         </div>
       </div>
     </div>
@@ -777,7 +779,7 @@
         </div>
         <div class="modal-body">
           <div class="d-flex justify-content-end mb-3">
-            <button type="button" class="btn btn-primary btn-sm" (click)="openDepositEditorModal('create')">
+            <button type="button" class="btn btn-primary btn-sm" [disabled]="!canManageBilling()" (click)="openDepositEditorModal('create')">
               <i class="fa-solid fa-plus me-1"></i>
               Ajouter un bordereau de remise {{ depositModalType() === 'especes' ? "d'especes" : 'de cheques' }}
             </button>
@@ -810,13 +812,13 @@
                       <td>{{ depositModalType() === 'cheque' ? deposit.chequeCount : '-' }}</td>
                       <td class="text-end">{{ formatCurrency(deposit.amountCents, deposit.currency) }}</td>
                       <td class="text-end">
-                        <button type="button" class="btn btn-outline-secondary btn-sm me-1" (click)="openDepositEditorModal('edit', deposit)">
+                        <button type="button" class="btn btn-outline-secondary btn-sm me-1" [disabled]="!canManageBilling()" (click)="openDepositEditorModal('edit', deposit)">
                           <i class="fa-solid fa-pen"></i>
                         </button>
                         <button type="button" class="btn btn-outline-primary btn-sm me-1" (click)="downloadDepositPdf(deposit.id)">
                           <i class="fa-solid fa-file-pdf"></i>
                         </button>
-                        <button type="button" class="btn btn-outline-danger btn-sm" (click)="deleteDeposit(deposit.id)">
+                        <button type="button" class="btn btn-outline-danger btn-sm" [disabled]="!canManageBilling()" (click)="deleteDeposit(deposit.id)">
                           <i class="fa-solid fa-trash-can"></i>
                         </button>
                       </td>
@@ -1026,7 +1028,7 @@
           <button
             type="button"
             class="btn btn-primary"
-            [disabled]="isSaving() || (!editingDepositId() && selectedDepositCandidateCount() === 0)"
+            [disabled]="isSaving() || !canManageBilling() || (!editingDepositId() && selectedDepositCandidateCount() === 0)"
             (click)="saveDepositEditor()">
             {{ editingDepositId() ? 'Enregistrer' : 'Generer le bordereau' }}
           </button>

@@ -10,9 +10,11 @@
       </button>
     }
 
-    <button type="button" class="btn btn-primary" (click)="openCreateModal()">
-      <i class="fa-solid fa-plus me-2"></i>Nouveau rendez-vous
-    </button>
+    @if (canCreateAppointment()) {
+      <button type="button" class="btn btn-primary" (click)="openCreateModal()">
+        <i class="fa-solid fa-plus me-2"></i>Nouveau rendez-vous
+      </button>
+    }
   </div>
 </section>
 

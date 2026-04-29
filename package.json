@@ -8,6 +8,8 @@
     "start:full": "concurrently -n web,api -c cyan,green \"npm:start\" \"npm:start:api\"",
     "seed:fakename": "node server/scripts/import-fakename-patients.mjs 1500",
     "seed:directory": "node server/scripts/seed-directory-contacts.mjs",
+    "e2e:backup": "node server/scripts/e2e-backup-restore.mjs",
+    "e2e:rights": "node server/scripts/e2e-access-rights.mjs",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test --watch=false --browsers=ChromeHeadless",

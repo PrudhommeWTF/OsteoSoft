@@ -56,6 +56,7 @@ export class AgendaPage implements OnDestroy {
   });
 
   readonly canExportAgenda = computed(() => this.authService.hasPermission('export-agenda'));
+  readonly canCreateAppointment = computed(() => this.authService.hasPermission('create-appointment'));
 
   readonly isCreateModalOpen = signal(false);
   readonly isExportModalOpen = signal(false);
@@ -172,6 +173,10 @@ export class AgendaPage implements OnDestroy {
   }
 
   openCreateModal(): void {
+    if (!this.canCreateAppointment()) {
+      return;
+    }
+
     this.createAppointmentError.set('');
     this.createAppointmentSuccess.set('');
     this.createPatientSearch.set('');
@@ -301,6 +306,11 @@ export class AgendaPage implements OnDestroy {
   }
 
   async createAppointment(): Promise<void> {
+    if (!this.canCreateAppointment()) {
+      this.createAppointmentError.set('Vous ne disposez pas du droit de creer un rendez-vous.');
+      return;
+    }
+
     if (!this.createAppointmentForm.valid) {
       this.createAppointmentError.set('Veuillez remplir tous les champs.');
       return;

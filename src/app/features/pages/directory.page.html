@@ -346,7 +346,7 @@
 
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" (click)="closeModal()" [disabled]="isSaving()">Annuler</button>
-          <button type="button" class="btn btn-primary" (click)="saveContact()" [disabled]="isSaving()">
+          <button type="button" class="btn btn-primary" (click)="saveContact()" [disabled]="isSaving() || (editingContactId() !== null ? !canEdit() : !canCreate())">
             {{ isSaving() ? 'Enregistrement...' : 'Enregistrer' }}
           </button>
         </div>

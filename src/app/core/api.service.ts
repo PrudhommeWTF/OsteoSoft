@@ -62,6 +62,7 @@ import {
   NewPatientDraftPayload,
   Office,
   OfficesPayload,
+  OfficeUserDelegation,
   PatientDetail,
   PatientAuditLog,
   Practitioner,
@@ -974,6 +975,46 @@ export class ApiService {
     );
 
     return response.offices;
+  }
+
+  async getOfficeDelegations(officeId: number): Promise<OfficeUserDelegation[]> {
+    const response = await firstValueFrom(
+      this.http.get<{ delegations: OfficeUserDelegation[] }>(`${this.baseUrl}/offices/${officeId}/delegations`)
+    );
+
+    return response.delegations;
+  }
+
+  async addOfficeDelegation(officeId: number, userId: number, profileId: string): Promise<OfficeUserDelegation[]> {
+    const response = await firstValueFrom(
+      this.http.post<{ delegations: OfficeUserDelegation[] }>(`${this.baseUrl}/offices/${officeId}/delegations`, { userId, profileId })
+    );
+
+    return response.delegations;
+  }
+
+  async updateOfficeDelegation(officeId: number, userId: number, profileId: string): Promise<OfficeUserDelegation[]> {
+    const response = await firstValueFrom(
+      this.http.put<{ delegations: OfficeUserDelegation[] }>(`${this.baseUrl}/offices/${officeId}/delegations/${userId}`, { profileId })
+    );
+
+    return response.delegations;
+  }
+
+  async deleteOfficeDelegation(officeId: number, userId: number): Promise<OfficeUserDelegation[]> {
+    const response = await firstValueFrom(
+      this.http.delete<{ delegations: OfficeUserDelegation[] }>(`${this.baseUrl}/offices/${officeId}/delegations/${userId}`)
+    );
+
+    return response.delegations;
+  }
+
+  async exportOfficeDelegations(officeId: number): Promise<Blob> {
+    return firstValueFrom(
+      this.http.get(`${this.baseUrl}/offices/${officeId}/delegations/export`, {
+        responseType: 'blob'
+      })
+    );
   }
 
   async downloadPatientRgpdExport(patientId: number): Promise<Blob> {

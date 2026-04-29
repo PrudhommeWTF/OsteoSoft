@@ -83,6 +83,7 @@ export class ShellPage implements OnInit, OnDestroy {
     { path: '/repertoire', label: 'Repertoire', icon: 'fa-solid fa-address-book', badge: '...', exact: true, requiredPermission: 'read-directory' },
     { path: '/facturation', label: 'Comptabilite', icon: 'fa-solid fa-file-invoice-dollar', badge: '...', requiredPermission: 'read-billing-kpis' },
     { path: '/statistiques', label: 'Statistiques', icon: 'fa-solid fa-chart-column', requiredPermission: 'read-advanced-statistics' },
+    { path: '/administration-cabinet', label: 'Administration cabinet', icon: 'fa-solid fa-building', exact: true, requiredPermission: 'read-office-settings' },
     { path: '/parametres', label: 'Parametres', icon: 'fa-solid fa-gear', exact: true, adminOnly: true }
   ]);
 
@@ -90,6 +91,10 @@ export class ShellPage implements OnInit, OnDestroy {
     const isAdmin = this.role() === 'admin' || this.authService.isSuperAdmin();
 
     return this.navItems().filter((item) => {
+      if (isAdmin && item.path === '/administration-cabinet') {
+        return false;
+      }
+
       if (item.adminOnly && !isAdmin) {
         return false;
       }

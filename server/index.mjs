@@ -715,7 +715,14 @@ const ACCESS_DOMAIN_DEFINITIONS = {
   agenda: ['read-agenda', 'create-appointment', 'edit-appointment', 'delete-appointment', 'export-agenda'],
   billing: ['read-billing-kpis', 'create-invoice', 'mark-payment', 'export-billing'],
   statistics: ['read-dashboard', 'read-advanced-statistics', 'read-peer-statistics', 'export-statistics'],
-  'contact-directory': ['read-directory', 'create-directory-contact', 'edit-directory-contact', 'delete-directory-contact', 'export-directory']
+  'contact-directory': ['read-directory', 'create-directory-contact', 'edit-directory-contact', 'delete-directory-contact', 'export-directory'],
+  'office-management': [
+    'read-office-settings',
+    'create-office',
+    'update-office-settings',
+    'delete-office',
+    'reorder-offices'
+  ]
 };
 
 function buildAccessRights(defaultValue = false) {
@@ -6056,6 +6063,13 @@ function requirePermission(permissionId) {
     }
 
     if (!hasPermission(access.rights, permissionId)) {
+      writeAuthSecurityLog(req, 'authorization_denied', {
+        userId: access.id,
+        username: access.username,
+        profileId: access.profileId,
+        permissionId,
+        reason: 'missing_permission'
+      });
       return res.status(403).json({ message: 'Droit insuffisant' });
     }
 
@@ -6201,6 +6215,15 @@ const updateAccessRightsSchema = z.object({
 });
 
 const updateCurrentUserAccessProfileSchema = z.object({
+  profileId: z.string().min(1).max(80)
+});
+
+const addOfficeDelegationSchema = z.object({
+  userId: z.number().int().positive(),
+  profileId: z.string().min(1).max(80)
+});
+
+const updateOfficeDelegationSchema = z.object({
   profileId: z.string().min(1).max(80)
 });
 
@@ -6712,8 +6735,17 @@ app.put('/api/profile/agenda-preferences', authMiddleware, (req, res) => {
   return res.json({ preferences });
 });
 
-app.get('/api/offices', authMiddleware, adminOnlyMiddleware, (_req, res) => {
-  const offices = db.prepare(`
+app.get('/api/offices', authMiddleware, requirePermission('read-office-settings'), (req, res) => {
+  const isGlobalOfficeAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+  const scopedOfficeIds = getScopedOfficeOptions(req.userAccess, isGlobalOfficeAdmin)
+    .map((office) => Number(office.id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+
+  if (!isGlobalOfficeAdmin && scopedOfficeIds.length === 0) {
+    return res.json({ offices: [] });
+  }
+
+  const selectOfficesSql = `
     SELECT id, name, default_session_duration_minutes as defaultSessionDurationMinutes, country, devise,
            invoice_number_format as invoiceNumberFormat, invoice_numbering_configuration as invoiceNumberingConfiguration,
            invoice_show_insurance_fields as invoiceShowInsuranceFields, invoice_hide_vat_mention as invoiceHideVatMention,
@@ -6728,16 +6760,22 @@ app.get('/api/offices', authMiddleware, adminOnlyMiddleware, (_req, res) => {
            patient_letters_json as patientLettersJson,
            is_active as isActive,
            display_order as displayOrder, created_at as createdAt, updated_at as updatedAt
-    FROM offices
-    ORDER BY display_order ASC, created_at DESC
-  `).all() || [];
+    FROM offices`;
+
+  let offices = [];
+  if (isGlobalOfficeAdmin) {
+    offices = db.prepare(`${selectOfficesSql} ORDER BY display_order ASC, created_at DESC`).all() || [];
+  } else {
+    const placeholders = scopedOfficeIds.map(() => '?').join(', ');
+    offices = db.prepare(`${selectOfficesSql} WHERE id IN (${placeholders}) ORDER BY display_order ASC, created_at DESC`).all(...scopedOfficeIds) || [];
+  }
   
   return res.json({
     offices: offices.map(mapOfficeRow)
   });
 });
 
-app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
+app.post('/api/offices', authMiddleware, requirePermission('create-office'), (req, res) => {
   const {
     name,
     defaultSessionDurationMinutes,
@@ -6858,8 +6896,32 @@ app.post('/api/offices', authMiddleware, adminOnlyMiddleware, (req, res) => {
   }
 });
 
-app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
+app.put('/api/offices/:id', authMiddleware, requirePermission('update-office-settings'), (req, res) => {
   const officeId = Number(req.params.id);
+
+  if (!Number.isInteger(officeId) || officeId <= 0) {
+    return res.status(400).json({ message: 'ID de cabinet invalide' });
+  }
+
+  const isGlobalOfficeAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+  if (!isGlobalOfficeAdmin) {
+    const scopedOfficeIds = new Set(
+      getScopedOfficeOptions(req.userAccess, false)
+        .map((office) => Number(office.id))
+        .filter((id) => Number.isInteger(id) && id > 0)
+    );
+
+    if (!scopedOfficeIds.has(officeId)) {
+      writeAuthSecurityLog(req, 'authorization_denied', {
+        userId: req.user.sub,
+        permissionId: 'update-office-settings',
+        officeId,
+        reason: 'office_scope_denied'
+      });
+      return res.status(403).json({ message: 'Acces interdit a ce cabinet' });
+    }
+  }
+
   const {
     name,
     defaultSessionDurationMinutes,
@@ -6967,10 +7029,38 @@ app.put('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
   }
 });
 
-app.delete('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) => {
+app.delete('/api/offices/:id', authMiddleware, requirePermission('delete-office'), (req, res) => {
   const officeId = Number(req.params.id);
 
+  if (!Number.isInteger(officeId) || officeId <= 0) {
+    return res.status(400).json({ message: 'ID de cabinet invalide' });
+  }
+
+  const isGlobalOfficeAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+  if (!isGlobalOfficeAdmin) {
+    const scopedOfficeIds = new Set(
+      getScopedOfficeOptions(req.userAccess, false)
+        .map((office) => Number(office.id))
+        .filter((id) => Number.isInteger(id) && id > 0)
+    );
+
+    if (!scopedOfficeIds.has(officeId)) {
+      writeAuthSecurityLog(req, 'authorization_denied', {
+        userId: req.user.sub,
+        permissionId: 'delete-office',
+        officeId,
+        reason: 'office_scope_denied'
+      });
+      return res.status(403).json({ message: 'Acces interdit a ce cabinet' });
+    }
+  }
+
   try {
+    const existing = db.prepare('SELECT id FROM offices WHERE id = ?').get(officeId);
+    if (!existing) {
+      return res.status(404).json({ message: 'Cabinet introuvable' });
+    }
+
     db.prepare('DELETE FROM service_types WHERE office_id = ?').run(officeId);
     db.prepare('DELETE FROM payment_methods WHERE office_id = ?').run(officeId);
     db.prepare(`DELETE FROM offices WHERE id = ?`).run(officeId);
@@ -6983,10 +7073,20 @@ app.delete('/api/offices/:id', authMiddleware, adminOnlyMiddleware, (req, res) =
   }
 });
 
-app.post('/api/offices/reorder', authMiddleware, adminOnlyMiddleware, (req, res) => {
+app.post('/api/offices/reorder', authMiddleware, requirePermission('reorder-offices'), (req, res) => {
   const { officeIds } = req.body;
   if (!Array.isArray(officeIds)) {
     return res.status(400).json({ message: 'officeIds doit être un tableau' });
+  }
+
+  const isGlobalOfficeAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+  if (!isGlobalOfficeAdmin) {
+    writeAuthSecurityLog(req, 'authorization_denied', {
+      userId: req.user.sub,
+      permissionId: 'reorder-offices',
+      reason: 'global_admin_required'
+    });
+    return res.status(403).json({ message: 'Reorganisation reservee aux administrateurs globaux' });
   }
 
   try {
@@ -7018,6 +7118,219 @@ app.post('/api/offices/reorder', authMiddleware, adminOnlyMiddleware, (req, res)
     console.error('Error reordering offices:', err);
     return res.status(500).json({ message: 'Erreur lors de la réorganisation' });
   }
+});
+
+// ---- Delegation CRUD routes ----
+
+function checkOfficeScopeOrRespond(req, res, officeId, permissionId) {
+  const isGlobalOfficeAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+  if (isGlobalOfficeAdmin) {
+    return true;
+  }
+
+  const scopedOfficeIds = new Set(
+    getScopedOfficeOptions(req.userAccess, false)
+      .map((office) => Number(office.id))
+      .filter((id) => Number.isInteger(id) && id > 0)
+  );
+
+  if (!scopedOfficeIds.has(officeId)) {
+    writeAuthSecurityLog(req, 'authorization_denied', {
+      userId: req.user.sub,
+      permissionId,
+      officeId,
+      reason: 'office_scope_denied'
+    });
+    res.status(403).json({ message: 'Acces interdit a ce cabinet' });
+    return false;
+  }
+
+  return true;
+}
+
+app.get('/api/offices/:id/delegations', authMiddleware, requirePermission('read-office-settings'), (req, res) => {
+  const officeId = Number(req.params.id);
+  if (!Number.isInteger(officeId) || officeId <= 0) {
+    return res.status(400).json({ message: 'ID de cabinet invalide' });
+  }
+
+  if (!checkOfficeScopeOrRespond(req, res, officeId, 'read-office-settings')) {
+    return;
+  }
+
+  const office = db.prepare('SELECT id FROM offices WHERE id = ?').get(officeId);
+  if (!office) {
+    return res.status(404).json({ message: 'Cabinet introuvable' });
+  }
+
+  const delegations = readOfficeUserDelegations(officeId);
+  return res.json({ delegations });
+});
+
+app.post('/api/offices/:id/delegations', authMiddleware, requirePermission('update-office-settings'), (req, res) => {
+  const officeId = Number(req.params.id);
+  if (!Number.isInteger(officeId) || officeId <= 0) {
+    return res.status(400).json({ message: 'ID de cabinet invalide' });
+  }
+
+  if (!checkOfficeScopeOrRespond(req, res, officeId, 'update-office-settings')) {
+    return;
+  }
+
+  const office = db.prepare('SELECT id FROM offices WHERE id = ?').get(officeId);
+  if (!office) {
+    return res.status(404).json({ message: 'Cabinet introuvable' });
+  }
+
+  const parsed = addOfficeDelegationSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Payload invalide' });
+  }
+
+  const { userId, profileId } = parsed.data;
+
+  const user = db.prepare('SELECT id FROM users WHERE id = ?').get(userId);
+  if (!user) {
+    return res.status(404).json({ message: 'Utilisateur introuvable' });
+  }
+
+  const profile = db.prepare('SELECT id FROM access_profiles WHERE id = ?').get(profileId);
+  if (!profile) {
+    return res.status(404).json({ message: 'Profil introuvable' });
+  }
+
+  const existing = db.prepare('SELECT id FROM office_user_delegations WHERE office_id = ? AND user_id = ?').get(officeId, userId);
+  if (existing) {
+    return res.status(409).json({ message: 'Cet utilisateur possède déjà une délégation dans ce cabinet' });
+  }
+
+  try {
+    db.prepare(
+      'INSERT INTO office_user_delegations (office_id, user_id, profile_id) VALUES (?, ?, ?)'
+    ).run(officeId, userId, profileId);
+
+    writeAuditLog(req.user.sub, 'CREATE', 'office_user_delegations', officeId, { userId, profileId });
+
+    const delegations = readOfficeUserDelegations(officeId);
+    return res.status(201).json({ delegations });
+  } catch (err) {
+    console.error('Error adding office delegation:', err);
+    return res.status(500).json({ message: 'Erreur lors de l\'ajout de la délégation' });
+  }
+});
+
+app.put('/api/offices/:id/delegations/:userId', authMiddleware, requirePermission('update-office-settings'), (req, res) => {
+  const officeId = Number(req.params.id);
+  const userId = Number(req.params.userId);
+
+  if (!Number.isInteger(officeId) || officeId <= 0 || !Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ message: 'ID invalide' });
+  }
+
+  if (!checkOfficeScopeOrRespond(req, res, officeId, 'update-office-settings')) {
+    return;
+  }
+
+  const parsed = updateOfficeDelegationSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Payload invalide' });
+  }
+
+  const { profileId } = parsed.data;
+
+  const profile = db.prepare('SELECT id FROM access_profiles WHERE id = ?').get(profileId);
+  if (!profile) {
+    return res.status(404).json({ message: 'Profil introuvable' });
+  }
+
+  const existing = db.prepare('SELECT id FROM office_user_delegations WHERE office_id = ? AND user_id = ?').get(officeId, userId);
+  if (!existing) {
+    return res.status(404).json({ message: 'Délégation introuvable' });
+  }
+
+  try {
+    db.prepare(
+      'UPDATE office_user_delegations SET profile_id = ? WHERE office_id = ? AND user_id = ?'
+    ).run(profileId, officeId, userId);
+
+    writeAuditLog(req.user.sub, 'UPDATE', 'office_user_delegations', officeId, { userId, profileId });
+
+    const delegations = readOfficeUserDelegations(officeId);
+    return res.json({ delegations });
+  } catch (err) {
+    console.error('Error updating office delegation:', err);
+    return res.status(500).json({ message: 'Erreur lors de la mise à jour de la délégation' });
+  }
+});
+
+app.delete('/api/offices/:id/delegations/:userId', authMiddleware, requirePermission('update-office-settings'), (req, res) => {
+  const officeId = Number(req.params.id);
+  const userId = Number(req.params.userId);
+
+  if (!Number.isInteger(officeId) || officeId <= 0 || !Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ message: 'ID invalide' });
+  }
+
+  if (!checkOfficeScopeOrRespond(req, res, officeId, 'update-office-settings')) {
+    return;
+  }
+
+  const existing = db.prepare('SELECT id FROM office_user_delegations WHERE office_id = ? AND user_id = ?').get(officeId, userId);
+  if (!existing) {
+    return res.status(404).json({ message: 'Délégation introuvable' });
+  }
+
+  try {
+    db.prepare('DELETE FROM office_user_delegations WHERE office_id = ? AND user_id = ?').run(officeId, userId);
+
+    writeAuditLog(req.user.sub, 'DELETE', 'office_user_delegations', officeId, { userId });
+
+    const delegations = readOfficeUserDelegations(officeId);
+    return res.json({ delegations });
+  } catch (err) {
+    console.error('Error deleting office delegation:', err);
+    return res.status(500).json({ message: 'Erreur lors de la suppression de la délégation' });
+  }
+});
+
+app.get('/api/offices/:id/delegations/export', authMiddleware, requirePermission('read-office-settings'), (req, res) => {
+  const officeId = Number(req.params.id);
+  if (!Number.isInteger(officeId) || officeId <= 0) {
+    return res.status(400).json({ message: 'ID de cabinet invalide' });
+  }
+
+  if (!checkOfficeScopeOrRespond(req, res, officeId, 'read-office-settings')) {
+    return;
+  }
+
+  const office = db.prepare('SELECT id, name FROM offices WHERE id = ?').get(officeId);
+  if (!office) {
+    return res.status(404).json({ message: 'Cabinet introuvable' });
+  }
+
+  const delegations = readOfficeUserDelegations(officeId);
+
+  const escapeCsvValue = (value) => {
+    const raw = String(value ?? '');
+    if (raw.includes(';') || raw.includes('"') || raw.includes('\n')) {
+      return `"${raw.replace(/"/g, '""')}"`;
+    }
+    return raw;
+  };
+
+  const header = ['cabinet', 'utilisateur', 'profil'];
+  const lines = [header.join(';')];
+  for (const d of delegations) {
+    lines.push([office.name, d.displayName, d.profileLabel].map(escapeCsvValue).join(';'));
+  }
+
+  const officeName = String(office.name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const stamp = new Date().toISOString().slice(0, 10);
+  const fileName = `delegations-${officeName || officeId}-${stamp}.csv`;
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  writeAuditLog(req.user.sub, 'EXPORT', 'office_user_delegations', officeId, { count: delegations.length });
+  return res.status(200).send(`\uFEFF${lines.join('\n')}`);
 });
 
 app.get('/api/setup/status', (_req, res) => {
@@ -8104,7 +8417,7 @@ app.delete('/api/office-drafts/new-office', authMiddleware, adminOnlyMiddleware,
   return res.status(204).send();
 });
 
-app.get('/api/patients/:id/consultation-drafts/new-consultation', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+app.get('/api/patients/:id/consultation-drafts/new-consultation', authMiddleware, requirePermission('create-consultation'), (req, res) => {
   const patientId = Number(req.params.id);
   if (!Number.isInteger(patientId) || patientId <= 0) {
     return res.status(400).json({ message: 'ID patient invalide' });
@@ -8148,7 +8461,7 @@ app.get('/api/patients/:id/consultation-drafts/new-consultation', authMiddleware
   });
 });
 
-app.put('/api/patients/:id/consultation-drafts/new-consultation', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+app.put('/api/patients/:id/consultation-drafts/new-consultation', authMiddleware, requirePermission('create-consultation'), (req, res) => {
   const patientId = Number(req.params.id);
   if (!Number.isInteger(patientId) || patientId <= 0) {
     return res.status(400).json({ message: 'ID patient invalide' });
@@ -8177,7 +8490,7 @@ app.put('/api/patients/:id/consultation-drafts/new-consultation', authMiddleware
   return res.status(204).send();
 });
 
-app.delete('/api/patients/:id/consultation-drafts/new-consultation', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+app.delete('/api/patients/:id/consultation-drafts/new-consultation', authMiddleware, requirePermission('create-consultation'), (req, res) => {
   const patientId = Number(req.params.id);
   if (!Number.isInteger(patientId) || patientId <= 0) {
     return res.status(400).json({ message: 'ID patient invalide' });
@@ -8268,7 +8581,7 @@ app.get('/api/patients/:id/antecedents', authMiddleware, requirePermission('read
   return res.json({ antecedents });
 });
 
-app.get('/api/consultation-context', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+app.get('/api/consultation-context', authMiddleware, requirePermission('create-consultation'), (req, res) => {
   const isAdmin = req.user.role === 'admin';
   const scopedOffices = getScopedOfficeOptions(req.userAccess, isAdmin);
   const scopedOfficeIds = new Set(
@@ -10484,7 +10797,7 @@ app.get('/api/patients/:id/consultations', authMiddleware, requirePermission('re
   return res.json({ consultations: all });
 });
 
-app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-consultation'), (req, res) => {
   const consultationId = Number(req.params.id);
   if (!Number.isInteger(consultationId) || consultationId <= 0) {
     return res.status(400).json({ message: 'Identifiant consultation invalide' });
@@ -10571,7 +10884,7 @@ app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-pa
   });
 });
 
-app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('create-consultation'), (req, res) => {
   const patientId = Number(req.params.id);
   if (!Number.isInteger(patientId) || patientId <= 0) {
     return res.status(400).json({ message: 'ID patient invalide' });
@@ -11542,7 +11855,7 @@ app.get('/api/appointments', authMiddleware, requirePermission('read-agenda'), (
   });
 });
 
-app.post('/api/appointments', authMiddleware, requirePermission('write-agenda'), (req, res) => {
+app.post('/api/appointments', authMiddleware, requirePermission('create-appointment'), (req, res) => {
   const {
     patientId,
     patientFirstName,
@@ -14416,7 +14729,7 @@ app.get('/api/billing/invoices/:id', authMiddleware, requirePermission('read-bil
   return res.json({ invoice });
 });
 
-app.post('/api/billing/invoices', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+app.post('/api/billing/invoices', authMiddleware, requirePermission('invoice-consultation'), (req, res) => {
   const patientId = Number(req.body?.patientId);
   const consultationId = req.body?.consultationId != null ? Number(req.body.consultationId) : null;
   const officeId = req.body?.officeId != null ? Number(req.body.officeId) : null;
@@ -14548,7 +14861,7 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('create-pati
   return res.status(201).json({ invoiceId });
 });
 
-app.delete('/api/billing/invoices/:id', authMiddleware, requirePermission('mark-payment'), (req, res) => {
+app.delete('/api/billing/invoices/:id', authMiddleware, requirePermission('cancel-invoice'), (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
     return res.status(400).json({ message: 'ID invalide' });

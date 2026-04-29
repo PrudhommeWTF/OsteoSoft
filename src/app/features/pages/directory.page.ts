@@ -249,6 +249,10 @@ export class DirectoryPage {
   }
 
   async saveContact(): Promise<void> {
+    const isEdit = this.editingContactId() !== null;
+    if (isEdit ? !this.canEdit() : !this.canCreate()) {
+      return;
+    }
     if (this.form.invalid || this.isSaving()) {
       this.form.markAllAsTouched();
       return;

@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 
 import { ApiService } from '../../core/api.service';
+import { AuthService } from '../../core/auth.service';
 import {
   AccessManagedUser,
   AgendaSettingsPayload,
@@ -47,7 +49,8 @@ type AccessDomain = {
     | 'agenda'
     | 'billing'
     | 'statistics'
-    | 'contact-directory';
+    | 'contact-directory'
+    | 'office-management';
   label: string;
   icon: string;
   description: string;
@@ -161,6 +164,8 @@ Je vous remercie par avance, et vous prie d'agréer mes sincères salutations.`;
 export class SettingsPage implements OnDestroy {
   private readonly fb = inject(FormBuilder);
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
 
   readonly accessDomains: AccessDomain[] = [
     {
@@ -248,6 +253,20 @@ export class SettingsPage implements OnDestroy {
         { id: 'export-directory', label: 'Exporter le répertoire' }
       ],
       impactedProfiles: ['Administrateur', 'Praticien', 'Secrétariat']
+    },
+    {
+      id: 'office-management',
+      label: 'Gestion cabinet',
+      icon: 'fa-solid fa-building',
+      description: 'Administration des cabinets, paramètres organisationnels, délégations et organisation multi-cabinets.',
+      permissions: [
+        { id: 'read-office-settings', label: 'Consulter les paramètres des cabinets accessibles' },
+        { id: 'create-office', label: 'Créer un cabinet' },
+        { id: 'update-office-settings', label: 'Modifier les paramètres d\'un cabinet' },
+        { id: 'delete-office', label: 'Supprimer un cabinet' },
+        { id: 'reorder-offices', label: 'Réorganiser l\'ordre des cabinets' }
+      ],
+      impactedProfiles: ['Administrateur', 'Direction', 'Responsable cabinet délégué']
     }
   ];
 
@@ -367,6 +386,7 @@ export class SettingsPage implements OnDestroy {
   readonly isResettingDemo = signal(false);
   readonly isSearchingRgpdPatients = signal(false);
   readonly isExportingRgpdPatient = signal(false);
+  readonly isExportingDelegations = signal(false);
   readonly isAuditLogsLoading = signal(false);
   readonly isSetupSecurityLogsLoading = signal(false);
   readonly isUsersLoading = signal(false);
@@ -662,7 +682,36 @@ export class SettingsPage implements OnDestroy {
     return this.profiles().find((profile) => profile.id === this.selectedProfileId()) ?? this.profiles()[0];
   });
 
+  readonly isOfficeAdminOnlyMode = computed(() => Boolean(this.route.snapshot.data?.['officeAdminOnly']));
+  readonly pageTitle = computed(() => this.isOfficeAdminOnlyMode() ? 'Administration des cabinets' : 'Parametres');
+  readonly pageDescription = computed(() =>
+    this.isOfficeAdminOnlyMode()
+      ? 'Gestion operationnelle des cabinets accessibles selon vos delegations.'
+      : 'Configuration fonctionnelle et technique de l\'application.'
+  );
+
+  readonly canReadOfficeSettings = computed(() => this.auth.hasPermission('read-office-settings'));
+  readonly canCreateOffice = computed(() => this.auth.hasPermission('create-office'));
+  readonly canUpdateOfficeSettings = computed(() => this.auth.hasPermission('update-office-settings'));
+  readonly canDeleteOffice = computed(() => this.auth.hasPermission('delete-office'));
+  readonly canReorderOffices = computed(() => this.auth.hasPermission('reorder-offices'));
+
+  readonly visibleSections = computed(() => {
+    if (this.isOfficeAdminOnlyMode()) {
+      return this.sections.filter((section) => section.id === 'offices');
+    }
+
+    return this.sections;
+  });
+
   constructor() {
+    if (this.isOfficeAdminOnlyMode()) {
+      this.activeSectionId.set('offices');
+      void this.loadCurrentUser();
+      void this.loadOffices();
+      return;
+    }
+
     void this.loadAccessProfiles();
     void this.loadCurrentUser();
     void this.loadUsers();
@@ -766,7 +815,7 @@ export class SettingsPage implements OnDestroy {
   ];
 
   readonly activeSection = computed(
-    () => this.sections.find((section) => section.id === this.activeSectionId()) ?? this.sections[0]
+    () => this.visibleSections().find((section) => section.id === this.activeSectionId()) ?? this.visibleSections()[0]
   );
 
   readonly isUserSignatureImage = computed(() => this.userSignatureValue().startsWith('data:image/'));
@@ -944,6 +993,11 @@ export class SettingsPage implements OnDestroy {
   });
 
   selectSection(sectionId: SettingsSectionId): void {
+    const allowedSectionIds = new Set(this.visibleSections().map((section) => section.id));
+    if (!allowedSectionIds.has(sectionId)) {
+      return;
+    }
+
     this.activeSectionId.set(sectionId);
 
     if (sectionId === 'user-management' && this.users().length === 0) {
@@ -3015,6 +3069,12 @@ export class SettingsPage implements OnDestroy {
   // Offices Management
 
   async loadOffices(): Promise<void> {
+    if (!this.canReadOfficeSettings()) {
+      this.offices.set([]);
+      this.officesError.set('Acces refuse aux parametres des cabinets.');
+      return;
+    }
+
     this.isOfficesLoading.set(true);
     this.officesError.set('');
 
@@ -3054,6 +3114,14 @@ export class SettingsPage implements OnDestroy {
   }
 
   openOfficeModal(officeId?: number): void {
+    if (officeId && !this.canUpdateOfficeSettings()) {
+      return;
+    }
+
+    if (!officeId && !this.canCreateOffice()) {
+      return;
+    }
+
     this.officesError.set('');
     this.officesSuccess.set('');
     this.editingOfficeId.set(officeId ?? null);
@@ -3323,6 +3391,31 @@ export class SettingsPage implements OnDestroy {
     this.officeUserDelegations.update((items) => items.filter((item) => item.tempKey !== tempKey));
   }
 
+  async exportOfficeDelegations(): Promise<void> {
+    const officeId = this.editingOfficeId();
+    if (!officeId) {
+      return;
+    }
+
+    this.isExportingDelegations.set(true);
+    try {
+      const blob = await this.api.exportOfficeDelegations(officeId);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      const stamp = new Date().toISOString().slice(0, 10);
+      anchor.href = url;
+      anchor.download = `delegations-cabinet-${officeId}-${stamp}.csv`;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      // silently ignore export errors — no error state needed for this action
+    } finally {
+      this.isExportingDelegations.set(false);
+    }
+  }
+
   getOfficeDelegationUserLabel(delegation: EditableOfficeUserDelegation): string {
     const userId = Number(delegation.userId);
     if (!Number.isInteger(userId) || userId <= 0) {
@@ -3563,13 +3656,23 @@ export class SettingsPage implements OnDestroy {
   }
 
   async saveOffice(): Promise<void> {
+    const editId = this.editingOfficeId();
+    if (editId && !this.canUpdateOfficeSettings()) {
+      this.officesError.set('Vous ne disposez pas du droit de modification du cabinet.');
+      return;
+    }
+
+    if (!editId && !this.canCreateOffice()) {
+      this.officesError.set('Vous ne disposez pas du droit de creation de cabinet.');
+      return;
+    }
+
     if (this.officeForm.invalid) {
       this.officeForm.markAllAsTouched();
       return;
     }
 
     const payload = this.buildOfficePayload();
-    const editId = this.editingOfficeId();
     const normalizedPayload = editId
       ? payload
       : {
@@ -3819,6 +3922,11 @@ export class SettingsPage implements OnDestroy {
   }
 
   async deleteOffice(officeId: number): Promise<void> {
+    if (!this.canDeleteOffice()) {
+      this.officesError.set('Vous ne disposez pas du droit de suppression de cabinet.');
+      return;
+    }
+
     if (!confirm('Êtes-vous sûr de vouloir supprimer ce cabinet ?')) {
       return;
     }
@@ -3845,6 +3953,11 @@ export class SettingsPage implements OnDestroy {
   }
 
   async reorderOffices(officeIds: number[]): Promise<void> {
+    if (!this.canReorderOffices()) {
+      this.officesError.set('Vous ne disposez pas du droit de reorganisation des cabinets.');
+      return;
+    }
+
     try {
       const offices = await this.api.reorderOffices(officeIds);
       this.offices.set(offices);

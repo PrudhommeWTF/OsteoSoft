@@ -31,6 +31,7 @@ export const routes: Routes = [
       {
         path: 'agenda',
         title: 'Agenda',
+        canActivate: [permissionGuard('read-agenda')],
         loadComponent: () => import('./features/pages/agenda.page').then((m) => m.AgendaPage)
       },
       {
@@ -47,21 +48,25 @@ export const routes: Routes = [
       {
         path: 'patients/nouveau',
         title: 'Nouveau patient',
+        canActivate: [permissionGuard('create-patient-record')],
         loadComponent: () => import('./features/pages/patient-create.page').then((m) => m.PatientCreatePage)
       },
       {
         path: 'patients/:id',
         title: 'Fiche patient',
+        canActivate: [permissionGuard('read-patient-record')],
         loadComponent: () => import('./features/pages/patient-detail.page').then((m) => m.PatientDetailPage)
       },
       {
         path: 'patients',
         title: 'Patients',
+        canActivate: [permissionGuard('read-patient-list')],
         loadComponent: () => import('./features/pages/patients.page').then((m) => m.PatientsPage)
       },
       {
         path: 'facturation',
         title: 'Facturation',
+        canActivate: [permissionGuard('read-billing-kpis')],
         loadComponent: () => import('./features/pages/billing.page').then((m) => m.BillingPage)
       },
       {
@@ -74,6 +79,13 @@ export const routes: Routes = [
         path: 'parametres',
         title: 'Paramètres',
         canActivate: [adminGuard],
+        loadComponent: () => import('./features/pages/settings.page').then((m) => m.SettingsPage)
+      },
+      {
+        path: 'administration-cabinet',
+        title: 'Administration cabinet',
+        canActivate: [permissionGuard('read-office-settings')],
+        data: { officeAdminOnly: true },
         loadComponent: () => import('./features/pages/settings.page').then((m) => m.SettingsPage)
       }
     ]

@@ -355,6 +355,13 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     { initialValue: this.consultationEditForm.controls.weightKg.value }
   );
 
+  readonly canEditPatient = computed(() => this.authService.hasPermission('create-patient-record'));
+  readonly canDeletePatient = computed(() => this.authService.hasPermission('delete-patient-record'));
+  readonly canCreateConsultation = computed(() => this.authService.hasPermission('create-consultation'));
+  readonly canInvoiceConsultation = computed(() => this.authService.hasPermission('invoice-consultation'));
+  readonly canCancelInvoice = computed(() => this.authService.hasPermission('cancel-invoice'));
+  readonly canManagePayments = computed(() => this.authService.hasPermission('mark-payment'));
+
   readonly sexIcon = computed(() => {
     const sex = this.patient()?.sex;
     if (sex === 'Femme') return 'fa-solid fa-venus';
@@ -751,15 +758,18 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     const consultationId = Number(consultationIdRaw);
     this.pendingFocusedConsultationId = Number.isInteger(consultationId) && consultationId > 0 ? consultationId : null;
 
-    this.topbar.set([
+    const topbarItems: Parameters<typeof this.topbar.set>[0] = [
       {
         id: 'back',
         label: 'Retour',
         icon: 'fa-arrow-left',
         btnClass: 'btn-outline-secondary',
         onClick: () => void this.router.navigate(['/patients'])
-      },
-      {
+      }
+    ];
+
+    if (this.canEditPatient()) {
+      topbarItems.push({
         id: 'save',
         label: 'Enregistrer',
         icon: 'fa-floppy-disk',
@@ -768,8 +778,10 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
         disabled: () => this.isSaving() || this.editForm.invalid,
         loading: () => this.isSaving(),
         onClick: () => void this.saveEdit()
-      }
-    ]);
+      });
+    }
+
+    this.topbar.set(topbarItems);
 
     void this.loadLocationPairs();
     void this.load(id);
@@ -909,6 +921,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   addAntecedent(): void {
+    if (!this.canEditPatient()) {
+      return;
+    }
     const dateDisplay = this.antecedentDateDisplay().trim();
     const category = this.antecedentCategory().trim();
     const description = this.antecedentDescription().trim();
@@ -949,6 +964,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   removeAntecedent(id: string): void {
+    if (!this.canEditPatient()) {
+      return;
+    }
     const next = this.antecedents().filter((item) => item.id !== id);
     this.syncMedicalHistoryFromAntecedents(next);
   }
@@ -1051,6 +1069,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
   async saveEdit(options?: { isAutoSave?: boolean }): Promise<void> {
     const isAutoSave = options?.isAutoSave === true;
+    if (!this.canEditPatient()) {
+      return;
+    }
     if (this.editForm.invalid || (isAutoSave ? this.isAutoSavingPatient() : this.isSaving())) {
       return;
     }
@@ -1241,6 +1262,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async saveConsultationDocumentMeta(documentRef: string, title: string, comment: string): Promise<void> {
+    if (!this.canEditPatient()) {
+      return;
+    }
     this.documentActionError.set('');
     this.documentSavingRefs.update((items) => ({ ...items, [documentRef]: true }));
 
@@ -1261,6 +1285,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async deleteConsultationDocument(documentRef: string): Promise<void> {
+    if (!this.canEditPatient()) {
+      return;
+    }
     this.documentActionError.set('');
     this.documentSavingRefs.update((items) => ({ ...items, [documentRef]: true }));
 
@@ -1714,6 +1741,10 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     const closeOnSuccess = options.closeOnSuccess ?? true;
     const isAutoSave = options.isAutoSave ?? false;
 
+    if (!this.canCreateConsultation()) {
+      return;
+    }
+
     if (this.consultationModalMode() === 'create') {
       if (isAutoSave) {
         await this.persistNewConsultationDraft();
@@ -1990,6 +2021,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async saveConsultationBillingDraft(): Promise<void> {
+    if (!this.canInvoiceConsultation()) {
+      return;
+    }
     const patient = this.patient();
     if (!patient || this.isGeneratingConsultationInvoice()) {
       return;
@@ -2162,6 +2196,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async cancelConsultationInvoice(): Promise<void> {
+    if (!this.canCancelInvoice()) {
+      return;
+    }
     const billing = this.activeConsultationBillingState();
     if (!billing) {
       return;
@@ -2280,6 +2317,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async saveConsultationPaymentEdit(): Promise<void> {
+    if (!this.canManagePayments()) {
+      return;
+    }
     const billing = this.activeConsultationBillingState();
     const paymentId = this.editingConsultationPaymentId();
     if (!billing || this.isSavingConsultationPayment()) {
@@ -2369,6 +2409,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async deleteConsultationPayment(paymentId: string): Promise<void> {
+    if (!this.canManagePayments()) {
+      return;
+    }
     const billing = this.activeConsultationBillingState();
     if (!billing || this.isSavingConsultationPayment()) {
       return;
@@ -3807,6 +3850,9 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
   private startPatientAutosave(): void {
     this.stopPatientAutosave();
+    if (!this.canEditPatient()) {
+      return;
+    }
     const intervalMs = this.getAutoSaveIntervalMs();
     if (intervalMs === null) {
       return;

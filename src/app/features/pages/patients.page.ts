@@ -19,6 +19,7 @@ export class PatientsPage {
   readonly search = signal('');
   readonly patients = signal<Patient[]>([]);
   readonly canExportPatients = computed(() => this.authService.hasPermission('export-patient-list'));
+  readonly canCreatePatient = computed(() => this.authService.hasPermission('create-patient-record'));
   readonly isExportModalOpen = signal(false);
   readonly isExportingPatients = signal(false);
   readonly exportPatientsError = signal('');

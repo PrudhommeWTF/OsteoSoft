@@ -148,6 +148,7 @@ export class BillingPage implements OnDestroy {
   readonly prototypePaymentNotes = signal('');
 
   readonly canExportBilling = computed(() => this.authService.hasPermission('export-billing'));
+  readonly canManageBilling = computed(() => this.authService.hasPermission('mark-payment'));
 
   readonly selectedCount = computed(() => this.selectedOperationIds().length);
 
@@ -650,6 +651,11 @@ export class BillingPage implements OnDestroy {
   }
 
   openConsultationSelectionModal(mode: 'bulk-update' | 'payment'): void {
+    if (!this.canManageBilling()) {
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      return;
+    }
+
     this.closeActionMenus();
     this.errorMessage.set('');
     this.successMessage.set('');
@@ -671,6 +677,11 @@ export class BillingPage implements OnDestroy {
   }
 
   openExpenseModal(): void {
+    if (!this.canManageBilling()) {
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      return;
+    }
+
     this.closeActionMenus();
     this.expenseOccurredAt.set(this.defaultNowDateTimeLocal());
     this.expenseTitle.set('');
@@ -687,6 +698,11 @@ export class BillingPage implements OnDestroy {
   }
 
   async saveExpense(): Promise<void> {
+    if (!this.canManageBilling()) {
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      return;
+    }
+
     const title = this.expenseTitle().trim();
     const amount = Number(this.expenseAmount());
     if (!title || !Number.isFinite(amount) || amount <= 0) {
@@ -719,6 +735,11 @@ export class BillingPage implements OnDestroy {
   }
 
   async openDepositModal(type: 'cheque' | 'especes'): Promise<void> {
+    if (!this.canManageBilling()) {
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      return;
+    }
+
     this.closeActionMenus();
     this.depositModalType.set(type);
     this.errorMessage.set('');
@@ -736,6 +757,11 @@ export class BillingPage implements OnDestroy {
   }
 
   async openDepositEditorModal(mode: 'create' | 'edit', deposit?: BillingDepositListItem): Promise<void> {
+    if (!this.canManageBilling()) {
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      return;
+    }
+
     const type = this.depositModalType();
     this.editingDepositId.set(mode === 'edit' ? (deposit?.id ?? null) : null);
 
@@ -905,6 +931,11 @@ export class BillingPage implements OnDestroy {
   }
 
   async saveDepositEditor(): Promise<void> {
+    if (!this.canManageBilling()) {
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      return;
+    }
+
     const isEditing = this.editingDepositId() != null;
     if (!isEditing && this.depositEditorCandidateIds().length === 0) {
       this.errorMessage.set('Selectionnez au moins un paiement a pointer.');
@@ -968,6 +999,11 @@ export class BillingPage implements OnDestroy {
   }
 
   async deleteDeposit(depositId: number): Promise<void> {
+    if (!this.canManageBilling()) {
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      return;
+    }
+
     this.isSaving.set(true);
     this.errorMessage.set('');
     this.successMessage.set('');
@@ -1138,6 +1174,11 @@ export class BillingPage implements OnDestroy {
   }
 
   async applyBulkUpdate(): Promise<void> {
+    if (!this.canManageBilling()) {
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      return;
+    }
+
     if (this.selectedOperationIds().length === 0) {
       this.errorMessage.set('Selectionnez au moins une operation.');
       return;
@@ -1165,6 +1206,11 @@ export class BillingPage implements OnDestroy {
   }
 
   async deleteSelectedOperations(): Promise<void> {
+    if (!this.canManageBilling()) {
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      return;
+    }
+
     if (this.selectedOperationIds().length === 0) {
       this.errorMessage.set('Selectionnez au moins une operation.');
       return;
@@ -1189,6 +1235,11 @@ export class BillingPage implements OnDestroy {
   }
 
   async applyPrototypeGroupedPayment(): Promise<void> {
+    if (!this.canManageBilling()) {
+      this.errorMessage.set('Vous ne disposez pas du droit de modifier la comptabilite.');
+      return;
+    }
+
     if (!this.canRunPrototypeGroupedPayment()) {
       this.errorMessage.set('Renseignez un paiement valide et selectionnez des consultations impayees.');
       return;

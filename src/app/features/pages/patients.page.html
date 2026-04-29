@@ -9,9 +9,11 @@
         <i class="fa-solid fa-file-export me-2"></i>Exporter
       </button>
     }
-    <a class="btn btn-primary" routerLink="/patients/nouveau">
-      <span class="fw-bold me-2">+</span>Nouveau patient
-    </a>
+    @if (canCreatePatient()) {
+      <a class="btn btn-primary" routerLink="/patients/nouveau">
+        <span class="fw-bold me-2">+</span>Nouveau patient
+      </a>
+    }
   </div>
 </section>
 
