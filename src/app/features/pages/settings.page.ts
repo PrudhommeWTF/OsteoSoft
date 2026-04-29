@@ -11,6 +11,7 @@ import {
   AgendaSettingsPayload,
   AuthUser,
   CreateOfficePayload,
+  DataCleanupKind,
   DataImportDataset,
   DataImportFormat,
   DataImportResult,
@@ -145,6 +146,14 @@ type RestoreStepStatus = 'pending' | 'active' | 'done' | 'error';
 type DraftSaveState = 'idle' | 'saving' | 'saved' | 'error';
 type UserModalTabId = 'application-rights' | 'cabinet-rights' | 'identity' | 'professional' | 'billing' | 'preferences';
 type DataManagementTabId = 'backup-restore' | 'rgpd' | 'import' | 'cleanup';
+type DataCleanupRow = {
+  key: string;
+  count: number;
+  value: string;
+  postalCode: string;
+  newValue: string;
+  newPostalCode: string;
+};
 type UserModalTabDefinition = {
   id: UserModalTabId;
   label: string;
@@ -390,6 +399,8 @@ export class SettingsPage implements OnDestroy {
   readonly isDownloadingBackup = signal(false);
   readonly isRestoringBackup = signal(false);
   readonly isResettingDemo = signal(false);
+  readonly isCleanupLoading = signal(false);
+  readonly isCleanupApplying = signal(false);
   readonly isSearchingRgpdPatients = signal(false);
   readonly isExportingRgpdPatient = signal(false);
   readonly isExportingDelegations = signal(false);
@@ -424,6 +435,9 @@ export class SettingsPage implements OnDestroy {
   readonly isDownloadingImportTemplate = signal(false);
   readonly isImportingDataFile = signal(false);
   readonly dataImportResult = signal<DataImportResult | null>(null);
+  readonly activeCleanupTabId = signal<DataCleanupKind>('cities');
+  readonly cleanupRows = signal<DataCleanupRow[]>([]);
+  readonly cleanupDoctorSuggestions = signal<string[]>([]);
   readonly restoreProgressStep = signal<RestoreProgressStep>('idle');
   readonly restoreProgressLabel = signal('');
   readonly restoreProgressPercent = signal(0);
@@ -703,6 +717,9 @@ export class SettingsPage implements OnDestroy {
   readonly canDeleteOffice = computed(() => this.isApplicationSuperAdmin() && this.auth.hasPermission('delete-office'));
   readonly canReorderOffices = computed(() => this.auth.hasPermission('reorder-offices'));
   readonly canResetDemoInstance = computed(() => this.isApplicationSuperAdmin());
+  readonly isSetupDemoInstance = computed(() =>
+    this.offices().some((office) => String(office.name ?? '').toLowerCase().includes('demo'))
+  );
 
   readonly visibleSections = computed(() => {
     if (this.isOfficeAdminOnlyMode()) {
@@ -820,6 +837,12 @@ export class SettingsPage implements OnDestroy {
     { id: 'rgpd', label: 'RGPD' },
     { id: 'import', label: 'Import de données' },
     { id: 'cleanup', label: 'Nettoyage des données' }
+  ];
+  readonly cleanupTabs: Array<{ id: DataCleanupKind; label: string }> = [
+    { id: 'cities', label: 'Villes' },
+    { id: 'banks', label: 'Banques' },
+    { id: 'referred-by', label: 'Envoyés par' },
+    { id: 'primary-doctors', label: 'Médecins traitants' }
   ];
 
   readonly activeSection = computed(
@@ -1037,6 +1060,131 @@ export class SettingsPage implements OnDestroy {
 
   selectDataManagementTab(tabId: DataManagementTabId): void {
     this.activeDataManagementTabId.set(tabId);
+    if (tabId === 'cleanup') {
+      void this.loadCleanupRows();
+    }
+  }
+
+  selectCleanupTab(tabId: DataCleanupKind): void {
+    this.activeCleanupTabId.set(tabId);
+    this.cleanupDoctorSuggestions.set([]);
+    this.dataManagementError.set('');
+    this.dataManagementSuccess.set('');
+    void this.loadCleanupRows();
+  }
+
+  updateCleanupValue(rowKey: string, value: string): void {
+    this.cleanupRows.update((rows) => rows.map((row) => (row.key === rowKey ? { ...row, newValue: value } : row)));
+  }
+
+  async updateCleanupDoctorValue(rowKey: string, value: string): Promise<void> {
+    this.updateCleanupValue(rowKey, value);
+
+    if (this.activeCleanupTabId() !== 'primary-doctors') {
+      this.cleanupDoctorSuggestions.set([]);
+      return;
+    }
+
+    const query = value.trim();
+    if (query.length < 2) {
+      this.cleanupDoctorSuggestions.set([]);
+      return;
+    }
+
+    try {
+      const people = await this.api.searchPeopleContacts(query);
+      const values = Array.from(
+        new Set(
+          people
+            .map((person) => String(person.fullName ?? '').trim())
+            .filter((item) => item.length > 0)
+        )
+      );
+      this.cleanupDoctorSuggestions.set(values.slice(0, 12));
+    } catch {
+      this.cleanupDoctorSuggestions.set([]);
+    }
+  }
+
+  updateCleanupPostalCode(rowKey: string, value: string): void {
+    this.cleanupRows.update((rows) => rows.map((row) => (row.key === rowKey ? { ...row, newPostalCode: value } : row)));
+  }
+
+  applyCleanupUppercase(): void {
+    this.cleanupRows.update((rows) =>
+      rows.map((row) => ({
+        ...row,
+        newValue: row.newValue.toUpperCase(),
+        newPostalCode: row.newPostalCode.toUpperCase()
+      }))
+    );
+  }
+
+  applyCleanupLowercase(): void {
+    this.cleanupRows.update((rows) =>
+      rows.map((row) => ({
+        ...row,
+        newValue: row.newValue.toLowerCase(),
+        newPostalCode: row.newPostalCode.toLowerCase()
+      }))
+    );
+  }
+
+  applyCleanupTitlecase(): void {
+    this.cleanupRows.update((rows) =>
+      rows.map((row) => ({
+        ...row,
+        newValue: this.toTitleCase(row.newValue),
+        newPostalCode: this.toTitleCase(row.newPostalCode)
+      }))
+    );
+  }
+
+  async saveCleanupChanges(): Promise<void> {
+    if (this.isCleanupApplying()) {
+      return;
+    }
+
+    const kind = this.activeCleanupTabId();
+    const rows = this.cleanupRows();
+    const changes = kind === 'cities'
+      ? rows
+        .filter(
+          (row) =>
+            row.newValue.trim().length > 0
+            && (row.newValue.trim() !== row.value || row.newPostalCode.trim() !== row.postalCode)
+        )
+        .map((row) => ({
+          sourceValue: row.value,
+          replacementValue: row.newValue.trim(),
+          sourcePostalCode: row.postalCode,
+          replacementPostalCode: row.newPostalCode.trim() || row.postalCode
+        }))
+      : rows
+        .filter((row) => row.newValue.trim().length > 0 && row.newValue.trim() !== row.value)
+        .map((row) => ({
+          sourceValue: row.value,
+          replacementValue: row.newValue.trim()
+        }));
+
+    if (changes.length === 0) {
+      this.dataManagementError.set('Aucune modification à enregistrer.');
+      return;
+    }
+
+    this.dataManagementError.set('');
+    this.dataManagementSuccess.set('');
+    this.isCleanupApplying.set(true);
+
+    try {
+      const result = await this.api.applyDataCleanup({ kind, changes });
+      this.dataManagementSuccess.set(`Nettoyage enregistré: ${result.updatedCount} élément(s) mis à jour.`);
+      await this.loadCleanupRows();
+    } catch {
+      this.dataManagementError.set('Impossible d\'enregistrer les corrections pour le moment.');
+    } finally {
+      this.isCleanupApplying.set(false);
+    }
   }
 
   onAuditLogLimitChange(value: string): void {
@@ -2012,6 +2160,40 @@ export class SettingsPage implements OnDestroy {
     } finally {
       this.isResettingDemo.set(false);
     }
+  }
+
+  private async loadCleanupRows(): Promise<void> {
+    if (this.isCleanupLoading()) {
+      return;
+    }
+
+    this.isCleanupLoading.set(true);
+    this.dataManagementError.set('');
+
+    try {
+      const kind = this.activeCleanupTabId();
+      const payload = await this.api.getDataCleanupItems(kind);
+      const rows: DataCleanupRow[] = payload.items.map((item) => ({
+        key: item.key,
+        count: item.count,
+        value: item.value,
+        postalCode: String(item.postalCode ?? '').trim(),
+        newValue: item.value,
+        newPostalCode: String(item.postalCode ?? '').trim()
+      }));
+      this.cleanupRows.set(rows);
+    } catch {
+      this.cleanupRows.set([]);
+      this.dataManagementError.set('Impossible de charger les données à corriger.');
+    } finally {
+      this.isCleanupLoading.set(false);
+    }
+  }
+
+  private toTitleCase(value: string): string {
+    return String(value ?? '')
+      .toLowerCase()
+      .replace(/\b\p{L}/gu, (char) => char.toUpperCase());
   }
 
   private async readBackupPayloadFromFile(file: File): Promise<unknown> {

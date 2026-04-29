@@ -1159,6 +1159,37 @@ export type DataImportResult = {
   errors: DataImportErrorItem[];
 };
 
+export type DataCleanupKind = 'cities' | 'banks' | 'referred-by' | 'primary-doctors';
+
+export type DataCleanupItem = {
+  key: string;
+  count: number;
+  value: string;
+  postalCode?: string;
+};
+
+export type DataCleanupItemsPayload = {
+  kind: DataCleanupKind;
+  items: DataCleanupItem[];
+};
+
+export type DataCleanupChangePayload = {
+  sourceValue: string;
+  replacementValue: string;
+  sourcePostalCode?: string;
+  replacementPostalCode?: string;
+};
+
+export type DataCleanupApplyPayload = {
+  kind: DataCleanupKind;
+  changes: DataCleanupChangePayload[];
+};
+
+export type DataCleanupApplyResult = {
+  kind: DataCleanupKind;
+  updatedCount: number;
+};
+
 export type UpdatePatientPayload = {
   lastName?: string;
   firstName?: string;

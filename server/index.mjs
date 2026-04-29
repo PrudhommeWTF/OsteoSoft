@@ -7750,6 +7750,228 @@ function normalizeImportedManualPreference(rawValue) {
   return 'Non renseigne';
 }
 
+const DATA_CLEANUP_KINDS = new Set(['cities', 'banks', 'referred-by', 'primary-doctors']);
+
+function normalizeCleanupKey(value) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function titleCaseCleanupValue(value) {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/\b\p{L}/gu, (char) => char.toUpperCase());
+}
+
+function getDataCleanupItems(kind) {
+  const normalizedKind = String(kind ?? '').trim();
+  if (!DATA_CLEANUP_KINDS.has(normalizedKind)) {
+    return [];
+  }
+
+  if (normalizedKind === 'cities') {
+    const rows = db.prepare('SELECT cipher_medical_notes FROM patients WHERE is_deleted = 0').all();
+    const grouped = new Map();
+
+    for (const row of rows) {
+      const notes = parsePatientNotesFromCipher(row.cipher_medical_notes);
+      const city = String(notes.city ?? '').trim();
+      const postalCode = String(notes.postalCode ?? '').trim();
+      if (!city && !postalCode) {
+        continue;
+      }
+
+      const key = `${normalizeCleanupKey(city)}|${normalizeCleanupKey(postalCode)}`;
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        grouped.set(key, {
+          key,
+          count: 1,
+          value: city,
+          postalCode
+        });
+      }
+    }
+
+    return Array.from(grouped.values())
+      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, 'fr', { sensitivity: 'base' }));
+  }
+
+  if (normalizedKind === 'banks') {
+    const grouped = new Map();
+    const sources = [
+      db.prepare('SELECT bank_name AS value FROM users').all(),
+      db.prepare('SELECT bank_name AS value FROM invoice_payments').all(),
+      db.prepare('SELECT bank_name AS value FROM accounting_deposits').all()
+    ];
+
+    for (const sourceRows of sources) {
+      for (const row of sourceRows) {
+        const value = String(row.value ?? '').trim();
+        if (!value) {
+          continue;
+        }
+        const key = normalizeCleanupKey(value);
+        const existing = grouped.get(key);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          grouped.set(key, { key, count: 1, value });
+        }
+      }
+    }
+
+    return Array.from(grouped.values())
+      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, 'fr', { sensitivity: 'base' }));
+  }
+
+  const notesRows = db.prepare('SELECT cipher_medical_notes FROM patients WHERE is_deleted = 0').all();
+  const grouped = new Map();
+  const noteKey = normalizedKind === 'primary-doctors' ? 'primaryDoctor' : 'referredBy';
+
+  for (const row of notesRows) {
+    const notes = parsePatientNotesFromCipher(row.cipher_medical_notes);
+    const value = String(notes[noteKey] ?? '').trim();
+    if (!value) {
+      continue;
+    }
+    const key = normalizeCleanupKey(value);
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      grouped.set(key, { key, count: 1, value });
+    }
+  }
+
+  return Array.from(grouped.values())
+    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, 'fr', { sensitivity: 'base' }));
+}
+
+function applyDataCleanupChanges(kind, rawChanges, actorUserId = null) {
+  const normalizedKind = String(kind ?? '').trim();
+  if (!DATA_CLEANUP_KINDS.has(normalizedKind) || !Array.isArray(rawChanges)) {
+    return 0;
+  }
+
+  const changes = rawChanges
+    .map((item) => ({
+      sourceValue: String(item?.sourceValue ?? '').trim(),
+      replacementValue: String(item?.replacementValue ?? '').trim(),
+      sourcePostalCode: String(item?.sourcePostalCode ?? '').trim(),
+      replacementPostalCode: String(item?.replacementPostalCode ?? '').trim()
+    }))
+    .filter((item) => item.sourceValue.length > 0 && item.replacementValue.length > 0);
+
+  if (changes.length === 0) {
+    return 0;
+  }
+
+  let updatedCount = 0;
+
+  if (normalizedKind === 'banks') {
+    const updateUserBanks = db.prepare('UPDATE users SET bank_name = ? WHERE lower(trim(bank_name)) = lower(trim(?))');
+    const updateInvoiceBanks = db.prepare('UPDATE invoice_payments SET bank_name = ? WHERE lower(trim(bank_name)) = lower(trim(?))');
+    const updateDepositBanks = db.prepare('UPDATE accounting_deposits SET bank_name = ? WHERE lower(trim(bank_name)) = lower(trim(?))');
+
+    for (const change of changes) {
+      updatedCount += Number(updateUserBanks.run(change.replacementValue, change.sourceValue).changes ?? 0);
+      updatedCount += Number(updateInvoiceBanks.run(change.replacementValue, change.sourceValue).changes ?? 0);
+      updatedCount += Number(updateDepositBanks.run(change.replacementValue, change.sourceValue).changes ?? 0);
+    }
+  } else {
+    const noteKey = normalizedKind === 'cities'
+      ? 'city'
+      : (normalizedKind === 'primary-doctors' ? 'primaryDoctor' : 'referredBy');
+
+    const rows = db.prepare('SELECT id, cipher_medical_notes FROM patients WHERE is_deleted = 0').all();
+    const updateNotes = db.prepare(
+      `UPDATE patients
+       SET cipher_medical_notes = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    );
+
+    for (const row of rows) {
+      const notes = parsePatientNotesFromCipher(row.cipher_medical_notes);
+      const currentValue = String(notes[noteKey] ?? '').trim();
+      if (!currentValue) {
+        continue;
+      }
+
+      let matched = null;
+      for (const change of changes) {
+        if (normalizeCleanupKey(currentValue) !== normalizeCleanupKey(change.sourceValue)) {
+          continue;
+        }
+
+        if (normalizedKind === 'cities') {
+          const currentPostalCode = String(notes.postalCode ?? '').trim();
+          if (normalizeCleanupKey(currentPostalCode) !== normalizeCleanupKey(change.sourcePostalCode)) {
+            continue;
+          }
+        }
+
+        matched = change;
+        break;
+      }
+
+      if (!matched) {
+        continue;
+      }
+
+      const nextNotes = {
+        ...notes,
+        [noteKey]: matched.replacementValue
+      };
+
+      if (normalizedKind === 'cities' && matched.replacementPostalCode) {
+        nextNotes.postalCode = matched.replacementPostalCode;
+      }
+
+      updateNotes.run(encryptSensitiveField(JSON.stringify(nextNotes)), Number(row.id));
+      updatedCount += 1;
+    }
+  }
+
+  if (updatedCount > 0) {
+    const normalizedActorUserId = Number(actorUserId);
+    const auditUserId = Number.isInteger(normalizedActorUserId) && normalizedActorUserId > 0
+      ? normalizedActorUserId
+      : null;
+
+    writeAuditLog(auditUserId, 'UPDATE', 'data-cleanup', normalizedKind, {
+      kind: normalizedKind,
+      changedItems: changes.length,
+      updatedCount
+    });
+  }
+
+  return updatedCount;
+}
+
+app.get('/api/data-management/cleanup', authMiddleware, adminOnlyMiddleware, (req, res) => {
+  const kind = String(req.query.kind ?? '').trim();
+  if (!DATA_CLEANUP_KINDS.has(kind)) {
+    return res.status(400).json({ message: 'Type de nettoyage invalide' });
+  }
+
+  const items = getDataCleanupItems(kind);
+  return res.json({ kind, items });
+});
+
+app.post('/api/data-management/cleanup/apply', authMiddleware, adminOnlyMiddleware, (req, res) => {
+  const kind = String(req.body?.kind ?? '').trim();
+  const changes = Array.isArray(req.body?.changes) ? req.body.changes : [];
+
+  if (!DATA_CLEANUP_KINDS.has(kind)) {
+    return res.status(400).json({ message: 'Type de nettoyage invalide' });
+  }
+
+  const updatedCount = applyDataCleanupChanges(kind, changes, req.user.sub);
+  return res.json({ kind, updatedCount });
+});
+
 app.get('/api/data-management/import-template', authMiddleware, adminOnlyMiddleware, (req, res) => {
   const format = String(req.query.format ?? 'csv').trim().toLowerCase();
   const dataset = String(req.query.dataset ?? 'patients').trim().toLowerCase();

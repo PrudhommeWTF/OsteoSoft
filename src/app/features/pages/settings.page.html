@@ -366,13 +366,153 @@
             <div class="col-12">
               <article class="settings-card">
                 <p class="settings-card-status mb-2">Nettoyage des données</p>
-                <h3 class="settings-card-title">Fonctionnalités à venir</h3>
-                <p class="settings-card-copy mb-0">
-                  Cette section accueillera prochainement des outils de correction ciblée, notamment pour les erreurs de typographie sur des attributs métier précis.
-                </p>
+                <h3 class="settings-card-title">Correction groupée des fautes et variations</h3>
+
+                <ul class="nav nav-pills flex-wrap gap-2 mb-3" role="tablist" aria-label="Types de nettoyage">
+                  @for (tab of cleanupTabs; track tab.id) {
+                    <li class="nav-item" role="presentation">
+                      <button
+                        type="button"
+                        class="nav-link"
+                        [class.active]="activeCleanupTabId() === tab.id"
+                        [attr.aria-selected]="activeCleanupTabId() === tab.id"
+                        [disabled]="isCleanupLoading()"
+                        (click)="selectCleanupTab(tab.id)"
+                      >
+                        {{ tab.label }}
+                      </button>
+                    </li>
+                  }
+                </ul>
+
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                  <button type="button" class="btn btn-primary" [disabled]="isCleanupLoading() || isCleanupApplying()" (click)="saveCleanupChanges()" title="Enregistrer les corrections" bsTooltip>
+                    @if (isCleanupApplying()) {
+                      <i class="fa-solid fa-circle-notch fa-spin me-1"></i>Enregistrement...
+                    } @else {
+                      <i class="fa-solid fa-floppy-disk me-1"></i>Enregistrer
+                    }
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary" [disabled]="isCleanupLoading() || isCleanupApplying()" (click)="applyCleanupUppercase()" title="Mettre les nouvelles valeurs en majuscules" bsTooltip>
+                    Tout mettre en majuscules
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary" [disabled]="isCleanupLoading() || isCleanupApplying()" (click)="applyCleanupLowercase()" title="Mettre les nouvelles valeurs en minuscules" bsTooltip>
+                    Tout mettre en minuscules
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary" [disabled]="isCleanupLoading() || isCleanupApplying()" (click)="applyCleanupTitlecase()" title="Mettre les premières lettres en majuscules" bsTooltip>
+                    Premières lettres en majuscules
+                  </button>
+                </div>
+
+                @if (isCleanupLoading()) {
+                  <p class="small text-secondary mb-0"><i class="fa-solid fa-circle-notch fa-spin me-1"></i>Chargement des données à corriger...</p>
+                } @else if (cleanupRows().length === 0) {
+                  <p class="small text-secondary mb-0">Aucune donnée à corriger dans cette catégorie.</p>
+                } @else {
+                  <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                      <thead>
+                        @if (activeCleanupTabId() === 'cities') {
+                          <tr>
+                            <th scope="col">Nombre</th>
+                            <th scope="col">Ville</th>
+                            <th scope="col">Code postal</th>
+                            <th scope="col">Nouvelle ville</th>
+                            <th scope="col">Nouveau code postal</th>
+                          </tr>
+                        } @else if (activeCleanupTabId() === 'banks') {
+                          <tr>
+                            <th scope="col">Nombre</th>
+                            <th scope="col">Banque</th>
+                            <th scope="col">Nouvelle banque</th>
+                          </tr>
+                        } @else if (activeCleanupTabId() === 'referred-by') {
+                          <tr>
+                            <th scope="col">Nombre</th>
+                            <th scope="col">Envoyé par</th>
+                            <th scope="col">Nouvelle valeur &quot;Envoyé par&quot;</th>
+                          </tr>
+                        } @else {
+                          <tr>
+                            <th scope="col">Nombre</th>
+                            <th scope="col">Médecin traitant</th>
+                            <th scope="col">Nouvelle valeur &quot;Médecin traitant&quot;</th>
+                          </tr>
+                        }
+                      </thead>
+                      <tbody>
+                        @for (row of cleanupRows(); track row.key) {
+                          @if (activeCleanupTabId() === 'cities') {
+                            <tr>
+                              <td>{{ row.count }}</td>
+                              <td>{{ row.value }}</td>
+                              <td>{{ row.postalCode }}</td>
+                              <td>
+                                <input
+                                  type="text"
+                                  class="form-control form-control-sm"
+                                  [value]="row.newValue"
+                                  [disabled]="isCleanupApplying()"
+                                  (input)="updateCleanupValue(row.key, $any($event.target).value || '')"
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="text"
+                                  class="form-control form-control-sm"
+                                  [value]="row.newPostalCode"
+                                  [disabled]="isCleanupApplying()"
+                                  (input)="updateCleanupPostalCode(row.key, $any($event.target).value || '')"
+                                />
+                              </td>
+                            </tr>
+                          } @else if (activeCleanupTabId() === 'primary-doctors') {
+                            <tr>
+                              <td>{{ row.count }}</td>
+                              <td>{{ row.value }}</td>
+                              <td>
+                                <input
+                                  type="text"
+                                  class="form-control form-control-sm"
+                                  list="cleanup-primary-doctors-list"
+                                  [value]="row.newValue"
+                                  [disabled]="isCleanupApplying()"
+                                  (input)="updateCleanupDoctorValue(row.key, $any($event.target).value || '')"
+                                />
+                              </td>
+                            </tr>
+                          } @else {
+                            <tr>
+                              <td>{{ row.count }}</td>
+                              <td>{{ row.value }}</td>
+                              <td>
+                                <input
+                                  type="text"
+                                  class="form-control form-control-sm"
+                                  [value]="row.newValue"
+                                  [disabled]="isCleanupApplying()"
+                                  (input)="updateCleanupValue(row.key, $any($event.target).value || '')"
+                                />
+                              </td>
+                            </tr>
+                          }
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+
+                  @if (activeCleanupTabId() === 'primary-doctors' && cleanupDoctorSuggestions().length > 0) {
+                    <datalist id="cleanup-primary-doctors-list">
+                      @for (suggestion of cleanupDoctorSuggestions(); track suggestion) {
+                        <option [value]="suggestion"></option>
+                      }
+                    </datalist>
+                  }
+                }
               </article>
             </div>
 
+            @if (isSetupDemoInstance()) {
             <div class="col-12">
               <article class="settings-card border border-warning-subtle bg-warning-subtle bg-opacity-10">
                 <p class="settings-card-status mb-2">Démo interne</p>
@@ -395,6 +535,7 @@
                 }
               </article>
             </div>
+            }
           </section>
         }
 

@@ -48,6 +48,10 @@ import {
   DashboardPayload,
   DataImportDataset,
   DataImportFormat,
+  DataCleanupApplyPayload,
+  DataCleanupApplyResult,
+  DataCleanupItemsPayload,
+  DataCleanupKind,
   DataImportPayload,
   DataImportResult,
   GeneralSettingsPayload,
@@ -124,6 +128,19 @@ export class ApiService {
 
   async resetDemoInstance(): Promise<void> {
     await firstValueFrom(this.http.post<{ officeId: number }>(`${this.baseUrl}/data-management/reset-demo`, {}));
+  }
+
+  async getDataCleanupItems(kind: DataCleanupKind): Promise<DataCleanupItemsPayload> {
+    const params = new HttpParams().set('kind', kind);
+    return firstValueFrom(
+      this.http.get<DataCleanupItemsPayload>(`${this.baseUrl}/data-management/cleanup`, { params })
+    );
+  }
+
+  async applyDataCleanup(payload: DataCleanupApplyPayload): Promise<DataCleanupApplyResult> {
+    return firstValueFrom(
+      this.http.post<DataCleanupApplyResult>(`${this.baseUrl}/data-management/cleanup/apply`, payload)
+    );
   }
 
   async me(): Promise<AuthUser> {
