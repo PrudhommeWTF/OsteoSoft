@@ -14,14 +14,14 @@
       <div class="step-circle">
         @if (currentStep() > 1) { <i class="fa-solid fa-check"></i> } @else { 1 }
       </div>
-      <span class="step-label">Identite</span>
+      <span class="step-label">Identité</span>
     </div>
     <div class="progress-connector" [class.done]="currentStep() > 1"></div>
     <div class="progress-step" [class.active]="currentStep() >= 2" [class.done]="currentStep() > 2">
       <div class="step-circle">
         @if (currentStep() > 2) { <i class="fa-solid fa-check"></i> } @else { 2 }
       </div>
-      <span class="step-label">Coordonnees</span>
+      <span class="step-label">Coordonnées</span>
     </div>
     <div class="progress-connector" [class.done]="currentStep() > 2"></div>
     <div class="progress-step" [class.active]="currentStep() >= 3" [class.done]="currentStep() > 3">
@@ -35,7 +35,7 @@
       <div class="step-circle">
         @if (currentStep() > 4) { <i class="fa-solid fa-check"></i> } @else { 4 }
       </div>
-      <span class="step-label">Antecedents</span>
+      <span class="step-label">Antécédents</span>
     </div>
     <div class="progress-connector" [class.done]="currentStep() > 4"></div>
     <div class="progress-step" [class.active]="currentStep() >= 5">
@@ -49,8 +49,8 @@
     <!-- ── ETAPE 1 : Identite ────────────────────────────── -->
     <div [hidden]="currentStep() !== 1" class="wizard-card">
       <div class="wizard-card-header">
-        <h2>Identite du patient</h2>
-        <p class="step-subtitle mb-0">Le nom, le prenom et la date de naissance sont obligatoires.</p>
+        <h2>Identité du patient</h2>
+        <p class="step-subtitle mb-0">Le nom, le prénom et la date de naissance sont obligatoires.</p>
       </div>
       <div class="wizard-card-body">
 
@@ -60,7 +60,7 @@
           <div class="sex-cards">
             <button type="button" class="sex-card" [class.active-indeterminate]="sexValue() === 'Non renseigne'" title="Genre non renseigné" bsTooltip (click)="setSex('Non renseigne')">
               <i class="fa-solid fa-circle-question"></i>
-              <span>Indetermine</span>
+              <span>Indéterminé</span>
             </button>
             <button type="button" class="sex-card" [class.active-femme]="sexValue() === 'Femme'" title="Sélectionner Femme" bsTooltip (click)="setSex('Femme')">
               <i class="fa-solid fa-venus"></i>
@@ -85,12 +85,12 @@
             }
           </div>
           <div class="col-6">
-            <label class="form-label fw-semibold" for="firstName">Prenom <span class="text-danger">*</span></label>
+            <label class="form-label fw-semibold" for="firstName">Prénom <span class="text-danger">*</span></label>
             <input id="firstName" class="form-control" type="text" formControlName="firstName"
                    (input)="onFirstNameInput($event)"
                    [class.is-invalid]="form.controls.firstName.touched && form.controls.firstName.invalid" />
             @if (form.controls.firstName.touched && form.controls.firstName.errors?.['required']) {
-              <div class="invalid-feedback">Le prenom est obligatoire.</div>
+              <div class="invalid-feedback">Le prénom est obligatoire.</div>
             }
           </div>
         </div>
@@ -117,7 +117,7 @@
 
         <div class="mb-3">
           <div class="d-flex justify-content-between align-items-center mb-2">
-            <label class="form-label fw-semibold mb-0">Liens de parente avec d'autres patients</label>
+            <label class="form-label fw-semibold mb-0">Liens de parenté avec d'autres patients</label>
             <button type="button" class="btn btn-outline-primary btn-sm" title="Lier un patient existant" bsTooltip (click)="toggleRelatedPicker()">
               <i class="fa-solid fa-user-plus me-1"></i>
               {{ showRelatedPicker() ? 'Fermer' : 'Ajouter' }}
@@ -146,14 +146,14 @@
                 id="relatedPatientSearch"
                 type="text"
                 class="form-control"
-                placeholder="Tapez au moins 2 caracteres..."
+                placeholder="Tapez au moins 2 caractères..."
                 [value]="relatedSearch()"
                 (input)="onRelatedSearchChange($any($event.target).value)" />
 
               @if (isSearchingRelated()) {
                 <div class="small text-muted mt-2">Recherche en cours...</div>
               } @else if (relatedSearch().trim().length >= 2 && relatedSearchResults().length === 0) {
-                <div class="small text-muted mt-2">Aucun patient trouve.</div>
+                <div class="small text-muted mt-2">Aucun patient trouvé.</div>
               }
 
               @if (relatedSearchResults().length > 0) {
@@ -179,10 +179,10 @@
         <!-- Remarques generales -->
         <div class="mb-1">
           <label class="form-label fw-semibold" for="generalRemarks">
-            Remarques generales <span class="text-muted fw-normal">(optionnel)</span>
+            Remarques générales <span class="text-muted fw-normal">(optionnel)</span>
           </label>
           <textarea id="generalRemarks" rows="4" class="form-control" formControlName="generalRemarks"
-                    placeholder="Informations complementaires a noter..."></textarea>
+                    placeholder="Informations complémentaires à noter..."></textarea>
         </div>
       </div>
 
@@ -197,16 +197,16 @@
     <!-- ── ETAPE 2 : Coordonnees ──────────────────────────── -->
     <div [hidden]="currentStep() !== 2" class="wizard-card">
       <div class="wizard-card-header">
-        <h2>Coordonnees <span class="badge bg-secondary fw-normal fs-6 ms-2">Optionnel</span></h2>
-        <p class="step-subtitle mb-0">Ces informations peuvent etre ajoutees ou modifiees plus tard.</p>
+        <h2>Coordonnées <span class="badge bg-secondary fw-normal fs-6 ms-2">Optionnel</span></h2>
+        <p class="step-subtitle mb-0">Ces informations peuvent être ajoutées ou modifiées plus tard.</p>
       </div>
       <div class="wizard-card-body">
 
         @if (relatedContactCards().length > 0) {
           <div class="related-contact-prefill mb-3">
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
-              <label class="form-label fw-semibold mb-0">Coordonnees disponibles via les patients lies</label>
-              <span class="small text-muted">Cliquez sur une carte pour utiliser ses coordonnees</span>
+              <label class="form-label fw-semibold mb-0">Coordonnées disponibles via les patients liés</label>
+              <span class="small text-muted">Cliquez sur une carte pour utiliser ses coordonnées</span>
             </div>
 
             <div class="row g-2">
@@ -241,11 +241,11 @@
 
         <div class="row g-3 mb-3">
           <div class="col-6">
-            <label class="form-label" for="mobilePhone">Telephone portable</label>
+            <label class="form-label" for="mobilePhone">Téléphone portable</label>
             <input id="mobilePhone" class="form-control" type="text" formControlName="mobilePhone" placeholder="06 xx xx xx xx" />
           </div>
           <div class="col-6">
-            <label class="form-label" for="landlinePhone">Telephone fixe</label>
+            <label class="form-label" for="landlinePhone">Téléphone fixe</label>
             <input id="landlinePhone" class="form-control" type="text" formControlName="landlinePhone" placeholder="01 xx xx xx xx" />
           </div>
         </div>
@@ -268,7 +268,7 @@
         <div class="mb-3">
           <label class="form-label" for="address1">Adresse</label>
           <input id="address1" class="form-control mb-2" type="text" formControlName="address1" placeholder="Numero et rue" />
-          <input id="address2" class="form-control" type="text" formControlName="address2" placeholder="Complement (batiment, etage...)" />
+          <input id="address2" class="form-control" type="text" formControlName="address2" placeholder="Complément (bâtiment, étage...)" />
         </div>
 
         <div class="row g-3 mb-3">
@@ -337,7 +337,7 @@
           <i class="fa-solid fa-arrow-left me-1"></i> Retour
         </button>
         <div class="d-flex gap-2">
-          <button class="btn btn-outline-primary" type="button" (click)="goNext()" title="Passer à l'étape suivante" bsTooltip>Passer cette etape</button>
+          <button class="btn btn-outline-primary" type="button" (click)="goNext()" title="Passer à l'étape suivante" bsTooltip>Passer cette étape</button>
           <button class="btn btn-primary px-4" type="button" (click)="goNext()" title="Passer à l'étape suivante" bsTooltip>
             Suivant <i class="fa-solid fa-arrow-right ms-1"></i>
           </button>
@@ -369,11 +369,11 @@
             <input id="childrenCount" class="form-control" type="number" min="0" max="50" formControlName="childrenCount" />
           </div>
           <div class="col-12 col-lg-6">
-            <label class="form-label" for="occupationOrSchool">Profession / Scolarite</label>
+            <label class="form-label" for="occupationOrSchool">Profession / Scolarité</label>
             <input id="occupationOrSchool" class="form-control" type="text" formControlName="occupationOrSchool" />
           </div>
           <div class="col-12 col-lg-6">
-            <label class="form-label" for="manualPreference">Preference manuelle</label>
+            <label class="form-label" for="manualPreference">Préférence manuelle</label>
             <select id="manualPreference" class="form-select" formControlName="manualPreference">
               <option value="Non renseigne">Non renseigne</option>
               <option value="Droitier">Droitier</option>
@@ -388,7 +388,7 @@
         </div>
 
         <div class="mb-3 position-relative">
-          <label class="form-label" for="primaryDoctorSearch">Medecin traitant</label>
+          <label class="form-label" for="primaryDoctorSearch">Médecin traitant</label>
           <input
             id="primaryDoctorSearch"
             type="search"
@@ -428,7 +428,7 @@
 
         <div class="row g-3 mb-3">
           <div class="col-12 col-lg-6">
-            <label class="form-label" for="socialSecurityNumber">Numero de securite sociale</label>
+            <label class="form-label" for="socialSecurityNumber">Numéro de sécurité sociale</label>
             <input
               id="socialSecurityNumber"
               class="form-control"
@@ -437,17 +437,17 @@
               inputmode="numeric"
               formControlName="socialSecurityNumber"
               placeholder="1 85 01 99 999 999 99" />
-            <div class="form-text">Stocke de maniere chiffree dans la fiche patient.</div>
+            <div class="form-text">Stocké de manière chiffrée dans la fiche patient.</div>
           </div>
 
           <div class="col-12 col-lg-6 position-relative">
-            <label class="form-label" for="referredBy">Envoye par</label>
+            <label class="form-label" for="referredBy">Envoyé par</label>
             <input
               id="referredBy"
               class="form-control"
               type="text"
               formControlName="referredBy"
-              placeholder="Ex: Medecin traitant, bouche-a-oreille..."
+              placeholder="Ex: Médecin traitant, bouche-à-oreille..."
               (input)="onReferredByInput($any($event.target).value)"
               (blur)="referredBySuggestions.set([])" />
 
@@ -490,7 +490,7 @@
           <i class="fa-solid fa-arrow-left me-1"></i> Retour
         </button>
         <div class="d-flex gap-2">
-          <button class="btn btn-outline-primary" type="button" (click)="goNext()" title="Passer à l'étape suivante" bsTooltip>Passer cette etape</button>
+          <button class="btn btn-outline-primary" type="button" (click)="goNext()" title="Passer à l'étape suivante" bsTooltip>Passer cette étape</button>
           <button class="btn btn-primary px-4" type="button" (click)="goNext()" title="Passer à l'étape suivante" bsTooltip>
             Suivant <i class="fa-solid fa-arrow-right ms-1"></i>
           </button>
@@ -501,7 +501,7 @@
     <!-- ── ETAPE 4 : Antecedents ─────────────────────────── -->
     <div [hidden]="currentStep() !== 4" class="wizard-card">
       <div class="wizard-card-header">
-        <h2>Antecedents <span class="badge bg-secondary fw-normal fs-6 ms-2">Optionnel</span></h2>
+        <h2>Antécédents <span class="badge bg-secondary fw-normal fs-6 ms-2">Optionnel</span></h2>
         <p class="step-subtitle mb-0">Renseignez l'historique clinique du patient.</p>
       </div>
       <div class="wizard-card-body">
@@ -826,7 +826,7 @@
                   (change)="setConsultationProfile($any($event.target).value)"
                   [disabled]="consultationProfileOptions().length === 0">
                   @if (consultationProfileOptions().length === 0) {
-                    <option value="">Aucun profil configure pour ce cabinet</option>
+                    <option value="">Aucun profil configuré pour ce cabinet</option>
                   } @else {
                     @for (option of consultationProfileOptions(); track option) {
                       <option [value]="option">{{ option }}</option>
@@ -881,9 +881,9 @@
               @if (!consultationProfile()) {
                 <div class="alert alert-light border mb-0">Selectionnez d'abord un profil pour afficher les motifs.</div>
               } @else if (consultationProfileReasons().length === 0) {
-                <div class="alert alert-light border mb-0">Aucun motif configure pour ce profil.</div>
+                <div class="alert alert-light border mb-0">Aucun motif configuré pour ce profil.</div>
               } @else {
-                <div class="reason-list d-flex flex-column gap-1" role="list" aria-label="Motifs disponibles pour le profil selectionne">
+                <div class="reason-list d-flex flex-column gap-1" role="list" aria-label="Motifs disponibles pour le profil sélectionné">
                   @for (item of consultationReasonItems(); track item.reason) {
                     <div class="reason-item" [class.active]="item.checked">
                       <div class="reason-item-check">
@@ -922,7 +922,7 @@
                 <div class="reason-selection mt-3">
                   <small class="text-muted fw-semibold d-block mb-2">Motifs selectionnes ({{ consultationSelectedReasonItems().length }})</small>
                   @if (consultationSelectedReasonItems().length === 0) {
-                    <small class="text-muted">Aucun motif selectionne.</small>
+                    <small class="text-muted">Aucun motif sélectionné.</small>
                   } @else {
                     <div class="d-flex flex-wrap gap-2">
                       @for (reason of consultationSelectedReasonItems(); track reason.label) {

@@ -865,7 +865,7 @@ export class BillingPage implements OnDestroy {
       return;
     }
     if (step === 3 && !this.canProceedToDepositRecap()) {
-      this.errorMessage.set('Selectionnez au moins un paiement avant le recapitulatif.');
+      this.errorMessage.set('Sélectionnez au moins un paiement avant le récapitulatif.');
       return;
     }
     this.depositWizardStep.set(step);
@@ -1221,7 +1221,7 @@ export class BillingPage implements OnDestroy {
     }
 
     if (this.selectedOperationIds().length === 0) {
-      this.errorMessage.set('Selectionnez au moins une operation.');
+      this.errorMessage.set('Sélectionnez au moins une opération.');
       return;
     }
 
@@ -1253,7 +1253,7 @@ export class BillingPage implements OnDestroy {
     }
 
     if (this.selectedOperationIds().length === 0) {
-      this.errorMessage.set('Selectionnez au moins une operation.');
+      this.errorMessage.set('Sélectionnez au moins une opération.');
       return;
     }
 

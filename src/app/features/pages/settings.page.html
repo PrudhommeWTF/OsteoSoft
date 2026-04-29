@@ -238,7 +238,7 @@
           <section class="row g-3 mb-4" aria-label="Import de données" role="tabpanel" id="data-management-import-panel" aria-labelledby="data-management-import-tab">
             <div class="col-12">
               <article class="settings-card">
-                <p class="settings-card-status mb-2">Import de donnees externes</p>
+                <p class="settings-card-status mb-2">Import de données externes</p>
                 <h3 class="settings-card-title">Importer un CSV ou un XLSX</h3>
                 <p class="settings-card-copy mb-3">
                   Importez des patients, consultations et contacts depuis d'autres logiciels. Pour un import multi-feuilles,
@@ -576,10 +576,10 @@
             </div>
           </div>
 
-          <article class="settings-security-panel mb-4" aria-label="Incidents de securite setup">
+          <article class="settings-security-panel mb-4" aria-label="Incidents de sécurité setup">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
               <div>
-                <p class="settings-card-status mb-1">Securite setup</p>
+                <p class="settings-card-status mb-1">Sécurité setup</p>
                 <h4 class="h6 mb-0">Incidents de configuration initiale</h4>
               </div>
 
@@ -610,7 +610,7 @@
             } @else if (setupSecurityLogsError()) {
               <div class="alert alert-danger py-2 mb-0" role="alert">{{ setupSecurityLogsError() }}</div>
             } @else if (setupSecurityLogs().length === 0) {
-              <p class="text-secondary mb-0">Aucun incident setup sur la fenetre selectionnee.</p>
+              <p class="text-secondary mb-0">Aucun incident setup sur la fenêtre sélectionnée.</p>
             } @else {
               <div class="d-flex flex-wrap gap-2 mb-3">
                 @for (item of setupSecurityIncidentSummary(); track item.event) {
@@ -655,14 +655,14 @@
             <p class="text-secondary mb-0">Aucun log d'audit disponible.</p>
           } @else {
             <div class="settings-audit-split">
-              <article class="settings-audit-subpanel" aria-label="Journal d'activite">
+              <article class="settings-audit-subpanel" aria-label="Journal d'activité">
                 <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
-                  <p class="settings-card-status mb-0">Activite utilisateur</p>
+                  <p class="settings-card-status mb-0">Activité utilisateur</p>
                   <span class="badge text-bg-light border">{{ activityAuditLogs().length }}</span>
                 </div>
 
                 @if (activityAuditLogs().length === 0) {
-                  <p class="text-secondary mb-0">Aucune activite utilisateur sur la fenetre selectionnee.</p>
+                  <p class="text-secondary mb-0">Aucune activite utilisateur sur la fenêtre sélectionnée.</p>
                 } @else {
                   <div class="table-responsive">
                     <table class="table table-sm align-middle settings-audit-table mb-0">
@@ -696,13 +696,13 @@
                 }
               </article>
 
-              <article class="settings-audit-subpanel settings-audit-security-subpanel" aria-label="Journal de securite">
+              <article class="settings-audit-subpanel settings-audit-security-subpanel" aria-label="Journal de sécurité">
                 <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
-                  <p class="settings-card-status mb-0">Securite</p>
+                  <p class="settings-card-status mb-0">Sécurité</p>
                   <span class="badge text-bg-danger-subtle border border-danger-subtle text-danger-emphasis">{{ filteredSecurityAuditLogs().length }}</span>
                 </div>
 
-                <div class="btn-group btn-group-sm mb-3" role="group" aria-label="Filtre par type d'evenement securite">
+                <div class="btn-group btn-group-sm mb-3" role="group" aria-label="Filtre par type d'événement sécurité">
                   <button
                     type="button"
                     class="btn"
@@ -727,7 +727,7 @@
                 </div>
 
                 @if (filteredSecurityAuditLogs().length === 0) {
-                  <p class="text-secondary mb-0">Aucun evenement securite sur la fenetre selectionnee.</p>
+                  <p class="text-secondary mb-0">Aucun événement sécurité sur la fenêtre sélectionnée.</p>
                 } @else {
                   <div class="table-responsive">
                     <table class="table table-sm align-middle settings-audit-table mb-0">
@@ -1123,7 +1123,7 @@
                                         <td>{{ delegation.profileLabel }}</td>
                                         <td class="text-end">
                                           @if (delegation.isConfigured) {
-                                            <span class="badge text-bg-success">Configure</span>
+                                            <span class="badge text-bg-success">Configuré</span>
                                           } @else {
                                             <span class="badge text-bg-warning">A definir</span>
                                           }
@@ -1394,7 +1394,7 @@
           @if (isOfficesLoading()) {
             <p class="text-secondary mb-0">Chargement des cabinets...</p>
           } @else if (!canReadOfficeSettings()) {
-            <div class="alert alert-warning mb-0" role="alert">Vous ne disposez pas du droit de consultation des parametres cabinet.</div>
+            <div class="alert alert-warning mb-0" role="alert">Vous ne disposez pas du droit de consultation des paramètres cabinet.</div>
           } @else {
             @if (canCreateOffice()) {
               <div class="mb-3">
@@ -1479,7 +1479,7 @@
                           <div class="step-circle">
                             @if (officeCreateStep() > 1) { <i class="fa-solid fa-check"></i> } @else { 1 }
                           </div>
-                          <span class="step-label">Identite</span>
+                          <span class="step-label">Identité</span>
                         </div>
                         <div class="progress-connector" [class.done]="officeCreateStep() > 1"></div>
 
@@ -1487,7 +1487,7 @@
                           <div class="step-circle">
                             @if (officeCreateStep() > 2) { <i class="fa-solid fa-check"></i> } @else { 2 }
                           </div>
-                          <span class="step-label">Coordonnees</span>
+                          <span class="step-label">Coordonnées</span>
                         </div>
                         <div class="progress-connector" [class.done]="officeCreateStep() > 2"></div>
 
@@ -2778,7 +2778,7 @@
                                       type="text"
                                       class="form-control"
                                       formControlName="paymentReminderLetterTitle"
-                                      placeholder="Ex: Relance de reglement"
+                                      placeholder="Ex: Relance de règlement"
                                     />
                                     <div class="d-flex flex-wrap gap-2 mt-2">
                                       @for (variable of officeLetterCommonVariables; track variable.token) {
@@ -2944,7 +2944,7 @@
                       <button type="button" class="btn btn-outline-secondary" (click)="closeOfficeModal()" title="Fermer" bsTooltip>Annuler</button>
                       @if (!editingOfficeId()) {
                         <button type="button" class="btn btn-outline-primary" [disabled]="officeCreateStep() <= 1" (click)="previousOfficeCreateStep()" title="Créer / Ajouter" bsTooltip>
-                          Precedent
+                          Précédent
                         </button>
                         @if (officeCreateStep() < 6) {
                           <button type="button" class="btn btn-primary" (click)="nextOfficeCreateStep()" title="Créer / Ajouter" bsTooltip>Suivant</button>
@@ -2965,7 +2965,7 @@
                           @if (isCreatingOffice() || isUpdatingOffice() !== null) {
                             <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                           }
-                          Mettre a jour
+                          Mettre à jour
                         </button>
                       }
                     </div>

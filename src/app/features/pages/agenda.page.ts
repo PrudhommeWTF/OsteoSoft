@@ -364,7 +364,7 @@ export class AgendaPage implements OnDestroy {
       const hasSelectedPatient = Number.isInteger(Number(raw.patientId)) && Number(raw.patientId) > 0;
       if (!hasSelectedPatient) {
         if (!raw.patientLastName.trim() || !raw.patientFirstName.trim()) {
-          this.createAppointmentError.set('Veuillez selectionner un patient existant ou saisir son nom et son prenom.');
+          this.createAppointmentError.set('Veuillez sélectionner un patient existant ou saisir son nom et son prénom.');
           return;
         }
       }

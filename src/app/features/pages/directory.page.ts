@@ -171,16 +171,16 @@ export class DirectoryPage {
     } catch (error) {
       if (error instanceof HttpErrorResponse) {
         if (error.status === 403) {
-          this.errorMessage.set('Acces refuse au repertoire (droits insuffisants).');
+          this.errorMessage.set('Accès refusé au répertoire (droits insuffisants).');
         } else if (error.status === 401) {
           this.errorMessage.set('Session expiree. Reconnectez-vous puis reessayez.');
         } else if (error.status === 0) {
           this.errorMessage.set('Serveur API inaccessible. Verifiez que le backend est demarre.');
         } else {
-          this.errorMessage.set('Impossible de charger le repertoire.');
+          this.errorMessage.set('Impossible de charger le répertoire.');
         }
       } else {
-        this.errorMessage.set('Impossible de charger le repertoire.');
+        this.errorMessage.set('Impossible de charger le répertoire.');
       }
     } finally {
       this.isLoading.set(false);
@@ -327,7 +327,7 @@ export class DirectoryPage {
         this.successMessage.set('Contact mis à jour.');
       } else {
         await this.api.createDirectoryContact(payload);
-        this.successMessage.set('Contact ajoute au repertoire.');
+        this.successMessage.set('Contact ajouté au répertoire.');
       }
 
       this.isModalOpen.set(false);
@@ -451,7 +451,7 @@ export class DirectoryPage {
 
         const worksheet = xlsx.utils.json_to_sheet(sheetRows);
         const workbook = xlsx.utils.book_new();
-        xlsx.utils.book_append_sheet(workbook, worksheet, 'Repertoire');
+        xlsx.utils.book_append_sheet(workbook, worksheet, 'Répertoire');
         const arrayBuffer = xlsx.write(workbook, { bookType: 'xlsx', type: 'array' });
 
         this.downloadBlob(
@@ -460,10 +460,10 @@ export class DirectoryPage {
         );
       }
 
-      this.successMessage.set('Export du repertoire termine.');
+      this.successMessage.set('Export du répertoire terminé.');
       this.closeExportModal();
     } catch {
-      this.exportError.set('Impossible d\'exporter le repertoire.');
+      this.exportError.set('Impossible d\'exporter le répertoire.');
     } finally {
       this.isExporting.set(false);
     }

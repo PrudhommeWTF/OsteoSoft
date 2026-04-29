@@ -30,7 +30,7 @@
       </div>
 
       <div class="col-12 col-md-2">
-        <label class="form-label mb-1">Fenetre annuelle</label>
+        <label class="form-label mb-1">Fenêtre annuelle</label>
         <select class="form-select" [value]="years()" (change)="onYearsChange($any($event.target).value)">
           @for (yearCount of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]; track yearCount) {
             <option [value]="yearCount">{{ yearCount }} an{{ yearCount > 1 ? 's' : '' }}</option>
@@ -172,21 +172,21 @@
                 @if (hasDistributionData(patientStats()?.bySex ?? EMPTY_DISTRIBUTION)) {
                   <div class="chart-wrap"><canvas data-chart-key="patients-sex-chart" aria-label="Graphique patients par sexe"></canvas></div>
                 } @else {
-                  <p class="text-secondary mb-0">Aucune donnee disponible sur la repartition par sexe.</p>
+                  <p class="text-secondary mb-0">Aucune donnée disponible sur la répartition par sexe.</p>
                 }
               }
               @case ('patients-age') {
                 @if (hasAgeSeriesData(patientStats()?.byAgeRangeAndSex ?? EMPTY_AGE_POINTS)) {
-                  <div class="chart-wrap"><canvas data-chart-key="patients-age-chart" aria-label="Graphique patients par tranche d age et sexe"></canvas></div>
+                  <div class="chart-wrap"><canvas data-chart-key="patients-age-chart" aria-label="Graphique patients par tranche d'âge et sexe"></canvas></div>
                 } @else {
-                  <p class="text-secondary mb-0">Aucune donnee disponible sur les tranches d age.</p>
+                  <p class="text-secondary mb-0">Aucune donnée disponible sur les tranches d'âge.</p>
                 }
               }
               @case ('patients-followed') {
                 <div class="table-responsive">
                   <table class="table table-hover align-middle mb-0">
                     <thead>
-                      <tr><th>#</th><th>Nom</th><th>Prenom</th><th>Age</th><th class="text-end">Consultations</th></tr>
+                      <tr><th>#</th><th>Nom</th><th>Prénom</th><th>Âge</th><th class="text-end">Consultations</th></tr>
                     </thead>
                     <tbody>
                       @for (item of patientStats()?.topFollowedPatients ?? EMPTY_PATIENT_ROWS; track item.patientId) {
@@ -208,7 +208,7 @@
                 <div class="table-responsive">
                   <table class="table table-hover align-middle mb-0">
                     <thead>
-                      <tr><th>#</th><th>Nom</th><th>Prenom</th><th>Age</th><th class="text-end">RDV manques</th></tr>
+                      <tr><th>#</th><th>Nom</th><th>Prénom</th><th>Âge</th><th class="text-end">RDV manqués</th></tr>
                     </thead>
                     <tbody>
                       @for (item of patientStats()?.topMissedAppointments ?? EMPTY_PATIENT_ROWS; track item.patientId) {
@@ -220,7 +220,7 @@
                           <td class="text-end">{{ item.count }}</td>
                         </tr>
                       } @empty {
-                        <tr><td colspan="5" class="text-center py-4 text-secondary">Aucun rendez-vous manque pour cette selection.</td></tr>
+                        <tr><td colspan="5" class="text-center py-4 text-secondary">Aucun rendez-vous manqué pour cette sélection.</td></tr>
                       }
                     </tbody>
                   </table>
@@ -241,7 +241,7 @@
                           <td class="text-end">{{ item.consultationCount }}</td>
                         </tr>
                       } @empty {
-                        <tr><td colspan="4" class="text-center py-4 text-secondary">Aucun motif exploitable pour cette selection.</td></tr>
+                        <tr><td colspan="4" class="text-center py-4 text-secondary">Aucun motif exploitable pour cette sélection.</td></tr>
                       }
                     </tbody>
                   </table>
@@ -262,7 +262,7 @@
                           <td class="text-end">{{ item.patientCount }}</td>
                         </tr>
                       } @empty {
-                        <tr><td colspan="4" class="text-center py-4 text-secondary">Aucune ville remontee pour cette selection.</td></tr>
+                        <tr><td colspan="4" class="text-center py-4 text-secondary">Aucune ville remontée pour cette sélection.</td></tr>
                       }
                     </tbody>
                   </table>
@@ -283,7 +283,7 @@
                           <td class="text-end">{{ item.patientCount }}</td>
                         </tr>
                       } @empty {
-                        <tr><td colspan="4" class="text-center py-4 text-secondary">Aucun antecedent structure pour cette selection.</td></tr>
+                        <tr><td colspan="4" class="text-center py-4 text-secondary">Aucun antécédent structuré pour cette sélection.</td></tr>
                       }
                     </tbody>
                   </table>
@@ -303,7 +303,7 @@
                           <td class="text-end">{{ item.patientCount }}</td>
                         </tr>
                       } @empty {
-                        <tr><td colspan="3" class="text-center py-4 text-secondary">Aucune origine patient remontee pour cette selection.</td></tr>
+                        <tr><td colspan="3" class="text-center py-4 text-secondary">Aucune origine patient remontée pour cette sélection.</td></tr>
                       }
                     </tbody>
                   </table>
@@ -311,14 +311,14 @@
               }
               @case ('consultations-evolution') {
                 @if (hasValueSeriesData(consultationStats()?.evolution ?? EMPTY_VALUE_POINTS)) {
-                  <div class="chart-wrap"><canvas data-chart-key="consultations-evolution-chart" aria-label="Evolution des consultations"></canvas></div>
+                  <div class="chart-wrap"><canvas data-chart-key="consultations-evolution-chart" aria-label="Évolution des consultations"></canvas></div>
                 } @else {
-                  <p class="text-secondary mb-0">Aucune consultation sur la fenetre selectionnee.</p>
+                  <p class="text-secondary mb-0">Aucune consultation sur la fenêtre sélectionnée.</p>
                 }
               }
               @case ('consultations-monthly') {
                 @if (hasYearSeriesData(consultationStats()?.monthlyByYear ?? EMPTY_YEAR_SERIES)) {
-                  <div class="chart-wrap"><canvas data-chart-key="consultations-monthly-combined" aria-label="Consultations mensuelles multi annees"></canvas></div>
+                  <div class="chart-wrap"><canvas data-chart-key="consultations-monthly-combined" aria-label="Consultations mensuelles multi années"></canvas></div>
                 } @else {
                   <p class="text-secondary mb-0">Aucune série mensuelle à afficher.</p>
                 }
@@ -327,7 +327,7 @@
                 @if (hasDistributionData(consultationStats()?.byType ?? EMPTY_DISTRIBUTION)) {
                   <div class="chart-wrap"><canvas data-chart-key="consultations-type-chart" aria-label="Types de consultations"></canvas></div>
                 } @else {
-                  <p class="text-secondary mb-0">Aucun type de consultation remonte.</p>
+                  <p class="text-secondary mb-0">Aucun type de consultation remonté.</p>
                 }
               }
               @case ('consultations-users') {
@@ -339,77 +339,77 @@
               }
               @case ('payments-revenue-evolution') {
                 @if (hasValueSeriesData(paymentStats()?.revenueEvolution ?? EMPTY_VALUE_POINTS)) {
-                  <div class="chart-wrap"><canvas data-chart-key="payments-revenue-evolution-chart" aria-label="Evolution du chiffre d affaires"></canvas></div>
+                  <div class="chart-wrap"><canvas data-chart-key="payments-revenue-evolution-chart" aria-label="Évolution du chiffre d'affaires"></canvas></div>
                 } @else {
-                  <p class="text-secondary mb-0">Aucun chiffre d affaires sur la fenetre selectionnee.</p>
+                  <p class="text-secondary mb-0">Aucun chiffre d'affaires sur la fenêtre sélectionnée.</p>
                 }
               }
               @case ('payments-revenue-monthly') {
                 @if (hasYearSeriesData(paymentStats()?.revenueMonthlyByYear ?? EMPTY_YEAR_SERIES)) {
-                  <div class="chart-wrap"><canvas data-chart-key="payments-revenue-monthly-combined" aria-label="Chiffre d affaires mensuel multi annees"></canvas></div>
+                  <div class="chart-wrap"><canvas data-chart-key="payments-revenue-monthly-combined" aria-label="Chiffre d'affaires mensuel multi années"></canvas></div>
                 } @else {
-                  <p class="text-secondary mb-0">Aucune serie mensuelle de chiffre d affaires disponible.</p>
+                  <p class="text-secondary mb-0">Aucune série mensuelle de chiffre d'affaires disponible.</p>
                 }
               }
               @case ('payments-profit-evolution') {
                 @if (hasValueSeriesData(paymentStats()?.profitEvolution ?? EMPTY_VALUE_POINTS)) {
-                  <div class="chart-wrap"><canvas data-chart-key="payments-profit-evolution-chart" aria-label="Evolution des benefices"></canvas></div>
+                  <div class="chart-wrap"><canvas data-chart-key="payments-profit-evolution-chart" aria-label="Évolution des bénéfices"></canvas></div>
                 } @else {
-                  <p class="text-secondary mb-0">Aucun benefice calcule sur la fenetre selectionnee.</p>
+                  <p class="text-secondary mb-0">Aucun bénéfice calculé sur la fenêtre sélectionnée.</p>
                 }
               }
               @case ('payments-profit-monthly') {
                 @if (hasYearSeriesData(paymentStats()?.profitMonthlyByYear ?? EMPTY_YEAR_SERIES)) {
-                  <div class="chart-wrap"><canvas data-chart-key="payments-profit-monthly-combined" aria-label="Benefices mensuels multi annees"></canvas></div>
+                  <div class="chart-wrap"><canvas data-chart-key="payments-profit-monthly-combined" aria-label="Bénéfices mensuels multi années"></canvas></div>
                 } @else {
-                  <p class="text-secondary mb-0">Aucune serie mensuelle de benefices disponible.</p>
+                  <p class="text-secondary mb-0">Aucune série mensuelle de bénéfices disponible.</p>
                 }
               }
               @case ('payments-methods') {
                 @if (hasDistributionData(paymentStats()?.paymentMethods ?? EMPTY_DISTRIBUTION)) {
-                  <div class="chart-wrap"><canvas data-chart-key="payments-methods-chart" aria-label="Repartition des types de paiement"></canvas></div>
+                  <div class="chart-wrap"><canvas data-chart-key="payments-methods-chart" aria-label="Répartition des types de paiement"></canvas></div>
                 } @else {
                   <p class="text-secondary mb-0">Aucune ventilation de paiement disponible.</p>
                 }
               }
               @case ('user-revenue-evolution') {
                 @if (hasValueSeriesData(userStats()?.revenueEvolution ?? EMPTY_VALUE_POINTS)) {
-                  <div class="chart-wrap"><canvas data-chart-key="user-revenue-evolution-chart" aria-label="Evolution du chiffre d affaires utilisateur"></canvas></div>
+                  <div class="chart-wrap"><canvas data-chart-key="user-revenue-evolution-chart" aria-label="Évolution du chiffre d'affaires utilisateur"></canvas></div>
                 } @else {
                   <p class="text-secondary mb-0">{{ getUserCardEmptyMessage() }}</p>
                 }
               }
               @case ('user-revenue-monthly') {
                 @if (hasYearSeriesData(userStats()?.revenueMonthlyByYear ?? EMPTY_YEAR_SERIES)) {
-                  <div class="chart-wrap"><canvas data-chart-key="user-revenue-monthly-combined" aria-label="Chiffre d affaires mensuel utilisateur multi annees"></canvas></div>
+                  <div class="chart-wrap"><canvas data-chart-key="user-revenue-monthly-combined" aria-label="Chiffre d affaires mensuel utilisateur multi années"></canvas></div>
                 } @else {
                   <p class="text-secondary mb-0">{{ getUserCardEmptyMessage() }}</p>
                 }
               }
               @case ('user-profit-evolution') {
                 @if (hasValueSeriesData(userStats()?.profitEvolution ?? EMPTY_VALUE_POINTS)) {
-                  <div class="chart-wrap"><canvas data-chart-key="user-profit-evolution-chart" aria-label="Evolution des benefices utilisateur"></canvas></div>
+                  <div class="chart-wrap"><canvas data-chart-key="user-profit-evolution-chart" aria-label="Évolution des bénéfices utilisateur"></canvas></div>
                 } @else {
                   <p class="text-secondary mb-0">{{ getUserCardEmptyMessage() }}</p>
                 }
               }
               @case ('user-profit-monthly') {
                 @if (hasYearSeriesData(userStats()?.profitMonthlyByYear ?? EMPTY_YEAR_SERIES)) {
-                  <div class="chart-wrap"><canvas data-chart-key="user-profit-monthly-combined" aria-label="Benefices mensuels utilisateur multi annees"></canvas></div>
+                  <div class="chart-wrap"><canvas data-chart-key="user-profit-monthly-combined" aria-label="Bénéfices mensuels utilisateur multi années"></canvas></div>
                 } @else {
                   <p class="text-secondary mb-0">{{ getUserCardEmptyMessage() }}</p>
                 }
               }
               @case ('user-consultations-evolution') {
                 @if (hasValueSeriesData(userStats()?.consultationEvolution ?? EMPTY_VALUE_POINTS)) {
-                  <div class="chart-wrap"><canvas data-chart-key="user-consultations-evolution-chart" aria-label="Evolution des consultations utilisateur"></canvas></div>
+                  <div class="chart-wrap"><canvas data-chart-key="user-consultations-evolution-chart" aria-label="Évolution des consultations utilisateur"></canvas></div>
                 } @else {
                   <p class="text-secondary mb-0">{{ getUserCardEmptyMessage() }}</p>
                 }
               }
               @case ('user-consultations-monthly') {
                 @if (hasYearSeriesData(userStats()?.consultationMonthlyByYear ?? EMPTY_YEAR_SERIES)) {
-                  <div class="chart-wrap"><canvas data-chart-key="user-consultations-monthly-combined" aria-label="Consultations mensuelles utilisateur multi annees"></canvas></div>
+                  <div class="chart-wrap"><canvas data-chart-key="user-consultations-monthly-combined" aria-label="Consultations mensuelles utilisateur multi années"></canvas></div>
                 } @else {
                   <p class="text-secondary mb-0">{{ getUserCardEmptyMessage() }}</p>
                 }

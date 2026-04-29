@@ -242,7 +242,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
               backgroundColor: '#3478f6'
             },
             {
-              label: 'Non renseigne',
+              label: 'Non renseigné',
               data: points.map((point) => point.unknownCount),
               backgroundColor: '#7f8c8d'
             }

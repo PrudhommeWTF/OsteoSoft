@@ -754,7 +754,7 @@
               <div class="consultation-split mb-4">
                 <div class="consultation-main-panel border rounded-3 p-3 bg-body">
                   <div class="mb-3">
-                    <label class="form-label" for="consultation-started-at">Debut de consultation</label>
+                    <label class="form-label" for="consultation-started-at">Début de consultation</label>
                     <input id="consultation-started-at" type="datetime-local" class="form-control" formControlName="startedAtLocal" />
                   </div>
 
@@ -766,7 +766,7 @@
                       class="form-control"
                       list="consultation-practitioner-options"
                       formControlName="practitioner"
-                      placeholder="Selectionner un praticien" />
+                      placeholder="Sélectionner un praticien" />
                     <datalist id="consultation-practitioner-options">
                       @for (practitioner of practitionerPickerOptions(); track practitioner.username) {
                         <option [value]="practitioner.displayName">{{ practitioner.label }}</option>
@@ -809,7 +809,7 @@
                       [disabled]="consultationProfileOptions().length === 0"
                       (change)="setConsultationProfile($any($event.target).value)">
                       @if (consultationProfileOptions().length === 0) {
-                        <option value="">Aucun profil configure pour ce cabinet</option>
+                        <option value="">Aucun profil configuré pour ce cabinet</option>
                       } @else {
                         @for (option of consultationProfileOptions(); track option) {
                           <option [value]="option">{{ option }}</option>
@@ -854,17 +854,17 @@
                       @if (consultationOfficeName()) {
                         Cabinet: {{ consultationOfficeName() }}
                       } @else {
-                        Cabinet non determine
+                        Cabinet non déterminé
                       }
                     </p>
                   </div>
 
                   @if (consultationEditForm.controls.profile.value.trim().length === 0) {
-                    <div class="alert alert-light border mb-0">Selectionnez d'abord un profil pour afficher les motifs.</div>
+                    <div class="alert alert-light border mb-0">Sélectionnez d'abord un profil pour afficher les motifs.</div>
                   } @else if (consultationProfileReasons().length === 0) {
-                    <div class="alert alert-light border mb-0">Aucun motif configure pour ce profil.</div>
+                    <div class="alert alert-light border mb-0">Aucun motif configuré pour ce profil.</div>
                   } @else {
-                    <div class="reason-list d-flex flex-column gap-1" role="list" aria-label="Motifs disponibles pour le profil selectionne">
+                    <div class="reason-list d-flex flex-column gap-1" role="list" aria-label="Motifs disponibles pour le profil sélectionné">
                       @for (item of consultationReasonItems(); track item.reason) {
                         <div class="reason-item" [class.active]="item.checked">
                           <div class="reason-item-check">
@@ -900,9 +900,9 @@
                     </div>
 
                     <div class="reason-selection mt-3">
-                      <small class="text-muted fw-semibold d-block mb-2">Motifs selectionnes ({{ consultationSelectedReasonItems().length }})</small>
+                      <small class="text-muted fw-semibold d-block mb-2">Motifs sélectionnés ({{ consultationSelectedReasonItems().length }})</small>
                       @if (consultationSelectedReasonItems().length === 0) {
-                        <small class="text-muted">Aucun motif selectionne.</small>
+                        <small class="text-muted">Aucun motif sélectionné.</small>
                       } @else {
                         <div class="d-flex flex-wrap gap-2">
                           @for (reason of consultationSelectedReasonItems(); track reason.label) {
@@ -1557,7 +1557,7 @@
                   }
                 </select>
                 @if (getConsultationPaymentMethodOptions().length === 0) {
-                  <div class="form-text text-warning">Aucun moyen de paiement actif n'est configure pour ce cabinet.</div>
+                  <div class="form-text text-warning">Aucun moyen de paiement actif n'est configuré pour ce cabinet.</div>
                 }
               </div>
               @if (isConsultationPaymentMethodChequeSelected()) {

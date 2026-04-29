@@ -189,7 +189,7 @@
 
                 @if (selectedCreatePatient(); as selectedPatient) {
                   <div class="form-text text-success d-flex justify-content-between align-items-center mt-1">
-                    <span>Patient selectionne: {{ selectedPatient.fullName }}</span>
+                    <span>Patient sélectionné: {{ selectedPatient.fullName }}</span>
                     <button type="button" class="btn btn-link btn-sm p-0" title="Changer le patient sélectionné" bsTooltip (click)="clearSelectedCreatePatient()">Changer</button>
                   </div>
                 }
@@ -208,7 +208,7 @@
                 </div>
 
                 <div class="col-12 col-md-6">
-                  <label class="form-label fw-semibold" for="create-patient-firstname">Prenom</label>
+                  <label class="form-label fw-semibold" for="create-patient-firstname">Prénom</label>
                   <input
                     id="create-patient-firstname"
                     type="text"
@@ -263,7 +263,7 @@
                 class="form-control"
                 list="create-practitioner-options"
                 formControlName="practitioner"
-                placeholder="Selectionner un praticien"
+                placeholder="Sélectionner un praticien"
                 [disabled]="isCreatingAppointment()"
               />
               <datalist id="create-practitioner-options">

@@ -446,11 +446,11 @@ export class SettingsPage implements OnDestroy {
   readonly restoreTimeline: Array<{ id: RestoreProgressStep; label: string }> = [
     { id: 'reading', label: 'Lecture du fichier' },
     { id: 'validating', label: 'Validation de la structure' },
-    { id: 'checksum', label: 'Verification du checksum' },
+    { id: 'checksum', label: 'Vérification du checksum' },
     { id: 'ready', label: 'Sauvegarde prete' },
     { id: 'uploading', label: 'Envoi vers le serveur' },
-    { id: 'applying', label: 'Application des donnees' },
-    { id: 'done', label: 'Restauration terminee' }
+    { id: 'applying', label: 'Application des données' },
+    { id: 'done', label: 'Restauration terminée' }
   ];
   readonly selectedAuditLogLimit = signal(100);
   readonly selectedSetupSecurityEvent = signal<SetupSecurityEventFilter>('all');
@@ -551,7 +551,7 @@ export class SettingsPage implements OnDestroy {
   ];
   readonly dataImportDatasetOptions: Array<{ value: DataImportDataset; label: string }> = [
     { value: 'patients', label: 'Patients' },
-    { value: 'directory-contacts', label: 'Contacts du repertoire' },
+    { value: 'directory-contacts', label: 'Contacts du répertoire' },
     { value: 'mixed', label: 'Patients + Consultations + Contacts (XLSX)' }
   ];
   readonly invoiceNumberFormatOptions: Array<{ value: CreateOfficePayload['invoiceNumberFormat']; label: string }> = [
@@ -578,12 +578,12 @@ export class SettingsPage implements OnDestroy {
     { token: '{$DATE}', description: 'Date du jour' },
     { token: '{$CIVILITE}', description: 'Civilite du patient (Monsieur ou Madame)' },
     { token: '{$NOM}', description: 'Nom du patient' },
-    { token: '{$PRENOM}', description: 'Prenom du patient' },
+    { token: '{$PRENOM}', description: 'Prénom du patient' },
     { token: '{$AGE}', description: 'Age du patient' },
     { token: '{$DATE_NAISSANCE}', description: 'Date de naissance du patient' },
     { token: '{$DATE_DERNIERE_CONSULTATION}', description: 'Date de la derniere consultation enregistree' },
     { token: '{$NOMPRATICIEN}', description: 'Nom du praticien connecte' },
-    { token: '{$PRENOMPRATICIEN}', description: 'Prenom du praticien connecte' }
+    { token: '{$PRENOMPRATICIEN}', description: 'Prénom du praticien connecté' }
   ];
   readonly officeLetterConsultationVariables: Array<{ token: string; description: string }> = [
     { token: '{$DATECONSULTATION}', description: 'Date de la consultation' },
@@ -704,7 +704,7 @@ export class SettingsPage implements OnDestroy {
   });
 
   readonly isOfficeAdminOnlyMode = computed(() => Boolean(this.route.snapshot.data?.['officeAdminOnly']));
-  readonly pageTitle = computed(() => this.isOfficeAdminOnlyMode() ? 'Administration des cabinets' : 'Parametres');
+  readonly pageTitle = computed(() => this.isOfficeAdminOnlyMode() ? 'Administration des cabinets' : 'Paramètres');
   readonly pageDescription = computed(() =>
     this.isOfficeAdminOnlyMode()
       ? 'Gestion operationnelle des cabinets accessibles selon vos delegations.'
@@ -2129,16 +2129,16 @@ export class SettingsPage implements OnDestroy {
 
       this.setRestoreProgress('validating', 'Validation de la structure de sauvegarde...', 45);
       if (this.hasBackupManifest(payload)) {
-        this.setRestoreProgress('checksum', 'Verification du checksum SHA-256...', 70);
+        this.setRestoreProgress('checksum', 'Vérification du checksum SHA-256...', 70);
         await this.verifyBackupChecksum(payload);
       }
 
       this.selectedBackupPayload.set(payload);
-      this.setRestoreProgress('ready', 'Sauvegarde validee. Prete pour restauration.', 100);
+      this.setRestoreProgress('ready', 'Sauvegarde validée. Prête pour restauration.', 100);
       this.dataManagementSuccess.set('Fichier de sauvegarde chargé, vous pouvez lancer la restauration.');
     } catch {
       this.selectedBackupPayload.set(null);
-      this.setRestoreProgress('error', 'Echec de validation de la sauvegarde.', 100);
+      this.setRestoreProgress('error', 'Échec de validation de la sauvegarde.', 100);
       this.dataManagementError.set('Le fichier sélectionné n\'est pas une sauvegarde ZIP ou JSON valide.');
     }
   }
@@ -2160,15 +2160,15 @@ export class SettingsPage implements OnDestroy {
     this.setRestoreProgress('uploading', 'Envoi de la sauvegarde au serveur...', 20);
 
     try {
-      this.setRestoreProgress('applying', 'Application des donnees sur la base...', 65);
+      this.setRestoreProgress('applying', 'Application des données sur la base...', 65);
       await this.api.restoreDataBackup(this.selectedBackupPayload());
-      this.setRestoreProgress('done', 'Restauration terminee avec succes.', 100);
+      this.setRestoreProgress('done', 'Restauration terminée avec succes.', 100);
       this.dataManagementSuccess.set('Restauration terminée avec succès.');
       await this.loadAccessProfiles();
       await this.loadUsers();
       await this.loadCurrentUser();
     } catch {
-      this.setRestoreProgress('error', 'La restauration a echoue.', 100);
+      this.setRestoreProgress('error', 'La restauration a échoué.', 100);
       this.dataManagementError.set('La restauration a échoué. Vérifiez le fichier de sauvegarde.');
     } finally {
       this.isRestoringBackup.set(false);
@@ -2182,7 +2182,7 @@ export class SettingsPage implements OnDestroy {
     }
 
     const confirmation = globalThis.confirm(
-      'Cette operation remplacera les donnees actuelles par une instance de demonstration complete. Continuer ?'
+      'Cette opération remplacera les données actuelles par une instance de démonstration complète. Continuer ?'
     );
     if (!confirmation || this.isResettingDemo()) {
       return;
@@ -3060,7 +3060,7 @@ export class SettingsPage implements OnDestroy {
       );
       this.setupSecurityLogs.set(logs);
     } catch {
-      this.setupSecurityLogsError.set('Impossible de charger les incidents de securite setup.');
+      this.setupSecurityLogsError.set('Impossible de charger les incidents de sécurité setup.');
     } finally {
       this.isSetupSecurityLogsLoading.set(false);
     }
@@ -3320,7 +3320,7 @@ export class SettingsPage implements OnDestroy {
   async loadOffices(): Promise<void> {
     if (!this.canReadOfficeSettings()) {
       this.offices.set([]);
-      this.officesError.set('Acces refuse aux parametres des cabinets.');
+      this.officesError.set('Accès refusé aux paramètres des cabinets.');
       return;
     }
 

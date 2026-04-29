@@ -357,13 +357,13 @@
       <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('yesterday')" title="Filtrer par hier" bsTooltip>Hier</button>
       <button type="button" class="btn btn-outline-primary btn-sm" (click)="applyPreset('month')" title="Filtrer par aujourd'hui" bsTooltip>Ce mois-ci</button>
       <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('lastMonth')" title="Filtrer le mois dernier" bsTooltip>Le mois dernier</button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('year')" title="Filtrer par aujourd'hui" bsTooltip>Cette annee</button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('lastYear')" title="Filtrer l'année dernière" bsTooltip>L'annee derniere</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('year')" title="Filtrer par aujourd'hui" bsTooltip>Cette année</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('lastYear')" title="Filtrer l'année dernière" bsTooltip>L'année dernière</button>
     </div>
   </div>
 </section>
 
-<section class="row g-3" aria-label="KPI comptabilite">
+<section class="row g-3" aria-label="KPI comptabilité">
   @for (tile of tiles(); track tile.label) {
     <article class="col-12 col-md-4">
       <div class="card h-100">
@@ -381,7 +381,7 @@
   <section class="row g-3 mt-1" aria-label="Tendances comptables">
     <article class="col-12 col-md-6 col-xl-3">
       <div class="card h-100">
-        <h5 class="card-header">Evolution credits</h5>
+        <h5 class="card-header">Évolution crédits</h5>
         <div class="card-body">
           <p class="fs-5 fw-bold mb-1">{{ formatPercent(insights.kpis.trends.creditsPercent) }}</p>
           <p class="text-secondary mb-0">vs période précédente</p>
@@ -390,7 +390,7 @@
     </article>
     <article class="col-12 col-md-6 col-xl-3">
       <div class="card h-100">
-        <h5 class="card-header">Evolution resultat</h5>
+        <h5 class="card-header">Évolution résultat</h5>
         <div class="card-body">
           <p class="fs-5 fw-bold mb-1">{{ formatPercent(insights.kpis.trends.netPercent) }}</p>
           <p class="text-secondary mb-0">net periodique</p>
@@ -421,7 +421,7 @@
 <section class="row g-3 mt-1" aria-label="Forecast et top debiteurs">
   <article class="col-12 col-xl-6">
     <div class="card h-100">
-      <h5 class="card-header">Forecast tresorerie</h5>
+      <h5 class="card-header">Forecast trésorerie</h5>
       <div class="card-body">
         @if (billingForecast(); as forecast) {
           <div class="table-responsive">
@@ -919,7 +919,7 @@
                 class="form-check-input"
                 [checked]="isAllFilteredDepositCandidatesSelected()"
                 (change)="toggleSelectAllFilteredDepositCandidates(!!$any($event.target).checked)" />
-              <span class="small text-secondary">Tout selectionner (resultats filtres)</span>
+              <span class="small text-secondary">Tout sélectionner (résultats filtrés)</span>
             </div>
             <input
               type="search"
@@ -931,7 +931,7 @@
           </div>
           @if (hasIncompatibleSelectedDepositCandidates()) {
             <div class="alert alert-warning py-2 small" role="alert">
-              Certains paiements selectionnes ne correspondent pas au type de remise courant.
+              Certains paiements sélectionnés ne correspondent pas au type de remise courant.
             </div>
           }
           <div class="table-responsive">
@@ -1028,9 +1028,9 @@
             </table>
           </div>
           <div class="d-flex justify-content-between align-items-center mt-2">
-            <span class="small text-secondary">{{ selectedDepositCandidateCount() }} paiement(s) selectionne(s)</span>
+            <span class="small text-secondary">{{ selectedDepositCandidateCount() }} paiement(s) sélectionné(s)</span>
             <div class="text-end fw-semibold">
-              Total selectionne: {{ formatCurrency(selectedDepositCandidateAmountCents(), 'EUR') }}
+              Total sélectionné: {{ formatCurrency(selectedDepositCandidateAmountCents(), 'EUR') }}
             </div>
           </div>
         </div>
@@ -1041,7 +1041,7 @@
             class="btn btn-primary"
             [disabled]="isSaving() || !canManageBilling() || (!editingDepositId() && selectedDepositCandidateCount() === 0)"
             (click)="saveDepositEditor()" title="Enregistrer" bsTooltip>
-            {{ editingDepositId() ? 'Enregistrer' : 'Generer le bordereau' }}
+            {{ editingDepositId() ? 'Enregistrer' : 'Générer le bordereau' }}
           </button>
         </div>
       </div>

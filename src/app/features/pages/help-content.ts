@@ -109,7 +109,7 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
         manipulations: [
           'Cliquer sur une ligne du tableau patient.',
           'Attendre l ouverture automatique de la fiche detail.',
-          'Naviguer ensuite vers les consultations ou documents associes.'
+          'Naviguer ensuite vers les consultations ou documents associés.'
         ],
         useCases: [
           'Mettre à jour les coordonnées avant une visite.',
@@ -134,7 +134,7 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
           'Enregistrer les changements et valider l affichage.'
         ],
         useCases: [
-          'Changement de telephone ou d adresse.',
+          'Changement de téléphone ou d\'adresse.',
           'Ajout d une information utile au secretariat.',
           'Preparation d un dossier avant transmission.'
         ]
@@ -147,9 +147,9 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
           'Créer une nouvelle consultation si necessaire.'
         ],
         useCases: [
-          'Continuer une prise en charge déjà engagee.',
-          'Comparer l evolution des symptomes dans le temps.',
-          'Documenter une nouvelle séance apres rendez-vous.'
+          'Continuer une prise en charge déjà engagée.',
+          'Comparer l\'évolution des symptômes dans le temps.',
+          'Documenter une nouvelle séance après rendez-vous.'
         ]
       }
     ]
@@ -159,31 +159,31 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
     title: 'Répertoire',
     appRoute: '/repertoire',
     screenshot: '/help/repertoire.png',
-    summary: 'Annuaire des correspondants et contacts du cabinet (medecins, partenaires, etc.).',
+    summary: 'Annuaire des correspondants et contacts du cabinet (médecins, partenaires, etc.).',
     actions: [
       {
         title: 'Consulter et filtrer les contacts',
         manipulations: [
           'Ouvrir Répertoire puis utiliser la recherche ou les filtres disponibles.',
-          'Cliquer sur une fiche contact pour afficher les details.',
-          'Vérifier email, telephone et categorie avant action.'
+          'Cliquer sur une fiche contact pour afficher les détails.',
+          'Vérifier email, téléphone et catégorie avant action.'
         ],
         useCases: [
-          'Retrouver rapidement un medecin adresseur.',
+          'Retrouver rapidement un médecin adresseur.',
           'Vérifier les coordonnées avant un courrier.',
-          'Identifier un contact par specialite.'
+          'Identifier un contact par spécialité.'
         ]
       },
       {
         title: 'Créer ou modifier un contact',
         manipulations: [
-          'Utiliser le bouton d ajout ou d edition.',
+          'Utiliser le bouton d\'ajout ou d\'édition.',
           'Saisir les champs obligatoires puis enregistrer.',
-          'Contrôler la presence du contact dans la liste apres sauvegarde.'
+          'Contrôler la présence du contact dans la liste après sauvegarde.'
         ],
         useCases: [
           'Ajouter un nouveau partenaire local.',
-          'Corriger un numero de telephone obsolete.',
+          'Corriger un numéro de téléphone obsolète.',
           'Maintenir une base de correspondants propre.'
         ]
       }
@@ -200,25 +200,25 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
         title: 'Suivre les factures et paiements',
         manipulations: [
           'Ouvrir Facturation puis consulter les indicateurs de suivi.',
-          'Filtrer les lignes par statut ou periode.',
-          'Vérifier les montants, echeances et moyens de paiement.'
+          'Filtrer les lignes par statut ou période.',
+          'Vérifier les montants, échéances et moyens de paiement.'
         ],
         useCases: [
-          'Prioriser les relances de factures impayees.',
-          'Preparer une vue synthese en fin de semaine.',
+          'Prioriser les relances de factures impayées.',
+          'Préparer une vue synthèse en fin de semaine.',
           'Contrôler la coherence des règlements saisis.'
         ]
       },
       {
         title: 'Mettre à jour le statut de règlement',
         manipulations: [
-          'Ouvrir la ligne de facture concernee.',
+          'Ouvrir la ligne de facture concernée.',
           'Saisir la date et le moyen de règlement.',
           'Valider puis contrôler la mise à jour du tableau de suivi.'
         ],
         useCases: [
-          'Marquer une facture comme reglee apres reception du paiement.',
-          'Corriger un statut errone.',
+          'Marquer une facture comme réglée après réception du paiement.',
+          'Corriger un statut erroné.',
           'Fiabiliser la comptabilité courante du cabinet.'
         ]
       }
@@ -229,32 +229,32 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
     title: 'Statistiques',
     appRoute: '/statistiques',
     screenshot: '/help/statistiques.png',
-    summary: 'Analyse des performances du cabinet: activite, patientele et tendances temporelles.',
+    summary: 'Analyse des performances du cabinet: activité, patientèle et tendances temporelles.',
     actions: [
       {
-        title: 'Analyser une periode d activite',
+        title: 'Analyser une période d\'activité',
         manipulations: [
-          'Choisir une periode depuis les controles de la page.',
-          'Lire les courbes et les histogrammes associes.',
-          'Comparer les résultats avec la periode precedente.'
+          'Choisir une période depuis les contrôles de la page.',
+          'Lire les courbes et les histogrammes associés.',
+          'Comparer les résultats avec la période précédente.'
         ],
         useCases: [
-          'Mesurer la croissance ou baisse d activite.',
-          'Identifier les mois creux pour ajuster l organisation.',
-          'Suivre l effet d une action de communication.'
+          'Mesurer la croissance ou baisse d\'activité.',
+          'Identifier les mois creux pour ajuster l\'organisation.',
+          'Suivre l\'effet d\'une action de communication.'
         ]
       },
       {
         title: 'Exploiter les indicateurs de pilotage',
         manipulations: [
-          'Répéter l analyse sur différents filtres.',
-          'Noter les indicateurs clefs pour le reporting interne.',
-          'Revenir a une vue globale pour valider la tendance generale.'
+          'Répéter l\'analyse sur différents filtres.',
+          'Noter les indicateurs clés pour le reporting interne.',
+          'Revenir à une vue globale pour valider la tendance générale.'
         ],
         useCases: [
-          'Preparer un bilan d activite trimestriel.',
-          'Partager une vision objective avec les associes.',
-          'Anticiper la charge de travail a venir.'
+          'Préparer un bilan d\'activité trimestriel.',
+          'Partager une vision objective avec les associés.',
+          'Anticiper la charge de travail à venir.'
         ]
       }
     ]
@@ -264,31 +264,31 @@ export const HELP_GUIDES: readonly HelpScreenGuide[] = [
     title: 'Mon profil',
     appRoute: '/mon-profil',
     screenshot: '/help/profil.png',
-    summary: 'Parametrage du compte utilisateur, preferences et options de personnalisation.',
+    summary: 'Paramétrage du compte utilisateur, préférences et options de personnalisation.',
     actions: [
       {
         title: 'Modifier les informations du compte',
         manipulations: [
-          'Ouvrir Mon profil puis selectionner l onglet concerne.',
+          'Ouvrir Mon profil puis sélectionner l\'onglet concerné.',
           'Mettre à jour les champs (identité, contact, mot de passe).',
-          'Enregistrer et verifier le message de confirmation.'
+          'Enregistrer et vérifier le message de confirmation.'
         ],
         useCases: [
           'Mise à jour d\'email professionnel.',
           'Changement de mot de passe utilisateur.',
-          'Correction d informations personnelles.'
+          'Correction d\'informations personnelles.'
         ]
       },
       {
-        title: 'Ajuster les preferences d interface',
+        title: 'Ajuster les préférences d\'interface',
         manipulations: [
-          'Accéder aux reglages interface et agenda.',
-          'Choisir theme, mode PDF, options d affichage.',
+          'Accéder aux réglages interface et agenda.',
+          'Choisir thème, mode PDF, options d\'affichage.',
           'Sauvegarder pour appliquer la personnalisation.'
         ],
         useCases: [
-          'Adapter l interface au confort visuel de l utilisateur.',
-          'Uniformiser les preferences d impression PDF.',
+          'Adapter l\'interface au confort visuel de l\'utilisateur.',
+          'Uniformiser les préférences d\'impression PDF.',
           'Optimiser le poste de travail pour un usage quotidien.'
         ]
       }

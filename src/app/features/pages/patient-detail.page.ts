@@ -1950,7 +1950,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
         ].join('\n')
       );
 
-      writeSection('Motifs selectionnes', selectedReasons || '- Aucun motif selectionne');
+      writeSection('Motifs sélectionnés', selectedReasons || '- Aucun motif sélectionné');
       writeSection('Motif principal', this.htmlToPlainText(this.consultationMotifMainHtml()));
       writeSection('Tests', this.htmlToPlainText(this.consultationTestsHtml()));
       writeSection('Schema', this.htmlToPlainText(this.consultationSchemaHtml()));

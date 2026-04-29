@@ -97,20 +97,20 @@ const STATISTICS_CARD_DEFINITIONS: Record<StatisticsCardId, StatisticsCardDefini
   'patients-cities': { id: 'patients-cities', section: 'Patients', title: 'Top 10 des villes les plus representees', icon: 'fa-solid fa-city', layout: 'half' },
   'patients-antecedents': { id: 'patients-antecedents', section: 'Patients', title: 'Top 10 des antecedents les plus frequents', icon: 'fa-solid fa-heart-pulse', layout: 'half' },
   'patients-referrals': { id: 'patients-referrals', section: 'Patients', title: 'Top 10 des referrals', icon: 'fa-solid fa-share-nodes', layout: 'half' },
-  'consultations-evolution': { id: 'consultations-evolution', section: 'Consultations', title: 'Evolution du nombre de consultations', icon: 'fa-solid fa-chart-line', layout: 'half' },
-  'consultations-monthly': { id: 'consultations-monthly', section: 'Consultations', title: 'Consultations par mois et par annee', icon: 'fa-solid fa-wave-square', layout: 'half' },
+  'consultations-evolution': { id: 'consultations-evolution', section: 'Consultations', title: 'Évolution du nombre de consultations', icon: 'fa-solid fa-chart-line', layout: 'half' },
+  'consultations-monthly': { id: 'consultations-monthly', section: 'Consultations', title: 'Consultations par mois et par année', icon: 'fa-solid fa-wave-square', layout: 'half' },
   'consultations-type': { id: 'consultations-type', section: 'Consultations', title: 'Types de consultations', icon: 'fa-solid fa-chart-pie', layout: 'half' },
   'consultations-users': { id: 'consultations-users', section: 'Consultations', title: 'Consultations par utilisateur', icon: 'fa-solid fa-user-group', layout: 'half' },
-  'payments-revenue-evolution': { id: 'payments-revenue-evolution', section: 'Paiements', title: 'Evolution du chiffre d affaires', icon: 'fa-solid fa-arrow-trend-up', layout: 'half' },
+  'payments-revenue-evolution': { id: 'payments-revenue-evolution', section: 'Paiements', title: 'Évolution du chiffre d\'affaires', icon: 'fa-solid fa-arrow-trend-up', layout: 'half' },
   'payments-revenue-monthly': { id: 'payments-revenue-monthly', section: 'Paiements', title: 'Chiffre d affaires par mois', icon: 'fa-solid fa-calendar-days', layout: 'half' },
-  'payments-profit-evolution': { id: 'payments-profit-evolution', section: 'Paiements', title: 'Evolution des benefices', icon: 'fa-solid fa-sack-dollar', layout: 'half' },
+  'payments-profit-evolution': { id: 'payments-profit-evolution', section: 'Paiements', title: 'Évolution des bénéfices', icon: 'fa-solid fa-sack-dollar', layout: 'half' },
   'payments-profit-monthly': { id: 'payments-profit-monthly', section: 'Paiements', title: 'Benefices par mois', icon: 'fa-solid fa-coins', layout: 'half' },
   'payments-methods': { id: 'payments-methods', section: 'Paiements', title: 'Repartition des types de paiement', icon: 'fa-solid fa-credit-card', layout: 'half' },
-  'user-revenue-evolution': { id: 'user-revenue-evolution', section: 'Utilisateurs', title: 'Evolution du chiffre d affaires utilisateur', icon: 'fa-solid fa-chart-column', layout: 'half' },
+  'user-revenue-evolution': { id: 'user-revenue-evolution', section: 'Utilisateurs', title: 'Évolution du chiffre d\'affaires utilisateur', icon: 'fa-solid fa-chart-column', layout: 'half' },
   'user-revenue-monthly': { id: 'user-revenue-monthly', section: 'Utilisateurs', title: 'Chiffre d affaires mensuel utilisateur', icon: 'fa-solid fa-money-bill-trend-up', layout: 'half' },
-  'user-profit-evolution': { id: 'user-profit-evolution', section: 'Utilisateurs', title: 'Evolution des benefices utilisateur', icon: 'fa-solid fa-scale-balanced', layout: 'half' },
+  'user-profit-evolution': { id: 'user-profit-evolution', section: 'Utilisateurs', title: 'Évolution des bénéfices utilisateur', icon: 'fa-solid fa-scale-balanced', layout: 'half' },
   'user-profit-monthly': { id: 'user-profit-monthly', section: 'Utilisateurs', title: 'Benefices mensuels utilisateur', icon: 'fa-solid fa-wallet', layout: 'half' },
-  'user-consultations-evolution': { id: 'user-consultations-evolution', section: 'Utilisateurs', title: 'Evolution des consultations utilisateur', icon: 'fa-solid fa-stethoscope', layout: 'half' },
+  'user-consultations-evolution': { id: 'user-consultations-evolution', section: 'Utilisateurs', title: 'Évolution des consultations utilisateur', icon: 'fa-solid fa-stethoscope', layout: 'half' },
   'user-consultations-monthly': { id: 'user-consultations-monthly', section: 'Utilisateurs', title: 'Consultations mensuelles utilisateur', icon: 'fa-solid fa-calendar-check', layout: 'half' },
   'user-payment-methods': { id: 'user-payment-methods', section: 'Utilisateurs', title: 'Types de paiement utilisateur', icon: 'fa-solid fa-chart-pie', layout: 'half' }
 };
@@ -559,16 +559,16 @@ export class StatistiquesPage implements AfterViewInit, OnDestroy {
     this.createMultiYearLineChart('consultations-monthly-combined', payload.consultations.monthlyByYear, 'Consultations');
     this.createDoughnutChart('consultations-type-chart', payload.consultations.byType, ['#f59e0b', '#0b8a74']);
     this.createDoughnutChart('consultations-users-chart', payload.consultations.byUser, ['#3478f6', '#0b8a74', '#f25f5c', '#7f8c8d', '#8e6cff', '#f59e0b']);
-    this.createLineChart('payments-revenue-evolution-chart', payload.payments.revenueEvolution, 'Chiffre d affaires', '#3478f6');
+    this.createLineChart('payments-revenue-evolution-chart', payload.payments.revenueEvolution, 'Chiffre d\'affaires', '#3478f6');
     this.createMultiYearLineChart('payments-revenue-monthly-combined', payload.payments.revenueMonthlyByYear, 'CA');
-    this.createLineChart('payments-profit-evolution-chart', payload.payments.profitEvolution, 'Benefices', '#0b8a74');
+    this.createLineChart('payments-profit-evolution-chart', payload.payments.profitEvolution, 'Bénéfices', '#0b8a74');
     this.createMultiYearLineChart('payments-profit-monthly-combined', payload.payments.profitMonthlyByYear, 'Benefices');
     this.createDoughnutChart('payments-methods-chart', payload.payments.paymentMethods, ['#3478f6', '#0b8a74', '#f25f5c', '#f59e0b', '#7f8c8d']);
 
     if (payload.userStats) {
-      this.createLineChart('user-revenue-evolution-chart', payload.userStats.revenueEvolution, 'Chiffre d affaires', '#4d92d1');
+      this.createLineChart('user-revenue-evolution-chart', payload.userStats.revenueEvolution, 'Chiffre d\'affaires', '#4d92d1');
       this.createMultiYearLineChart('user-revenue-monthly-combined', payload.userStats.revenueMonthlyByYear, 'CA');
-      this.createLineChart('user-profit-evolution-chart', payload.userStats.profitEvolution, 'Benefices', '#3ca374');
+      this.createLineChart('user-profit-evolution-chart', payload.userStats.profitEvolution, 'Bénéfices', '#3ca374');
       this.createMultiYearLineChart('user-profit-monthly-combined', payload.userStats.profitMonthlyByYear, 'Benefices');
       this.createLineChart('user-consultations-evolution-chart', payload.userStats.consultationEvolution, 'Consultations', '#f25f5c');
       this.createMultiYearLineChart('user-consultations-monthly-combined', payload.userStats.consultationMonthlyByYear, 'Consultations');
@@ -767,7 +767,7 @@ export class StatistiquesPage implements AfterViewInit, OnDestroy {
             backgroundColor: '#3478f6'
           },
           {
-            label: 'Non renseigne',
+            label: 'Non renseigné',
             data: points.map((point) => point.unknownCount),
             backgroundColor: '#7f8c8d'
           }

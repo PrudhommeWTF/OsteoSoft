@@ -39,7 +39,7 @@
               <canvas #monthlyChartHost class="w-100 h-100" aria-label="Graphique des consultations mensuelles"></canvas>
             </div>
           } @else {
-            <div class="alert alert-light border mb-0">Aucune consultation enregistree sur la periode.</div>
+            <div class="alert alert-light border mb-0">Aucune consultation enregistrée sur la période.</div>
           }
         </div>
       </div>
@@ -52,10 +52,10 @@
           <p class="text-secondary small text-uppercase mb-2">Par tranche d'age et sexe</p>
           @if (hasAgeChartData()) {
             <div class="ratio ratio-16x9">
-              <canvas #ageChartHost class="w-100 h-100" aria-label="Graphique empile de repartition des patients par tranche d'age et sexe"></canvas>
+              <canvas #ageChartHost class="w-100 h-100" aria-label="Graphique empilé de répartition des patients par tranche d'âge et sexe"></canvas>
             </div>
           } @else {
-            <div class="alert alert-light border mb-0 small">Aucune repartition disponible.</div>
+            <div class="alert alert-light border mb-0 small">Aucune répartition disponible.</div>
           }
         </div>
       </div>
@@ -105,7 +105,7 @@
                 <tr>
                   <th>Facture</th>
                   <th>Patient</th>
-                  <th>Echeance</th>
+                  <th>Échéance</th>
                   <th class="text-end">Montant</th>
                 </tr>
               </thead>
@@ -139,7 +139,7 @@
                     (click)="goToPendingPaymentsPage(pendingPaymentsPage() - 1)"
                     [disabled]="pendingPaymentsPage() === 1"
                   >
-                    Precedent
+                    Précédent
                   </button>
                 </li>
                 @for (item of pendingPaymentsPaginationItems(); track item.key) {
