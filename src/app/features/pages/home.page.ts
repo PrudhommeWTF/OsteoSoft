@@ -18,6 +18,10 @@ import { ApiService } from '../../core/api.service';
 import { AgendaSettings, DashboardEvent, DashboardPayload, StatisticsAgeSexPoint } from '../../core/api.types';
 import { WeekCalendar } from './week-calendar';
 
+type PaginationItem =
+  | { key: string; kind: 'page'; page: number }
+  | { key: string; kind: 'ellipsis' };
+
 @Component({
   selector: 'app-home-page',
   imports: [RouterLink, WeekCalendar],
@@ -26,6 +30,9 @@ import { WeekCalendar } from './week-calendar';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class HomePage implements AfterViewInit, OnDestroy {
+  private static readonly PENDING_PAYMENTS_PAGE_SIZE = 10;
+  private static readonly PENDING_PAYMENTS_MAX_VISIBLE_PAGES = 7;
+
   private readonly api = inject(ApiService);
   private readonly injector = inject(Injector);
 
@@ -35,9 +42,61 @@ export class HomePage implements AfterViewInit, OnDestroy {
   readonly isLoading = signal(true);
   readonly recentPatients = signal<DashboardPayload['recentPatients']>([]);
   readonly pendingPayments = signal<DashboardPayload['pendingPayments']>([]);
+  readonly pendingPaymentsPage = signal(1);
   readonly calendarEvents = signal<DashboardEvent[]>([]);
   readonly calendarSettings = signal<AgendaSettings | null>(null);
   readonly defaultAgendaView = signal<string>('Semaine');
+  readonly pendingPaymentsTotalPages = computed(() =>
+    Math.max(1, Math.ceil(this.pendingPayments().length / HomePage.PENDING_PAYMENTS_PAGE_SIZE))
+  );
+  readonly pendingPaymentsPageItems = computed(() => {
+    const page = this.pendingPaymentsPage();
+    const start = (page - 1) * HomePage.PENDING_PAYMENTS_PAGE_SIZE;
+    return this.pendingPayments().slice(start, start + HomePage.PENDING_PAYMENTS_PAGE_SIZE);
+  });
+  readonly pendingPaymentsPaginationItems = computed<PaginationItem[]>(() => {
+    const total = this.pendingPaymentsTotalPages();
+    const current = this.pendingPaymentsPage();
+
+    if (total <= HomePage.PENDING_PAYMENTS_MAX_VISIBLE_PAGES) {
+      return Array.from({ length: total }, (_value, index) => ({
+        key: `page-${index + 1}`,
+        kind: 'page' as const,
+        page: index + 1
+      }));
+    }
+
+    const pages = new Set<number>([1, total, current - 1, current, current + 1]);
+
+    if (current <= 3) {
+      pages.add(2);
+      pages.add(3);
+      pages.add(4);
+    }
+
+    if (current >= total - 2) {
+      pages.add(total - 1);
+      pages.add(total - 2);
+      pages.add(total - 3);
+    }
+
+    const sortedPages = Array.from(pages)
+      .filter((page) => page >= 1 && page <= total)
+      .sort((left, right) => left - right);
+
+    const items: PaginationItem[] = [];
+    let previousPage = 0;
+
+    for (const page of sortedPages) {
+      if (previousPage > 0 && page - previousPage > 1) {
+        items.push({ key: `ellipsis-${previousPage}-${page}`, kind: 'ellipsis' });
+      }
+      items.push({ key: `page-${page}`, kind: 'page', page });
+      previousPage = page;
+    }
+
+    return items;
+  });
 
   readonly hasMonthlyChartData = computed(() =>
     (this.pendingPayload()?.monthlyConsultations ?? []).some((point) => Number(point.count) > 0)
@@ -69,6 +128,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
       ]);
       this.recentPatients.set(payload.recentPatients);
       this.pendingPayments.set(payload.pendingPayments);
+      this.pendingPaymentsPage.set(1);
       this.calendarEvents.set(payload.events);
       this.calendarSettings.set(payload.agendaSettings);
       this.defaultAgendaView.set(profile.defaultAgendaView || 'Semaine');
@@ -184,5 +244,10 @@ export class HomePage implements AfterViewInit, OnDestroy {
       unknownCount: point.count,
       totalCount: point.count
     }));
+  }
+
+  goToPendingPaymentsPage(page: number): void {
+    const boundedPage = Math.min(Math.max(page, 1), this.pendingPaymentsTotalPages());
+    this.pendingPaymentsPage.set(boundedPage);
   }
 }

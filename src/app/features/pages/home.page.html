@@ -100,7 +100,7 @@
                 </tr>
               </thead>
               <tbody>
-                @for (payment of pendingPayments(); track payment.invoiceNumber) {
+                @for (payment of pendingPaymentsPageItems(); track payment.invoiceNumber) {
                   <tr
                     [routerLink]="['/patients', payment.patientId]"
                     [queryParams]="payment.consultationId ? { consultationId: payment.consultationId } : null"
@@ -118,6 +118,51 @@
               </tbody>
             </table>
           </div>
+          @if (pendingPayments().length > 10) {
+            <nav class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3" aria-label="Pagination paiements en attente">
+              <span class="small text-secondary">Page {{ pendingPaymentsPage() }} / {{ pendingPaymentsTotalPages() }}</span>
+              <ul class="pagination pagination-sm mb-0">
+                <li class="page-item" [class.disabled]="pendingPaymentsPage() === 1">
+                  <button
+                    type="button"
+                    class="page-link"
+                    (click)="goToPendingPaymentsPage(pendingPaymentsPage() - 1)"
+                    [disabled]="pendingPaymentsPage() === 1"
+                  >
+                    Precedent
+                  </button>
+                </li>
+                @for (item of pendingPaymentsPaginationItems(); track item.key) {
+                  @if (item.kind === 'page') {
+                    <li class="page-item" [class.active]="pendingPaymentsPage() === item.page">
+                      <button
+                        type="button"
+                        class="page-link"
+                        (click)="goToPendingPaymentsPage(item.page)"
+                        [attr.aria-current]="pendingPaymentsPage() === item.page ? 'page' : null"
+                      >
+                        {{ item.page }}
+                      </button>
+                    </li>
+                  } @else {
+                    <li class="page-item disabled" aria-hidden="true">
+                      <span class="page-link">...</span>
+                    </li>
+                  }
+                }
+                <li class="page-item" [class.disabled]="pendingPaymentsPage() === pendingPaymentsTotalPages()">
+                  <button
+                    type="button"
+                    class="page-link"
+                    (click)="goToPendingPaymentsPage(pendingPaymentsPage() + 1)"
+                    [disabled]="pendingPaymentsPage() === pendingPaymentsTotalPages()"
+                  >
+                    Suivant
+                  </button>
+                </li>
+              </ul>
+            </nav>
+          }
         </div>
       </div>
     </article>
