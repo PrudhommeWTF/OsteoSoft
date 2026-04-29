@@ -38,6 +38,7 @@ import {
   UserAgendaPreferences
 } from '../../core/api.types';
 import { AuthService } from '../../core/auth.service';
+import { HtmlSanitizerService } from '../../core/html-sanitizer.service';
 import { TopbarService } from '../../core/topbar.service';
 import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 
@@ -132,6 +133,7 @@ Je vous remercie par avance, et vous prie d'agréer mes sincères salutations.`;
 export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly authService = inject(AuthService);
+  private readonly htmlSanitizer = inject(HtmlSanitizerService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly fb = inject(FormBuilder);
@@ -4179,7 +4181,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   private setConsultationEditorContent(section: ConsultationEditorSection, html: string): void {
     const element = this.getConsultationEditorElement(section);
     if (element) {
-      element.innerHTML = html || '';
+      element.innerHTML = this.htmlSanitizer.sanitize(html || '');
     }
   }
 
@@ -4855,7 +4857,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       .replace(/<\s*\/li\s*>/gi, '\n');
 
     const container = globalThis.document.createElement('div');
-    container.innerHTML = withBreaks;
+    container.innerHTML = this.htmlSanitizer.sanitize(withBreaks);
     return this.normalizeMultilineText(container.textContent ?? '');
   }
 
