@@ -10840,8 +10840,8 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
   if (Array.isArray(payload.consultationDocuments) && payload.consultationDocuments.length > 0) {
     try {
       preValidatedDocuments = await normalizeConsultationDocumentsPayload(payload.consultationDocuments);
-    } catch {
-      return res.status(415).json({ message: 'Type de fichier non autorisé' });
+    } catch (err) {
+      return res.status(415).json({ message: err.message || 'Type de fichier non autorisé' });
     }
   }
 
@@ -11144,8 +11144,8 @@ app.post('/api/patients/:id/documents', authMiddleware, requirePermission('creat
   let mimeType;
   try {
     mimeType = await validateDocumentMimeType(contentBase64);
-  } catch {
-    return res.status(415).json({ message: 'Type de fichier non autorisé' });
+  } catch (err) {
+    return res.status(415).json({ message: err.message || 'Type de fichier non autorisé' });
   }
 
   if (requestedOfficeId !== null && patientOfficeId !== null && requestedOfficeId !== patientOfficeId) {
@@ -11778,8 +11778,8 @@ app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('c
   if (Array.isArray(payload.consultationDocuments) && payload.consultationDocuments.length > 0) {
     try {
       preValidatedDocuments = await normalizeConsultationDocumentsPayload(payload.consultationDocuments);
-    } catch {
-      return res.status(415).json({ message: 'Type de fichier non autorisé' });
+    } catch (err) {
+      return res.status(415).json({ message: err.message || 'Type de fichier non autorisé' });
     }
   }
 
