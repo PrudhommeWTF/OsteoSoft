@@ -1058,6 +1058,43 @@ try {
   console.warn('Patient audit encryption migration failed:', err.message);
 }
 
+// Migration: encrypt legacy draft payloads stored in plaintext
+try {
+  const migrationDone = getConfigValue('migration_draft_encryption_v1', '0');
+  if (migrationDone !== '1') {
+    const encryptedCount = db.transaction(() => {
+      const rows = db.prepare('SELECT user_id, flow_key, draft_json FROM draft').all();
+      const updateDraft = db.prepare(
+        'UPDATE draft SET draft_json = ? WHERE user_id = ? AND flow_key = ?'
+      );
+      let changedRows = 0;
+
+      for (const row of rows) {
+        const raw = String(row.draft_json ?? '');
+        const encrypted = restoreCipherField(raw);
+        if (encrypted === raw) {
+          continue;
+        }
+
+        updateDraft.run(encrypted, Number(row.user_id), String(row.flow_key ?? ''));
+        changedRows += 1;
+      }
+
+      db.prepare(
+        "INSERT OR REPLACE INTO config (key, value) VALUES ('migration_draft_encryption_v1', '1')"
+      ).run();
+
+      return changedRows;
+    })();
+
+    if (encryptedCount > 0) {
+      console.log(`✓ Encrypted ${encryptedCount} draft entrie(s)`);
+    }
+  }
+} catch (err) {
+  console.warn('Draft encryption migration failed:', err.message);
+}
+
 function normalizeUserAgendaPreferences(rawValue) {
   const source = rawValue && typeof rawValue === 'object' ? rawValue : {};
 
@@ -4102,7 +4139,7 @@ function restoreDataBackupSnapshot(backupPayload) {
       insertPatientDraft.run(
         Number(row.user_id),
         row.flow_key,
-        row.draft_json,
+        restoreCipherField(row.draft_json),
         Number(row.step) || 1,
         row.updated_at ?? new Date().toISOString()
       );
@@ -9055,7 +9092,7 @@ app.get('/api/patient-drafts/new-patient', authMiddleware, (req, res) => {
 
   let payload = null;
   try {
-    payload = JSON.parse(row.draft_json);
+    payload = JSON.parse(safeDecryptField(row.draft_json));
   } catch {
     payload = null;
   }
@@ -9086,7 +9123,7 @@ app.put('/api/patient-drafts/new-patient', authMiddleware, (req, res) => {
      DO UPDATE SET draft_json = excluded.draft_json,
                    step = excluded.step,
                    updated_at = CURRENT_TIMESTAMP`
-  ).run(req.user.sub, JSON.stringify(parsed.data.payload), parsed.data.step);
+  ).run(req.user.sub, encryptSensitiveField(JSON.stringify(parsed.data.payload)), parsed.data.step);
 
   return res.status(204).send();
 });
@@ -9115,7 +9152,7 @@ app.get('/api/office-drafts/new-office', authMiddleware, adminOnlyMiddleware, (r
 
   let payload = null;
   try {
-    payload = JSON.parse(row.draft_json);
+    payload = JSON.parse(safeDecryptField(row.draft_json));
   } catch {
     payload = null;
   }
@@ -9146,7 +9183,7 @@ app.put('/api/office-drafts/new-office', authMiddleware, adminOnlyMiddleware, (r
      DO UPDATE SET draft_json = excluded.draft_json,
                    step = excluded.step,
                    updated_at = CURRENT_TIMESTAMP`
-  ).run(req.user.sub, JSON.stringify(parsed.data.payload), parsed.data.step);
+  ).run(req.user.sub, encryptSensitiveField(JSON.stringify(parsed.data.payload)), parsed.data.step);
 
   return res.status(204).send();
 });
@@ -9186,7 +9223,7 @@ app.get('/api/patients/:id/consultation-drafts/new-consultation', authMiddleware
 
   let payload = null;
   try {
-    payload = JSON.parse(row.draft_json);
+    payload = JSON.parse(safeDecryptField(row.draft_json));
   } catch {
     payload = null;
   }
@@ -9228,7 +9265,7 @@ app.put('/api/patients/:id/consultation-drafts/new-consultation', authMiddleware
      DO UPDATE SET draft_json = excluded.draft_json,
                    step = excluded.step,
                    updated_at = CURRENT_TIMESTAMP`
-  ).run(req.user.sub, flowKey, JSON.stringify(parsed.data.payload), parsed.data.step);
+  ).run(req.user.sub, flowKey, encryptSensitiveField(JSON.stringify(parsed.data.payload)), parsed.data.step);
 
   return res.status(204).send();
 });
