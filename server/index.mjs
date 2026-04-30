@@ -942,11 +942,11 @@ try {
         'UPDATE patient_antecedents SET date_display = ?, description = ? WHERE id = ?'
       );
       for (const row of antecedentRows) {
-        let dateDisplay = String(row.date_display ?? '');
-        let description = String(row.description ?? '');
-        try { decryptSensitiveField(dateDisplay); } catch { dateDisplay = encryptSensitiveField(dateDisplay); }
-        try { decryptSensitiveField(description); } catch { description = encryptSensitiveField(description); }
-        updateAntecedent.run(dateDisplay, description, row.id);
+        updateAntecedent.run(
+          restoreCipherField(String(row.date_display ?? '')),
+          restoreCipherField(String(row.description ?? '')),
+          row.id
+        );
       }
 
       const reasonRows = db.prepare(
@@ -956,9 +956,7 @@ try {
         'UPDATE consultation_reason_items SET value = ? WHERE id = ?'
       );
       for (const row of reasonRows) {
-        let value = String(row.value ?? '');
-        try { decryptSensitiveField(value); } catch { value = encryptSensitiveField(value); }
-        updateReason.run(value, row.id);
+        updateReason.run(restoreCipherField(String(row.value ?? '')), row.id);
       }
 
       db.prepare(
