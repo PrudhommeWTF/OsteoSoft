@@ -845,6 +845,35 @@ function writeAuditLog(userId, action, entity, entityId, metadata = null) {
   ).run(userId ?? null, action, entity, entityId ?? null, metadata ? JSON.stringify(metadata) : null);
 }
 
+function processExpiredPatients() {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const expired = db.prepare(
+    `SELECT id, retention_until FROM patients
+     WHERE is_deleted = 0
+       AND retention_until IS NOT NULL
+       AND retention_until < ?`
+  ).all(today);
+
+  for (const { id, retention_until: retentionUntil } of expired) {
+    db.prepare(`UPDATE patients
+      SET cipher_full_name = ?, cipher_phone = ?, cipher_medical_notes = ?,
+          is_deleted = 1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`).run(
+      encryptSensitiveField('ANONYMIZED'),
+      encryptSensitiveField('ANONYMIZED'),
+      encryptSensitiveField('ANONYMIZED'),
+      id
+    );
+    writeAuditLog(null, 'AUTO_ANONYMIZE', 'patients', String(id), {
+      reason: 'retention_expired',
+      retentionUntil
+    });
+  }
+
+  return expired.length;
+}
+
 function shouldAutoTraceRequest(req) {
   const method = String(req.method ?? '').toUpperCase();
   if (['OPTIONS', 'HEAD'].includes(method)) {
@@ -8436,6 +8465,29 @@ app.post('/api/data-management/cleanup/apply', authMiddleware, requirePermission
   const allowedOfficeIds = getDataManagementScopedOfficeIds(req.userAccess);
   const updatedCount = applyDataCleanupChanges(kind, changes, allowedOfficeIds, req.user.sub);
   return res.json({ kind, updatedCount });
+});
+
+app.get('/api/data-management/retention-status', authMiddleware, requirePermission('manage-data-rgpd'), (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const rows = db.prepare(
+    `SELECT id, retention_until
+     FROM patients
+     WHERE is_deleted = 0
+       AND retention_until IS NOT NULL
+       AND retention_until <= ?
+     ORDER BY retention_until ASC`
+  ).all(in30Days);
+
+  const expiringSoon = rows.map((row) => ({
+    id: row.id,
+    retentionUntil: row.retention_until,
+    isExpired: row.retention_until < today
+  }));
+
+  writeAuditLog(req.user.sub, 'READ_LIST', 'data-management-retention', null, { count: expiringSoon.length });
+  return res.json({ expiringSoon });
 });
 
 app.get('/api/data-management/import-template', authMiddleware, requirePermission('manage-data-import'), (req, res) => {
@@ -16803,3 +16855,7 @@ app.listen(port, () => {
   // eslint-disable-next-line no-console
   console.log(`Secure SQLite API ready on http://localhost:${port}`);
 });
+
+processExpiredPatients();
+const retentionCheckIntervalMs = 24 * 60 * 60 * 1000;
+const retentionCheckInterval = setInterval(processExpiredPatients, retentionCheckIntervalMs);
