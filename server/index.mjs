@@ -969,6 +969,95 @@ try {
   console.warn('Sensitive field encryption migration failed:', err.message);
 }
 
+// Migration: encrypt historical patient audit before/after values stored in clear text
+try {
+  const migrationDone = getConfigValue('migration_patient_audit_encryption_v1', '0');
+  if (migrationDone !== '1') {
+    const encryptedCount = db.transaction(() => {
+      const rows = db
+        .prepare(
+          `SELECT id, metadata
+           FROM audit_logs
+           WHERE entity = 'patients' AND action = 'UPDATE' AND metadata IS NOT NULL AND trim(metadata) <> ''`
+        )
+        .all();
+
+      const updateMetadata = db.prepare('UPDATE audit_logs SET metadata = ? WHERE id = ?');
+      let changedRows = 0;
+
+      for (const row of rows) {
+        let metadata;
+        try {
+          metadata = JSON.parse(String(row.metadata ?? '{}'));
+        } catch {
+          continue;
+        }
+
+        if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+          continue;
+        }
+
+        const rawChanges = metadata.changes;
+        if (!Array.isArray(rawChanges) || rawChanges.length === 0) {
+          continue;
+        }
+
+        let hasPlainValues = false;
+        const encryptedChanges = rawChanges.map((change) => {
+          if (!change || typeof change !== 'object' || Array.isArray(change)) {
+            return change;
+          }
+
+          const field = String(change.field ?? '').trim();
+          if (!field) {
+            return change;
+          }
+
+          const hasCipherValues =
+            Object.prototype.hasOwnProperty.call(change, 'beforeCipher') ||
+            Object.prototype.hasOwnProperty.call(change, 'afterCipher');
+          if (hasCipherValues) {
+            return {
+              field,
+              beforeCipher: String(change.beforeCipher ?? ''),
+              afterCipher: String(change.afterCipher ?? '')
+            };
+          }
+
+          hasPlainValues = true;
+          const before = normalizeAuditValue(change.before);
+          const after = normalizeAuditValue(change.after);
+
+          return {
+            field,
+            beforeCipher: encryptSensitiveField(before),
+            afterCipher: encryptSensitiveField(after)
+          };
+        });
+
+        if (!hasPlainValues) {
+          continue;
+        }
+
+        updateMetadata.run(JSON.stringify({ ...metadata, changes: encryptedChanges }), row.id);
+        changedRows += 1;
+      }
+
+      db.prepare(
+        "INSERT OR REPLACE INTO config (key, value) VALUES ('migration_patient_audit_encryption_v1', '1')"
+      ).run();
+
+      return changedRows;
+    })();
+
+    if (encryptedCount > 0) {
+      console.log(`✓ Encrypted patient audit before/after values in ${encryptedCount} log entrie(s)`);
+    }
+  }
+} catch (err) {
+  console.warn('Patient audit encryption migration failed:', err.message);
+}
+
 function normalizeUserAgendaPreferences(rawValue) {
   const source = rawValue && typeof rawValue === 'object' ? rawValue : {};
 
@@ -6146,8 +6235,8 @@ function buildPatientUpdateChanges(beforeSnapshot, afterSnapshot) {
 
     changes.push({
       field: labels[key],
-      before,
-      after
+      beforeCipher: encryptSensitiveField(before),
+      afterCipher: encryptSensitiveField(after)
     });
   }
 
@@ -11712,8 +11801,12 @@ app.get('/api/patients/:id/audit-logs', authMiddleware, requirePermission('read-
         ? metadata.changes
             .map((change) => ({
               field: String(change?.field ?? '').trim(),
-              before: String(change?.before ?? ''),
-              after: String(change?.after ?? '')
+              before: safeDecryptField(
+                String(change?.beforeCipher ?? change?.before ?? '')
+              ),
+              after: safeDecryptField(
+                String(change?.afterCipher ?? change?.after ?? '')
+              )
             }))
             .filter((change) => change.field.length > 0)
         : [];
@@ -11863,7 +11956,13 @@ app.put('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
     medicalHistory: updatedNotes.medicalHistory ?? ''
   };
 
-  const changes = buildPatientUpdateChanges(beforeSnapshot, afterSnapshot);
+  let changes = [];
+  try {
+    changes = buildPatientUpdateChanges(beforeSnapshot, afterSnapshot);
+  } catch (error) {
+    console.warn('Unable to build encrypted patient audit changes:', error instanceof Error ? error.message : error);
+    changes = [];
+  }
 
   db.prepare(
     `UPDATE patients SET
@@ -11900,10 +11999,14 @@ app.put('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
   }
   replacePatientAntecedents(id, String(updatedNotes.medicalHistory ?? ''));
 
-  writeAuditLog(req.user.sub, 'UPDATE', 'patients', String(id), {
-    changedFieldCount: changes.length,
-    changes
-  });
+  try {
+    writeAuditLog(req.user.sub, 'UPDATE', 'patients', String(id), {
+      changedFieldCount: changes.length,
+      changes
+    });
+  } catch (error) {
+    console.warn('Unable to write patient update audit log:', error instanceof Error ? error.message : error);
+  }
   return res.status(204).send();
 });
 
