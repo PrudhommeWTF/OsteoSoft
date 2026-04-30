@@ -9,6 +9,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
+import { fileTypeFromBuffer } from 'file-type';
 import helmet from 'helmet';
 import JSZip from 'jszip';
 import jwt from 'jsonwebtoken';
@@ -5777,7 +5778,33 @@ function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}
   return null;
 }
 
-function normalizeConsultationDocumentsPayload(rawDocuments) {
+const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+]);
+
+async function validateDocumentMimeType(contentBase64) {
+  const buffer = Buffer.from(contentBase64, 'base64');
+  const detected = await fileTypeFromBuffer(buffer);
+  const actualMime = detected?.mime ?? null;
+
+  if (actualMime !== null && !ALLOWED_DOCUMENT_MIME_TYPES.has(actualMime)) {
+    throw Object.assign(new Error(`Type de fichier non autorisé: ${actualMime}`), { statusCode: 415 });
+  }
+
+  if (actualMime !== null) {
+    return actualMime;
+  }
+
+  return 'application/octet-stream';
+}
+
+async function normalizeConsultationDocumentsPayload(rawDocuments) {
   const input = Array.isArray(rawDocuments) ? rawDocuments : [];
   const seenRefs = new Set();
   const normalized = [];
@@ -5795,10 +5822,12 @@ function normalizeConsultationDocumentsPayload(rawDocuments) {
     }
     seenRefs.add(documentRef);
 
+    const mimeType = await validateDocumentMimeType(contentBase64);
+
     normalized.push({
       documentRef,
       fileName,
-      mimeType: String(item?.mimeType ?? 'application/octet-stream').trim() || 'application/octet-stream',
+      mimeType,
       sizeBytes: Math.max(0, Number(item?.sizeBytes) || 0),
       title: String(item?.title ?? '').trim(),
       comment: String(item?.comment ?? '').trim(),
@@ -5809,8 +5838,12 @@ function normalizeConsultationDocumentsPayload(rawDocuments) {
   return normalized;
 }
 
-function storeConsultationDocuments(patientId, consultationId, officeId, createdByUserId, rawDocuments) {
-  const documents = normalizeConsultationDocumentsPayload(rawDocuments);
+async function storeConsultationDocuments(patientId, consultationId, officeId, createdByUserId, rawDocuments) {
+  const documents = await normalizeConsultationDocumentsPayload(rawDocuments);
+  return insertNormalizedDocuments(patientId, consultationId, officeId, createdByUserId, documents);
+}
+
+function insertNormalizedDocuments(patientId, consultationId, officeId, createdByUserId, documents) {
   if (!documents.length) {
     return [];
   }
@@ -10795,13 +10828,22 @@ app.get('/api/patients/referrals', authMiddleware, requirePermission('create-pat
   return res.json({ referrals: referrals.slice(0, 20) });
 });
 
-app.post('/api/patients', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+app.post('/api/patients', authMiddleware, requirePermission('create-patient-record'), async (req, res) => {
   const parsed = createPatientSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: 'Payload invalide' });
   }
 
   const payload = parsed.data;
+
+  let preValidatedDocuments = [];
+  if (Array.isArray(payload.consultationDocuments) && payload.consultationDocuments.length > 0) {
+    try {
+      preValidatedDocuments = await normalizeConsultationDocumentsPayload(payload.consultationDocuments);
+    } catch {
+      return res.status(415).json({ message: 'Type de fichier non autorisé' });
+    }
+  }
 
   const consultationScheduling = resolveConsultationSchedulingContextFromRaw(payload.consultationNote, {
     userId: req.user.sub,
@@ -10902,12 +10944,12 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
     linkStrategy: payload.consultationLinkStrategy === 'create-new' ? 'create-new' : 'attach-existing'
   });
 
-  const createdDocuments = storeConsultationDocuments(
+  const createdDocuments = insertNormalizedDocuments(
     Number(inserted.lastInsertRowid),
     consultationCreation?.consultationId ?? null,
     consultationCreation?.officeId ?? (req.userAccess?.officeIds?.[0] ?? null),
     req.user.sub,
-    payload.consultationDocuments
+    preValidatedDocuments
   );
 
   synchronizeBidirectionalRelatedPeople({
@@ -11043,7 +11085,7 @@ app.get('/api/patient-documents/:documentRef', authMiddleware, requirePermission
   });
 });
 
-app.post('/api/patients/:id/documents', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+app.post('/api/patients/:id/documents', authMiddleware, requirePermission('create-patient-record'), async (req, res) => {
   const patientId = Number(req.params.id);
   if (!Number.isInteger(patientId) || patientId <= 0) {
     return res.status(400).json({ message: 'Identifiant patient invalide' });
@@ -11066,7 +11108,6 @@ app.post('/api/patients/:id/documents', authMiddleware, requirePermission('creat
   }
 
   const fileName = String(req.body?.fileName ?? '').trim();
-  const mimeType = String(req.body?.mimeType ?? 'application/octet-stream').trim() || 'application/octet-stream';
   const declaredSizeBytes = Math.max(0, Number(req.body?.sizeBytes) || 0);
   const title = String(req.body?.title ?? '').trim();
   const comment = String(req.body?.comment ?? '').trim();
@@ -11098,6 +11139,13 @@ app.post('/api/patients/:id/documents', authMiddleware, requirePermission('creat
     if (delta > 2048) {
       return res.status(400).json({ message: 'Taille de fichier incoherente' });
     }
+  }
+
+  let mimeType;
+  try {
+    mimeType = await validateDocumentMimeType(contentBase64);
+  } catch {
+    return res.status(415).json({ message: 'Type de fichier non autorisé' });
   }
 
   if (requestedOfficeId !== null && patientOfficeId !== null && requestedOfficeId !== patientOfficeId) {
@@ -11708,7 +11756,7 @@ app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-co
   });
 });
 
-app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('create-consultation'), (req, res) => {
+app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('create-consultation'), async (req, res) => {
   const patientId = Number(req.params.id);
   if (!Number.isInteger(patientId) || patientId <= 0) {
     return res.status(400).json({ message: 'ID patient invalide' });
@@ -11725,6 +11773,16 @@ app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('c
   }
 
   const payload = parsed.data;
+
+  let preValidatedDocuments = [];
+  if (Array.isArray(payload.consultationDocuments) && payload.consultationDocuments.length > 0) {
+    try {
+      preValidatedDocuments = await normalizeConsultationDocumentsPayload(payload.consultationDocuments);
+    } catch {
+      return res.status(415).json({ message: 'Type de fichier non autorisé' });
+    }
+  }
+
   const normalizedReasonItems = normalizeConsultationReasonItems(payload.reasonItems);
 
   const officeId = Number.isInteger(payload.officeId) && Number(payload.officeId) > 0
@@ -11760,12 +11818,12 @@ app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('c
     remarksHtml: payload.remarksHtml
   });
 
-  storeConsultationDocuments(
+  insertNormalizedDocuments(
     patientId,
     consultationId,
     officeId,
     req.user.sub,
-    payload.consultationDocuments
+    preValidatedDocuments
   );
 
   writeAuditLog(req.user.sub, 'CREATE', 'consultations', String(consultationId), {
