@@ -12201,8 +12201,49 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
 
 app.post('/api/patients/:id/anonymize', authMiddleware, adminOnlyMiddleware, (req, res) => {
   const id = Number(req.params.id);
-  const updated = db
-    .prepare(
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ message: 'Identifiant patient invalide' });
+  }
+
+  const patient = db.prepare('SELECT id FROM patients WHERE id = ?').get(id);
+  if (!patient) {
+    return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  const anonymizedValue = encryptSensitiveField('ANONYMIZED');
+  const anonymizePatient = db.transaction((patientId) => {
+    db.prepare('DELETE FROM patient_antecedents WHERE patient_id = ?').run(patientId);
+    db.prepare('DELETE FROM patient_documents WHERE patient_id = ?').run(patientId);
+
+    db.prepare(
+      `DELETE FROM consultation_sections
+       WHERE consultation_id IN (
+         SELECT id FROM consultations WHERE patient_id = ?
+       )`
+    ).run(patientId);
+
+    db.prepare(
+      `DELETE FROM consultation_reason_items
+       WHERE consultation_id IN (
+         SELECT id FROM consultations WHERE patient_id = ?
+       )`
+    ).run(patientId);
+
+    db.prepare('DELETE FROM consultations WHERE patient_id = ?').run(patientId);
+
+    db.prepare(
+      `UPDATE appointments
+       SET reason_cipher = ?
+       WHERE patient_id = ?`
+    ).run(anonymizedValue, patientId);
+
+    db.prepare(
+      `UPDATE invoices
+       SET notes_cipher = ?
+       WHERE patient_id = ?`
+    ).run(anonymizedValue, patientId);
+
+    db.prepare(
       `UPDATE patients
        SET cipher_full_name = ?,
            cipher_phone = ?,
@@ -12210,17 +12251,13 @@ app.post('/api/patients/:id/anonymize', authMiddleware, adminOnlyMiddleware, (re
            is_deleted = 1,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`
-    )
-    .run(
-      encryptSensitiveField('ANONYMIZED'),
-      encryptSensitiveField('ANONYMIZED'),
-      encryptSensitiveField('ANONYMIZED'),
-      id
-    );
+    ).run(anonymizedValue, anonymizedValue, anonymizedValue, patientId);
 
-  if (!updated.changes) {
-    return res.status(404).json({ message: 'Patient introuvable' });
-  }
+    db.prepare("DELETE FROM audit_logs WHERE entity = 'patients' AND entity_id = ?")
+      .run(String(patientId));
+  });
+
+  anonymizePatient(id);
 
   writeAuditLog(req.user.sub, 'ANONYMIZE', 'patients', String(id));
   return res.status(204).send();
