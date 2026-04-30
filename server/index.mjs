@@ -687,6 +687,28 @@ function decryptSensitiveField(cipherText) {
   return decipher.update(encrypted, undefined, 'utf8') + decipher.final('utf8');
 }
 
+function safeDecryptField(cipherText) {
+  const text = String(cipherText ?? '');
+  try {
+    return decryptSensitiveField(text);
+  } catch {
+    return text;
+  }
+}
+
+function restoreCipherField(value) {
+  const text = String(value ?? '');
+  if (!text) {
+    return encryptSensitiveField('');
+  }
+  try {
+    decryptSensitiveField(text);
+    return text;
+  } catch {
+    return encryptSensitiveField(text);
+  }
+}
+
 function signTokenForSession(user, remember) {
   const tokenTtl = remember ? SESSION_REMEMBER_TTL : SESSION_DEFAULT_TTL;
   return jwt.sign({ sub: user.id, role: user.role, username: user.username }, jwtSecret, {
@@ -906,6 +928,45 @@ function getConfigInteger(key, fallback) {
   }
 
   return raw;
+}
+
+// Migration: encrypt plaintext sensitive fields in patient_antecedents and consultation_reason_items
+try {
+  const migrationDone = getConfigValue('migration_sensitive_fields_v1', '0');
+  if (migrationDone !== '1') {
+    db.transaction(() => {
+      const antecedentRows = db.prepare(
+        'SELECT id, date_display, description FROM patient_antecedents'
+      ).all();
+      const updateAntecedent = db.prepare(
+        'UPDATE patient_antecedents SET date_display = ?, description = ? WHERE id = ?'
+      );
+      for (const row of antecedentRows) {
+        updateAntecedent.run(
+          restoreCipherField(String(row.date_display ?? '')),
+          restoreCipherField(String(row.description ?? '')),
+          row.id
+        );
+      }
+
+      const reasonRows = db.prepare(
+        'SELECT id, value FROM consultation_reason_items'
+      ).all();
+      const updateReason = db.prepare(
+        'UPDATE consultation_reason_items SET value = ? WHERE id = ?'
+      );
+      for (const row of reasonRows) {
+        updateReason.run(restoreCipherField(String(row.value ?? '')), row.id);
+      }
+
+      db.prepare(
+        "INSERT OR REPLACE INTO config (key, value) VALUES ('migration_sensitive_fields_v1', '1')"
+      ).run();
+    })();
+    console.log('✓ Encrypted sensitive fields in patient_antecedents and consultation_reason_items');
+  }
+} catch (err) {
+  console.warn('Sensitive field encryption migration failed:', err.message);
 }
 
 function normalizeUserAgendaPreferences(rawValue) {
@@ -3751,9 +3812,9 @@ function restoreDataBackupSnapshot(backupPayload) {
         Number(row.id),
         Number(row.patient_id),
         String(row.date_precision ?? 'date').trim() || 'date',
-        String(row.date_display ?? '').trim(),
+        restoreCipherField(String(row.date_display ?? '').trim()),
         String(row.category ?? '').trim(),
-        String(row.description ?? '').trim(),
+        restoreCipherField(String(row.description ?? '').trim()),
         Number(row.important) ? 1 : 0,
         Number(row.sort_key) || 0,
         row.created_at ?? new Date().toISOString(),
@@ -3912,7 +3973,7 @@ function restoreDataBackupSnapshot(backupPayload) {
         Number(row.id),
         Number(row.consultation_id),
         String(row.label ?? '').trim(),
-        String(row.value ?? '').trim(),
+        restoreCipherField(String(row.value ?? '').trim()),
         Number(row.important) ? 1 : 0,
         Number(row.display_order) || 0,
         row.created_at ?? new Date().toISOString()
@@ -5703,9 +5764,9 @@ function replacePatientAntecedents(patientId, medicalHistoryRaw) {
       insertAntecedent.run(
         id,
         item.datePrecision,
-        item.dateDisplay,
+        encryptSensitiveField(item.dateDisplay),
         item.category,
-        item.description,
+        encryptSensitiveField(item.description),
         item.important ? 1 : 0,
         item.sortKey
       );
@@ -5737,7 +5798,7 @@ function replaceConsultationReasonItems(consultationId, reasonItems) {
       insertItem.run(
         id,
         item.label,
-        item.value,
+        encryptSensitiveField(item.value),
         item.important ? 1 : 0,
         index
       );
@@ -5800,7 +5861,7 @@ function getConsultationReasonItems(consultationId) {
     return rows
       .map((row) => ({
         label: String(row.label ?? '').trim(),
-        value: String(row.value ?? '').trim(),
+        value: safeDecryptField(row.value).trim(),
         important: Boolean(row.important)
       }))
       .filter((item) => item.label.length > 0);
@@ -5861,7 +5922,7 @@ function getPatientAntecedentItems(patientId, medicalHistoryRaw = null) {
     return rows
       .map((row) => ({
         category: String(row.category ?? '').trim(),
-        label: String(row.description ?? '').trim(),
+        label: safeDecryptField(row.description).trim(),
         important: Boolean(row.important)
       }))
       .filter((item) => item.category.length > 0 || item.label.length > 0);
@@ -5902,7 +5963,7 @@ function buildConsultationReasonItemsMap(rows) {
     const items = map.get(consultationId) ?? [];
     items.push({
       label: String(row.label ?? '').trim(),
-      value: String(row.value ?? '').trim(),
+      value: safeDecryptField(row.value).trim(),
       important: Boolean(row.important)
     });
     map.set(consultationId, items.filter((item) => item.label.length > 0));
@@ -5997,7 +6058,7 @@ function buildPatientAntecedentsMap(rows) {
     const items = map.get(patientId) ?? [];
     items.push({
       category: String(row.category ?? '').trim(),
-      label: String(row.description ?? '').trim(),
+      label: safeDecryptField(row.description).trim(),
       important: Boolean(row.important)
     });
     map.set(patientId, items.filter((item) => item.category.length > 0 || item.label.length > 0));
@@ -9164,9 +9225,9 @@ app.get('/api/patients/:id/antecedents', authMiddleware, requirePermission('read
   const antecedents = rows.map((row) => ({
     id: Number(row.id),
     datePrecision: String(row.date_precision ?? 'date').trim() || 'date',
-    date: String(row.date_display ?? '').trim(),
+    date: safeDecryptField(row.date_display).trim(),
     category: String(row.category ?? '').trim(),
-    description: String(row.description ?? '').trim(),
+    description: safeDecryptField(row.description).trim(),
     important: Boolean(row.important),
     sortKey: Number(row.sort_key) || 0
   }));
@@ -11904,9 +11965,29 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
     .all(id);
 
   const consultationSectionsById = buildConsultationSectionsMap(consultationRows);
+  const consultationReasonItemsById = buildConsultationReasonItemsMap(consultationRows);
+
+  const antecedentRows = db
+    .prepare(
+      `SELECT id, date_precision, date_display, category, description, important, sort_key
+       FROM patient_antecedents
+       WHERE patient_id = ?
+       ORDER BY sort_key DESC, id DESC`
+    )
+    .all(id);
+
+  const antecedents = antecedentRows.map((row) => ({
+    id: row.id,
+    datePrecision: String(row.date_precision ?? 'date').trim() || 'date',
+    date: safeDecryptField(row.date_display).trim(),
+    category: String(row.category ?? '').trim(),
+    description: safeDecryptField(row.description).trim(),
+    important: Boolean(row.important)
+  }));
 
   const consultations = consultationRows.map((consultation) => {
     const sections = consultationSectionsById.get(Number(consultation.id)) ?? buildEmptyConsultationSections();
+    const reasonItems = consultationReasonItemsById.get(Number(consultation.id)) ?? [];
 
     return {
       id: consultation.id,
@@ -11919,6 +12000,7 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
       evaBefore: consultation.eva_before ?? 0,
       evaAfter: consultation.eva_after ?? 0,
       profile: consultation.profile ?? 'Adulte',
+      reasonItems,
       motifMain: sections.motifMainHtml,
       tests: sections.testsHtml,
       schema: sections.schemaHtml,
@@ -11994,6 +12076,7 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
       updatedAt: row.updated_at
     },
     appointments,
+    antecedents,
     consultations,
     auditTrail
   };
