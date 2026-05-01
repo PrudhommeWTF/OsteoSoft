@@ -6,6 +6,7 @@ import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { DirectoryContact, DirectoryContactPayload, OfficeOption } from '../../core/api.types';
 import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
+import { sanitizeCellValue } from '../../core/xlsx-export.utils';
 
 type ContactKindFilter = 'all' | 'person' | 'company';
 
@@ -434,19 +435,19 @@ export class DirectoryPage {
       } else {
         const xlsx = await import('xlsx');
         const sheetRows = rows.map((contact) => ({
-          nom: this.contactName(contact),
-          type: this.kindLabel(contact.kind),
-          cabinet: contact.officeName,
-          fonction: contact.role,
-          email: contact.email,
-          telephoneMobile: contact.mobilePhone,
-          telephoneFixe: contact.landlinePhone,
-          adresse: contact.address1,
-          complementAdresse: contact.address2,
-          codePostal: contact.postalCode,
-          ville: contact.city,
-          pays: contact.country,
-          notes: contact.notes
+          nom: sanitizeCellValue(this.contactName(contact)),
+          type: sanitizeCellValue(this.kindLabel(contact.kind)),
+          cabinet: sanitizeCellValue(contact.officeName),
+          fonction: sanitizeCellValue(contact.role),
+          email: sanitizeCellValue(contact.email),
+          telephoneMobile: sanitizeCellValue(contact.mobilePhone),
+          telephoneFixe: sanitizeCellValue(contact.landlinePhone),
+          adresse: sanitizeCellValue(contact.address1),
+          complementAdresse: sanitizeCellValue(contact.address2),
+          codePostal: sanitizeCellValue(contact.postalCode),
+          ville: sanitizeCellValue(contact.city),
+          pays: sanitizeCellValue(contact.country),
+          notes: sanitizeCellValue(contact.notes)
         }));
 
         const worksheet = xlsx.utils.json_to_sheet(sheetRows);

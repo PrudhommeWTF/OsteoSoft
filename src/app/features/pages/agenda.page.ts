@@ -15,6 +15,7 @@ import { AuthService } from '../../core/auth.service';
 import { AgendaSettings, Appointment, DashboardEvent, LocalAgendaCalendar, OfficeOpeningHours, OfficeOption, Patient, Practitioner } from '../../core/api.types';
 import { WeekCalendar } from './week-calendar';
 import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
+import { sanitizeCellValue } from '../../core/xlsx-export.utils';
 
 @Component({
   selector: 'app-agenda-page',
@@ -460,16 +461,16 @@ export class AgendaPage implements OnDestroy {
             minute: '2-digit',
             hour12: false
           }).format(new Date(event.start)),
-          patient: event.patient,
-          motif: event.reason,
-          statut: event.status,
-          typeConsultation: event.consultationType,
-          titreConsultation: event.consultationTitle,
-          praticien: event.consultationPractitioner,
-          sexe: event.patientSex,
-          telPortable: event.patientMobilePhone,
-          telFixe: event.patientLandlinePhone,
-          remarques: event.patientRemarks
+          patient: sanitizeCellValue(event.patient),
+          motif: sanitizeCellValue(event.reason),
+          statut: sanitizeCellValue(event.status),
+          typeConsultation: sanitizeCellValue(event.consultationType),
+          titreConsultation: sanitizeCellValue(event.consultationTitle),
+          praticien: sanitizeCellValue(event.consultationPractitioner),
+          sexe: sanitizeCellValue(event.patientSex),
+          telPortable: sanitizeCellValue(event.patientMobilePhone),
+          telFixe: sanitizeCellValue(event.patientLandlinePhone),
+          remarques: sanitizeCellValue(event.patientRemarks)
         }));
 
         const worksheet = xlsx.utils.json_to_sheet(sheetRows);

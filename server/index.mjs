@@ -8100,6 +8100,29 @@ function isDataImportRowEmpty(row) {
   return Object.values(row ?? {}).every((value) => String(value ?? '').trim() === '');
 }
 
+const ALLOWED_IMPORT_MIME_TYPES = new Map([
+  ['csv', new Set(['text/csv', 'text/plain', 'application/csv', 'application/vnd.ms-excel'])],
+  ['xlsx', new Set(['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip', 'application/octet-stream'])]
+]);
+
+async function validateImportFileType(buffer, format, fileName) {
+  const lowerName = String(fileName ?? '').toLowerCase();
+  if (format === 'csv' && !lowerName.endsWith('.csv')) {
+    throw Object.assign(new Error('Le fichier doit avoir l\'extension .csv pour ce format'), { statusCode: 400 });
+  }
+  if (format === 'xlsx' && !lowerName.endsWith('.xlsx')) {
+    throw Object.assign(new Error('Le fichier doit avoir l\'extension .xlsx pour ce format'), { statusCode: 400 });
+  }
+
+  if (format === 'xlsx') {
+    const detected = await fileTypeFromBuffer(buffer);
+    const actualMime = detected?.mime ?? null;
+    if (actualMime === null || !ALLOWED_IMPORT_MIME_TYPES.get('xlsx').has(actualMime)) {
+      throw Object.assign(new Error(`Type de fichier non autorisé: ${actualMime ?? 'inconnu'}`), { statusCode: 415 });
+    }
+  }
+}
+
 function parseDataImportWorkbook(buffer, format) {
   if (format === 'csv') {
     const csvText = buffer.toString('utf8');
@@ -8606,7 +8629,7 @@ app.get('/api/data-management/import-template', authMiddleware, requirePermissio
   return res.status(200).send(workbookBuffer);
 });
 
-app.post('/api/data-management/import', authMiddleware, requirePermission('manage-data-import'), (req, res) => {
+app.post('/api/data-management/import', authMiddleware, requirePermission('manage-data-import'), async (req, res) => {
   const parsed = dataImportPayloadSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: 'Payload d\'import invalide' });
@@ -8629,6 +8652,7 @@ app.post('/api/data-management/import', authMiddleware, requirePermission('manag
       ? payload.contentBase64.slice(payload.contentBase64.indexOf(',') + 1)
       : payload.contentBase64;
     const fileBuffer = Buffer.from(normalizedBase64, 'base64');
+    await validateImportFileType(fileBuffer, payload.format, payload.fileName);
     const workbook = parseDataImportWorkbook(fileBuffer, payload.format);
     const { patientRows, contactRows, consultationRows } = getDataImportRows(workbook, payload.dataset);
 
@@ -8955,8 +8979,9 @@ app.post('/api/data-management/import', authMiddleware, requirePermission('manag
       errors: errors.slice(0, 100)
     });
   } catch (error) {
+    const statusCode = error?.statusCode ?? 400;
     const message = error instanceof Error ? error.message : 'Impossible de traiter le fichier d\'import';
-    return res.status(400).json({ message });
+    return res.status(statusCode).json({ message });
   }
 });
 

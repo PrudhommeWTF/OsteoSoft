@@ -5,6 +5,7 @@ import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { OfficeOption, Patient } from '../../core/api.types';
 import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
+import { sanitizeCellValue } from '../../core/xlsx-export.utils';
 
 @Component({
   selector: 'app-patients-page',
@@ -195,11 +196,11 @@ export class PatientsPage {
       } else {
         const xlsx = await import('xlsx');
         const sheetRows = rows.map((patient) => ({
-          nom: patient.fullName,
-          telephone: patient.phone,
-          derniereVisite: patient.lastVisit,
-          sexe: patient.sex,
-          age: patient.age ?? '',
+          nom: sanitizeCellValue(patient.fullName),
+          telephone: sanitizeCellValue(patient.phone),
+          derniereVisite: sanitizeCellValue(patient.lastVisit),
+          sexe: sanitizeCellValue(patient.sex),
+          age: sanitizeCellValue(patient.age ?? ''),
           nombreConsultations: patient.consultationCount
         }));
 
