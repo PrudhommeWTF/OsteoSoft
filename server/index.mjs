@@ -751,7 +751,11 @@ function restoreCipherField(value) {
 
 function signTokenForSession(user, remember) {
   const tokenTtl = remember ? SESSION_REMEMBER_TTL : SESSION_DEFAULT_TTL;
-  return jwt.sign({ sub: user.id, role: user.role, username: user.username }, jwtSecret, {
+  const payload = { sub: user.id, role: user.role, username: user.username };
+  if (user.must_change_password === 1) {
+    payload.mcp = true;
+  }
+  return jwt.sign(payload, jwtSecret, {
     expiresIn: tokenTtl
   });
 }
@@ -6548,12 +6552,26 @@ function authMiddleware(req, res, next) {
     const payload = jwt.verify(token, jwtSecret);
     req.user = payload;
 
+    // Enforce must_change_password: fast-path from JWT flag (mcp=true) or fallback DB
+    // check for tokens issued before this flag was introduced. The DB check is only
+    // performed when the JWT already signals mcp or when the flag is absent (legacy token).
     const route = String(req.path ?? '').split('?')[0];
     if (!ROUTES_ALLOWED_WITH_MUST_CHANGE_PASSWORD.has(route)) {
-      const userFlags = db.prepare('SELECT must_change_password FROM users WHERE id = ?').get(payload.sub);
-      if (userFlags?.must_change_password === 1) {
-        return res.status(403).json({ message: 'Changement de mot de passe requis', mustChangePassword: true });
+      const jwtMcp = payload.mcp;
+      if (jwtMcp === true) {
+        // JWT already signals must_change_password; confirm with DB in case it was cleared
+        const userFlags = db.prepare('SELECT must_change_password FROM users WHERE id = ?').get(payload.sub);
+        if (userFlags?.must_change_password === 1) {
+          return res.status(403).json({ message: 'Changement de mot de passe requis', mustChangePassword: true });
+        }
+      } else if (jwtMcp === undefined) {
+        // Legacy token without mcp field: do DB check for backward compatibility
+        const userFlags = db.prepare('SELECT must_change_password FROM users WHERE id = ?').get(payload.sub);
+        if (userFlags?.must_change_password === 1) {
+          return res.status(403).json({ message: 'Changement de mot de passe requis', mustChangePassword: true });
+        }
       }
+      // jwtMcp === false → no restriction, skip DB check
     }
 
     return next();
@@ -7112,25 +7130,28 @@ app.use(
 );
 
 // Routes that accept large file payloads (documents, backups, imports, logos)
+// Patterns are kept strict (bounded \d{1,10}) to avoid runaway regex on malformed paths
 const LARGE_BODY_ROUTE_PATTERNS = [
   /^\/api\/data-management\/restore$/,
   /^\/api\/data-management\/import$/,
-  /^\/api\/patients\/\d+\/documents$/,
-  /^\/api\/patients\/\d+\/consultations$/,
-  /^\/api\/patients\/\d+\/consultation-drafts\/new-consultation$/,
-  /^\/api\/offices(\/\d+)?$/,
+  /^\/api\/patients\/\d{1,10}\/documents$/,
+  /^\/api\/patients\/\d{1,10}\/consultations$/,
+  /^\/api\/patients\/\d{1,10}\/consultation-drafts\/new-consultation$/,
+  /^\/api\/offices(\/\d{1,10})?$/,
   /^\/api\/setup\/office$/,
 ];
 
+function resolveBodyLimit(path) {
+  return LARGE_BODY_ROUTE_PATTERNS.some((pattern) => pattern.test(path))
+    ? largeRequestBodyLimit
+    : requestBodyLimit;
+}
+
 app.use((req, res, next) => {
-  const isLargeRoute = LARGE_BODY_ROUTE_PATTERNS.some((pattern) => pattern.test(req.path));
-  const limit = isLargeRoute ? largeRequestBodyLimit : requestBodyLimit;
-  express.json({ limit })(req, res, next);
+  express.json({ limit: resolveBodyLimit(req.path) })(req, res, next);
 });
 app.use((req, res, next) => {
-  const isLargeRoute = LARGE_BODY_ROUTE_PATTERNS.some((pattern) => pattern.test(req.path));
-  const limit = isLargeRoute ? largeRequestBodyLimit : requestBodyLimit;
-  express.urlencoded({ limit, extended: true })(req, res, next);
+  express.urlencoded({ limit: resolveBodyLimit(req.path), extended: true })(req, res, next);
 });
 app.use(cookieParser());
 
@@ -7453,6 +7474,13 @@ app.put('/api/profile/me', authMiddleware, async (req, res) => {
     });
 
     db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?').run(passwordHash, req.user.sub);
+
+    // Re-issue session cookie so the new JWT no longer carries mcp=true
+    const updatedUser = db.prepare('SELECT id, role, username, must_change_password FROM users WHERE id = ?').get(req.user.sub);
+    if (updatedUser) {
+      const newToken = signTokenForSession(updatedUser, false);
+      res.cookie(SESSION_COOKIE_NAME, newToken, buildSessionCookieOptions(false));
+    }
   }
 
   writeAuditLog(req.user.sub, 'UPDATE', 'users', String(req.user.sub), {
