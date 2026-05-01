@@ -533,6 +533,106 @@
         </div>
       </div>
     </div>
+
+    <div class="accordion-item">
+      <h2 class="accordion-header" id="headingConsent">
+        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-consent" aria-expanded="false" aria-controls="patient-accordion-consent" title="Déplier / replier cette section" bsTooltip>
+          <i class="fa-solid fa-file-signature text-primary me-2"></i>Consentement RGPD
+          @if (patient()!.consentWithdrawnAt) {
+            <span class="badge text-bg-danger ms-2">Retiré</span>
+          } @else if (patient()!.consentSigned) {
+            <span class="badge text-bg-success ms-2">Signé</span>
+          } @else {
+            <span class="badge text-bg-warning ms-2">Non signé</span>
+          }
+        </button>
+      </h2>
+      <div id="patient-accordion-consent" class="accordion-collapse collapse" aria-labelledby="headingConsent" data-bs-parent="#patientDetailAccordion">
+        <div class="accordion-body bg-body">
+          <div class="row g-3">
+            <div class="col-12 col-md-4 fw-semibold">Statut :</div>
+            <div class="col-12 col-md-8">
+              @if (patient()!.consentWithdrawnAt) {
+                <span class="badge text-bg-danger">Consentement retiré</span>
+              } @else if (patient()!.consentSigned) {
+                <span class="badge text-bg-success">Consentement signé</span>
+              } @else {
+                <span class="badge text-bg-warning">Consentement non signé</span>
+              }
+            </div>
+            @if (patient()!.consentSignedAt) {
+              <div class="col-12 col-md-4 fw-semibold">Date de signature :</div>
+              <div class="col-12 col-md-8">{{ formatShortDate(patient()!.consentSignedAt!) }}</div>
+            }
+            <div class="col-12 col-md-4 fw-semibold">Version du formulaire :</div>
+            <div class="col-12 col-md-8">{{ patient()!.consentFormVersion }}</div>
+            @if (patient()!.consentWithdrawnAt) {
+              <div class="col-12 col-md-4 fw-semibold">Date de retrait :</div>
+              <div class="col-12 col-md-8">{{ formatShortDate(patient()!.consentWithdrawnAt!) }}</div>
+            }
+          </div>
+
+          @if (canEditPatient() && !patient()!.consentWithdrawnAt) {
+            <div class="mt-4 d-flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="btn btn-outline-danger btn-sm"
+                [disabled]="isWithdrawingConsent()"
+                (click)="withdrawConsent()"
+                title="Enregistrer le retrait du consentement RGPD du patient"
+                bsTooltip>
+                @if (isWithdrawingConsent()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                } @else {
+                  <i class="fa-solid fa-ban me-2"></i>
+                }
+                Retirer le consentement
+              </button>
+              <button
+                type="button"
+                class="btn btn-outline-secondary btn-sm"
+                [disabled]="isDownloadingConsentPdf()"
+                (click)="downloadConsentForm()"
+                title="Télécharger le formulaire de consentement RGPD à imprimer et faire signer"
+                bsTooltip>
+                @if (isDownloadingConsentPdf()) {
+                  <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                } @else {
+                  <i class="fa-solid fa-file-pdf me-1"></i>
+                }
+                Télécharger le formulaire
+              </button>
+            </div>
+          }
+
+          @if (!canEditPatient() || patient()!.consentWithdrawnAt) {
+            <div class="mt-4">
+              <button
+                type="button"
+                class="btn btn-outline-secondary btn-sm"
+                [disabled]="isDownloadingConsentPdf()"
+                (click)="downloadConsentForm()"
+                title="Télécharger le formulaire de consentement RGPD à imprimer et faire signer"
+                bsTooltip>
+                @if (isDownloadingConsentPdf()) {
+                  <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                } @else {
+                  <i class="fa-solid fa-file-pdf me-1"></i>
+                }
+                Télécharger le formulaire
+              </button>
+            </div>
+          }
+
+          @if (withdrawConsentError()) {
+            <div class="alert alert-danger mt-3 mb-0">{{ withdrawConsentError() }}</div>
+          }
+          @if (withdrawConsentSuccess()) {
+            <div class="alert alert-success mt-3 mb-0">{{ withdrawConsentSuccess() }}</div>
+          }
+        </div>
+      </div>
+    </div>
   </div>
 
   @if (isAntecedentModalOpen()) {

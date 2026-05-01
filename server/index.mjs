@@ -34,6 +34,7 @@ const SESSION_REMEMBER_MAX_AGE_MS = Number(process.env.SESSION_REMEMBER_MAX_AGE_
 const SESSION_DEFAULT_MAX_AGE_MS = Number(process.env.SESSION_DEFAULT_MAX_AGE_MS ?? 2 * 60 * 60 * 1000);
 const SESSION_REMEMBER_TTL = process.env.SESSION_REMEMBER_TTL ?? '12h';
 const SESSION_DEFAULT_TTL = process.env.SESSION_DEFAULT_TTL ?? '2h';
+const CURRENT_CONSENT_FORM_VERSION = '1.0';
 
 if (isProduction && jwtSecret === 'dev-only-jwt-secret-change-me') {
   throw new Error('JWT_SECRET must be configured in production.');
@@ -126,6 +127,25 @@ try {
   console.warn('accounting_deposits migration failed:', err.message);
 }
 
+// Migration: add GDPR consent detail columns to patients table
+try {
+  const cols = db.prepare(`PRAGMA table_info(patients)`).all().map((c) => c.name);
+  if (cols.length > 0 && !cols.includes('consent_signed_at')) {
+    db.exec('ALTER TABLE patients ADD COLUMN consent_signed_at TEXT');
+    console.log('✓ Added consent_signed_at column to patients');
+  }
+  if (cols.length > 0 && !cols.includes('consent_form_version')) {
+    db.exec("ALTER TABLE patients ADD COLUMN consent_form_version TEXT NOT NULL DEFAULT '1.0'");
+    console.log('✓ Added consent_form_version column to patients');
+  }
+  if (cols.length > 0 && !cols.includes('consent_withdrawn_at')) {
+    db.exec('ALTER TABLE patients ADD COLUMN consent_withdrawn_at TEXT');
+    console.log('✓ Added consent_withdrawn_at column to patients');
+  }
+} catch (err) {
+  console.warn('patients consent columns migration failed:', err.message);
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -181,6 +201,9 @@ db.exec(`
     children_count INTEGER NOT NULL DEFAULT 0,
     last_visit TEXT,
     consent_signed INTEGER NOT NULL DEFAULT 1,
+    consent_signed_at TEXT,
+    consent_form_version TEXT NOT NULL DEFAULT '1.0',
+    consent_withdrawn_at TEXT,
     retention_until TEXT,
     is_deleted INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2644,8 +2667,8 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
 
   const insertPatient = db.prepare(
     `INSERT INTO patients
-     (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count, last_visit, consent_signed, retention_until)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count, last_visit, consent_signed, consent_signed_at, consent_form_version, retention_until)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const insertConsultation = db.prepare(
     `INSERT INTO consultations
@@ -2720,6 +2743,7 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
       };
 
       const consentSigned = seededUnit(patientSeedBase + 31) < 0.14 ? 0 : 1;
+      const consentSignedAt = consentSigned ? new Date(now.getTime() - ((365 + patientIndex * 30) * 24 * 60 * 60 * 1000)).toISOString() : null;
 
       const patientResult = insertPatient.run(
         encryptSensitiveField(fullName),
@@ -2731,6 +2755,8 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
         childrenCount,
         lastVisit,
         consentSigned,
+        consentSignedAt,
+        CURRENT_CONSENT_FORM_VERSION,
         retentionUntil
       );
 
@@ -3512,8 +3538,8 @@ function buildDataBackupSnapshot(options = {}) {
     patients: db.prepare(
       `SELECT id, cipher_full_name, cipher_phone, cipher_medical_notes,
             sex, marital_status, children_count, office_id,
-            birth_date, last_visit, consent_signed, retention_until,
-            is_deleted, created_at, updated_at
+            birth_date, last_visit, consent_signed, consent_signed_at, consent_form_version, consent_withdrawn_at,
+            retention_until, is_deleted, created_at, updated_at
        FROM patients
        ORDER BY id ASC`
     ).all(),
@@ -3711,9 +3737,9 @@ function restoreDataBackupSnapshot(backupPayload) {
       `INSERT INTO patients (
          id, cipher_full_name, cipher_phone, cipher_medical_notes, sex,
          birth_date, marital_status, children_count, office_id,
-         last_visit, consent_signed, retention_until,
-         is_deleted, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         last_visit, consent_signed, consent_signed_at, consent_form_version, consent_withdrawn_at,
+         retention_until, is_deleted, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const insertUserOffice = db.prepare(
       `INSERT INTO user_offices (user_id, office_id, created_at)
@@ -3995,6 +4021,9 @@ function restoreDataBackupSnapshot(backupPayload) {
         row.office_id != null ? Number(row.office_id) : null,
         row.last_visit ?? null,
         Number(row.consent_signed) ? 1 : 0,
+        row.consent_signed_at ?? null,
+        String(row.consent_form_version ?? '1.0'),
+        row.consent_withdrawn_at ?? null,
         row.retention_until ?? null,
         Number(row.is_deleted) ? 1 : 0,
         row.created_at ?? new Date().toISOString(),
@@ -8748,8 +8777,8 @@ app.post('/api/data-management/import', authMiddleware, requirePermission('manag
         const inserted = db
           .prepare(
             `INSERT INTO patients
-             (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count, last_visit, consent_signed, retention_until, office_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+             (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count, last_visit, consent_signed, consent_signed_at, consent_form_version, retention_until, office_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
           .run(
             encryptSensitiveField(fullName),
@@ -8761,6 +8790,8 @@ app.post('/api/data-management/import', authMiddleware, requirePermission('manag
             patient.childrenCount,
             null,
             1,
+            new Date().toISOString(),
+            CURRENT_CONSENT_FORM_VERSION,
             retentionUntil,
             payload.officeId
           );
@@ -11007,11 +11038,12 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
   const antecedentCategories = extractAntecedentCategories(payload.medicalHistory);
 
   const birthDate = payload.birthDate.trim();
+  const consentSignedAt = new Date().toISOString();
   const inserted = db
     .prepare(
       `INSERT INTO patients
-       (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count, last_visit, consent_signed, retention_until)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count, last_visit, consent_signed, consent_signed_at, consent_form_version, retention_until)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       encryptSensitiveField(fullName),
@@ -11023,6 +11055,8 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
       payload.childrenCount,
       null,
       1,
+      consentSignedAt,
+      CURRENT_CONSENT_FORM_VERSION,
       retentionUntil
     );
 
@@ -11589,6 +11623,7 @@ app.get('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
     .prepare(
       `SELECT p.id, p.cipher_full_name, p.cipher_phone, p.cipher_medical_notes,
               p.sex, p.birth_date, p.marital_status, p.children_count, p.last_visit, p.office_id,
+              p.consent_signed, p.consent_signed_at, p.consent_form_version, p.consent_withdrawn_at,
               COALESCE(a.consultation_count, 0) AS consultation_count
        FROM patients p
        LEFT JOIN (
@@ -11657,7 +11692,11 @@ app.get('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
       generalRemarks: notes.generalRemarks ?? '',
       medicalHistory: notes.medicalHistory ?? '',
       relatedPeople: notes.relatedPeople ?? '',
-      isDeceased: Boolean(notes.isDeceased)
+      isDeceased: Boolean(notes.isDeceased),
+      consentSigned: Boolean(row.consent_signed),
+      consentSignedAt: row.consent_signed_at ?? null,
+      consentFormVersion: row.consent_form_version ?? '1.0',
+      consentWithdrawnAt: row.consent_withdrawn_at ?? null
     }
   });
 });
@@ -12211,8 +12250,8 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
   const row = db
     .prepare(
       `SELECT id, cipher_full_name, cipher_phone, cipher_medical_notes,
-              sex, birth_date, last_visit, consent_signed, retention_until,
-              created_at, updated_at, office_id
+              sex, birth_date, last_visit, consent_signed, consent_signed_at, consent_form_version, consent_withdrawn_at,
+              retention_until, created_at, updated_at, office_id
        FROM patients WHERE id = ? AND is_deleted = 0`
     )
     .get(id);
@@ -12366,6 +12405,9 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
       isDeceased: Boolean(notes.isDeceased),
       lastVisit: row.last_visit ? formatDateFr(row.last_visit) : '',
       consentSigned: Boolean(row.consent_signed),
+      consentSignedAt: row.consent_signed_at ?? null,
+      consentFormVersion: row.consent_form_version ?? '1.0',
+      consentWithdrawnAt: row.consent_withdrawn_at ?? null,
       retentionUntil: row.retention_until ?? '',
       createdAt: row.created_at,
       updatedAt: row.updated_at
@@ -12389,6 +12431,42 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
   return res.status(200).send(JSON.stringify(rgpdPayload, null, 2));
+});
+
+app.post('/api/patients/:id/withdraw-consent', authMiddleware, requirePermission('read-patient-record'), (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ message: 'ID invalide' });
+  }
+
+  const patient = db.prepare('SELECT id, consent_withdrawn_at, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(id);
+  if (!patient) {
+    return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
+  if (patientOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(patientOfficeId)) {
+        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
+      }
+    }
+  }
+
+  if (patient.consent_withdrawn_at) {
+    return res.status(409).json({ message: 'Le consentement a déjà été retiré' });
+  }
+
+  const withdrawnAt = new Date().toISOString();
+  db.prepare(
+    'UPDATE patients SET consent_withdrawn_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(withdrawnAt, id);
+
+  writeAuditLog(req.user.sub, 'WITHDRAW_CONSENT', 'patients', String(id));
+
+  return res.status(200).json({ consentWithdrawnAt: withdrawnAt });
 });
 
 app.post('/api/patients/:id/anonymize', authMiddleware, adminOnlyMiddleware, (req, res) => {

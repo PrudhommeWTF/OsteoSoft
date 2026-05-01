@@ -264,6 +264,11 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     'Rhumatologie'
   ]);
 
+  readonly isWithdrawingConsent = signal(false);
+  readonly withdrawConsentError = signal('');
+  readonly withdrawConsentSuccess = signal('');
+  readonly isDownloadingConsentPdf = signal(false);
+
   private readonly birthDateIso = signal('');
   private readonly editSex = signal<PatientDetail['sex']>('Non renseigne');
   private isSynchronizingLocationFields = false;
@@ -1146,6 +1151,55 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
   closeAuditModal(): void {
     this.showAuditModal.set(false);
+  }
+
+  async withdrawConsent(): Promise<void> {
+    const patientId = this.patient()?.id;
+    if (!patientId) {
+      return;
+    }
+
+    this.withdrawConsentError.set('');
+    this.withdrawConsentSuccess.set('');
+    this.isWithdrawingConsent.set(true);
+
+    try {
+      const result = await this.api.withdrawPatientConsent(patientId);
+      this.patient.update((p) => p ? { ...p, consentWithdrawnAt: result.consentWithdrawnAt } : p);
+      this.withdrawConsentSuccess.set('Le retrait du consentement a été enregistré.');
+    } catch {
+      this.withdrawConsentError.set('Impossible d\'enregistrer le retrait du consentement.');
+    } finally {
+      this.isWithdrawingConsent.set(false);
+    }
+  }
+
+  async downloadConsentForm(): Promise<void> {
+    if (this.isDownloadingConsentPdf()) {
+      return;
+    }
+    this.isDownloadingConsentPdf.set(true);
+
+    try {
+      const [offices, profile] = await Promise.all([
+        this.api.getOffices().catch(() => [] as Office[]),
+        this.api.getMyUserProfile().catch(() => null as MyUserProfile | null)
+      ]);
+      const office = this.resolveConsultationBillingOffice(offices);
+      const patientName = String(this.patient()?.fullName ?? '').trim();
+
+      const blob = this.buildConsentFormPdfBlob(office, profile, patientName);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `formulaire_consentement_rgpd${patientName ? '_' + this.toFileSlug(patientName) : ''}.pdf`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      // Silently ignore errors on PDF generation
+    } finally {
+      this.isDownloadingConsentPdf.set(false);
+    }
   }
 
   async openPatientDocument(patientDocument: PatientDocumentSummary, forceDownload = false): Promise<void> {
@@ -4876,5 +4930,200 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '');
+  }
+
+  private buildConsentFormPdfBlob(office: Office | null, profile: MyUserProfile | null, patientName = ''): Blob {
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+    const margin = 14;
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const contentWidth = pageWidth - margin * 2;
+    let y = margin;
+
+    const writeLine = (text: string, fontSize = 10, bold = false, spacingAfter = 5): void => {
+      pdf.setFont('helvetica', bold ? 'bold' : 'normal');
+      pdf.setFontSize(fontSize);
+      const lines = pdf.splitTextToSize(this.normalizeMultilineText(text), contentWidth) as string[];
+      if (y + lines.length * 5 > pageHeight - margin) {
+        pdf.addPage();
+        y = margin;
+      }
+      pdf.text(lines, margin, y);
+      y += lines.length * 5 + spacingAfter;
+    };
+
+    const drawRule = (spacingAfter = 5): void => {
+      pdf.setDrawColor(200, 210, 220);
+      pdf.line(margin, y, pageWidth - margin, y);
+      y += spacingAfter;
+    };
+
+    // ── Cabinet header ────────────────────────────────────────
+    const officeName = String(office?.name ?? '').trim() || 'Cabinet';
+    const officeHeading = officeName.toLowerCase().startsWith('cabinet') ? officeName : `Cabinet de ${officeName}`;
+    const practitioner = profile
+      ? `${String(profile.lastName ?? '').trim().toUpperCase()} ${String(profile.firstName ?? '').trim()}`.trim()
+      : '';
+    const suffix = String(profile?.nameSuffixText ?? '').trim();
+    const addressLine = [
+      String(office?.addressLine1 ?? '').trim(),
+      `${String(office?.postalCode ?? '').trim()} ${String(office?.city ?? '').trim()}`.trim()
+    ].filter(Boolean).join(' - ');
+    const officeContact = [
+      String(office?.phoneMobile ?? '').trim() || String(office?.phoneLandline ?? '').trim(),
+      String(office?.email ?? '').trim()
+    ].filter(Boolean).join(' | ');
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(11.5);
+    pdf.text(officeHeading, margin, y);
+    y += 6;
+    if (practitioner) {
+      pdf.setFontSize(10.5);
+      pdf.text([practitioner, suffix].filter(Boolean).join(' - '), margin, y);
+      y += 5;
+    }
+    if (addressLine) {
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9.5);
+      pdf.text(addressLine, margin, y);
+      y += 5;
+    }
+    if (officeContact) {
+      pdf.text(officeContact, margin, y);
+      y += 5;
+    }
+    y += 2;
+    drawRule(6);
+
+    // ── Title ─────────────────────────────────────────────────
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(15);
+    pdf.text('Formulaire de consentement RGPD', pageWidth / 2, y, { align: 'center' });
+    y += 7;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    pdf.text('Version 1.0', pageWidth / 2, y, { align: 'center' });
+    y += 8;
+
+    // ── Identity section ──────────────────────────────────────
+    writeLine('1. Identification du patient', 11, true, 3);
+    const nameLabel = 'Nom et prénom du patient :';
+    const nameValue = patientName ? `  ${patientName}` : '';
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+    pdf.text(nameLabel, margin, y);
+    if (nameValue) {
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(nameValue, margin + pdf.getTextWidth(nameLabel), y);
+      pdf.setFont('helvetica', 'normal');
+    }
+    y += 6;
+    if (!patientName) {
+      pdf.setDrawColor(160, 170, 185);
+      pdf.line(margin + pdf.getTextWidth(nameLabel) + 2, y - 1, pageWidth - margin, y - 1);
+      y += 4;
+    }
+    writeLine('Date de naissance : ______ / ______ / ____________', 10, false, 4);
+    y += 3;
+
+    // ── Purpose & data ────────────────────────────────────────
+    writeLine('2. Finalité du traitement', 11, true, 3);
+    writeLine(
+      'Dans le cadre de votre suivi ostéopathique, le cabinet collecte et traite des données personnelles ' +
+      'vous concernant. Ces données sont nécessaires à la prise en charge thérapeutique et à la gestion ' +
+      'administrative de votre dossier patient.',
+      10, false, 4
+    );
+
+    writeLine('3. Données collectées', 11, true, 3);
+    writeLine(
+      '• Données d\'identité : nom, prénom, date de naissance, sexe\n' +
+      '• Coordonnées : adresse postale, numéro de téléphone, adresse e-mail\n' +
+      '• Données de santé : antécédents médicaux, motifs de consultation, comptes rendus\n' +
+      '• Données administratives : numéro de sécurité sociale, mutuelle, informations de facturation',
+      10, false, 4
+    );
+
+    writeLine('4. Base légale', 11, true, 3);
+    writeLine(
+      'Le traitement de vos données repose sur :\n' +
+      '• L\'exécution du contrat de soins (Art. 6.1.b du RGPD)\n' +
+      '• La nécessité pour des finalités de médecine préventive et de soins de santé (Art. 9.2.h du RGPD)\n' +
+      '• Votre consentement explicite pour les données de santé à caractère sensible (Art. 9.2.a du RGPD)',
+      10, false, 4
+    );
+
+    writeLine('5. Durée de conservation', 11, true, 3);
+    writeLine(
+      'Vos données sont conservées pour une durée de 5 ans à compter de votre dernière consultation, ' +
+      'conformément aux recommandations de la CNIL pour les professionnels de santé. ' +
+      'Passé ce délai, vos données sont anonymisées ou supprimées.',
+      10, false, 4
+    );
+
+    writeLine('6. Vos droits', 11, true, 3);
+    writeLine(
+      'Conformément au RGPD (Articles 15 à 22), vous disposez des droits suivants :\n' +
+      '• Droit d\'accès à vos données personnelles\n' +
+      '• Droit de rectification en cas de données inexactes\n' +
+      '• Droit à l\'effacement (« droit à l\'oubli »)\n' +
+      '• Droit à la limitation du traitement\n' +
+      '• Droit à la portabilité de vos données\n' +
+      '• Droit d\'opposition au traitement\n' +
+      '• Droit de retirer votre consentement à tout moment, sans que cela affecte la licéité du traitement ' +
+      'antérieur au retrait\n\n' +
+      'Pour exercer ces droits, contactez le cabinet à l\'adresse indiquée en en-tête. ' +
+      'Vous disposez également du droit d\'introduire une réclamation auprès de la CNIL (www.cnil.fr).',
+      10, false, 4
+    );
+
+    // ── Consent declaration ───────────────────────────────────
+    if (y + 28 > pageHeight - margin) {
+      pdf.addPage();
+      y = margin;
+    }
+    writeLine('7. Déclaration de consentement', 11, true, 3);
+    writeLine(
+      'Je soussigné(e), après avoir pris connaissance des informations ci-dessus, consens librement et ' +
+      'en connaissance de cause au traitement de mes données personnelles et de mes données de santé ' +
+      'par le cabinet aux fins décrites dans ce document.\n\n' +
+      'Je reconnais avoir été informé(e) de mon droit de retirer ce consentement à tout moment.',
+      10, false, 6
+    );
+
+    // ── Signature zone ────────────────────────────────────────
+    if (y + 40 > pageHeight - margin) {
+      pdf.addPage();
+      y = margin;
+    }
+    y += 2;
+    drawRule(6);
+
+    const colLeft = margin;
+    const colRight = pageWidth / 2 + 4;
+    const boxWidth = contentWidth / 2 - 4;
+    const boxHeight = 24;
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    pdf.text('Date et lieu :', colLeft, y);
+    pdf.setDrawColor(160, 170, 185);
+    pdf.rect(colLeft, y + 2, boxWidth, boxHeight);
+
+    pdf.text('Signature du patient (précédée de « Lu et approuvé ») :', colRight, y);
+    pdf.rect(colRight, y + 2, boxWidth, boxHeight);
+
+    y += boxHeight + 8;
+
+    // ── Footer ────────────────────────────────────────────────
+    pdf.setDrawColor(200, 210, 220);
+    pdf.line(margin, pageHeight - 10, pageWidth - margin, pageHeight - 10);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(7.5);
+    const footerText = `Document généré par OsteoSoft — ${officeHeading}`;
+    pdf.text(footerText, pageWidth / 2, pageHeight - 5, { align: 'center' });
+
+    return pdf.output('blob');
   }
 }

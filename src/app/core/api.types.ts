@@ -998,6 +998,10 @@ export type PatientDetail = {
   medicalHistory: string;
   relatedPeople: string;
   isDeceased: boolean;
+  consentSigned: boolean;
+  consentSignedAt: string | null;
+  consentFormVersion: string;
+  consentWithdrawnAt: string | null;
 };
 
 export type ConsultationRecord = {
