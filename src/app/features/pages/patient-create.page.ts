@@ -3641,20 +3641,6 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       y += spacingAfter;
     };
 
-    const drawSignatureBox = (label: string, fieldWidth = 70): void => {
-      if (y + 18 > pageHeight - margin) {
-        pdf.addPage();
-        y = margin;
-      }
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(9);
-      pdf.text(label, margin, y);
-      y += 4;
-      pdf.setDrawColor(160, 170, 185);
-      pdf.rect(margin, y, fieldWidth, 12);
-      y += 18;
-    };
-
     // ── Cabinet header ────────────────────────────────────────
     const officeName = String(office?.name ?? '').trim() || 'Cabinet';
     const officeHeading = officeName.toLowerCase().startsWith('cabinet') ? officeName : `Cabinet de ${officeName}`;
