@@ -7928,18 +7928,10 @@ app.get('/api/offices/:id/delegations/export', authMiddleware, requirePermission
 
   const delegations = readOfficeUserDelegations(officeId);
 
-  const escapeCsvValue = (value) => {
-    const raw = String(value ?? '');
-    if (raw.includes(';') || raw.includes('"') || raw.includes('\n')) {
-      return `"${raw.replace(/"/g, '""')}"`;
-    }
-    return raw;
-  };
-
   const header = ['cabinet', 'utilisateur', 'profil'];
   const lines = [header.join(';')];
   for (const d of delegations) {
-    lines.push([office.name, d.displayName, d.profileLabel].map(escapeCsvValue).join(';'));
+    lines.push([office.name, d.displayName, d.profileLabel].map((value) => serializeCsvCell(value, ';')).join(';'));
   }
 
   const officeName = String(office.name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -8095,6 +8087,71 @@ const dataImportPayloadSchema = z.object({
   contentBase64: z.string().trim().min(1).max(60_000_000)
 });
 
+const DATA_IMPORT_ALLOWED_EXTENSIONS = {
+  csv: ['.csv'],
+  xlsx: ['.xlsx', '.xlsm', '.xlsb', '.xls']
+};
+
+const DATA_IMPORT_ALLOWED_MIME_TYPES = {
+  csv: new Set(['text/csv', 'application/csv', 'application/vnd.ms-excel']),
+  xlsx: new Set([
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-excel.sheet.macroenabled.12',
+    'application/vnd.ms-excel.sheet.binary.macroenabled.12',
+    'application/vnd.ms-excel'
+  ])
+};
+
+function sanitizeSpreadsheetCellValue(value) {
+  const raw = String(value ?? '');
+  return /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
+}
+
+function serializeCsvCell(value, separator = ';') {
+  const safe = sanitizeSpreadsheetCellValue(value);
+  if (safe.includes(separator) || safe.includes('"') || safe.includes('\n') || safe.includes('\r')) {
+    return `"${safe.replace(/"/g, '""')}"`;
+  }
+  return safe;
+}
+
+function sanitizeSpreadsheetRecord(record, headers) {
+  return headers.reduce((result, header) => {
+    result[header] = sanitizeSpreadsheetCellValue(record?.[header]);
+    return result;
+  }, {});
+}
+
+function extractDataUrlMimeType(contentBase64) {
+  const value = String(contentBase64 ?? '').trim();
+  const match = value.match(/^data:([^;,\s]+)(?:;[^,]*)?,/i);
+  if (!match) {
+    return '';
+  }
+  return String(match[1] ?? '').trim().toLowerCase();
+}
+
+function validateDataImportFileMetadata(format, fileName, contentBase64) {
+  const normalizedFormat = String(format ?? '').trim().toLowerCase();
+  const extension = path.extname(String(fileName ?? '').trim().toLowerCase());
+  const allowedExtensions = DATA_IMPORT_ALLOWED_EXTENSIONS[normalizedFormat] ?? [];
+  if (!allowedExtensions.includes(extension)) {
+    return `Extension de fichier invalide pour le format ${normalizedFormat.toUpperCase()}`;
+  }
+
+  const mimeType = extractDataUrlMimeType(contentBase64);
+  if (!mimeType) {
+    return null;
+  }
+
+  const allowedMimeTypes = DATA_IMPORT_ALLOWED_MIME_TYPES[normalizedFormat];
+  if (!allowedMimeTypes || !allowedMimeTypes.has(mimeType)) {
+    return `Type MIME invalide pour le format ${normalizedFormat.toUpperCase()}`;
+  }
+
+  return null;
+}
+
 function normalizeDataImportFieldName(value) {
   return String(value ?? '')
     .trim()
@@ -8204,23 +8261,23 @@ function getDataImportRows(workbook, dataset) {
 
 function buildDataImportTemplateCsv(dataset) {
   if (dataset === 'directory-contacts') {
-    return `${DATA_IMPORT_CONTACT_HEADERS.join(',')}\n${DATA_IMPORT_CONTACT_HEADERS.map((header) => `"${String(DATA_IMPORT_CONTACT_SAMPLE[header] ?? '').replace(/"/g, '""')}"`).join(',')}\n`;
+    return `${DATA_IMPORT_CONTACT_HEADERS.join(',')}\n${DATA_IMPORT_CONTACT_HEADERS.map((header) => serializeCsvCell(DATA_IMPORT_CONTACT_SAMPLE[header], ',')).join(',')}\n`;
   }
 
-  return `${DATA_IMPORT_PATIENT_HEADERS.join(',')}\n${DATA_IMPORT_PATIENT_HEADERS.map((header) => `"${String(DATA_IMPORT_PATIENT_SAMPLE[header] ?? '').replace(/"/g, '""')}"`).join(',')}\n`;
+  return `${DATA_IMPORT_PATIENT_HEADERS.join(',')}\n${DATA_IMPORT_PATIENT_HEADERS.map((header) => serializeCsvCell(DATA_IMPORT_PATIENT_SAMPLE[header], ',')).join(',')}\n`;
 }
 
 function buildDataImportTemplateWorkbook(dataset) {
   const workbook = XLSX.utils.book_new();
 
   if (dataset !== 'directory-contacts') {
-    const patientSheet = XLSX.utils.json_to_sheet([DATA_IMPORT_PATIENT_SAMPLE], {
+    const patientSheet = XLSX.utils.json_to_sheet([sanitizeSpreadsheetRecord(DATA_IMPORT_PATIENT_SAMPLE, DATA_IMPORT_PATIENT_HEADERS)], {
       header: DATA_IMPORT_PATIENT_HEADERS,
       skipHeader: false
     });
     XLSX.utils.book_append_sheet(workbook, patientSheet, DATA_IMPORT_PATIENTS_SHEET);
 
-    const consultationSheet = XLSX.utils.json_to_sheet([DATA_IMPORT_CONSULTATION_SAMPLE], {
+    const consultationSheet = XLSX.utils.json_to_sheet([sanitizeSpreadsheetRecord(DATA_IMPORT_CONSULTATION_SAMPLE, DATA_IMPORT_CONSULTATION_HEADERS)], {
       header: DATA_IMPORT_CONSULTATION_HEADERS,
       skipHeader: false
     });
@@ -8228,7 +8285,7 @@ function buildDataImportTemplateWorkbook(dataset) {
   }
 
   if (dataset !== 'patients') {
-    const contactSheet = XLSX.utils.json_to_sheet([DATA_IMPORT_CONTACT_SAMPLE], {
+    const contactSheet = XLSX.utils.json_to_sheet([sanitizeSpreadsheetRecord(DATA_IMPORT_CONTACT_SAMPLE, DATA_IMPORT_CONTACT_HEADERS)], {
       header: DATA_IMPORT_CONTACT_HEADERS,
       skipHeader: false
     });
@@ -8663,6 +8720,11 @@ app.post('/api/data-management/import', authMiddleware, requirePermission('manag
   }
 
   const payload = parsed.data;
+  const metadataValidationError = validateDataImportFileMetadata(payload.format, payload.fileName, payload.contentBase64);
+  if (metadataValidationError) {
+    return res.status(400).json({ message: metadataValidationError });
+  }
+
   const allowedOfficeIds = new Set(getDataManagementScopedOfficeIds(req.userAccess));
 
   if (!allowedOfficeIds.has(payload.officeId)) {
@@ -8679,6 +8741,9 @@ app.post('/api/data-management/import', authMiddleware, requirePermission('manag
       ? payload.contentBase64.slice(payload.contentBase64.indexOf(',') + 1)
       : payload.contentBase64;
     const fileBuffer = Buffer.from(normalizedBase64, 'base64');
+    if (fileBuffer.length === 0) {
+      return res.status(400).json({ message: 'Fichier importe vide ou invalide' });
+    }
     await validateImportFileType(fileBuffer, payload.format, payload.fileName);
     const workbook = parseDataImportWorkbook(fileBuffer, payload.format);
     const { patientRows, contactRows, consultationRows } = getDataImportRows(workbook, payload.dataset);
@@ -10773,14 +10838,6 @@ app.get('/api/directory/contacts/export', authMiddleware, requirePermission('exp
     'pays'
   ];
 
-  const escapeCsv = (value) => {
-    const raw = String(value ?? '');
-    if (raw.includes(';') || raw.includes('"') || raw.includes('\n')) {
-      return `"${raw.replace(/"/g, '""')}"`;
-    }
-    return raw;
-  };
-
   const lines = [header.join(';')];
   for (const row of rows) {
     lines.push([
@@ -10799,7 +10856,7 @@ app.get('/api/directory/contacts/export', authMiddleware, requirePermission('exp
       row.postalCode,
       row.city,
       row.country,
-    ].map(escapeCsv).join(';'));
+    ].map((value) => serializeCsvCell(value, ';')).join(';'));
   }
 
   const fileName = `repertoire-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -15802,7 +15859,7 @@ app.get('/api/billing/alerts/export', authMiddleware, requirePermission('export-
   }
 
   const csv = [header, ...rows]
-    .map((line) => line.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(';'))
+    .map((line) => line.map((value) => serializeCsvCell(value, ';')).join(';'))
     .join('\n');
 
   const fileName = `billing-alerts-${datePart}.csv`;
@@ -16910,7 +16967,7 @@ app.get('/api/billing/export', authMiddleware, requirePermission('export-billing
       : [])
   ]);
   const csv = [header, ...rows]
-    .map((line) => line.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(';'))
+    .map((line) => line.map((value) => serializeCsvCell(value, ';')).join(';'))
     .join('\n');
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
