@@ -18,6 +18,7 @@ export type OfficeOption = {
 
 export type SetupStatus = {
   requiresSetup: boolean;
+  hasEncryptionKey: boolean;
 };
 
 export type AccessManagedUser = {
@@ -1359,6 +1360,7 @@ export type CreateOfficePayload = {
 
 export type CreateSetupOfficePayload = CreateOfficePayload & {
   adminPassword: string;
+  encryptionKey?: string;
 };
 
 export type UpdateOfficePayload = CreateOfficePayload & {

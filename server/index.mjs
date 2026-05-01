@@ -714,6 +714,26 @@ if (dataKey.length !== 32) {
   throw new Error('OSTEOSOFT_DATA_KEY must decode to exactly 32 bytes (base64).');
 }
 
+function updateEnvFile(key, value) {
+  const envPath = path.resolve(process.cwd(), '.env');
+  let content = '';
+  try {
+    if (fs.existsSync(envPath)) {
+      content = fs.readFileSync(envPath, 'utf8');
+    }
+  } catch {
+    content = '';
+  }
+  const line = `${key}=${value}`;
+  const regex = new RegExp(`^${key}=.*$`, 'm');
+  if (regex.test(content)) {
+    content = content.replace(regex, line);
+  } else {
+    content = content ? `${content.trimEnd()}\n${line}\n` : `${line}\n`;
+  }
+  fs.writeFileSync(envPath, content, { encoding: 'utf8', mode: 0o600 });
+}
+
 function encryptSensitiveField(plainText) {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', dataKey, iv);
@@ -8163,7 +8183,7 @@ app.get('/api/offices/:id/delegations/export', authMiddleware, requirePermission
 
 app.get('/api/setup/status', (_req, res) => {
   const { requiresSetup } = getSetupStatusSnapshot();
-  return res.json({ requiresSetup });
+  return res.json({ requiresSetup, hasEncryptionKey: !!rawDataKey });
 });
 
 const DATA_IMPORT_PATIENTS_SHEET = 'Patients';
@@ -9383,7 +9403,8 @@ app.post('/api/setup/office', setupLimiter, setupBootstrapGuard, async (req, res
     consultationProfiles,
     serviceTypes,
     paymentMethods,
-    adminPassword
+    adminPassword,
+    encryptionKey
   } = req.body;
 
   if (!name || typeof name !== 'string' || !name.trim()) {
@@ -9394,6 +9415,27 @@ app.post('/api/setup/office', setupLimiter, setupBootstrapGuard, async (req, res
     return res.status(400).json({
       message: 'Le mot de passe admin doit contenir au moins 12 caracteres, une majuscule, une minuscule, un chiffre et un caractere special.'
     });
+  }
+
+  if (!rawDataKey) {
+    if (!encryptionKey || typeof encryptionKey !== 'string' || !encryptionKey.trim()) {
+      return res.status(400).json({ message: 'La cle de chiffrement est obligatoire.' });
+    }
+    let keyBuffer;
+    try {
+      keyBuffer = Buffer.from(encryptionKey.trim(), 'base64');
+    } catch {
+      return res.status(400).json({ message: 'La cle de chiffrement doit etre encodee en base64.' });
+    }
+    if (keyBuffer.length !== 32) {
+      return res.status(400).json({ message: 'La cle de chiffrement doit decoder en exactement 32 octets (base64 de 32 bytes).' });
+    }
+    dataKey = keyBuffer;
+    try {
+      updateEnvFile('OSTEOSOFT_DATA_KEY', encryptionKey.trim());
+    } catch (envErr) {
+      console.warn('Could not persist encryption key to .env file:', envErr.message);
+    }
   }
 
   const normalizedOpeningHours = normalizeOfficeOpeningHours(openingHours);

@@ -165,6 +165,43 @@
                   <div class="invalid-feedback">La confirmation du mot de passe ne correspond pas.</div>
                 }
               </div>
+              @if (!hasEncryptionKey()) {
+                <div class="mb-3">
+                  <label class="form-label">Clé de chiffrement <span class="text-danger">*</span></label>
+                  <div class="input-group">
+                    <input
+                      id="setup-encryption-key"
+                      type="text"
+                      class="form-control font-monospace"
+                      [class.is-invalid]="officeForm.controls.encryptionKey.touched && !encryptionKeyIsValid()"
+                      [class.is-valid]="officeForm.controls.encryptionKey.touched && encryptionKeyIsValid()"
+                      readonly
+                      formControlName="encryptionKey"
+                      autocomplete="off"
+                      aria-label="Clé de chiffrement"
+                    />
+                    <button type="button" class="btn btn-outline-secondary" (click)="generateEncryptionKey()" title="Générer une nouvelle clé">
+                      <i class="fa-solid fa-rotate me-1"></i>Générer
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" (click)="copyEncryptionKey()" [disabled]="!encryptionKeyIsValid()" title="Copier la clé">
+                      @if (encryptionKeyCopied()) {
+                        <i class="fa-solid fa-check text-success"></i>
+                      } @else {
+                        <i class="fa-solid fa-copy"></i>
+                      }
+                    </button>
+                  </div>
+                  @if (officeForm.controls.encryptionKey.touched && !encryptionKeyIsValid()) {
+                    <div class="text-danger small mt-1">Cliquez sur « Générer » pour créer une clé de chiffrement valide.</div>
+                  }
+                  <div class="alert alert-warning mt-2 mb-0 small">
+                    <i class="fa-solid fa-triangle-exclamation me-1"></i>
+                    <strong>Conservez cette clé en lieu sûr.</strong> Elle chiffre les données sensibles (coordonnées bancaires).
+                    Sans elle, ces données ne pourront pas être déchiffrées après un redémarrage du serveur.
+                    Elle sera automatiquement enregistrée dans le fichier <code>.env</code> du serveur.
+                  </div>
+                </div>
+              }
               <div class="mb-3">
                 <label for="setup-duration" class="form-label">
                   Durée par défaut des séances : {{ officeForm.controls.defaultSessionDurationMinutes.value }} min
