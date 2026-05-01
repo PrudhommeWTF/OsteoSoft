@@ -4,7 +4,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ApiService } from './api.service';
 import { AuthUser, OfficeOption } from './api.types';
 
-export type LoginResult = 'success' | 'invalid-credentials' | 'server-unreachable';
+export type LoginResult = 'success' | 'invalid-credentials' | 'account-locked' | 'server-unreachable';
 
 const ACTIVE_OFFICE_STORAGE_KEY = 'osteosoft:active-office-id';
 const SUPER_ADMIN_PROFILE_ID = 'super-admin';
@@ -88,6 +88,10 @@ export class AuthService {
 
       if (error instanceof HttpErrorResponse && error.status === 401) {
         return 'invalid-credentials';
+      }
+
+      if (error instanceof HttpErrorResponse && error.status === 429) {
+        return 'account-locked';
       }
 
       return 'server-unreachable';
