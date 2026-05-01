@@ -86,7 +86,8 @@ import {
   SetupStatus,
   UserAgendaPreferences,
   UpdateMyUserProfilePayload,
-  UpdatePatientPayload
+  UpdatePatientPayload,
+  BackupRestoreResult
 } from './api.types';
 
 @Injectable({ providedIn: 'root' })
@@ -855,9 +856,9 @@ export class ApiService {
     );
   }
 
-  async restoreDataBackup(payload: unknown): Promise<void> {
-    await firstValueFrom(
-      this.http.post<void>(`${this.baseUrl}/data-management/restore`, payload)
+  async restoreDataBackup(payload: unknown): Promise<BackupRestoreResult> {
+    return firstValueFrom(
+      this.http.post<BackupRestoreResult>(`${this.baseUrl}/data-management/restore`, payload)
     );
   }
 

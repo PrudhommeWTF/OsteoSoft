@@ -20,6 +20,7 @@ type SessionState = {
   activeOfficeId: number | null;
   permissions: Set<string>;
   checked: boolean;
+  mustChangePassword: boolean;
 };
 
 @Injectable({ providedIn: 'root' })
@@ -35,7 +36,8 @@ export class AuthService {
     officeIds: [],
     activeOfficeId: null,
     permissions: new Set<string>(),
-    checked: false
+    checked: false,
+    mustChangePassword: false
   });
 
   readonly isAuthenticated = computed(() => this.session().authenticated);
@@ -47,6 +49,7 @@ export class AuthService {
   readonly officeIds = computed(() => this.session().officeIds);
   readonly activeOfficeId = computed(() => this.session().activeOfficeId);
   readonly isSuperAdmin = computed(() => this.session().profileId === SUPER_ADMIN_PROFILE_ID);
+  readonly mustChangePassword = computed(() => this.session().mustChangePassword);
 
   setActiveOfficeId(value: number | null): void {
     const session = this.session();
@@ -160,7 +163,8 @@ export class AuthService {
       officeIds,
       activeOfficeId,
       permissions,
-      checked: true
+      checked: true,
+      mustChangePassword: user.mustChangePassword === true
     });
   }
 
@@ -175,7 +179,8 @@ export class AuthService {
       officeIds: [],
       activeOfficeId: null,
       permissions: new Set<string>(),
-      checked: true
+      checked: true,
+      mustChangePassword: false
     });
 
     this.persistActiveOfficeId(null);

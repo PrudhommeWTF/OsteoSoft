@@ -135,6 +135,21 @@
                     </ul>
                   </div>
                 }
+
+                @if (restoreTempPasswords().length > 0) {
+                  <div class="alert alert-warning mt-3" role="alert">
+                    <p class="fw-semibold mb-2"><i class="fa-solid fa-key me-1" aria-hidden="true"></i>Mots de passe temporaires générés</p>
+                    <p class="small mb-2">Les mots de passe des utilisateurs restaurés ont été réinitialisés. Communiquez ces mots de passe temporaires à chaque utilisateur — ils devront les modifier à la prochaine connexion.</p>
+                    <ul class="list-unstyled mb-0 small">
+                      @for (entry of restoreTempPasswords(); track entry.userId) {
+                        <li class="mb-1">
+                          <span class="fw-semibold">{{ entry.username }}</span> :
+                          <code class="text-danger-emphasis bg-danger-subtle border border-danger-subtle rounded px-2 py-1">{{ entry.tempPassword }}</code>
+                        </li>
+                      }
+                    </ul>
+                  </div>
+                }
               </article>
             </div>
 

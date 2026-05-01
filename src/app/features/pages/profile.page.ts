@@ -16,7 +16,7 @@ import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 })
 export class ProfilePage {
   private readonly api = inject(ApiService);
-  private readonly authService = inject(AuthService);
+  readonly authService = inject(AuthService);
   private readonly fb = inject(FormBuilder);
   private readonly themeService = inject(ThemeService);
 
@@ -24,7 +24,9 @@ export class ProfilePage {
   readonly isSaving = signal(false);
   readonly error = signal('');
   readonly success = signal('');
-  readonly activeTab = signal<'securite' | 'identite' | 'pro' | 'documents' | 'compta' | 'agenda' | 'consultation' | 'interface'>('identite');
+  readonly activeTab = signal<'securite' | 'identite' | 'pro' | 'documents' | 'compta' | 'agenda' | 'consultation' | 'interface'>(
+    'identite'
+  );
   readonly lockedRole = signal('');
   readonly lockedIsActive = signal(true);
   readonly lockedCabinets = signal<string[]>([]);
@@ -109,6 +111,9 @@ export class ProfilePage {
   });
 
   constructor() {
+    if (this.authService.mustChangePassword()) {
+      this.activeTab.set('securite');
+    }
     void this.load();
   }
 

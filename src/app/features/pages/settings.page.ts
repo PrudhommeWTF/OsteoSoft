@@ -10,6 +10,7 @@ import {
   AccessManagedUser,
   AgendaSettingsPayload,
   AuthUser,
+  BackupRestoreTempPassword,
   CreateOfficePayload,
   DataCleanupKind,
   DataImportDataset,
@@ -510,6 +511,7 @@ export class SettingsPage implements OnDestroy {
   readonly selectedUserId = signal<number | null>(null);
   readonly selectedUserProfileId = signal('');
   readonly selectedBackupPayload = signal<unknown | null>(null);
+  readonly restoreTempPasswords = signal<BackupRestoreTempPassword[]>([]);
 
   readonly agendaViewOptions = ['Semaine', 'Jour', 'Mois'];
   readonly calendarOptions = ['Tous les calendriers', 'Calendrier personnel'];
@@ -2156,14 +2158,16 @@ export class SettingsPage implements OnDestroy {
 
     this.dataManagementError.set('');
     this.dataManagementSuccess.set('');
+    this.restoreTempPasswords.set([]);
     this.isRestoringBackup.set(true);
     this.setRestoreProgress('uploading', 'Envoi de la sauvegarde au serveur...', 20);
 
     try {
       this.setRestoreProgress('applying', 'Application des données sur la base...', 65);
-      await this.api.restoreDataBackup(this.selectedBackupPayload());
+      const result = await this.api.restoreDataBackup(this.selectedBackupPayload());
       this.setRestoreProgress('done', 'Restauration terminée avec succes.', 100);
       this.dataManagementSuccess.set('Restauration terminée avec succès.');
+      this.restoreTempPasswords.set(result?.tempPasswords ?? []);
       await this.loadAccessProfiles();
       await this.loadUsers();
       await this.loadCurrentUser();
