@@ -26,8 +26,12 @@ const jwtSecret = process.env.JWT_SECRET ?? 'dev-only-jwt-secret-change-me';
 const isProduction = process.env.NODE_ENV === 'production';
 const allowRemoteSetup = /^(1|true|yes)$/i.test(String(process.env.ALLOW_REMOTE_SETUP ?? 'false'));
 const SUPER_ADMIN_PROFILE_ID = 'super-admin';
-const requestBodyLimit = process.env.API_BODY_LIMIT ?? '60mb';
+const requestBodyLimit = process.env.API_BODY_LIMIT ?? '5mb';
+const largeRequestBodyLimit = process.env.API_LARGE_BODY_LIMIT ?? '60mb';
 const MAX_PATIENT_DOCUMENT_BYTES = Number(process.env.MAX_PATIENT_DOCUMENT_BYTES ?? 15 * 1024 * 1024);
+const trustedProxies = process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1'
+  ? 1
+  : (process.env.TRUST_PROXY === 'loopback' ? 'loopback' : false);
 const SESSION_COOKIE_NAME = 'os_session';
 const SESSION_COOKIE_PATH = '/';
 const SESSION_REMEMBER_MAX_AGE_MS = Number(process.env.SESSION_REMEMBER_MAX_AGE_MS ?? 12 * 60 * 60 * 1000);
@@ -181,6 +185,8 @@ db.exec(`
     color_hex TEXT NOT NULL DEFAULT '#4d92d1',
     bank_name TEXT NOT NULL DEFAULT '',
     iban TEXT NOT NULL DEFAULT '',
+    bank_name_cipher TEXT NOT NULL DEFAULT '',
+    iban_cipher TEXT NOT NULL DEFAULT '',
     retrocession_percent REAL NOT NULL DEFAULT 0,
     retrocession_recipient TEXT NOT NULL DEFAULT '',
     default_agenda_view TEXT NOT NULL DEFAULT 'Semaine',
@@ -279,6 +285,7 @@ db.exec(`
     currency TEXT NOT NULL DEFAULT 'EUR',
     payment_method TEXT NOT NULL DEFAULT '',
     bank_name TEXT NOT NULL DEFAULT '',
+    bank_name_cipher TEXT NOT NULL DEFAULT '',
     cheque_number TEXT NOT NULL DEFAULT '',
     reference TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
@@ -349,6 +356,7 @@ db.exec(`
     type TEXT NOT NULL DEFAULT 'cheque',
     deposit_code TEXT NOT NULL DEFAULT '',
     bank_name TEXT NOT NULL DEFAULT '',
+    bank_name_cipher TEXT NOT NULL DEFAULT '',
     account_label TEXT NOT NULL DEFAULT '',
     title TEXT NOT NULL,
     amount_cents INTEGER NOT NULL,
@@ -747,7 +755,11 @@ function restoreCipherField(value) {
 
 function signTokenForSession(user, remember) {
   const tokenTtl = remember ? SESSION_REMEMBER_TTL : SESSION_DEFAULT_TTL;
-  return jwt.sign({ sub: user.id, role: user.role, username: user.username }, jwtSecret, {
+  const payload = { sub: user.id, role: user.role, username: user.username };
+  if (user.must_change_password === 1) {
+    payload.mcp = true;
+  }
+  return jwt.sign(payload, jwtSecret, {
     expiresIn: tokenTtl
   });
 }
@@ -914,6 +926,12 @@ const anonymizePatientTx = db.transaction((patientId) => {
      SET notes_cipher = ?
      WHERE patient_id = ?`
   ).run(anonymizedValue, patientId);
+
+  db.prepare(
+    `UPDATE patient_payment_credits
+     SET bank_name = '', cheque_number = '', reference = '', notes = ''
+     WHERE patient_id = ?`
+  ).run(patientId);
 
   db.prepare(
     `UPDATE patients
@@ -3598,7 +3616,7 @@ function buildDataBackupSnapshot(options = {}) {
               office_id, last_name, first_name, email, mobile_phone, country,
               siret, adeli_code, rpps_code, ape_naf_code, name_suffix_text,
               letter_header, letter_footer, signature_text, color_hex,
-              bank_name, iban, retrocession_percent, retrocession_recipient,
+              bank_name_cipher, iban_cipher, retrocession_percent, retrocession_recipient,
               default_agenda_view, visible_calendars, default_service, invoice_mentions,
               created_at
        FROM users
@@ -3641,7 +3659,7 @@ function buildDataBackupSnapshot(options = {}) {
        ORDER BY invoice_id ASC, display_order ASC, id ASC`
     ).all(),
     invoicePayments: db.prepare(
-      `SELECT id, invoice_id, paid_at, amount_cents, currency, payment_method, bank_name, cheque_number, reference, notes, created_by, created_at
+      `SELECT id, invoice_id, paid_at, amount_cents, currency, payment_method, bank_name_cipher, cheque_number, reference, notes, created_by, created_at
        FROM invoice_payments
        ORDER BY invoice_id ASC, paid_at ASC, id ASC`
     ).all(),
@@ -3653,7 +3671,7 @@ function buildDataBackupSnapshot(options = {}) {
        ORDER BY id ASC`
     ).all(),
     accountingDeposits: db.prepare(
-      `SELECT id, occurred_at, office_id, owner_user_id, type, deposit_code, bank_name,
+      `SELECT id, occurred_at, office_id, owner_user_id, type, deposit_code, bank_name_cipher,
               account_label, title, amount_cents, currency, notes,
               retrocession_percent, retrocession_recipient, is_deleted, created_by, created_at
        FROM accounting_deposits
@@ -3807,7 +3825,7 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
          office_id, last_name, first_name, email, mobile_phone, country,
          siret, adeli_code, rpps_code, ape_naf_code, name_suffix_text,
          letter_header, letter_footer, signature_text, color_hex,
-         bank_name, iban, retrocession_percent, retrocession_recipient,
+         bank_name_cipher, iban_cipher, retrocession_percent, retrocession_recipient,
          default_agenda_view, visible_calendars, default_service, invoice_mentions,
          created_at, must_change_password
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -3847,7 +3865,7 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
      );
      const insertInvoicePayment = db.prepare(
-      `INSERT INTO invoice_payments (id, invoice_id, paid_at, amount_cents, currency, payment_method, bank_name, cheque_number, reference, notes, created_by, created_at)
+      `INSERT INTO invoice_payments (id, invoice_id, paid_at, amount_cents, currency, payment_method, bank_name_cipher, cheque_number, reference, notes, created_by, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
      );
      const insertAccountingExpense = db.prepare(
@@ -3859,7 +3877,7 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
      );
      const insertAccountingDeposit = db.prepare(
       `INSERT INTO accounting_deposits (
-        id, occurred_at, office_id, owner_user_id, type, deposit_code, bank_name,
+        id, occurred_at, office_id, owner_user_id, type, deposit_code, bank_name_cipher,
         account_label, title, amount_cents, currency, notes,
         retrocession_percent, retrocession_recipient, is_deleted, created_by, created_at
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -3995,8 +4013,8 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
         row.letter_footer ?? '',
         row.signature_text ?? '',
         row.color_hex ?? '#4d92d1',
-        row.bank_name ?? '',
-        row.iban ?? '',
+        restoreCipherField(row.bank_name_cipher ?? row.bank_name ?? ''),
+        restoreCipherField(row.iban_cipher ?? row.iban ?? ''),
         Number(row.retrocession_percent) || 0,
         row.retrocession_recipient ?? '',
         row.default_agenda_view ?? 'Semaine',
@@ -4191,7 +4209,7 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
         Number(row.amount_cents) || 0,
         String(row.currency ?? 'EUR'),
         String(row.payment_method ?? ''),
-        String(row.bank_name ?? ''),
+        restoreCipherField(row.bank_name_cipher ?? row.bank_name ?? ''),
         String(row.cheque_number ?? ''),
         String(row.reference ?? ''),
         String(row.notes ?? ''),
@@ -4227,7 +4245,7 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
         row.owner_user_id != null ? Number(row.owner_user_id) : null,
         row.type === 'especes' ? 'especes' : 'cheque',
         String(row.deposit_code ?? ''),
-        String(row.bank_name ?? ''),
+        restoreCipherField(row.bank_name_cipher ?? row.bank_name ?? ''),
         String(row.account_label ?? ''),
         String(row.title ?? ''),
         Number(row.amount_cents) || 0,
@@ -4491,6 +4509,8 @@ function migrateUsersOfficeForeignKey() {
         color_hex TEXT NOT NULL DEFAULT '#4d92d1',
         bank_name TEXT NOT NULL DEFAULT '',
         iban TEXT NOT NULL DEFAULT '',
+        bank_name_cipher TEXT NOT NULL DEFAULT '',
+        iban_cipher TEXT NOT NULL DEFAULT '',
         retrocession_percent REAL NOT NULL DEFAULT 0,
         retrocession_recipient TEXT NOT NULL DEFAULT '',
         default_agenda_view TEXT NOT NULL DEFAULT 'Semaine',
@@ -4511,7 +4531,7 @@ function migrateUsersOfficeForeignKey() {
         last_name, first_name, email, mobile_phone, country,
         siret, adeli_code, rpps_code, ape_naf_code, name_suffix_text,
         letter_header, letter_footer, signature_text, color_hex,
-        bank_name, iban, retrocession_percent, retrocession_recipient,
+        bank_name, iban, bank_name_cipher, iban_cipher, retrocession_percent, retrocession_recipient,
         default_agenda_view, visible_calendars, default_service, invoice_mentions,
         must_change_password, include_free_consultations, show_consultation_hour,
         created_at
@@ -4540,6 +4560,8 @@ function migrateUsersOfficeForeignKey() {
         coalesce(nullif(trim(u.color_hex), ''), '#4d92d1'),
         coalesce(u.bank_name, ''),
         coalesce(u.iban, ''),
+        '', /* bank_name_cipher - will be populated by SEC-3 startup encryption migration */
+        '', /* iban_cipher - will be populated by SEC-3 startup encryption migration */
         coalesce(u.retrocession_percent, 0),
         coalesce(u.retrocession_recipient, ''),
         coalesce(nullif(trim(u.default_agenda_view), ''), 'Semaine'),
@@ -4777,6 +4799,8 @@ async function ensureSeedData() {
   ensureColumn('users', 'color_hex', "color_hex TEXT NOT NULL DEFAULT '#4d92d1'");
   ensureColumn('users', 'bank_name', "bank_name TEXT NOT NULL DEFAULT ''");
   ensureColumn('users', 'iban', "iban TEXT NOT NULL DEFAULT ''");
+  ensureColumn('users', 'bank_name_cipher', "bank_name_cipher TEXT NOT NULL DEFAULT ''");
+  ensureColumn('users', 'iban_cipher', "iban_cipher TEXT NOT NULL DEFAULT ''");
   ensureColumn('users', 'retrocession_percent', 'retrocession_percent REAL NOT NULL DEFAULT 0');
   ensureColumn('users', 'retrocession_recipient', "retrocession_recipient TEXT NOT NULL DEFAULT ''");
   ensureColumn('users', 'default_agenda_view', "default_agenda_view TEXT NOT NULL DEFAULT 'Semaine'");
@@ -4824,10 +4848,34 @@ async function ensureSeedData() {
   ensureColumn('service_types', 'office_id', 'office_id INTEGER');
   ensureColumn('payment_methods', 'office_id', 'office_id INTEGER');
   ensureColumn('invoice_payments', 'bank_name', "bank_name TEXT NOT NULL DEFAULT ''");
+  ensureColumn('invoice_payments', 'bank_name_cipher', "bank_name_cipher TEXT NOT NULL DEFAULT ''");
   ensureColumn('invoice_payments', 'cheque_number', "cheque_number TEXT NOT NULL DEFAULT ''");
+  ensureColumn('accounting_deposits', 'bank_name_cipher', "bank_name_cipher TEXT NOT NULL DEFAULT ''");
   ensureColumn('user_preference', 'slot_duration_minutes', 'slot_duration_minutes INTEGER NOT NULL DEFAULT 15');
   ensureColumn('user_preference', 'display_height', 'display_height INTEGER NOT NULL DEFAULT 14');
   ensureColumn('user_preference', 'theme_mode', "theme_mode TEXT NOT NULL DEFAULT 'system'");
+
+  // SEC-3: encrypt bank_name and iban fields at rest (one-time migration of existing plaintext data)
+  try {
+    const encryptExistingColumn = (table, cipherCol, plaintextCol, extraWhere = '') => {
+      const where = extraWhere ? ` AND (${extraWhere})` : '';
+      const rows = db.prepare(`SELECT id, ${plaintextCol} FROM ${table} WHERE ${cipherCol} = '' AND ${plaintextCol} != ''${where}`).all();
+      if (rows.length === 0) {
+        return;
+      }
+      const stmt = db.prepare(`UPDATE ${table} SET ${cipherCol} = ? WHERE id = ?`);
+      for (const row of rows) {
+        stmt.run(encryptSensitiveField(String(row[plaintextCol])), row.id);
+      }
+      console.log(`✓ SEC-3: encrypted ${rows.length} existing ${table}.${cipherCol} values`);
+    };
+    encryptExistingColumn('users', 'bank_name_cipher', 'bank_name');
+    encryptExistingColumn('users', 'iban_cipher', 'iban');
+    encryptExistingColumn('invoice_payments', 'bank_name_cipher', 'bank_name');
+    encryptExistingColumn('accounting_deposits', 'bank_name_cipher', 'bank_name');
+  } catch (err) {
+    console.warn('SEC-3 encryption migration failed:', err.message);
+  }
 
   const fallbackOffice = db.prepare('SELECT id FROM offices ORDER BY display_order ASC, id ASC LIMIT 1').get();
   const defaultOfficeCountry = getConfigValue('settings_general_country', 'France');
@@ -6516,6 +6564,13 @@ function buildPatientUpdateChanges(beforeSnapshot, afterSnapshot) {
   return changes;
 }
 
+// Routes that remain accessible even when must_change_password is set
+const ROUTES_ALLOWED_WITH_MUST_CHANGE_PASSWORD = new Set([
+  '/api/auth/logout',
+  '/api/auth/me',
+  '/api/profile/me',
+]);
+
 function authMiddleware(req, res, next) {
   const token = req.cookies[SESSION_COOKIE_NAME];
 
@@ -6530,6 +6585,23 @@ function authMiddleware(req, res, next) {
   try {
     const payload = jwt.verify(token, jwtSecret);
     req.user = payload;
+
+    // Enforce must_change_password: fast-path from JWT flag (mcp=true) or fallback DB
+    // check for tokens issued before this flag was introduced. The DB check is only
+    // performed when the JWT already signals mcp or when the flag is absent (legacy token).
+    if (!ROUTES_ALLOWED_WITH_MUST_CHANGE_PASSWORD.has(req.path)) {
+      const jwtMcp = payload.mcp;
+      if (jwtMcp === true || jwtMcp === undefined) {
+        // mcp=true  → JWT signals flag; confirm with DB in case it was cleared
+        // mcp=undefined → legacy token without flag; DB check for backward compat
+        const userFlags = db.prepare('SELECT must_change_password FROM users WHERE id = ?').get(payload.sub);
+        if (userFlags?.must_change_password === 1) {
+          return res.status(403).json({ message: 'Changement de mot de passe requis', mustChangePassword: true });
+        }
+      }
+      // mcp === false → no restriction, skip DB check
+    }
+
     return next();
   } catch {
     writeAuthSecurityLog(req, 'unauthenticated_request_blocked', {
@@ -7056,6 +7128,10 @@ const userAgendaPreferencesSchema = z.object({
   appointmentColorMode: z.enum(['calendar', 'user'])
 });
 
+if (trustedProxies !== false) {
+  app.set('trust proxy', trustedProxies);
+}
+
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -7080,8 +7156,42 @@ app.use(
     credentials: true
   })
 );
-app.use(express.json({ limit: requestBodyLimit }));
-app.use(express.urlencoded({ limit: requestBodyLimit, extended: true }));
+
+// Routes that accept large file payloads (documents, backups, imports, logos)
+// Patterns are kept strict (bounded \d{1,10}) to avoid runaway regex on malformed paths
+const LARGE_BODY_ROUTE_PATTERNS = [
+  /^\/api\/data-management\/restore$/,
+  /^\/api\/data-management\/import$/,
+  /^\/api\/patients\/\d{1,10}\/documents$/,
+  /^\/api\/patients\/\d{1,10}\/consultations$/,
+  /^\/api\/patients\/\d{1,10}\/consultation-drafts\/new-consultation$/,
+  /^\/api\/offices(\/\d{1,10})?$/,
+  /^\/api\/setup\/office$/,
+];
+
+function resolveBodyLimit(path) {
+  return LARGE_BODY_ROUTE_PATTERNS.some((pattern) => pattern.test(path))
+    ? largeRequestBodyLimit
+    : requestBodyLimit;
+}
+
+// Pre-create parser instances once at startup; selected per-request based on route
+const jsonParserDefault = express.json({ limit: requestBodyLimit });
+const jsonParserLarge = express.json({ limit: largeRequestBodyLimit });
+const urlencodedParserDefault = express.urlencoded({ limit: requestBodyLimit, extended: true });
+const urlencodedParserLarge = express.urlencoded({ limit: largeRequestBodyLimit, extended: true });
+
+app.use((req, res, next) => {
+  const isLargeRoute = LARGE_BODY_ROUTE_PATTERNS.some((pattern) => pattern.test(req.path));
+  const jsonParser = isLargeRoute ? jsonParserLarge : jsonParserDefault;
+  const urlencodedParser = isLargeRoute ? urlencodedParserLarge : urlencodedParserDefault;
+  jsonParser(req, res, (jsonErr) => {
+    if (jsonErr) {
+      return next(jsonErr);
+    }
+    urlencodedParser(req, res, next);
+  });
+});
 app.use(cookieParser());
 
 const loginLimiter = rateLimit({
@@ -7278,7 +7388,7 @@ app.get('/api/profile/me', authMiddleware, (req, res) => {
               u.office_id, o.name AS office_name, u.last_name, u.first_name, u.email, u.mobile_phone, u.country,
               u.siret, u.adeli_code, u.rpps_code, u.ape_naf_code, u.name_suffix_text,
               u.letter_header, u.letter_footer, u.signature_text, u.color_hex,
-              u.bank_name, u.iban, u.retrocession_percent, u.retrocession_recipient,
+              u.bank_name_cipher, u.iban_cipher, u.retrocession_percent, u.retrocession_recipient,
               u.default_agenda_view, u.visible_calendars, u.default_service, u.invoice_mentions,
               u.include_free_consultations, u.show_consultation_hour,
               (
@@ -7353,8 +7463,8 @@ app.put('/api/profile/me', authMiddleware, async (req, res) => {
          letter_footer = ?,
          signature_text = ?,
          color_hex = ?,
-         bank_name = ?,
-         iban = ?,
+         bank_name_cipher = ?,
+         iban_cipher = ?,
          retrocession_percent = ?,
          retrocession_recipient = ?,
          default_agenda_view = ?,
@@ -7380,8 +7490,8 @@ app.put('/api/profile/me', authMiddleware, async (req, res) => {
     payload.letterFooter.trim(),
     payload.signatureText.trim(),
     payload.colorHex.trim() || '#4d92d1',
-    payload.bankName.trim(),
-    payload.iban.trim(),
+    payload.bankName.trim() ? encryptSensitiveField(payload.bankName.trim()) : '',
+    payload.iban.trim() ? encryptSensitiveField(payload.iban.trim()) : '',
     Number(payload.retrocessionPercent) || 0,
     payload.retrocessionRecipient.trim(),
     payload.defaultAgendaView.trim() || 'Semaine',
@@ -7403,6 +7513,13 @@ app.put('/api/profile/me', authMiddleware, async (req, res) => {
     });
 
     db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?').run(passwordHash, req.user.sub);
+
+    // Re-issue session cookie so the new JWT no longer carries mcp=true
+    const updatedUser = db.prepare('SELECT id, role, username, must_change_password FROM users WHERE id = ?').get(req.user.sub);
+    if (updatedUser) {
+      const newToken = signTokenForSession(updatedUser, false);
+      res.cookie(SESSION_COOKIE_NAME, newToken, buildSessionCookieOptions(false));
+    }
   }
 
   writeAuditLog(req.user.sub, 'UPDATE', 'users', String(req.user.sub), {
@@ -8521,9 +8638,9 @@ function getDataCleanupItems(kind, allowedOfficeIds = []) {
     const sources = [
       db
         .prepare(
-          `SELECT DISTINCT u.bank_name AS value
+          `SELECT u.bank_name_cipher AS value
            FROM users u
-           WHERE trim(u.bank_name) <> ''
+           WHERE u.bank_name_cipher <> ''
              AND (
                u.office_id IN (${placeholders})
                OR EXISTS (SELECT 1 FROM user_offices uo WHERE uo.user_id = u.id AND uo.office_id IN (${placeholders}))
@@ -8532,25 +8649,27 @@ function getDataCleanupItems(kind, allowedOfficeIds = []) {
         .all(...scopedOfficeIds, ...scopedOfficeIds),
       db
         .prepare(
-          `SELECT ip.bank_name AS value
+          `SELECT ip.bank_name_cipher AS value
            FROM invoice_payments ip
            INNER JOIN invoices i ON i.id = ip.invoice_id
            INNER JOIN patients p ON p.id = i.patient_id
-           WHERE p.office_id IN (${placeholders})`
+           WHERE ip.bank_name_cipher <> ''
+             AND p.office_id IN (${placeholders})`
         )
         .all(...scopedOfficeIds),
       db
         .prepare(
-          `SELECT bank_name AS value
+          `SELECT bank_name_cipher AS value
            FROM accounting_deposits
-           WHERE office_id IN (${placeholders})`
+           WHERE bank_name_cipher <> ''
+             AND office_id IN (${placeholders})`
         )
         .all(...scopedOfficeIds)
     ];
 
     for (const sourceRows of sources) {
       for (const row of sourceRows) {
-        const value = String(row.value ?? '').trim();
+        const value = safeDecryptField(String(row.value ?? '')).trim();
         if (!value) {
           continue;
         }
@@ -8624,37 +8743,53 @@ function applyDataCleanupChanges(kind, rawChanges, allowedOfficeIds = [], actorU
   let updatedCount = 0;
 
   if (normalizedKind === 'banks') {
-    const updateUserBanks = db.prepare(
-      `UPDATE users
-       SET bank_name = ?
-       WHERE lower(trim(bank_name)) = lower(trim(?))
-         AND (
-           office_id IN (${placeholders})
-           OR EXISTS (SELECT 1 FROM user_offices uo WHERE uo.user_id = users.id AND uo.office_id IN (${placeholders}))
-         )`
-    );
-    const updateInvoiceBanks = db.prepare(
-      `UPDATE invoice_payments
-       SET bank_name = ?
-       WHERE lower(trim(bank_name)) = lower(trim(?))
-         AND invoice_id IN (
-           SELECT i.id
-           FROM invoices i
-           INNER JOIN patients p ON p.id = i.patient_id
-           WHERE p.office_id IN (${placeholders})
-         )`
-    );
-    const updateDepositBanks = db.prepare(
-      `UPDATE accounting_deposits
-       SET bank_name = ?
-       WHERE lower(trim(bank_name)) = lower(trim(?))
+    const scopedUsers = db.prepare(
+      `SELECT id, bank_name_cipher FROM users
+       WHERE (
+         office_id IN (${placeholders})
+         OR EXISTS (SELECT 1 FROM user_offices uo WHERE uo.user_id = users.id AND uo.office_id IN (${placeholders}))
+       )`
+    ).all(...scopedOfficeIds, ...scopedOfficeIds);
+
+    const scopedPayments = db.prepare(
+      `SELECT ip.id, ip.bank_name_cipher
+       FROM invoice_payments ip
+       INNER JOIN invoices i ON i.id = ip.invoice_id
+       INNER JOIN patients p ON p.id = i.patient_id
+       WHERE ip.bank_name_cipher <> ''
+         AND p.office_id IN (${placeholders})`
+    ).all(...scopedOfficeIds);
+
+    const scopedDeposits = db.prepare(
+      `SELECT id, bank_name_cipher FROM accounting_deposits
+       WHERE bank_name_cipher <> ''
          AND office_id IN (${placeholders})`
-    );
+    ).all(...scopedOfficeIds);
+
+    const updateUserBank = db.prepare(`UPDATE users SET bank_name_cipher = ? WHERE id = ?`);
+    const updatePaymentBank = db.prepare(`UPDATE invoice_payments SET bank_name_cipher = ? WHERE id = ?`);
+    const updateDepositBank = db.prepare(`UPDATE accounting_deposits SET bank_name_cipher = ? WHERE id = ?`);
 
     for (const change of changes) {
-      updatedCount += Number(updateUserBanks.run(change.replacementValue, change.sourceValue, ...scopedOfficeIds, ...scopedOfficeIds).changes ?? 0);
-      updatedCount += Number(updateInvoiceBanks.run(change.replacementValue, change.sourceValue, ...scopedOfficeIds).changes ?? 0);
-      updatedCount += Number(updateDepositBanks.run(change.replacementValue, change.sourceValue, ...scopedOfficeIds).changes ?? 0);
+      const sourceKey = change.sourceValue.toLowerCase().trim();
+      for (const user of scopedUsers) {
+        if (safeDecryptField(user.bank_name_cipher).toLowerCase().trim() === sourceKey) {
+          updateUserBank.run(encryptSensitiveField(change.replacementValue), user.id);
+          updatedCount += 1;
+        }
+      }
+      for (const payment of scopedPayments) {
+        if (safeDecryptField(payment.bank_name_cipher).toLowerCase().trim() === sourceKey) {
+          updatePaymentBank.run(encryptSensitiveField(change.replacementValue), payment.id);
+          updatedCount += 1;
+        }
+      }
+      for (const deposit of scopedDeposits) {
+        if (safeDecryptField(deposit.bank_name_cipher).toLowerCase().trim() === sourceKey) {
+          updateDepositBank.run(encryptSensitiveField(change.replacementValue), deposit.id);
+          updatedCount += 1;
+        }
+      }
     }
   } else {
     const noteKey = normalizedKind === 'cities'
@@ -9888,8 +10023,8 @@ function mapUserAccountRow(row) {
     letterFooter: row.letter_footer ?? '',
     signatureText: row.signature_text ?? '',
     colorHex: row.color_hex ?? '#4d92d1',
-    bankName: row.bank_name ?? '',
-    iban: row.iban ?? '',
+    bankName: safeDecryptField(row.bank_name_cipher),
+    iban: safeDecryptField(row.iban_cipher),
     retrocessionPercent: Number(row.retrocession_percent ?? 0),
     retrocessionRecipient: row.retrocession_recipient ?? '',
     defaultAgendaView: row.default_agenda_view ?? 'Semaine',
@@ -9908,7 +10043,7 @@ app.get('/api/users', authMiddleware, adminOnlyMiddleware, (_req, res) => {
               u.office_id, o.name AS office_name, u.last_name, u.first_name, u.email, u.mobile_phone, u.country,
               u.siret, u.adeli_code, u.rpps_code, u.ape_naf_code, u.name_suffix_text,
               u.letter_header, u.letter_footer, u.signature_text, u.color_hex,
-              u.bank_name, u.iban, u.retrocession_percent, u.retrocession_recipient,
+              u.bank_name_cipher, u.iban_cipher, u.retrocession_percent, u.retrocession_recipient,
               u.default_agenda_view, u.visible_calendars, u.default_service, u.invoice_mentions,
               (
                 SELECT json_group_array(uo.office_id)
@@ -9987,7 +10122,7 @@ app.post('/api/users', authMiddleware, adminOnlyMiddleware, async (req, res) => 
       last_name, first_name, email, mobile_phone, country,
       siret, adeli_code, rpps_code, ape_naf_code, name_suffix_text,
       letter_header, letter_footer, signature_text, color_hex,
-      bank_name, iban, retrocession_percent, retrocession_recipient,
+      bank_name_cipher, iban_cipher, retrocession_percent, retrocession_recipient,
       default_agenda_view, visible_calendars, default_service, invoice_mentions,
       include_free_consultations, show_consultation_hour
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -10012,8 +10147,8 @@ app.post('/api/users', authMiddleware, adminOnlyMiddleware, async (req, res) => 
     payload.letterFooter.trim(),
     payload.signatureText.trim(),
     payload.colorHex.trim() || '#4d92d1',
-    payload.bankName.trim(),
-    payload.iban.trim(),
+    payload.bankName.trim() ? encryptSensitiveField(payload.bankName.trim()) : '',
+    payload.iban.trim() ? encryptSensitiveField(payload.iban.trim()) : '',
     Number(payload.retrocessionPercent) || 0,
     payload.retrocessionRecipient.trim(),
     payload.defaultAgendaView.trim() || 'Semaine',
@@ -10038,7 +10173,7 @@ app.post('/api/users', authMiddleware, adminOnlyMiddleware, async (req, res) => 
               u.office_id, o.name AS office_name, u.last_name, u.first_name, u.email, u.mobile_phone, u.country,
               u.siret, u.adeli_code, u.rpps_code, u.ape_naf_code, u.name_suffix_text,
               u.letter_header, u.letter_footer, u.signature_text, u.color_hex,
-              u.bank_name, u.iban, u.retrocession_percent, u.retrocession_recipient,
+              u.bank_name_cipher, u.iban_cipher, u.retrocession_percent, u.retrocession_recipient,
               u.default_agenda_view, u.visible_calendars, u.default_service, u.invoice_mentions,
               (
                 SELECT json_group_array(uo.office_id)
@@ -10146,8 +10281,8 @@ app.put('/api/users/:id', authMiddleware, adminOnlyMiddleware, async (req, res) 
          letter_footer = ?,
          signature_text = ?,
          color_hex = ?,
-         bank_name = ?,
-         iban = ?,
+         bank_name_cipher = ?,
+         iban_cipher = ?,
          retrocession_percent = ?,
          retrocession_recipient = ?,
          default_agenda_view = ?,
@@ -10177,8 +10312,8 @@ app.put('/api/users/:id', authMiddleware, adminOnlyMiddleware, async (req, res) 
     payload.letterFooter.trim(),
     payload.signatureText.trim(),
     payload.colorHex.trim() || '#4d92d1',
-    payload.bankName.trim(),
-    payload.iban.trim(),
+    payload.bankName.trim() ? encryptSensitiveField(payload.bankName.trim()) : '',
+    payload.iban.trim() ? encryptSensitiveField(payload.iban.trim()) : '',
     Number(payload.retrocessionPercent) || 0,
     payload.retrocessionRecipient.trim(),
     payload.defaultAgendaView.trim() || 'Semaine',
@@ -10270,7 +10405,7 @@ app.post('/api/users/:id/reset-password', authMiddleware, adminOnlyMiddleware, a
   const tempPassword = crypto.randomBytes(8).toString('hex');
   const hashedPassword = await argon2.hash(tempPassword);
 
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashedPassword, userId);
+  db.prepare('UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?').run(hashedPassword, userId);
 
   writeAuditLog(req.user.sub, 'UPDATE', 'users', String(userId), {
     action: 'admin_password_reset',
@@ -12672,9 +12807,10 @@ app.post('/api/patients/:id/withdraw-consent', authMiddleware, requirePermission
   }
 
   const withdrawnAt = new Date().toISOString();
+  const consentWithdrawalDate = new Date().toISOString().slice(0, 10);
   db.prepare(
-    'UPDATE patients SET consent_withdrawn_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-  ).run(withdrawnAt, id);
+    'UPDATE patients SET consent_withdrawn_at = ?, retention_until = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(withdrawnAt, consentWithdrawalDate, id);
 
   writeAuditLog(req.user.sub, 'WITHDRAW_CONSENT', 'patients', String(id));
 
@@ -14013,7 +14149,7 @@ function getInvoiceDetail(invoiceId) {
   ).all(invoiceId);
 
   const payments = db.prepare(
-    `SELECT id, paid_at, amount_cents, currency, payment_method, bank_name, cheque_number, reference, notes
+    `SELECT id, paid_at, amount_cents, currency, payment_method, bank_name_cipher, cheque_number, reference, notes
      FROM invoice_payments
      WHERE invoice_id = ?
      ORDER BY datetime(paid_at) ASC, id ASC`
@@ -14052,7 +14188,7 @@ function getInvoiceDetail(invoiceId) {
       amountCents: Number(item.amount_cents ?? 0),
       currency: String(item.currency ?? 'EUR').trim() || 'EUR',
       paymentMethod: String(item.payment_method ?? '').trim(),
-      bankName: String(item.bank_name ?? '').trim(),
+      bankName: safeDecryptField(item.bank_name_cipher ?? '').trim(),
       chequeNumber: String(item.cheque_number ?? '').trim(),
       reference: String(item.reference ?? '').trim(),
       notes: String(item.notes ?? '').trim()
@@ -14062,7 +14198,7 @@ function getInvoiceDetail(invoiceId) {
 
 function appendInvoicePayment(invoiceId, payment, createdBy) {
   db.prepare(
-    `INSERT INTO invoice_payments (invoice_id, paid_at, amount_cents, currency, payment_method, bank_name, cheque_number, reference, notes, created_by)
+    `INSERT INTO invoice_payments (invoice_id, paid_at, amount_cents, currency, payment_method, bank_name_cipher, cheque_number, reference, notes, created_by)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     invoiceId,
@@ -14070,7 +14206,7 @@ function appendInvoicePayment(invoiceId, payment, createdBy) {
     payment.amountCents,
     payment.currency,
     payment.paymentMethod,
-    payment.bankName,
+    payment.bankName ? encryptSensitiveField(payment.bankName) : '',
     payment.chequeNumber,
     payment.reference,
     payment.notes,
@@ -16136,7 +16272,7 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('invoice-con
        VALUES (?, ?, ?, ?, ?, ?)`
     );
     const insertPayment = db.prepare(
-      `INSERT INTO invoice_payments (invoice_id, paid_at, amount_cents, currency, payment_method, bank_name, cheque_number, reference, notes, created_by)
+      `INSERT INTO invoice_payments (invoice_id, paid_at, amount_cents, currency, payment_method, bank_name_cipher, cheque_number, reference, notes, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
 
@@ -16158,7 +16294,7 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('invoice-con
         payment.amountCents,
         payment.currency,
         payment.paymentMethod,
-        payment.bankName,
+        payment.bankName ? encryptSensitiveField(payment.bankName) : '',
         payment.chequeNumber,
         payment.reference,
         payment.notes,
@@ -16453,7 +16589,7 @@ app.post('/api/billing/deposits', authMiddleware, requirePermission('mark-paymen
 
   const userProfile = db
     .prepare(
-      `SELECT username, last_name, first_name, bank_name, iban
+      `SELECT username, last_name, first_name, bank_name_cipher, iban_cipher
        FROM users
        WHERE id = ?`
     )
@@ -16485,8 +16621,8 @@ app.post('/api/billing/deposits', authMiddleware, requirePermission('mark-paymen
   const mm = String(safeDate.getMonth() + 1).padStart(2, '0');
   const dd = String(safeDate.getDate()).padStart(2, '0');
   const depositCode = `${trigram}-${yyyy}${mm}${dd}`;
-  const bankName = String(userProfile?.bank_name ?? '').trim();
-  const accountLabel = String(userProfile?.iban ?? '').trim();
+  const bankNameCipher = String(userProfile?.bank_name_cipher ?? '');
+  const accountLabel = safeDecryptField(String(userProfile?.iban_cipher ?? '')).trim();
 
   const officeIds = getScopedBillingOfficeIds(req.userAccess, officeId);
   if (!officeIds.length) {
@@ -16527,7 +16663,7 @@ app.post('/api/billing/deposits', authMiddleware, requirePermission('mark-paymen
   const tx = db.transaction(() => {
     const inserted = db.prepare(
       `INSERT INTO accounting_deposits
-        (occurred_at, office_id, owner_user_id, type, deposit_code, bank_name, account_label, title, amount_cents, currency, notes, created_by)
+        (occurred_at, office_id, owner_user_id, type, deposit_code, bank_name_cipher, account_label, title, amount_cents, currency, notes, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       occurredAt,
@@ -16535,7 +16671,7 @@ app.post('/api/billing/deposits', authMiddleware, requirePermission('mark-paymen
       validatedOwnerUserId,
       type,
       depositCode,
-      bankName,
+      bankNameCipher,
       accountLabel,
       title,
       computedAmountCents,
@@ -16578,7 +16714,7 @@ app.get('/api/billing/deposits', authMiddleware, requirePermission('read-billing
 
   const placeholders = scopedOfficeIds.map(() => '?').join(', ');
   const rows = db.prepare(
-    `SELECT d.id, d.type, d.deposit_code, d.occurred_at, d.bank_name, d.account_label, d.title,
+    `SELECT d.id, d.type, d.deposit_code, d.occurred_at, d.bank_name_cipher, d.account_label, d.title,
             d.amount_cents, d.currency, d.office_id, d.notes, o.name AS office_name,
             (
               SELECT COUNT(*)
@@ -16614,7 +16750,7 @@ app.get('/api/billing/deposits', authMiddleware, requirePermission('read-billing
       type: row.type === 'especes' ? 'especes' : 'cheque',
       code: String(row.deposit_code ?? '').trim(),
       occurredAt: String(row.occurred_at),
-      bankName: String(row.bank_name ?? '').trim(),
+      bankName: safeDecryptField(String(row.bank_name_cipher ?? '')).trim(),
       accountLabel: String(row.account_label ?? '').trim(),
       chequeCount: Number(row.cheque_count ?? 0),
       amountCents: Number(row.amount_cents ?? 0),
@@ -16666,7 +16802,7 @@ app.get('/api/billing/deposit-candidates', authMiddleware, requirePermission('re
   const rows = db.prepare(
     `SELECT i.id, i.patient_id, i.consultation_id, i.invoice_number, i.issued_at, i.amount_cents, i.status, i.payment_method, i.office_id,
             p.cipher_full_name,
-            ip.id AS payment_id, ip.paid_at, ip.bank_name, ip.cheque_number, ip.notes AS payment_notes
+            ip.id AS payment_id, ip.paid_at, ip.bank_name_cipher, ip.cheque_number, ip.notes AS payment_notes
      FROM invoices i
      INNER JOIN patients p ON p.id = i.patient_id
      LEFT JOIN invoice_payments ip ON ip.invoice_id = i.id
@@ -16706,7 +16842,7 @@ app.get('/api/billing/deposit-candidates', authMiddleware, requirePermission('re
         paymentMethod: String(row.payment_method ?? '').trim(),
         officeId: row.office_id != null ? Number(row.office_id) : null,
         groupRef: groupRef,
-        bankName: String(row.bank_name ?? '').trim(),
+        bankName: safeDecryptField(String(row.bank_name_cipher ?? '')).trim(),
         chequeNumber: String(row.cheque_number ?? '').trim(),
         paidAt: row.paid_at != null ? String(row.paid_at) : null
       };
@@ -16794,12 +16930,12 @@ app.patch('/api/billing/deposits/:id', authMiddleware, requirePermission('mark-p
   const tx = db.transaction(() => {
     db.prepare(
       `UPDATE accounting_deposits
-       SET occurred_at = ?, deposit_code = ?, bank_name = ?, account_label = ?, title = ?, notes = ?, amount_cents = ?
+       SET occurred_at = ?, deposit_code = ?, bank_name_cipher = ?, account_label = ?, title = ?, notes = ?, amount_cents = ?
        WHERE id = ?`
     ).run(
       occurredAt,
       code,
-      bankName,
+      bankName ? encryptSensitiveField(bankName) : '',
       accountLabel,
       title,
       notes,
@@ -16851,7 +16987,7 @@ app.get('/api/billing/deposits/:id/detail', authMiddleware, requirePermission('r
   }
 
   const row = db.prepare(
-    `SELECT d.id, d.type, d.deposit_code, d.occurred_at, d.bank_name, d.account_label, d.title,
+    `SELECT d.id, d.type, d.deposit_code, d.occurred_at, d.bank_name_cipher, d.account_label, d.title,
             d.amount_cents, d.currency, d.office_id, d.notes,
             o.name AS office_name, o.address_line1, o.address_line2, o.postal_code, o.city, o.country, o.phone_landline, o.email
      FROM accounting_deposits d
@@ -16870,7 +17006,7 @@ app.get('/api/billing/deposits/:id/detail', authMiddleware, requirePermission('r
 
   const items = db.prepare(
     `SELECT i.id AS invoice_id, i.invoice_number, i.issued_at, i.amount_cents, p.cipher_full_name,
-            ip.bank_name, ip.cheque_number, ip.notes AS payment_notes, ip.paid_at
+            ip.bank_name_cipher, ip.cheque_number, ip.notes AS payment_notes, ip.paid_at
      FROM accounting_deposit_items di
      INNER JOIN invoices i ON i.id = di.source_id AND di.source_type = 'invoice'
      INNER JOIN patients p ON p.id = i.patient_id
@@ -16891,7 +17027,7 @@ app.get('/api/billing/deposits/:id/detail', authMiddleware, requirePermission('r
         type: row.type === 'especes' ? 'especes' : 'cheque',
         code: String(row.deposit_code ?? '').trim(),
         occurredAt: String(row.occurred_at),
-        bankName: String(row.bank_name ?? '').trim(),
+        bankName: safeDecryptField(String(row.bank_name_cipher ?? '')).trim(),
         accountLabel: String(row.account_label ?? '').trim(),
         chequeCount: items.length,
         amountCents: Number(row.amount_cents ?? 0),
@@ -16920,7 +17056,7 @@ app.get('/api/billing/deposits/:id/detail', authMiddleware, requirePermission('r
         amountCents: Number(item.amount_cents ?? 0),
         currency: 'EUR',
         groupRef: extractGroupRef(item.payment_notes),
-        bankName: String(item.bank_name ?? '').trim(),
+        bankName: safeDecryptField(String(item.bank_name_cipher ?? '')).trim(),
         chequeNumber: String(item.cheque_number ?? '').trim(),
         paidAt: item.paid_at != null ? String(item.paid_at) : null
       }))
@@ -17181,10 +17317,10 @@ app.get('/api/invoices/summary', authMiddleware, requirePermission('read-billing
 
 await ensureSeedData();
 
-app.use((err, _req, res, _next) => {
+app.use((err, req, res, _next) => {
   if (err?.type === 'entity.too.large') {
     return res.status(413).json({
-      message: `Payload trop volumineux. Reduisez la taille des pieces jointes (limite API: ${requestBodyLimit}).`
+      message: `Payload trop volumineux. Reduisez la taille des pieces jointes (limite API: ${resolveBodyLimit(req.path)}).`
     });
   }
 
