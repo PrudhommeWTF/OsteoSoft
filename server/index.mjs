@@ -3884,6 +3884,9 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
 
     for (const row of Array.isArray(backup.users) ? backup.users : []) {
       const normalizedUsername = String(row.username ?? '').trim();
+      if (!normalizedUsername) {
+        continue;
+      }
       const isAdminAccount = normalizedUsername.toLowerCase() === 'admin';
       let officeId = row.office_id != null ? Number(row.office_id) : null;
 
@@ -3897,7 +3900,11 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
       }
 
       const userId = Number(row.id);
-      const { hash: restoredPasswordHash } = prehashedUserPasswords.get(userId) ?? { hash: '' };
+      const entry = prehashedUserPasswords.get(userId);
+      if (!entry) {
+        throw new Error(`Mot de passe temporaire manquant pour l'utilisateur ${userId}`);
+      }
+      const { hash: restoredPasswordHash } = entry;
 
       insertUser.run(
         userId,
@@ -9277,10 +9284,14 @@ app.post('/api/data-management/restore', authMiddleware, requirePermission('mana
       if (!Number.isInteger(userId) || userId <= 0) {
         continue;
       }
+      const normalizedUsername = String(row?.username ?? '').trim();
+      if (!normalizedUsername) {
+        continue;
+      }
       const tempPassword = crypto.randomBytes(8).toString('hex');
       const hash = await argon2.hash(tempPassword);
       prehashedUserPasswords.set(userId, { hash, tempPassword });
-      tempPasswords.push({ userId, username: String(row?.username ?? ''), tempPassword });
+      tempPasswords.push({ userId, username: normalizedUsername, tempPassword });
     }
 
     restoreDataBackupSnapshot(parsed.data, prehashedUserPasswords);
