@@ -200,7 +200,7 @@ export class PatientsPage {
           telephone: sanitizeCellValue(patient.phone),
           derniereVisite: sanitizeCellValue(patient.lastVisit),
           sexe: sanitizeCellValue(patient.sex),
-          age: patient.age ?? '',
+          age: sanitizeCellValue(patient.age ?? ''),
           nombreConsultations: patient.consultationCount
         }));
 

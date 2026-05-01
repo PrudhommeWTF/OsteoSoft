@@ -8117,8 +8117,8 @@ async function validateImportFileType(buffer, format, fileName) {
   if (format === 'xlsx') {
     const detected = await fileTypeFromBuffer(buffer);
     const actualMime = detected?.mime ?? null;
-    if (actualMime !== null && !ALLOWED_IMPORT_MIME_TYPES.get('xlsx').has(actualMime)) {
-      throw Object.assign(new Error(`Type de fichier non autorisé: ${actualMime}`), { statusCode: 415 });
+    if (actualMime === null || !ALLOWED_IMPORT_MIME_TYPES.get('xlsx').has(actualMime)) {
+      throw Object.assign(new Error(`Type de fichier non autorisé: ${actualMime ?? 'inconnu'}`), { statusCode: 415 });
     }
   }
 }
