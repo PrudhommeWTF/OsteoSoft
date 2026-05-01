@@ -1163,6 +1163,73 @@ try {
   console.warn('Patient audit encryption migration failed:', err.message);
 }
 
+// Migration: encrypt plaintext fullName stored in CREATE patient audit logs
+try {
+  const migrationDone = getConfigValue('migration_patient_create_audit_encryption_v1', '0');
+  if (migrationDone !== '1') {
+    const encryptedCount = db.transaction(() => {
+      const rows = db
+        .prepare(
+          `SELECT id, metadata
+           FROM audit_logs
+           WHERE entity = 'patients' AND action = 'CREATE' AND metadata IS NOT NULL AND trim(metadata) <> ''`
+        )
+        .all();
+
+      const updateMetadata = db.prepare('UPDATE audit_logs SET metadata = ? WHERE id = ?');
+      let changedRows = 0;
+
+      for (const row of rows) {
+        let metadata;
+        try {
+          metadata = JSON.parse(row.metadata);
+        } catch {
+          continue;
+        }
+
+        if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+          continue;
+        }
+
+        if (!Object.prototype.hasOwnProperty.call(metadata, 'fullName')) {
+          continue;
+        }
+
+        const plainFullName = String(metadata.fullName ?? '').trim();
+        if (!plainFullName) {
+          continue;
+        }
+
+        let nameCipher;
+        try {
+          nameCipher = encryptSensitiveField(plainFullName);
+        } catch {
+          continue;
+        }
+
+        const { fullName: _removed, ...rest } = metadata;
+        updateMetadata.run(
+          JSON.stringify({ ...rest, nameCipher }),
+          row.id
+        );
+        changedRows += 1;
+      }
+
+      db.prepare(
+        "INSERT OR REPLACE INTO config (key, value) VALUES ('migration_patient_create_audit_encryption_v1', '1')"
+      ).run();
+
+      return changedRows;
+    })();
+
+    if (encryptedCount > 0) {
+      console.log(`✓ Encrypted fullName in ${encryptedCount} patient CREATE audit log entries`);
+    }
+  }
+} catch (err) {
+  console.warn('Patient CREATE audit encryption migration failed:', err.message);
+}
+
 // Migration: encrypt legacy draft payloads stored in plaintext
 try {
   const migrationDone = getConfigValue('migration_draft_encryption_v1', '0');
@@ -11193,7 +11260,7 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
     );
 
   writeAuditLog(req.user.sub, 'CREATE', 'patients', String(inserted.lastInsertRowid), {
-    fullName,
+    nameCipher: encryptSensitiveField(fullName),
     sex: payload.sex
   });
 
@@ -12499,6 +12566,19 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
       metadata = entry.metadata ? JSON.parse(entry.metadata) : null;
     } catch {
       metadata = null;
+    }
+
+    if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
+      if (Object.prototype.hasOwnProperty.call(metadata, 'nameCipher')) {
+        const { nameCipher, ...rest } = metadata;
+        let fullName;
+        try {
+          fullName = decryptSensitiveField(String(nameCipher ?? ''));
+        } catch {
+          fullName = '[données non disponibles]';
+        }
+        metadata = { ...rest, fullName };
+      }
     }
 
     return {
