@@ -772,6 +772,13 @@ export class ApiService {
     await firstValueFrom(this.http.put<void>(`${this.baseUrl}/patients/${id}`, payload));
   }
 
+  async withdrawPatientConsent(id: number): Promise<{ consentWithdrawnAt: string }> {
+    const response = await firstValueFrom(
+      this.http.post<{ consentWithdrawnAt: string }>(`${this.baseUrl}/patients/${id}/withdraw-consent`, {})
+    );
+    return response;
+  }
+
   async getAccessProfiles(): Promise<AccessProfile[]> {
     const response = await firstValueFrom(
       this.http.get<AccessProfilesPayload>(`${this.baseUrl}/access-profiles`)

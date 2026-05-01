@@ -264,6 +264,10 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     'Rhumatologie'
   ]);
 
+  readonly isWithdrawingConsent = signal(false);
+  readonly withdrawConsentError = signal('');
+  readonly withdrawConsentSuccess = signal('');
+
   private readonly birthDateIso = signal('');
   private readonly editSex = signal<PatientDetail['sex']>('Non renseigne');
   private isSynchronizingLocationFields = false;
@@ -1146,6 +1150,27 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
 
   closeAuditModal(): void {
     this.showAuditModal.set(false);
+  }
+
+  async withdrawConsent(): Promise<void> {
+    const patientId = this.patient()?.id;
+    if (!patientId) {
+      return;
+    }
+
+    this.withdrawConsentError.set('');
+    this.withdrawConsentSuccess.set('');
+    this.isWithdrawingConsent.set(true);
+
+    try {
+      const result = await this.api.withdrawPatientConsent(patientId);
+      this.patient.update((p) => p ? { ...p, consentWithdrawnAt: result.consentWithdrawnAt } : p);
+      this.withdrawConsentSuccess.set('Le retrait du consentement a été enregistré.');
+    } catch {
+      this.withdrawConsentError.set('Impossible d\'enregistrer le retrait du consentement.');
+    } finally {
+      this.isWithdrawingConsent.set(false);
+    }
   }
 
   async openPatientDocument(patientDocument: PatientDocumentSummary, forceDownload = false): Promise<void> {
