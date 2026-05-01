@@ -9,6 +9,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
+import { fileTypeFromBuffer } from 'file-type';
 import helmet from 'helmet';
 import JSZip from 'jszip';
 import jwt from 'jsonwebtoken';
@@ -845,6 +846,54 @@ function writeAuditLog(userId, action, entity, entityId, metadata = null) {
   ).run(userId ?? null, action, entity, entityId ?? null, metadata ? JSON.stringify(metadata) : null);
 }
 
+const anonymizePatientTx = db.transaction((patientId) => {
+  const anonymizedValue = encryptSensitiveField('ANONYMIZED');
+
+  db.prepare('DELETE FROM patient_antecedents WHERE patient_id = ?').run(patientId);
+  db.prepare('DELETE FROM patient_documents WHERE patient_id = ?').run(patientId);
+
+  db.prepare(
+    `DELETE FROM consultation_sections
+     WHERE consultation_id IN (
+       SELECT id FROM consultations WHERE patient_id = ?
+     )`
+  ).run(patientId);
+
+  db.prepare(
+    `DELETE FROM consultation_reason_items
+     WHERE consultation_id IN (
+       SELECT id FROM consultations WHERE patient_id = ?
+     )`
+  ).run(patientId);
+
+  db.prepare('DELETE FROM consultations WHERE patient_id = ?').run(patientId);
+
+  db.prepare(
+    `UPDATE appointments
+     SET reason_cipher = ?
+     WHERE patient_id = ?`
+  ).run(anonymizedValue, patientId);
+
+  db.prepare(
+    `UPDATE invoices
+     SET notes_cipher = ?
+     WHERE patient_id = ?`
+  ).run(anonymizedValue, patientId);
+
+  db.prepare(
+    `UPDATE patients
+     SET cipher_full_name = ?,
+         cipher_phone = ?,
+         cipher_medical_notes = ?,
+         is_deleted = 1,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+  ).run(anonymizedValue, anonymizedValue, anonymizedValue, patientId);
+
+  db.prepare("DELETE FROM audit_logs WHERE entity = 'patients' AND entity_id = ?")
+    .run(String(patientId));
+});
+
 function processExpiredPatients() {
   const today = new Date().toISOString().slice(0, 10);
 
@@ -856,15 +905,7 @@ function processExpiredPatients() {
   ).all(today);
 
   for (const { id, retention_until: retentionUntil } of expired) {
-    db.prepare(`UPDATE patients
-      SET cipher_full_name = ?, cipher_phone = ?, cipher_medical_notes = ?,
-          is_deleted = 1, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?`).run(
-      encryptSensitiveField('ANONYMIZED'),
-      encryptSensitiveField('ANONYMIZED'),
-      encryptSensitiveField('ANONYMIZED'),
-      id
-    );
+    anonymizePatientTx(id);
     writeAuditLog(null, 'AUTO_ANONYMIZE', 'patients', String(id), {
       reason: 'retention_expired',
       retentionUntil
@@ -5818,7 +5859,33 @@ function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}
   return null;
 }
 
-function normalizeConsultationDocumentsPayload(rawDocuments) {
+const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+]);
+
+async function validateDocumentMimeType(contentBase64) {
+  const buffer = Buffer.from(contentBase64, 'base64');
+  const detected = await fileTypeFromBuffer(buffer);
+  const actualMime = detected?.mime ?? null;
+
+  if (actualMime !== null && !ALLOWED_DOCUMENT_MIME_TYPES.has(actualMime)) {
+    throw Object.assign(new Error(`Type de fichier non autorisé: ${actualMime}`), { statusCode: 415 });
+  }
+
+  if (actualMime !== null) {
+    return actualMime;
+  }
+
+  return 'application/octet-stream';
+}
+
+async function normalizeConsultationDocumentsPayload(rawDocuments) {
   const input = Array.isArray(rawDocuments) ? rawDocuments : [];
   const seenRefs = new Set();
   const normalized = [];
@@ -5836,10 +5903,12 @@ function normalizeConsultationDocumentsPayload(rawDocuments) {
     }
     seenRefs.add(documentRef);
 
+    const mimeType = await validateDocumentMimeType(contentBase64);
+
     normalized.push({
       documentRef,
       fileName,
-      mimeType: String(item?.mimeType ?? 'application/octet-stream').trim() || 'application/octet-stream',
+      mimeType,
       sizeBytes: Math.max(0, Number(item?.sizeBytes) || 0),
       title: String(item?.title ?? '').trim(),
       comment: String(item?.comment ?? '').trim(),
@@ -5850,8 +5919,12 @@ function normalizeConsultationDocumentsPayload(rawDocuments) {
   return normalized;
 }
 
-function storeConsultationDocuments(patientId, consultationId, officeId, createdByUserId, rawDocuments) {
-  const documents = normalizeConsultationDocumentsPayload(rawDocuments);
+async function storeConsultationDocuments(patientId, consultationId, officeId, createdByUserId, rawDocuments) {
+  const documents = await normalizeConsultationDocumentsPayload(rawDocuments);
+  return insertNormalizedDocuments(patientId, consultationId, officeId, createdByUserId, documents);
+}
+
+function insertNormalizedDocuments(patientId, consultationId, officeId, createdByUserId, documents) {
   if (!documents.length) {
     return [];
   }
@@ -10859,13 +10932,22 @@ app.get('/api/patients/referrals', authMiddleware, requirePermission('create-pat
   return res.json({ referrals: referrals.slice(0, 20) });
 });
 
-app.post('/api/patients', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+app.post('/api/patients', authMiddleware, requirePermission('create-patient-record'), async (req, res) => {
   const parsed = createPatientSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: 'Payload invalide' });
   }
 
   const payload = parsed.data;
+
+  let preValidatedDocuments = [];
+  if (Array.isArray(payload.consultationDocuments) && payload.consultationDocuments.length > 0) {
+    try {
+      preValidatedDocuments = await normalizeConsultationDocumentsPayload(payload.consultationDocuments);
+    } catch (err) {
+      return res.status(415).json({ message: err.message || 'Type de fichier non autorisé' });
+    }
+  }
 
   const consultationScheduling = resolveConsultationSchedulingContextFromRaw(payload.consultationNote, {
     userId: req.user.sub,
@@ -10966,12 +11048,12 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
     linkStrategy: payload.consultationLinkStrategy === 'create-new' ? 'create-new' : 'attach-existing'
   });
 
-  const createdDocuments = storeConsultationDocuments(
+  const createdDocuments = insertNormalizedDocuments(
     Number(inserted.lastInsertRowid),
     consultationCreation?.consultationId ?? null,
     consultationCreation?.officeId ?? (req.userAccess?.officeIds?.[0] ?? null),
     req.user.sub,
-    payload.consultationDocuments
+    preValidatedDocuments
   );
 
   synchronizeBidirectionalRelatedPeople({
@@ -11107,7 +11189,7 @@ app.get('/api/patient-documents/:documentRef', authMiddleware, requirePermission
   });
 });
 
-app.post('/api/patients/:id/documents', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
+app.post('/api/patients/:id/documents', authMiddleware, requirePermission('create-patient-record'), async (req, res) => {
   const patientId = Number(req.params.id);
   if (!Number.isInteger(patientId) || patientId <= 0) {
     return res.status(400).json({ message: 'Identifiant patient invalide' });
@@ -11130,7 +11212,6 @@ app.post('/api/patients/:id/documents', authMiddleware, requirePermission('creat
   }
 
   const fileName = String(req.body?.fileName ?? '').trim();
-  const mimeType = String(req.body?.mimeType ?? 'application/octet-stream').trim() || 'application/octet-stream';
   const declaredSizeBytes = Math.max(0, Number(req.body?.sizeBytes) || 0);
   const title = String(req.body?.title ?? '').trim();
   const comment = String(req.body?.comment ?? '').trim();
@@ -11162,6 +11243,13 @@ app.post('/api/patients/:id/documents', authMiddleware, requirePermission('creat
     if (delta > 2048) {
       return res.status(400).json({ message: 'Taille de fichier incoherente' });
     }
+  }
+
+  let mimeType;
+  try {
+    mimeType = await validateDocumentMimeType(contentBase64);
+  } catch (err) {
+    return res.status(415).json({ message: err.message || 'Type de fichier non autorisé' });
   }
 
   if (requestedOfficeId !== null && patientOfficeId !== null && requestedOfficeId !== patientOfficeId) {
@@ -11772,7 +11860,7 @@ app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-co
   });
 });
 
-app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('create-consultation'), (req, res) => {
+app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('create-consultation'), async (req, res) => {
   const patientId = Number(req.params.id);
   if (!Number.isInteger(patientId) || patientId <= 0) {
     return res.status(400).json({ message: 'ID patient invalide' });
@@ -11789,6 +11877,16 @@ app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('c
   }
 
   const payload = parsed.data;
+
+  let preValidatedDocuments = [];
+  if (Array.isArray(payload.consultationDocuments) && payload.consultationDocuments.length > 0) {
+    try {
+      preValidatedDocuments = await normalizeConsultationDocumentsPayload(payload.consultationDocuments);
+    } catch (err) {
+      return res.status(415).json({ message: err.message || 'Type de fichier non autorisé' });
+    }
+  }
+
   const normalizedReasonItems = normalizeConsultationReasonItems(payload.reasonItems);
 
   const officeId = Number.isInteger(payload.officeId) && Number(payload.officeId) > 0
@@ -11826,12 +11924,12 @@ app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('c
 
   updatePatientRetentionFields(patientId, payload.startedAt);
 
-  storeConsultationDocuments(
+  insertNormalizedDocuments(
     patientId,
     consultationId,
     officeId,
     req.user.sub,
-    payload.consultationDocuments
+    preValidatedDocuments
   );
 
   writeAuditLog(req.user.sub, 'CREATE', 'consultations', String(consultationId), {
@@ -12313,54 +12411,7 @@ app.post('/api/patients/:id/anonymize', authMiddleware, adminOnlyMiddleware, (re
     return res.status(404).json({ message: 'Patient introuvable' });
   }
 
-  const anonymizedValue = encryptSensitiveField('ANONYMIZED');
-  const anonymizePatient = db.transaction((patientId) => {
-    db.prepare('DELETE FROM patient_antecedents WHERE patient_id = ?').run(patientId);
-    db.prepare('DELETE FROM patient_documents WHERE patient_id = ?').run(patientId);
-
-    db.prepare(
-      `DELETE FROM consultation_sections
-       WHERE consultation_id IN (
-         SELECT id FROM consultations WHERE patient_id = ?
-       )`
-    ).run(patientId);
-
-    db.prepare(
-      `DELETE FROM consultation_reason_items
-       WHERE consultation_id IN (
-         SELECT id FROM consultations WHERE patient_id = ?
-       )`
-    ).run(patientId);
-
-    db.prepare('DELETE FROM consultations WHERE patient_id = ?').run(patientId);
-
-    db.prepare(
-      `UPDATE appointments
-       SET reason_cipher = ?
-       WHERE patient_id = ?`
-    ).run(anonymizedValue, patientId);
-
-    db.prepare(
-      `UPDATE invoices
-       SET notes_cipher = ?
-       WHERE patient_id = ?`
-    ).run(anonymizedValue, patientId);
-
-    db.prepare(
-      `UPDATE patients
-       SET cipher_full_name = ?,
-           cipher_phone = ?,
-           cipher_medical_notes = ?,
-           is_deleted = 1,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = ?`
-    ).run(anonymizedValue, anonymizedValue, anonymizedValue, patientId);
-
-    db.prepare("DELETE FROM audit_logs WHERE entity = 'patients' AND entity_id = ?")
-      .run(String(patientId));
-  });
-
-  anonymizePatient(id);
+  anonymizePatientTx(id);
 
   writeAuditLog(req.user.sub, 'ANONYMIZE', 'patients', String(id));
   return res.status(204).send();
