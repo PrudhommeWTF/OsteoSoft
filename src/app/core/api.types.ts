@@ -18,9 +18,6 @@ export type OfficeOption = {
 
 export type SetupStatus = {
   requiresSetup: boolean;
-  stats: {
-    offices: number;
-  };
 };
 
 export type AccessManagedUser = {
@@ -927,7 +924,7 @@ export type StatisticsPayload = {
 
 export type AppConfig = {
   app_name: string;
-  version: string;
+  version?: string;
 };
 
 export type AntecedentTypesPayload = {

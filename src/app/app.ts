@@ -28,7 +28,7 @@ export class App {
     effect(() => {
       const config = this.configService.config();
       if (config) {
-        const baseTitle = `${config.app_name} v${config.version}`;
+        const baseTitle = this.configService.getFullTitle();
         this.titleService.setTitle(baseTitle);
       }
     });
@@ -40,7 +40,7 @@ export class App {
       .subscribe(() => {
         const config = this.configService.config();
         if (config) {
-          const baseTitle = `${config.app_name} v${config.version}`;
+          const baseTitle = this.configService.getFullTitle();
           this.titleService.setTitle(baseTitle);
         }
       });
