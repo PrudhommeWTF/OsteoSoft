@@ -5,7 +5,6 @@ import { Router } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { SetupService } from '../../core/setup.service';
 import {
-  CreateOfficePayload,
   CreateSetupOfficePayload,
   OfficeConsultationProfile,
   OfficeOpeningHours,
@@ -15,7 +14,7 @@ import {
 } from '../../core/api.types';
 
 type OfficeCreateStep = 1 | 2 | 3 | 4 | 5 | 6;
-type SetupFlowMode = 'welcome' | 'create' | 'restore';
+type SetupFlowMode = 'welcome' | 'create';
 
 type EditableServiceType = ServiceTypeSetting & { tempKey: string };
 type EditablePaymentMethod = PaymentMethodSetting & { tempKey: string };
@@ -87,10 +86,6 @@ export class InstallationPage {
   readonly step = signal<OfficeCreateStep>(1);
   readonly isCreating = signal(false);
   readonly isInstallingDemo = signal(false);
-  readonly isRestoring = signal(false);
-  readonly isRestoreDragOver = signal(false);
-  readonly restoreSuccess = signal('');
-  readonly restoreFileName = signal('');
   readonly error = signal('');
 
   readonly serviceTypes = signal<EditableServiceType[]>([]);
@@ -115,28 +110,17 @@ export class InstallationPage {
 
   startNewInstallation(): void {
     this.error.set('');
-    this.restoreSuccess.set('');
     this.flowMode.set('create');
     this.step.set(1);
   }
 
-  startRestore(): void {
-    this.error.set('');
-    this.restoreSuccess.set('');
-    this.flowMode.set('restore');
-  }
-
   backToWelcome(): void {
     this.error.set('');
-    this.restoreSuccess.set('');
-    this.restoreFileName.set('');
-    this.isRestoreDragOver.set(false);
     this.flowMode.set('welcome');
   }
 
   async installDemoInstance(): Promise<void> {
     this.error.set('');
-    this.restoreSuccess.set('');
     this.isInstallingDemo.set(true);
 
     try {
@@ -487,98 +471,6 @@ export class InstallationPage {
     } finally {
       this.isCreating.set(false);
     }
-  }
-
-  async onRestoreFileSelected(event: Event): Promise<void> {
-    const input = event.target as HTMLInputElement | null;
-    const file = input?.files?.item(0) ?? null;
-    if (!file) {
-      return;
-    }
-
-    await this.restoreFromBackupFile(file);
-    if (input) {
-      input.value = '';
-    }
-  }
-
-  onRestoreDragOver(event: DragEvent): void {
-    event.preventDefault();
-    this.isRestoreDragOver.set(true);
-  }
-
-  onRestoreDragLeave(event: DragEvent): void {
-    event.preventDefault();
-    this.isRestoreDragOver.set(false);
-  }
-
-  async onRestoreDrop(event: DragEvent): Promise<void> {
-    event.preventDefault();
-    this.isRestoreDragOver.set(false);
-
-    const file = event.dataTransfer?.files?.item(0) ?? null;
-    if (!file) {
-      return;
-    }
-
-    await this.restoreFromBackupFile(file);
-  }
-
-  private async restoreFromBackupFile(file: File): Promise<void> {
-    this.error.set('');
-    this.restoreSuccess.set('');
-    this.restoreFileName.set(file.name);
-    this.isRestoring.set(true);
-
-    try {
-      const payload = await this.readBackupPayloadFromFile(file);
-      await this.api.restoreSetupBackup(payload);
-      this.setupService.invalidate();
-      const requiresSetup = await this.setupService.ensureChecked();
-
-      if (requiresSetup) {
-        this.restoreSuccess.set('La sauvegarde a été importée. Vous pouvez maintenant créer le premier cabinet.');
-        this.flowMode.set('create');
-        this.step.set(1);
-        return;
-      }
-
-      this.setupService.markComplete();
-      this.restoreSuccess.set('Sauvegarde restaurée avec succès. Redirection vers la connexion...');
-      await this.router.navigateByUrl('/login');
-    } catch {
-      this.error.set('La restauration a échoué. Vérifiez le fichier de sauvegarde.');
-    } finally {
-      this.isRestoring.set(false);
-    }
-  }
-
-  private async readBackupPayloadFromFile(file: File): Promise<unknown> {
-    const fileName = file.name.toLowerCase();
-
-    if (fileName.endsWith('.json')) {
-      return JSON.parse(await file.text());
-    }
-
-    if (!fileName.endsWith('.zip')) {
-      throw new Error('Unsupported backup format');
-    }
-
-    const { default: JSZip } = await import('jszip');
-    const zip = await JSZip.loadAsync(await file.arrayBuffer());
-    const manifestText = await zip.file('manifest.json')?.async('string');
-    const dataText = await zip.file('data.json')?.async('string');
-    const metaText = await zip.file('meta.json')?.async('string');
-
-    if (!manifestText || !dataText) {
-      throw new Error('Archive incomplete');
-    }
-
-    return {
-      manifest: JSON.parse(manifestText),
-      data: JSON.parse(dataText),
-      ...(metaText ? { meta: JSON.parse(metaText) } : {})
-    };
   }
 
   private buildPayload(): CreateSetupOfficePayload {

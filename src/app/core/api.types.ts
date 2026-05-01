@@ -17,7 +17,6 @@ export type OfficeOption = {
 
 export type SetupStatus = {
   requiresSetup: boolean;
-  canRestoreWithoutAuth: boolean;
   stats: {
     offices: number;
   };

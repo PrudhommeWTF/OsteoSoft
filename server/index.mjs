@@ -3347,7 +3347,6 @@ function getSetupStatusSnapshot() {
 
   return {
     requiresSetup,
-    canRestoreWithoutAuth: requiresSetup,
     stats: { offices }
   };
 }
@@ -6470,8 +6469,7 @@ function setupBootstrapGuard(req, res, next) {
   if (!setupStatus.requiresSetup) {
     writeSetupSecurityLog(req, 'setup_guard_blocked', {
       reason: 'setup_not_required',
-      requiresSetup: false,
-      canRestoreWithoutAuth: setupStatus.canRestoreWithoutAuth
+      requiresSetup: false
     });
     return res.status(403).json({ message: 'La configuration initiale n\'est disponible qu\'au premier demarrage' });
   }
@@ -9009,38 +9007,6 @@ app.get('/api/data-management/backup', authMiddleware, requirePermission('manage
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
   return res.status(200).send(archive);
-});
-
-app.post('/api/setup/restore', setupLimiter, setupBootstrapGuard, (req, res) => {
-  const setupStatus = getSetupStatusSnapshot();
-  if (!setupStatus.canRestoreWithoutAuth) {
-    writeSetupSecurityLog(req, 'setup_restore_blocked', {
-      reason: 'restore_not_allowed_without_auth',
-      canRestoreWithoutAuth: setupStatus.canRestoreWithoutAuth
-    });
-    return res.status(403).json({ message: 'La restauration initiale n\'est disponible qu\'au premier demarrage' });
-  }
-
-  const parsed = dataRestoreSchema.safeParse(req.body);
-  if (!parsed.success) {
-    writeSetupSecurityLog(req, 'setup_restore_rejected', {
-      reason: 'invalid_backup_payload',
-      issuesCount: parsed.error.issues.length
-    });
-    return res.status(400).json({ message: 'Fichier de sauvegarde invalide' });
-  }
-
-  try {
-    restoreDataBackupSnapshot(parsed.data);
-    return res.status(204).send();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'La restauration de la sauvegarde a echoue';
-    writeSetupSecurityLog(req, 'setup_restore_rejected', {
-      reason: 'restore_failed',
-      errorMessage: message
-    });
-    return res.status(400).json({ message });
-  }
 });
 
 app.post('/api/setup/office', setupLimiter, setupBootstrapGuard, async (req, res) => {

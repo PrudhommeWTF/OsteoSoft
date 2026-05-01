@@ -114,10 +114,6 @@ export class ApiService {
     return firstValueFrom(this.http.get<SetupStatus>(`${this.baseUrl}/setup/status`));
   }
 
-  async restoreSetupBackup(payload: unknown): Promise<void> {
-    await firstValueFrom(this.http.post<void>(`${this.baseUrl}/setup/restore`, payload));
-  }
-
   async createSetupOffice(payload: CreateSetupOfficePayload): Promise<void> {
     await firstValueFrom(this.http.post<{ officeId: number }>(`${this.baseUrl}/setup/office`, payload));
   }
