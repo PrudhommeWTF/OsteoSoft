@@ -4560,8 +4560,8 @@ function migrateUsersOfficeForeignKey() {
         coalesce(nullif(trim(u.color_hex), ''), '#4d92d1'),
         coalesce(u.bank_name, ''),
         coalesce(u.iban, ''),
-        '',
-        '',
+        '', /* bank_name_cipher - will be populated by SEC-3 startup encryption migration */
+        '', /* iban_cipher - will be populated by SEC-3 startup encryption migration */
         coalesce(u.retrocession_percent, 0),
         coalesce(u.retrocession_recipient, ''),
         coalesce(nullif(trim(u.default_agenda_view), ''), 'Semaine'),
