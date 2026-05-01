@@ -573,7 +573,7 @@
           </div>
 
           @if (canEditPatient() && !patient()!.consentWithdrawnAt) {
-            <div class="mt-4">
+            <div class="mt-4 d-flex flex-wrap gap-2">
               <button
                 type="button"
                 class="btn btn-outline-danger btn-sm"
@@ -587,6 +587,39 @@
                   <i class="fa-solid fa-ban me-2"></i>
                 }
                 Retirer le consentement
+              </button>
+              <button
+                type="button"
+                class="btn btn-outline-secondary btn-sm"
+                [disabled]="isDownloadingConsentPdf()"
+                (click)="downloadConsentForm()"
+                title="Télécharger le formulaire de consentement RGPD à imprimer et faire signer"
+                bsTooltip>
+                @if (isDownloadingConsentPdf()) {
+                  <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                } @else {
+                  <i class="fa-solid fa-file-pdf me-1"></i>
+                }
+                Télécharger le formulaire
+              </button>
+            </div>
+          }
+
+          @if (!canEditPatient() || patient()!.consentWithdrawnAt) {
+            <div class="mt-4">
+              <button
+                type="button"
+                class="btn btn-outline-secondary btn-sm"
+                [disabled]="isDownloadingConsentPdf()"
+                (click)="downloadConsentForm()"
+                title="Télécharger le formulaire de consentement RGPD à imprimer et faire signer"
+                bsTooltip>
+                @if (isDownloadingConsentPdf()) {
+                  <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                } @else {
+                  <i class="fa-solid fa-file-pdf me-1"></i>
+                }
+                Télécharger le formulaire
               </button>
             </div>
           }

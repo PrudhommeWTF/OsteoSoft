@@ -187,19 +187,35 @@
 
         <!-- Consentement RGPD -->
         <div class="mt-4 p-3 border rounded">
-          <div class="form-check" [class.is-invalid]="form.controls.consentSigned.touched && form.controls.consentSigned.invalid">
-            <input
-              id="consentSigned"
-              class="form-check-input"
-              type="checkbox"
-              formControlName="consentSigned"
-              [class.is-invalid]="form.controls.consentSigned.touched && form.controls.consentSigned.invalid" />
-            <label class="form-check-label fw-semibold" for="consentSigned">
-              <i class="fa-solid fa-file-signature me-2 text-primary"></i>Consentement RGPD <span class="text-danger">*</span>
-            </label>
-            <div class="form-text mt-1">
-              Le patient a été informé de la collecte et du traitement de ses données personnelles conformément au RGPD (Articles 6 et 7) et a donné son consentement.
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+            <div class="form-check flex-grow-1" [class.is-invalid]="form.controls.consentSigned.touched && form.controls.consentSigned.invalid">
+              <input
+                id="consentSigned"
+                class="form-check-input"
+                type="checkbox"
+                formControlName="consentSigned"
+                [class.is-invalid]="form.controls.consentSigned.touched && form.controls.consentSigned.invalid" />
+              <label class="form-check-label fw-semibold" for="consentSigned">
+                <i class="fa-solid fa-file-signature me-2 text-primary"></i>Consentement RGPD <span class="text-danger">*</span>
+              </label>
+              <div class="form-text mt-1">
+                Le patient a été informé de la collecte et du traitement de ses données personnelles conformément au RGPD (Articles 6 et 7) et a donné son consentement.
+              </div>
             </div>
+            <button
+              type="button"
+              class="btn btn-outline-secondary btn-sm flex-shrink-0"
+              [disabled]="isDownloadingConsentPdf()"
+              (click)="downloadConsentForm()"
+              title="Télécharger le formulaire de consentement RGPD à imprimer et faire signer"
+              bsTooltip>
+              @if (isDownloadingConsentPdf()) {
+                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+              } @else {
+                <i class="fa-solid fa-file-pdf me-1"></i>
+              }
+              Télécharger le formulaire
+            </button>
           </div>
           @if (form.controls.consentSigned.touched && form.controls.consentSigned.invalid) {
             <div class="text-danger small mt-1">
