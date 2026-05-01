@@ -26,8 +26,12 @@ const jwtSecret = process.env.JWT_SECRET ?? 'dev-only-jwt-secret-change-me';
 const isProduction = process.env.NODE_ENV === 'production';
 const allowRemoteSetup = /^(1|true|yes)$/i.test(String(process.env.ALLOW_REMOTE_SETUP ?? 'false'));
 const SUPER_ADMIN_PROFILE_ID = 'super-admin';
-const requestBodyLimit = process.env.API_BODY_LIMIT ?? '60mb';
+const requestBodyLimit = process.env.API_BODY_LIMIT ?? '5mb';
+const largeRequestBodyLimit = process.env.API_LARGE_BODY_LIMIT ?? '60mb';
 const MAX_PATIENT_DOCUMENT_BYTES = Number(process.env.MAX_PATIENT_DOCUMENT_BYTES ?? 15 * 1024 * 1024);
+const trustedProxies = process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1'
+  ? 1
+  : (process.env.TRUST_PROXY === 'loopback' ? 'loopback' : false);
 const SESSION_COOKIE_NAME = 'os_session';
 const SESSION_COOKIE_PATH = '/';
 const SESSION_REMEMBER_MAX_AGE_MS = Number(process.env.SESSION_REMEMBER_MAX_AGE_MS ?? 12 * 60 * 60 * 1000);
@@ -914,6 +918,12 @@ const anonymizePatientTx = db.transaction((patientId) => {
      SET notes_cipher = ?
      WHERE patient_id = ?`
   ).run(anonymizedValue, patientId);
+
+  db.prepare(
+    `UPDATE patient_payment_credits
+     SET bank_name = '', cheque_number = '', reference = '', notes = ''
+     WHERE patient_id = ?`
+  ).run(patientId);
 
   db.prepare(
     `UPDATE patients
@@ -6516,6 +6526,13 @@ function buildPatientUpdateChanges(beforeSnapshot, afterSnapshot) {
   return changes;
 }
 
+// Routes that remain accessible even when must_change_password is set
+const ROUTES_ALLOWED_WITH_MUST_CHANGE_PASSWORD = new Set([
+  '/api/auth/logout',
+  '/api/auth/me',
+  '/api/profile/me',
+]);
+
 function authMiddleware(req, res, next) {
   const token = req.cookies[SESSION_COOKIE_NAME];
 
@@ -6530,6 +6547,15 @@ function authMiddleware(req, res, next) {
   try {
     const payload = jwt.verify(token, jwtSecret);
     req.user = payload;
+
+    const route = String(req.path ?? '').split('?')[0];
+    if (!ROUTES_ALLOWED_WITH_MUST_CHANGE_PASSWORD.has(route)) {
+      const userFlags = db.prepare('SELECT must_change_password FROM users WHERE id = ?').get(payload.sub);
+      if (userFlags?.must_change_password === 1) {
+        return res.status(403).json({ message: 'Changement de mot de passe requis', mustChangePassword: true });
+      }
+    }
+
     return next();
   } catch {
     writeAuthSecurityLog(req, 'unauthenticated_request_blocked', {
@@ -7056,6 +7082,10 @@ const userAgendaPreferencesSchema = z.object({
   appointmentColorMode: z.enum(['calendar', 'user'])
 });
 
+if (trustedProxies !== false) {
+  app.set('trust proxy', trustedProxies);
+}
+
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -7080,8 +7110,28 @@ app.use(
     credentials: true
   })
 );
-app.use(express.json({ limit: requestBodyLimit }));
-app.use(express.urlencoded({ limit: requestBodyLimit, extended: true }));
+
+// Routes that accept large file payloads (documents, backups, imports, logos)
+const LARGE_BODY_ROUTE_PATTERNS = [
+  /^\/api\/data-management\/restore$/,
+  /^\/api\/data-management\/import$/,
+  /^\/api\/patients\/\d+\/documents$/,
+  /^\/api\/patients\/\d+\/consultations$/,
+  /^\/api\/patients\/\d+\/consultation-drafts\/new-consultation$/,
+  /^\/api\/offices(\/\d+)?$/,
+  /^\/api\/setup\/office$/,
+];
+
+app.use((req, res, next) => {
+  const isLargeRoute = LARGE_BODY_ROUTE_PATTERNS.some((pattern) => pattern.test(req.path));
+  const limit = isLargeRoute ? largeRequestBodyLimit : requestBodyLimit;
+  express.json({ limit })(req, res, next);
+});
+app.use((req, res, next) => {
+  const isLargeRoute = LARGE_BODY_ROUTE_PATTERNS.some((pattern) => pattern.test(req.path));
+  const limit = isLargeRoute ? largeRequestBodyLimit : requestBodyLimit;
+  express.urlencoded({ limit, extended: true })(req, res, next);
+});
 app.use(cookieParser());
 
 const loginLimiter = rateLimit({
@@ -10270,7 +10320,7 @@ app.post('/api/users/:id/reset-password', authMiddleware, adminOnlyMiddleware, a
   const tempPassword = crypto.randomBytes(8).toString('hex');
   const hashedPassword = await argon2.hash(tempPassword);
 
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashedPassword, userId);
+  db.prepare('UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?').run(hashedPassword, userId);
 
   writeAuditLog(req.user.sub, 'UPDATE', 'users', String(userId), {
     action: 'admin_password_reset',
@@ -12672,9 +12722,10 @@ app.post('/api/patients/:id/withdraw-consent', authMiddleware, requirePermission
   }
 
   const withdrawnAt = new Date().toISOString();
+  const today = new Date().toISOString().slice(0, 10);
   db.prepare(
-    'UPDATE patients SET consent_withdrawn_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-  ).run(withdrawnAt, id);
+    'UPDATE patients SET consent_withdrawn_at = ?, retention_until = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(withdrawnAt, today, id);
 
   writeAuditLog(req.user.sub, 'WITHDRAW_CONSENT', 'patients', String(id));
 
@@ -17181,10 +17232,12 @@ app.get('/api/invoices/summary', authMiddleware, requirePermission('read-billing
 
 await ensureSeedData();
 
-app.use((err, _req, res, _next) => {
+app.use((err, req, res, _next) => {
   if (err?.type === 'entity.too.large') {
+    const isLargeRoute = LARGE_BODY_ROUTE_PATTERNS.some((pattern) => pattern.test(req.path));
+    const limit = isLargeRoute ? largeRequestBodyLimit : requestBodyLimit;
     return res.status(413).json({
-      message: `Payload trop volumineux. Reduisez la taille des pieces jointes (limite API: ${requestBodyLimit}).`
+      message: `Payload trop volumineux. Reduisez la taille des pieces jointes (limite API: ${limit}).`
     });
   }
 
