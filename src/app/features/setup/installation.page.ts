@@ -224,7 +224,7 @@ export class InstallationPage {
   generateEncryptionKey(): void {
     const bytes = new Uint8Array(32);
     globalThis.crypto.getRandomValues(bytes);
-    const base64 = btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''));
+    const base64 = btoa(String.fromCharCode(...bytes));
     this.officeForm.patchValue({ encryptionKey: base64 });
     this.encryptionKeyCopied.set(false);
   }

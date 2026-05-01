@@ -716,6 +716,7 @@ if (dataKey.length !== 32) {
 
 function updateEnvFile(key, value) {
   const envPath = path.resolve(process.cwd(), '.env');
+  const tempPath = `${envPath}.tmp`;
   let content = '';
   try {
     if (fs.existsSync(envPath)) {
@@ -731,7 +732,8 @@ function updateEnvFile(key, value) {
   } else {
     content = content ? `${content.trimEnd()}\n${line}\n` : `${line}\n`;
   }
-  fs.writeFileSync(envPath, content, { encoding: 'utf8', mode: 0o600 });
+  fs.writeFileSync(tempPath, content, { encoding: 'utf8', mode: 0o600 });
+  fs.renameSync(tempPath, envPath);
 }
 
 function encryptSensitiveField(plainText) {
