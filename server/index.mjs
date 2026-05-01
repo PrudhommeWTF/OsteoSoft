@@ -1196,9 +1196,20 @@ try {
         }
 
         const plainFullName = String(metadata.fullName ?? '').trim();
+        if (!plainFullName) {
+          continue;
+        }
+
+        let nameCipher;
+        try {
+          nameCipher = encryptSensitiveField(plainFullName);
+        } catch {
+          continue;
+        }
+
         const { fullName: _removed, ...rest } = metadata;
         updateMetadata.run(
-          JSON.stringify({ ...rest, nameCipher: encryptSensitiveField(plainFullName) }),
+          JSON.stringify({ ...rest, nameCipher }),
           row.id
         );
         changedRows += 1;
@@ -1212,7 +1223,7 @@ try {
     })();
 
     if (encryptedCount > 0) {
-      console.log(`✓ Encrypted fullName in ${encryptedCount} patient CREATE audit log entrie(s)`);
+      console.log(`✓ Encrypted fullName in ${encryptedCount} patient CREATE audit log entries`);
     }
   }
 } catch (err) {
