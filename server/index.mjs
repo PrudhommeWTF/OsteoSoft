@@ -846,6 +846,75 @@ function writeAuditLog(userId, action, entity, entityId, metadata = null) {
   ).run(userId ?? null, action, entity, entityId ?? null, metadata ? JSON.stringify(metadata) : null);
 }
 
+const anonymizePatientTx = db.transaction((patientId) => {
+  const anonymizedValue = encryptSensitiveField('ANONYMIZED');
+
+  db.prepare('DELETE FROM patient_antecedents WHERE patient_id = ?').run(patientId);
+  db.prepare('DELETE FROM patient_documents WHERE patient_id = ?').run(patientId);
+
+  db.prepare(
+    `DELETE FROM consultation_sections
+     WHERE consultation_id IN (
+       SELECT id FROM consultations WHERE patient_id = ?
+     )`
+  ).run(patientId);
+
+  db.prepare(
+    `DELETE FROM consultation_reason_items
+     WHERE consultation_id IN (
+       SELECT id FROM consultations WHERE patient_id = ?
+     )`
+  ).run(patientId);
+
+  db.prepare('DELETE FROM consultations WHERE patient_id = ?').run(patientId);
+
+  db.prepare(
+    `UPDATE appointments
+     SET reason_cipher = ?
+     WHERE patient_id = ?`
+  ).run(anonymizedValue, patientId);
+
+  db.prepare(
+    `UPDATE invoices
+     SET notes_cipher = ?
+     WHERE patient_id = ?`
+  ).run(anonymizedValue, patientId);
+
+  db.prepare(
+    `UPDATE patients
+     SET cipher_full_name = ?,
+         cipher_phone = ?,
+         cipher_medical_notes = ?,
+         is_deleted = 1,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+  ).run(anonymizedValue, anonymizedValue, anonymizedValue, patientId);
+
+  db.prepare("DELETE FROM audit_logs WHERE entity = 'patients' AND entity_id = ?")
+    .run(String(patientId));
+});
+
+function processExpiredPatients() {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const expired = db.prepare(
+    `SELECT id, retention_until FROM patients
+     WHERE is_deleted = 0
+       AND retention_until IS NOT NULL
+       AND retention_until < ?`
+  ).all(today);
+
+  for (const { id, retention_until: retentionUntil } of expired) {
+    anonymizePatientTx(id);
+    writeAuditLog(null, 'AUTO_ANONYMIZE', 'patients', String(id), {
+      reason: 'retention_expired',
+      retentionUntil
+    });
+  }
+
+  return expired.length;
+}
+
 function shouldAutoTraceRequest(req) {
   const method = String(req.method ?? '').toUpperCase();
   if (['OPTIONS', 'HEAD'].includes(method)) {
@@ -5626,6 +5695,15 @@ function findOverlappingAppointmentForOffice(officeId, localCalendarId, startsAt
   return null;
 }
 
+function updatePatientRetentionFields(patientId, consultationDateIso) {
+  db.prepare(
+    `UPDATE patients SET
+       last_visit = CASE WHEN last_visit IS NULL OR date(?) > last_visit THEN date(?) ELSE last_visit END,
+       retention_until = CASE WHEN retention_until IS NULL OR date(?, '+10 years') > retention_until THEN date(?, '+10 years') ELSE retention_until END
+     WHERE id = ?`
+  ).run(consultationDateIso, consultationDateIso, consultationDateIso, consultationDateIso, patientId);
+}
+
 function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}) {
   const raw = String(consultationNoteRaw ?? '').trim();
   if (!raw) return null;
@@ -5730,6 +5808,9 @@ function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}
       treatmentsHtml: data.treatmentsHtml,
       remarksHtml: data.remarksHtml
     });
+
+    updatePatientRetentionFields(patientId, alignedStartIso);
+
     const title = String(data.title ?? '').trim();
     const reason = title || 'Consultation';
 
@@ -8469,6 +8550,29 @@ app.post('/api/data-management/cleanup/apply', authMiddleware, requirePermission
   const allowedOfficeIds = getDataManagementScopedOfficeIds(req.userAccess);
   const updatedCount = applyDataCleanupChanges(kind, changes, allowedOfficeIds, req.user.sub);
   return res.json({ kind, updatedCount });
+});
+
+app.get('/api/data-management/retention-status', authMiddleware, requirePermission('manage-data-rgpd'), (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const rows = db.prepare(
+    `SELECT id, retention_until
+     FROM patients
+     WHERE is_deleted = 0
+       AND retention_until IS NOT NULL
+       AND retention_until <= ?
+     ORDER BY retention_until ASC`
+  ).all(in30Days);
+
+  const expiringSoon = rows.map((row) => ({
+    id: row.id,
+    retentionUntil: row.retention_until,
+    isExpired: row.retention_until < today
+  }));
+
+  writeAuditLog(req.user.sub, 'READ_LIST', 'data-management-retention', null, { count: expiringSoon.length });
+  return res.json({ expiringSoon });
 });
 
 app.get('/api/data-management/import-template', authMiddleware, requirePermission('manage-data-import'), (req, res) => {
@@ -11818,6 +11922,8 @@ app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('c
     remarksHtml: payload.remarksHtml
   });
 
+  updatePatientRetentionFields(patientId, payload.startedAt);
+
   insertNormalizedDocuments(
     patientId,
     consultationId,
@@ -12305,54 +12411,7 @@ app.post('/api/patients/:id/anonymize', authMiddleware, adminOnlyMiddleware, (re
     return res.status(404).json({ message: 'Patient introuvable' });
   }
 
-  const anonymizedValue = encryptSensitiveField('ANONYMIZED');
-  const anonymizePatient = db.transaction((patientId) => {
-    db.prepare('DELETE FROM patient_antecedents WHERE patient_id = ?').run(patientId);
-    db.prepare('DELETE FROM patient_documents WHERE patient_id = ?').run(patientId);
-
-    db.prepare(
-      `DELETE FROM consultation_sections
-       WHERE consultation_id IN (
-         SELECT id FROM consultations WHERE patient_id = ?
-       )`
-    ).run(patientId);
-
-    db.prepare(
-      `DELETE FROM consultation_reason_items
-       WHERE consultation_id IN (
-         SELECT id FROM consultations WHERE patient_id = ?
-       )`
-    ).run(patientId);
-
-    db.prepare('DELETE FROM consultations WHERE patient_id = ?').run(patientId);
-
-    db.prepare(
-      `UPDATE appointments
-       SET reason_cipher = ?
-       WHERE patient_id = ?`
-    ).run(anonymizedValue, patientId);
-
-    db.prepare(
-      `UPDATE invoices
-       SET notes_cipher = ?
-       WHERE patient_id = ?`
-    ).run(anonymizedValue, patientId);
-
-    db.prepare(
-      `UPDATE patients
-       SET cipher_full_name = ?,
-           cipher_phone = ?,
-           cipher_medical_notes = ?,
-           is_deleted = 1,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = ?`
-    ).run(anonymizedValue, anonymizedValue, anonymizedValue, patientId);
-
-    db.prepare("DELETE FROM audit_logs WHERE entity = 'patients' AND entity_id = ?")
-      .run(String(patientId));
-  });
-
-  anonymizePatient(id);
+  anonymizePatientTx(id);
 
   writeAuditLog(req.user.sub, 'ANONYMIZE', 'patients', String(id));
   return res.status(204).send();
@@ -16861,3 +16920,7 @@ app.listen(port, () => {
   // eslint-disable-next-line no-console
   console.log(`Secure SQLite API ready on http://localhost:${port}`);
 });
+
+processExpiredPatients();
+const retentionCheckIntervalMs = 24 * 60 * 60 * 1000;
+const retentionCheckInterval = setInterval(processExpiredPatients, retentionCheckIntervalMs);
