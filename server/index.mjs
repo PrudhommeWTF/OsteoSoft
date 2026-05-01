@@ -6555,23 +6555,17 @@ function authMiddleware(req, res, next) {
     // Enforce must_change_password: fast-path from JWT flag (mcp=true) or fallback DB
     // check for tokens issued before this flag was introduced. The DB check is only
     // performed when the JWT already signals mcp or when the flag is absent (legacy token).
-    const route = String(req.path ?? '').split('?')[0];
-    if (!ROUTES_ALLOWED_WITH_MUST_CHANGE_PASSWORD.has(route)) {
+    if (!ROUTES_ALLOWED_WITH_MUST_CHANGE_PASSWORD.has(req.path)) {
       const jwtMcp = payload.mcp;
-      if (jwtMcp === true) {
-        // JWT already signals must_change_password; confirm with DB in case it was cleared
-        const userFlags = db.prepare('SELECT must_change_password FROM users WHERE id = ?').get(payload.sub);
-        if (userFlags?.must_change_password === 1) {
-          return res.status(403).json({ message: 'Changement de mot de passe requis', mustChangePassword: true });
-        }
-      } else if (jwtMcp === undefined) {
-        // Legacy token without mcp field: do DB check for backward compatibility
+      if (jwtMcp === true || jwtMcp === undefined) {
+        // mcp=true  → JWT signals flag; confirm with DB in case it was cleared
+        // mcp=undefined → legacy token without flag; DB check for backward compat
         const userFlags = db.prepare('SELECT must_change_password FROM users WHERE id = ?').get(payload.sub);
         if (userFlags?.must_change_password === 1) {
           return res.status(403).json({ message: 'Changement de mot de passe requis', mustChangePassword: true });
         }
       }
-      // jwtMcp === false → no restriction, skip DB check
+      // mcp === false → no restriction, skip DB check
     }
 
     return next();
@@ -7147,11 +7141,22 @@ function resolveBodyLimit(path) {
     : requestBodyLimit;
 }
 
+// Pre-create parser instances once at startup; selected per-request based on route
+const jsonParserDefault = express.json({ limit: requestBodyLimit });
+const jsonParserLarge = express.json({ limit: largeRequestBodyLimit });
+const urlencodedParserDefault = express.urlencoded({ limit: requestBodyLimit, extended: true });
+const urlencodedParserLarge = express.urlencoded({ limit: largeRequestBodyLimit, extended: true });
+
 app.use((req, res, next) => {
-  express.json({ limit: resolveBodyLimit(req.path) })(req, res, next);
-});
-app.use((req, res, next) => {
-  express.urlencoded({ limit: resolveBodyLimit(req.path), extended: true })(req, res, next);
+  const isLargeRoute = LARGE_BODY_ROUTE_PATTERNS.some((pattern) => pattern.test(req.path));
+  const jsonParser = isLargeRoute ? jsonParserLarge : jsonParserDefault;
+  const urlencodedParser = isLargeRoute ? urlencodedParserLarge : urlencodedParserDefault;
+  jsonParser(req, res, (jsonErr) => {
+    if (jsonErr) {
+      return next(jsonErr);
+    }
+    urlencodedParser(req, res, next);
+  });
 });
 app.use(cookieParser());
 
@@ -12750,10 +12755,10 @@ app.post('/api/patients/:id/withdraw-consent', authMiddleware, requirePermission
   }
 
   const withdrawnAt = new Date().toISOString();
-  const today = new Date().toISOString().slice(0, 10);
+  const consentWithdrawalDate = new Date().toISOString().slice(0, 10);
   db.prepare(
     'UPDATE patients SET consent_withdrawn_at = ?, retention_until = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-  ).run(withdrawnAt, today, id);
+  ).run(withdrawnAt, consentWithdrawalDate, id);
 
   writeAuditLog(req.user.sub, 'WITHDRAW_CONSENT', 'patients', String(id));
 
@@ -17262,10 +17267,8 @@ await ensureSeedData();
 
 app.use((err, req, res, _next) => {
   if (err?.type === 'entity.too.large') {
-    const isLargeRoute = LARGE_BODY_ROUTE_PATTERNS.some((pattern) => pattern.test(req.path));
-    const limit = isLargeRoute ? largeRequestBodyLimit : requestBodyLimit;
     return res.status(413).json({
-      message: `Payload trop volumineux. Reduisez la taille des pieces jointes (limite API: ${limit}).`
+      message: `Payload trop volumineux. Reduisez la taille des pieces jointes (limite API: ${resolveBodyLimit(req.path)}).`
     });
   }
 
