@@ -79,7 +79,8 @@ export class InstallationPage {
     email: ['', [Validators.email, Validators.maxLength(200)]],
     website: ['', [Validators.maxLength(200)]],
     logoData: [''],
-    openingHoursJson: ['']
+    openingHoursJson: [''],
+    encryptionKey: ['', [Validators.maxLength(64)]]
   });
 
   readonly flowMode = signal<SetupFlowMode>('welcome');
@@ -87,6 +88,9 @@ export class InstallationPage {
   readonly isCreating = signal(false);
   readonly isInstallingDemo = signal(false);
   readonly error = signal('');
+  readonly encryptionKeyCopied = signal(false);
+
+  readonly hasEncryptionKey = this.setupService.hasEncryptionKey;
 
   readonly serviceTypes = signal<EditableServiceType[]>([]);
   readonly paymentMethods = signal<EditablePaymentMethod[]>(this.createDefaultPaymentMethods());
@@ -110,6 +114,9 @@ export class InstallationPage {
 
   startNewInstallation(): void {
     this.error.set('');
+    if (!this.hasEncryptionKey()) {
+      this.generateEncryptionKey();
+    }
     this.flowMode.set('create');
     this.step.set(1);
   }
@@ -158,11 +165,13 @@ export class InstallationPage {
   isStepValid(step: OfficeCreateStep): boolean {
     if (step === 1) {
       const raw = this.officeForm.getRawValue();
+      const isEncryptionKeyValid = this.hasEncryptionKey() || this.isValidEncryptionKey(raw.encryptionKey);
       return (
         raw.name.trim().length > 0
         && Number(raw.defaultSessionDurationMinutes) > 0
         && this.isAdminPasswordStrong(raw.adminPassword)
         && raw.adminPassword.trim() === raw.adminPasswordConfirmation.trim()
+        && isEncryptionKeyValid
       );
     }
     if (step === 3) {
@@ -179,7 +188,12 @@ export class InstallationPage {
       this.officeForm.controls.adminPassword.markAsTouched();
       this.officeForm.controls.adminPasswordConfirmation.markAsTouched();
       this.officeForm.controls.defaultSessionDurationMinutes.markAsTouched();
-      this.error.set('Renseignez un mot de passe admin robuste et confirmez-le.');
+      this.officeForm.controls.encryptionKey.markAsTouched();
+      if (!this.hasEncryptionKey() && !this.isValidEncryptionKey(this.officeForm.controls.encryptionKey.value)) {
+        this.error.set('Renseignez un mot de passe admin robuste, confirmez-le, et générez une clé de chiffrement.');
+      } else {
+        this.error.set('Renseignez un mot de passe admin robuste et confirmez-le.');
+      }
     }
   }
 
@@ -205,6 +219,32 @@ export class InstallationPage {
 
   adminPasswordMatchesConfirmation(): boolean {
     return this.officeForm.controls.adminPassword.value === this.officeForm.controls.adminPasswordConfirmation.value;
+  }
+
+  generateEncryptionKey(): void {
+    const bytes = new Uint8Array(32);
+    globalThis.crypto.getRandomValues(bytes);
+    const base64 = btoa(String.fromCharCode(...bytes));
+    this.officeForm.patchValue({ encryptionKey: base64 });
+    this.encryptionKeyCopied.set(false);
+  }
+
+  async copyEncryptionKey(): Promise<void> {
+    const key = this.officeForm.controls.encryptionKey.value;
+    if (!key) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(key);
+      this.encryptionKeyCopied.set(true);
+      setTimeout(() => this.encryptionKeyCopied.set(false), 2000);
+    } catch {
+      // Clipboard access may be denied in some environments
+    }
+  }
+
+  encryptionKeyIsValid(): boolean {
+    return this.isValidEncryptionKey(this.officeForm.controls.encryptionKey.value);
   }
 
   onOfficeLogoSelected(event: Event): void {
@@ -475,7 +515,7 @@ export class InstallationPage {
 
   private buildPayload(): CreateSetupOfficePayload {
     const raw = this.officeForm.getRawValue();
-    return {
+    const payload: CreateSetupOfficePayload = {
       name: raw.name.trim(),
       adminPassword: raw.adminPassword.trim(),
       defaultSessionDurationMinutes: Number(raw.defaultSessionDurationMinutes) || 60,
@@ -519,10 +559,26 @@ export class InstallationPage {
         displayOrder: index + 1
       }))
     };
+    if (!this.hasEncryptionKey() && raw.encryptionKey.trim()) {
+      payload.encryptionKey = raw.encryptionKey.trim();
+    }
+    return payload;
   }
 
   private isAdminPasswordStrong(password: string): boolean {
     return this.adminPasswordPattern.test(String(password ?? '').trim());
+  }
+
+  private isValidEncryptionKey(key: string): boolean {
+    if (!key || key.trim().length === 0) {
+      return false;
+    }
+    try {
+      const decoded = atob(key.trim());
+      return decoded.length === 32;
+    } catch {
+      return false;
+    }
   }
 
   private toOfficeConsultationProfiles(): OfficeConsultationProfile[] {

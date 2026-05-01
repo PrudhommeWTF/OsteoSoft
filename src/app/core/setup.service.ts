@@ -7,6 +7,7 @@ export class SetupService {
   private readonly api = inject(ApiService);
 
   readonly requiresSetup = signal(false);
+  readonly hasEncryptionKey = signal(true);
   private _checked = false;
 
   async ensureChecked(): Promise<boolean> {
@@ -14,6 +15,7 @@ export class SetupService {
       try {
         const status = await this.api.getSetupStatus();
         this.requiresSetup.set(status.requiresSetup);
+        this.hasEncryptionKey.set(status.hasEncryptionKey ?? true);
       } catch {
         // If API is unavailable do not block the app
       }
