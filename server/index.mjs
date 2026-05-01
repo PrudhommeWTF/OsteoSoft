@@ -146,6 +146,17 @@ try {
   console.warn('patients consent columns migration failed:', err.message);
 }
 
+// Migration: add must_change_password column to users table
+try {
+  const cols = db.prepare(`PRAGMA table_info(users)`).all().map((c) => c.name);
+  if (cols.length > 0 && !cols.includes('must_change_password')) {
+    db.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0');
+    console.log('✓ Added must_change_password column to users');
+  }
+} catch (err) {
+  console.warn('users must_change_password migration failed:', err.message);
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -176,6 +187,7 @@ db.exec(`
     visible_calendars TEXT NOT NULL DEFAULT 'Tous les calendriers',
     default_service TEXT NOT NULL DEFAULT 'Aucune prestation',
     invoice_mentions TEXT NOT NULL DEFAULT '',
+    must_change_password INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE SET NULL
   );
@@ -3515,7 +3527,7 @@ function buildDataBackupSnapshot(options = {}) {
        ORDER BY created_at ASC, id ASC`
     ).all(),
     users: db.prepare(
-      `SELECT id, username, password_hash, role, profile_id, is_active,
+      `SELECT id, username, role, profile_id, is_active,
               office_id, last_name, first_name, email, mobile_phone, country,
               siret, adeli_code, rpps_code, ape_naf_code, name_suffix_text,
               letter_header, letter_footer, signature_text, color_hex,
@@ -3687,7 +3699,7 @@ function buildDataBackupSnapshot(options = {}) {
   };
 }
 
-function restoreDataBackupSnapshot(backupPayload) {
+function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new Map()) {
   const { data: backup } = normalizeBackupEnvelope(backupPayload);
 
   const transaction = db.transaction(() => {
@@ -3730,8 +3742,8 @@ function restoreDataBackupSnapshot(backupPayload) {
          letter_header, letter_footer, signature_text, color_hex,
          bank_name, iban, retrocession_percent, retrocession_recipient,
          default_agenda_view, visible_calendars, default_service, invoice_mentions,
-         created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         created_at, must_change_password
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const insertPatient = db.prepare(
       `INSERT INTO patients (
@@ -3884,10 +3896,13 @@ function restoreDataBackupSnapshot(backupPayload) {
         officeId = null;
       }
 
+      const userId = Number(row.id);
+      const { hash: restoredPasswordHash } = prehashedUserPasswords.get(userId) ?? { hash: '' };
+
       insertUser.run(
-        Number(row.id),
+        userId,
         normalizedUsername,
-        row.password_hash,
+        restoredPasswordHash,
         isAdminAccount ? 'admin' : (row.role ?? 'practitioner'),
         isAdminAccount ? 'super-admin' : (row.profile_id ?? 'super-admin'),
         isAdminAccount ? 1 : (Number(row.is_active) ? 1 : 0),
@@ -3914,7 +3929,8 @@ function restoreDataBackupSnapshot(backupPayload) {
         row.visible_calendars ?? 'Tous les calendriers',
         row.default_service ?? 'Aucune prestation',
         row.invoice_mentions ?? '',
-        row.created_at ?? new Date().toISOString()
+        row.created_at ?? new Date().toISOString(),
+        1
       );
     }
 
@@ -4407,6 +4423,7 @@ function migrateUsersOfficeForeignKey() {
         visible_calendars TEXT NOT NULL DEFAULT 'Tous les calendriers',
         default_service TEXT NOT NULL DEFAULT 'Aucune prestation',
         invoice_mentions TEXT NOT NULL DEFAULT '',
+        must_change_password INTEGER NOT NULL DEFAULT 0,
         include_free_consultations INTEGER NOT NULL DEFAULT 1,
         show_consultation_hour INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -4422,7 +4439,7 @@ function migrateUsersOfficeForeignKey() {
         letter_header, letter_footer, signature_text, color_hex,
         bank_name, iban, retrocession_percent, retrocession_recipient,
         default_agenda_view, visible_calendars, default_service, invoice_mentions,
-        include_free_consultations, show_consultation_hour,
+        must_change_password, include_free_consultations, show_consultation_hour,
         created_at
       )
       SELECT
@@ -4455,6 +4472,7 @@ function migrateUsersOfficeForeignKey() {
         coalesce(nullif(trim(u.visible_calendars), ''), 'Tous les calendriers'),
         coalesce(nullif(trim(u.default_service), ''), 'Aucune prestation'),
         coalesce(u.invoice_mentions, ''),
+        coalesce(u.must_change_password, 0),
         1,
         1,
         ${createdAtExpr}
@@ -7310,7 +7328,7 @@ app.put('/api/profile/me', authMiddleware, async (req, res) => {
       parallelism: 1
     });
 
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, req.user.sub);
+    db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?').run(passwordHash, req.user.sub);
   }
 
   writeAuditLog(req.user.sub, 'UPDATE', 'users', String(req.user.sub), {
@@ -9237,7 +9255,7 @@ app.post('/api/data-management/reset-demo', authMiddleware, adminOnlyMiddleware,
   }
 });
 
-app.post('/api/data-management/restore', authMiddleware, requirePermission('manage-data-backup-restore'), (req, res) => {
+app.post('/api/data-management/restore', authMiddleware, requirePermission('manage-data-backup-restore'), async (req, res) => {
   if (!isApplicationSuperAdmin(req.userAccess)) {
     return res.status(403).json({
       message: 'Restauration globale reservee au super administrateur application. Utilisez un compte super administrateur application pour restaurer une sauvegarde complete.'
@@ -9250,8 +9268,23 @@ app.post('/api/data-management/restore', authMiddleware, requirePermission('mana
   }
 
   try {
-    restoreDataBackupSnapshot(parsed.data);
-    return res.status(204).send();
+    const usersInBackup = Array.isArray(parsed.data?.data?.users) ? parsed.data.data.users : [];
+    const prehashedUserPasswords = new Map();
+    const tempPasswords = [];
+
+    for (const row of usersInBackup) {
+      const userId = Number(row?.id);
+      if (!Number.isInteger(userId) || userId <= 0) {
+        continue;
+      }
+      const tempPassword = crypto.randomBytes(8).toString('hex');
+      const hash = await argon2.hash(tempPassword);
+      prehashedUserPasswords.set(userId, { hash, tempPassword });
+      tempPasswords.push({ userId, username: String(row?.username ?? ''), tempPassword });
+    }
+
+    restoreDataBackupSnapshot(parsed.data, prehashedUserPasswords);
+    return res.status(200).json({ tempPasswords });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'La restauration de la sauvegarde a echoue';
     return res.status(400).json({ message });
@@ -10361,7 +10394,8 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
 
   const user = db
     .prepare(
-      `SELECT u.id, u.username, u.password_hash, u.role, u.is_active, u.profile_id, p.label AS profile_label
+      `SELECT u.id, u.username, u.password_hash, u.role, u.is_active, u.profile_id, u.must_change_password,
+              p.label AS profile_label
        FROM users u
        LEFT JOIN access_profiles p ON p.id = u.profile_id
        WHERE u.username = ?`
@@ -10420,7 +10454,8 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
       profileLabel: access?.profileLabel ?? null,
       officeIds: access?.officeIds ?? [],
       offices: access?.offices ?? [],
-      rights: access?.rights ?? buildAccessRights(false)
+      rights: access?.rights ?? buildAccessRights(false),
+      mustChangePassword: user.must_change_password === 1
     }
   });
 });

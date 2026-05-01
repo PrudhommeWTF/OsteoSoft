@@ -7,6 +7,7 @@ export type AuthUser = {
   officeIds?: number[];
   offices?: OfficeOption[];
   rights?: AccessRightsByDomain;
+  mustChangePassword?: boolean;
 };
 
 export type OfficeOption = {
@@ -97,6 +98,16 @@ export type UpdateMyUserProfilePayload = Omit<
   UserAccountPayload,
   'isActive' | 'profileId' | 'role' | 'officeId' | 'officeIds'
 >;
+
+export type BackupRestoreTempPassword = {
+  userId: number;
+  username: string;
+  tempPassword: string;
+};
+
+export type BackupRestoreResult = {
+  tempPasswords: BackupRestoreTempPassword[];
+};
 
 export type Practitioner = {
   id: number;

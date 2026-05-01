@@ -49,7 +49,11 @@ export class LoginPage {
       return;
     }
 
-    await this.router.navigateByUrl('/');
+    if (this.authService.mustChangePassword()) {
+      await this.router.navigateByUrl('/mon-profil');
+    } else {
+      await this.router.navigateByUrl('/');
+    }
     this.isSubmitting.set(false);
   }
 }

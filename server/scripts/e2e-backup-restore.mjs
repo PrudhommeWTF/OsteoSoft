@@ -109,7 +109,7 @@ async function restoreBackup(cookie, payload) {
     body: JSON.stringify(payload)
   });
 
-  if (res.status !== 204) {
+  if (res.status !== 200) {
     const body = await res.text();
     throw new Error(`restore failed (${res.status}) ${body}`);
   }

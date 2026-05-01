@@ -8,6 +8,13 @@
     </div>
   </div>
 
+  @if (authService.mustChangePassword()) {
+    <div class="alert alert-warning d-flex align-items-center gap-2 mb-4" role="alert">
+      <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+      <span>Votre mot de passe est temporaire. Veuillez le modifier dans l'onglet <strong>Sécurité</strong> avant de continuer.</span>
+    </div>
+  }
+
   @if (isLoading()) {
     <div class="card border-0 shadow-sm">
       <div class="card-body p-4 d-flex align-items-center gap-3">
