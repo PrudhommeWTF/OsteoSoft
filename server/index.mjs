@@ -1182,7 +1182,7 @@ try {
       for (const row of rows) {
         let metadata;
         try {
-          metadata = JSON.parse(String(row.metadata ?? '{}'));
+          metadata = JSON.parse(row.metadata);
         } catch {
           continue;
         }
@@ -12571,7 +12571,13 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
     if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
       if (Object.prototype.hasOwnProperty.call(metadata, 'nameCipher')) {
         const { nameCipher, ...rest } = metadata;
-        metadata = { ...rest, fullName: safeDecryptField(String(nameCipher ?? '')) };
+        let fullName;
+        try {
+          fullName = decryptSensitiveField(String(nameCipher ?? ''));
+        } catch {
+          fullName = '[données non disponibles]';
+        }
+        metadata = { ...rest, fullName };
       }
     }
 
