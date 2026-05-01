@@ -22,8 +22,7 @@ export class ConfigService {
       console.error('Failed to load config:', error);
       // Set default config if API fails
       this.config.set({
-        app_name: 'OsteoSoft',
-        version: '0.0.2'
+        app_name: 'OsteoSoft'
       });
     } finally {
       this.isLoaded.set(true);
@@ -39,7 +38,6 @@ export class ConfigService {
   }
 
   getFullTitle(): string {
-    const cfg = this.config();
-    return cfg ? `${cfg.app_name} v${cfg.version}` : 'OsteoSoft v0.0.2';
+    return `${this.getAppName()} v${this.getVersion()}`;
   }
 }

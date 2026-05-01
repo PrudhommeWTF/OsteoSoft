@@ -7074,11 +7074,9 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/config', (_req, res) => {
   const appName = db.prepare('SELECT value FROM config WHERE key = ?').get('app_name');
-  const version = db.prepare('SELECT value FROM config WHERE key = ?').get('version');
-  
   res.json({
-    app_name: appName?.value ?? 'OsteoSoft',
-    version: version?.value ?? '0.0.2'
+    app_name: appName?.value ?? 'OsteoSoft'
+    // version intentionally omitted from public endpoint
   });
 });
 
@@ -7969,7 +7967,8 @@ app.get('/api/offices/:id/delegations/export', authMiddleware, requirePermission
 });
 
 app.get('/api/setup/status', (_req, res) => {
-  return res.json(getSetupStatusSnapshot());
+  const { requiresSetup } = getSetupStatusSnapshot();
+  return res.json({ requiresSetup });
 });
 
 const DATA_IMPORT_PATIENTS_SHEET = 'Patients';
