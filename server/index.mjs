@@ -305,6 +305,7 @@ db.exec(`
     currency TEXT NOT NULL DEFAULT 'EUR',
     payment_method TEXT NOT NULL DEFAULT '',
     bank_name TEXT NOT NULL DEFAULT '',
+    bank_name_cipher TEXT NOT NULL DEFAULT '',
     cheque_number TEXT NOT NULL DEFAULT '',
     reference TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
@@ -760,6 +761,7 @@ function signTokenForSession(user, remember) {
     payload.mcp = true;
   }
   return jwt.sign(payload, jwtSecret, {
+    algorithm: 'HS256',
     expiresIn: tokenTtl
   });
 }
@@ -929,7 +931,7 @@ const anonymizePatientTx = db.transaction((patientId) => {
 
   db.prepare(
     `UPDATE patient_payment_credits
-     SET bank_name = '', cheque_number = '', reference = '', notes = ''
+     SET bank_name = '', bank_name_cipher = '', cheque_number = '', reference = '', notes = ''
      WHERE patient_id = ?`
   ).run(patientId);
 
@@ -4851,6 +4853,7 @@ async function ensureSeedData() {
   ensureColumn('invoice_payments', 'bank_name_cipher', "bank_name_cipher TEXT NOT NULL DEFAULT ''");
   ensureColumn('invoice_payments', 'cheque_number', "cheque_number TEXT NOT NULL DEFAULT ''");
   ensureColumn('accounting_deposits', 'bank_name_cipher', "bank_name_cipher TEXT NOT NULL DEFAULT ''");
+  ensureColumn('patient_payment_credits', 'bank_name_cipher', "bank_name_cipher TEXT NOT NULL DEFAULT ''");
   ensureColumn('user_preference', 'slot_duration_minutes', 'slot_duration_minutes INTEGER NOT NULL DEFAULT 15');
   ensureColumn('user_preference', 'display_height', 'display_height INTEGER NOT NULL DEFAULT 14');
   ensureColumn('user_preference', 'theme_mode', "theme_mode TEXT NOT NULL DEFAULT 'system'");
@@ -4873,6 +4876,12 @@ async function ensureSeedData() {
     encryptExistingColumn('users', 'iban_cipher', 'iban');
     encryptExistingColumn('invoice_payments', 'bank_name_cipher', 'bank_name');
     encryptExistingColumn('accounting_deposits', 'bank_name_cipher', 'bank_name');
+    encryptExistingColumn('patient_payment_credits', 'bank_name_cipher', 'bank_name');
+    // SEC-3: clear plaintext columns now that cipher columns are populated
+    db.prepare(`UPDATE users SET bank_name = '', iban = '' WHERE bank_name != '' OR iban != ''`).run();
+    db.prepare(`UPDATE invoice_payments SET bank_name = '' WHERE bank_name != ''`).run();
+    db.prepare(`UPDATE patient_payment_credits SET bank_name = '' WHERE bank_name != ''`).run();
+    // accounting_deposits has no plaintext bank_name column used by new writes; only bank_name_cipher
   } catch (err) {
     console.warn('SEC-3 encryption migration failed:', err.message);
   }
@@ -8910,6 +8919,23 @@ app.get('/api/data-management/retention-status', authMiddleware, requirePermissi
   return res.json({ expiringSoon });
 });
 
+app.get('/api/data-management/consent-status', authMiddleware, requirePermission('manage-data-rgpd'), (req, res) => {
+  const rows = db.prepare(
+    `SELECT id
+     FROM patients
+     WHERE is_deleted = 0
+       AND consent_signed = 1
+       AND consent_withdrawn_at IS NULL
+       AND consent_form_version != ?
+     ORDER BY id ASC`
+  ).all(CURRENT_CONSENT_FORM_VERSION);
+
+  const outdated = rows.map((row) => ({ id: row.id }));
+
+  writeAuditLog(req.user.sub, 'READ_LIST', 'data-management-consent', null, { count: outdated.length, currentVersion: CURRENT_CONSENT_FORM_VERSION });
+  return res.json({ outdated, currentVersion: CURRENT_CONSENT_FORM_VERSION });
+});
+
 app.get('/api/data-management/import-template', authMiddleware, requirePermission('manage-data-import'), (req, res) => {
   const format = String(req.query.format ?? 'csv').trim().toLowerCase();
   const dataset = String(req.query.dataset ?? 'patients').trim().toLowerCase();
@@ -9492,7 +9518,12 @@ app.post('/api/data-management/restore', authMiddleware, requirePermission('mana
         continue;
       }
       const tempPassword = crypto.randomBytes(8).toString('hex');
-      const hash = await argon2.hash(tempPassword);
+      const hash = await argon2.hash(tempPassword, {
+        type: argon2.argon2id,
+        memoryCost: 2 ** 16,
+        timeCost: 3,
+        parallelism: 1
+      });
       prehashedUserPasswords.set(userId, { hash, tempPassword });
       tempPasswords.push({ userId, username: normalizedUsername, tempPassword });
     }
@@ -10403,7 +10434,12 @@ app.post('/api/users/:id/reset-password', authMiddleware, adminOnlyMiddleware, a
   }
 
   const tempPassword = crypto.randomBytes(8).toString('hex');
-  const hashedPassword = await argon2.hash(tempPassword);
+  const hashedPassword = await argon2.hash(tempPassword, {
+    type: argon2.argon2id,
+    memoryCost: 2 ** 16,
+    timeCost: 3,
+    parallelism: 1
+  });
 
   db.prepare('UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?').run(hashedPassword, userId);
 
@@ -12030,6 +12066,11 @@ app.get('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
       consentSigned: Boolean(row.consent_signed),
       consentSignedAt: row.consent_signed_at ?? null,
       consentFormVersion: row.consent_form_version ?? '1.0',
+      consentOutdated: Boolean(
+        row.consent_signed &&
+        !row.consent_withdrawn_at &&
+        (row.consent_form_version ?? '1.0') !== CURRENT_CONSENT_FORM_VERSION
+      ),
       consentWithdrawnAt: row.consent_withdrawn_at ?? null
     }
   });
@@ -12725,6 +12766,30 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
     };
   });
 
+  const paymentCreditRows = db
+    .prepare(
+      `SELECT id, paid_at, amount_cents, remaining_cents, currency, payment_method,
+              bank_name_cipher, cheque_number, reference, notes, created_at
+       FROM patient_payment_credits
+       WHERE patient_id = ?
+       ORDER BY paid_at ASC, id ASC`
+    )
+    .all(id);
+
+  const paymentCredits = paymentCreditRows.map((credit) => ({
+    id: credit.id,
+    paidAt: credit.paid_at,
+    amountCents: Number(credit.amount_cents ?? 0),
+    remainingCents: Number(credit.remaining_cents ?? 0),
+    currency: String(credit.currency ?? 'EUR').trim() || 'EUR',
+    paymentMethod: String(credit.payment_method ?? '').trim(),
+    bankName: safeDecryptField(credit.bank_name_cipher ?? '').trim(),
+    chequeNumber: String(credit.cheque_number ?? '').trim(),
+    reference: String(credit.reference ?? '').trim(),
+    notes: String(credit.notes ?? '').trim(),
+    createdAt: credit.created_at
+  }));
+
   const rgpdPayload = {
     meta: {
       kind: 'rgpd-patient-export',
@@ -12762,6 +12827,7 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
     appointments,
     antecedents,
     consultations,
+    paymentCredits,
     auditTrail
   };
 
@@ -12807,14 +12873,60 @@ app.post('/api/patients/:id/withdraw-consent', authMiddleware, requirePermission
   }
 
   const withdrawnAt = new Date().toISOString();
-  const consentWithdrawalDate = new Date().toISOString().slice(0, 10);
+  // Record consent withdrawal timestamp first, then immediately anonymize the patient
+  // (RGPD Article 17: erasure without undue delay upon consent withdrawal)
   db.prepare(
-    'UPDATE patients SET consent_withdrawn_at = ?, retention_until = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-  ).run(withdrawnAt, consentWithdrawalDate, id);
+    'UPDATE patients SET consent_withdrawn_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(withdrawnAt, id);
+
+  anonymizePatientTx(id);
 
   writeAuditLog(req.user.sub, 'WITHDRAW_CONSENT', 'patients', String(id));
 
   return res.status(200).json({ consentWithdrawnAt: withdrawnAt });
+});
+
+app.post('/api/patients/:id/update-consent', authMiddleware, requirePermission('read-patient-record'), (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ message: 'ID invalide' });
+  }
+
+  const patient = db.prepare('SELECT id, consent_withdrawn_at, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(id);
+  if (!patient) {
+    return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  if (patient.consent_withdrawn_at) {
+    return res.status(409).json({ message: 'Impossible de mettre à jour le consentement d\'un patient dont le consentement a été retiré' });
+  }
+
+  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
+  if (patientOfficeId !== null) {
+    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+    if (!isAdmin) {
+      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+      if (!accessibleOfficeIds.includes(patientOfficeId)) {
+        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
+      }
+    }
+  }
+
+  const signedAt = new Date().toISOString();
+  db.prepare(
+    `UPDATE patients
+     SET consent_signed = 1,
+         consent_signed_at = ?,
+         consent_form_version = ?,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+  ).run(signedAt, CURRENT_CONSENT_FORM_VERSION, id);
+
+  writeAuditLog(req.user.sub, 'UPDATE_CONSENT', 'patients', String(id), {
+    consentFormVersion: CURRENT_CONSENT_FORM_VERSION
+  });
+
+  return res.status(200).json({ consentSignedAt: signedAt, consentFormVersion: CURRENT_CONSENT_FORM_VERSION });
 });
 
 app.post('/api/patients/:id/anonymize', authMiddleware, adminOnlyMiddleware, (req, res) => {
