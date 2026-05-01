@@ -5654,6 +5654,15 @@ function findOverlappingAppointmentForOffice(officeId, localCalendarId, startsAt
   return null;
 }
 
+function updatePatientRetentionFields(patientId, consultationDateIso) {
+  db.prepare(
+    `UPDATE patients SET
+       last_visit = CASE WHEN last_visit IS NULL OR date(?) > last_visit THEN date(?) ELSE last_visit END,
+       retention_until = CASE WHEN retention_until IS NULL OR date(?, '+10 years') > retention_until THEN date(?, '+10 years') ELSE retention_until END
+     WHERE id = ?`
+  ).run(consultationDateIso, consultationDateIso, consultationDateIso, consultationDateIso, patientId);
+}
+
 function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}) {
   const raw = String(consultationNoteRaw ?? '').trim();
   if (!raw) return null;
@@ -5758,6 +5767,9 @@ function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}
       treatmentsHtml: data.treatmentsHtml,
       remarksHtml: data.remarksHtml
     });
+
+    updatePatientRetentionFields(patientId, alignedStartIso);
+
     const title = String(data.title ?? '').trim();
     const reason = title || 'Consultation';
 
@@ -11811,6 +11823,8 @@ app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('c
     treatmentsHtml: payload.treatmentsHtml,
     remarksHtml: payload.remarksHtml
   });
+
+  updatePatientRetentionFields(patientId, payload.startedAt);
 
   storeConsultationDocuments(
     patientId,
