@@ -43,7 +43,9 @@ export class LoginPage {
       this.errorMessage.set(
         result === 'invalid-credentials'
           ? 'Identifiants invalides. Utilise admin / admin.'
-          : 'API indisponible. Demarre le backend avec npm run start:api ou npm run start:full.'
+          : result === 'account-locked'
+            ? 'Compte temporairement verrouillé. Reessayez plus tard.'
+            : 'API indisponible. Demarre le backend avec npm run start:api ou npm run start:full.'
       );
       this.isSubmitting.set(false);
       return;

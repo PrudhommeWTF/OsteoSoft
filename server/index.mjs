@@ -4718,6 +4718,8 @@ async function ensureSeedData() {
   ensureColumn('users', 'invoice_mentions', "invoice_mentions TEXT NOT NULL DEFAULT ''");
   ensureColumn('users', 'include_free_consultations', 'include_free_consultations INTEGER NOT NULL DEFAULT 1');
   ensureColumn('users', 'show_consultation_hour', 'show_consultation_hour INTEGER NOT NULL DEFAULT 1');
+  ensureColumn('users', 'failed_login_attempts', 'failed_login_attempts INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('users', 'locked_until', 'locked_until TEXT');
   ensureColumn('appointments', 'local_calendar_id', 'local_calendar_id INTEGER');
   ensureColumn('appointments', 'office_id', 'office_id INTEGER');
   ensureColumn('appointments', 'consultation_id', 'consultation_id INTEGER');
@@ -10402,9 +10404,14 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
 
   const attemptedUsername = parsed.data.username.trim().slice(0, 120);
 
+  const LOCK_THRESHOLD = 10;
+  const LOCK_DURATION_MINUTES = 15;
+  const lockDurationModifier = `+${LOCK_DURATION_MINUTES} minutes`;
+
   const user = db
     .prepare(
       `SELECT u.id, u.username, u.password_hash, u.role, u.is_active, u.profile_id, u.must_change_password,
+              u.failed_login_attempts, u.locked_until,
               p.label AS profile_label
        FROM users u
        LEFT JOIN access_profiles p ON p.id = u.profile_id
@@ -10431,8 +10438,29 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
     return res.status(403).json({ message: 'Compte desactive' });
   }
 
+  if (user.locked_until && new Date(user.locked_until) > new Date()) {
+    writeAuthSecurityLog(req, 'login_attempt_failed', {
+      reason: 'account_locked',
+      statusCode: 429,
+      attemptedUsername,
+      userId: Number(user.id),
+      lockedUntil: user.locked_until
+    });
+    return res.status(429).json({ message: 'Compte temporairement verrouillé. Reessayez plus tard.' });
+  }
+
   const validPassword = await argon2.verify(user.password_hash, parsed.data.password);
   if (!validPassword) {
+    db.prepare(
+      `UPDATE users SET
+         failed_login_attempts = failed_login_attempts + 1,
+         locked_until = CASE
+           WHEN failed_login_attempts + 1 >= ? THEN datetime('now', ?)
+           ELSE locked_until
+         END
+       WHERE id = ?`
+    ).run(LOCK_THRESHOLD, lockDurationModifier, user.id);
+
     writeAuthSecurityLog(req, 'login_attempt_failed', {
       reason: 'invalid_password',
       statusCode: 401,
@@ -10441,6 +10469,8 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
     });
     return res.status(401).json({ message: 'Identifiants invalides' });
   }
+
+  db.prepare('UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = ?').run(user.id);
 
   const token = signTokenForSession(user, Boolean(parsed.data.remember));
   res.cookie(SESSION_COOKIE_NAME, token, buildSessionCookieOptions(Boolean(parsed.data.remember)));
