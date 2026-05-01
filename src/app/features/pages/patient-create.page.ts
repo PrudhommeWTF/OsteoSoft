@@ -473,7 +473,8 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     relatedPeople: ['', [Validators.maxLength(500)]],
     isDeceased: [false],
     medicalHistory: ['', [Validators.maxLength(5000)]],
-    consultationNote: ['', [Validators.maxLength(30000)]]
+    consultationNote: ['', [Validators.maxLength(30000)]],
+    consentSigned: [false, [Validators.requiredTrue]]
   });
 
   /** Reactive snapshot of form values — used in computed signals */
@@ -486,7 +487,8 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     return (
       (vals.lastName?.trim().length ?? 0) > 0 &&
       (vals.firstName?.trim().length ?? 0) > 0 &&
-      (vals.birthDate?.trim().length ?? 0) > 0
+      (vals.birthDate?.trim().length ?? 0) > 0 &&
+      vals.consentSigned === true
     );
   });
 
@@ -1148,6 +1150,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
         this.form.controls.lastName.markAsTouched();
         this.form.controls.firstName.markAsTouched();
         this.form.controls.birthDate.markAsTouched();
+        this.form.controls.consentSigned.markAsTouched();
         return;
       }
 
