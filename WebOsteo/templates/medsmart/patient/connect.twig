@@ -1,0 +1,42 @@
+<div class="alert alert-info" style="margin-bottom: 0px;margin-top: 25px;">
+    {% if medsmart.praticien.medsmart_connected == '1' %}
+        {# praticien connecté #}
+
+
+
+        {% if medsmart.patient.medsmart_connected in ['1','0'] %}
+
+
+            <h5><b>Télétransmission mutuelle</b> :
+                {% if medsmart.patient.medsmart_connected=='1' %}
+                    <b class="checkVert"> <i class="fa fa-fw fa-check tooltipTop"></i>
+                        {{ medsmart.patient.mutuelle|default("Mutuelle inconnue - n'hésitez pas à l'actualiser") }} - Mutuelle connectée
+                    </b>
+                {% else %}
+                    <b class="orange"> <i class="fa fa-fw fa-check tooltipTop"></i>
+                        {{ medsmart.patient.mutuelle|default("Mutuelle inconnue - n'hésitez pas à l'actualiser") }} - Mutuelle non connectée
+                    </b>
+                {% endif %}
+            </h5>
+
+            <button type="button" style="margin-top:5px; margin-bottom: 10px;" class="btn btn-default btn-sm rounded btFacture" data-consultation="{{ consultation.id }}" id="btn-teletransmission-add-{{ consultation.id }}" href="javascript:void(0)">
+                <i class="fa fa-fw fa-refresh"></i> Modifier ou supprimer la mutuelle du patient
+            </button>
+        {% else %}
+            <h5><b>Télétransmission mutuelle</b> : <i class="fa fa-ban uncheckRouge"></i> Mutuelle non renseignée </h5>
+
+            <button type="button" style="margin-top:5px; margin-bottom: 10px; font-size: 12px" class="btn btn-default btn-sm rounded btFacture" data-consultation="{{ consultation.id }}" id="btn-teletransmission-add-{{ consultation.id }}" href="javascript:void(0)">
+                <img src="/images/partenariats/boutons/medsmart-noir.png" style="width: 12px;height:12px; margin-right: 5px"/> Saisir la mutuelle
+            </button>
+        {% endif %}
+
+    {% else %}
+        {# praticien non connecté #}
+        <div style="margin-bottom: 10px;">Vous n'avez pas encore activé le module de télétransmission aux mutuelles.</div>
+        <a href="/index.php?p=parametres&partenaires=1#partenaire-medsmart" target="_blank" class="btn btn-default btn-sm rounded">
+            <img src="/images/partenariats/boutons/medsmart-noir.png" style="width: 12px;height:12px; margin-right: 5px"/> Cliquez ici pour plus d'infos</a>
+
+    {% endif %}
+
+</div>
+<div class="clear"></div>

@@ -1,0 +1,14 @@
+{% import 'macros.twig' as macros_base %}
+{% from 'macros.twig' import input %}
+<div class="row">
+    <div class="col-md-12">
+        <div style="margin-bottom: 30px;">
+            Vous êtes sur le point d'effectuer un changement de RIB auprès du fournisseur de service Cashlee®.<br>Merci de renseigner votre IBAN ainsi que le mot de passe de votre compte Mon Cabinet Libéral par sécurité.
+        </div>
+        {{ input('iban','iban', iban,'Nouvel IBAN',true,'text',label_class,div_class) }}
+        {{ input('mdp','mdp', '','Votre mot de passe MCL',true,'password',label_class,div_class) }}
+    </div>
+</div>
+
+
+<div class="clear"></div>

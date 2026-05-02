@@ -1,0 +1,18 @@
+﻿span.spinedit .glyphicon-chevron-down { position: relative; cursor: pointer;}
+span.spinedit .glyphicon-chevron-up { position: relative; cursor: pointer;}
+span.spinedit .glyphicon-chevron-up { top: -7px;  left: -8px; color:#555; font-size: 9px; top:-2px;}
+span.spinedit .glyphicon-chevron-down { top: 8px; margin-right: -5px; color:#555; font-size: 9px; top:7px; left:-4.5px;}
+
+span.spinedit {
+  padding: 0px 10px;
+  font-size: 14px;
+  font-weight: normal;
+  line-height: 1;
+  text-align: center;
+  display: inline-block;
+  width: 1%;
+  white-space: nowrap;
+  vertical-align: top;
+  box-sizing: border-box;
+}
+

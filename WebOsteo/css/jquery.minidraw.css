@@ -1,0 +1,81 @@
+
+
+canvas.minidraw {
+	margin:0 auto 20px auto; 
+	display:block;  
+	cursor:crosshair;
+}
+
+canvas:active {
+	cursor:crosshair;
+}
+
+
+div.minidraw {
+	border:1px solid #ddd;
+	display: inline-block;
+}
+
+.minidraw_toolbar {
+	height:30px;
+	background:#fff;
+	border-bottom:1px solid #eee;
+
+}
+
+.minidraw_toolbar ul {
+	list-style: none;
+	height:30px;
+	padding:0px;
+	margin:0px;
+	display:inline-block;
+	margin-right:30px;
+}
+
+.minidraw_toolbar ul li {
+	float: left;
+	width:30px;
+	height:30px;
+	border-right:1px solid #eee;
+	text-align: center;
+	line-height:30px;
+	font-size: 20px;
+}
+
+.minidraw_toolbar ul li.disabled {
+	color:#aaa;
+}
+
+.minidraw_toolbar ul li span{
+	display:inline-block;
+	width:20px;
+	height:20px;
+	margin-top: 5px;
+	border:1px solid #ddd;
+}
+
+.minidraw_toolbar ul li.first {border-left:1px solid #eee;}
+
+.minidraw_toolbar ul li.brushwidth1 {font-size:5px;}
+.minidraw_toolbar ul li.brushwidth3 {font-size:10px;}
+.minidraw_toolbar ul li.brushwidth5 {font-size:15px;}
+.minidraw_toolbar ul li.brushwidth10 {font-size:20px;}
+
+/*
+.minidraw_toolbar ul li.erase span{ background:url(../images/minidraw/minidraw_erase.png) center center no-repeat transparent;}
+.minidraw_toolbar ul li.new {background:url(../images/minidraw/minidraw_new.png) center center no-repeat transparent;}
+*/
+
+
+
+.minidraw_toolbar ul li:hover {
+	background-color: #ccc;
+	cursor:pointer;
+}
+
+.minidraw_toolbar ul li.disabled:hover {background-color: inherit; cursor:default;}
+
+.minidraw_toolbar ul li.selected {
+	background-color: #ccc !important;
+}
+

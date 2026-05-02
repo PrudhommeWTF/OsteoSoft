@@ -1,0 +1,39 @@
+<div class="row" id="container-cashlee">
+
+    <div class="col-xs-12 col-md-2" style="padding:20px;">
+        <a href="https://www.cashlee.fr" target="_blank">
+            <img src="/images/partenariats/cashlee.svg" style="width: 100%;"/> </a>
+    </div>
+    <div class="col-xs-12 col-md-10">
+        <h4 style=" margin-top: 0; margin-bottom: 30px;">Inédit : avec Cashlee, évitez les impayés et offrez à vos patients un nouveau moyen de paiement !</h4>
+        ✅ Prix fixe par transaction et très faible. <br/>✅ Système est entièrement sécurisé.
+        <br/>✅ Fonctionne même à distance. <br/>✅ Pas de CB, pas de TPE.
+        <br/>✅ Le patient n'a pas saisir le montant du virement, ni à saisir d’IBAN.
+        <br/>✅ 100% intégré à votre logiciel Webosteo (pas d'outil externe à manipuler)
+
+        {% if config.cashlee_connected==false %}
+            <p style="margin-top: 30px;"><i class="fa fa-gift"></i> Bénéficiez de
+                <b class="rose">10 liens 100% gratuits et sans aucun engagement</b> pour tester notre nouvelle solution ! Cliquez sur le bouton ci-dessous :
+            </p><br>
+            <button type="button" id="launchConfigurationCashlee" class="btn btn-default btn-sm rounded btFacture">
+                <i class="fa fa-cog"></i> Configurer mon compte Cashlee®
+            </button>
+        {% else %}
+            <p style="margin-top: 30px;">
+
+                <i class="fa fa-check checkVert"></i> Vous êtes actuellement connecté(e) à l'application Cashlee® le login
+                <b>{{ config.cashlee_connected_login }}</b>.
+
+            {% if client.cashlee_connected == '1' %}
+                <br/>L'IBAN renseigné est le <b>{{ client.iban }}</b>.
+                <br/><br/>
+                <button type="button" id="logoutCashlee" class="btn btn-default btn-sm rounded btFacture">
+                    <i class="glyphicon glyphicon-eye-close"></i> Déconnecter mon compte Cashlee®
+                </button>
+            {% endif %}
+            </p>
+
+        {% endif %}
+    </div>
+    <div class="clear"></div>
+</div>

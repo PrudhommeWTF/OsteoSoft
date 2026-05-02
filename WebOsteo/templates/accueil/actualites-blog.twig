@@ -1,0 +1,97 @@
+<script id="template-liste-actualites-blog" type="text/twig">
+    {% verbatim %}
+                                {% for actualite in liste_actualites %}
+                                    <li style="margin:0px">
+                                        <a href="{{ actualite.url }}" target="_blank" class="noHover" style="">
+                                             {%if actualite.logiciel=='mcl'%}
+                                                    <img src="/images/actu-mcl.png" style="height:20px;width:auto;margin-right:10px; vertical-align: text-bottom;">
+                                                 {%else%}
+                                                    <img src="/images/actu-webosteo.png" style="height:20px;width:auto;margin-right:10px; vertical-align: text-bottom;">
+                                                 {%endif%}
+                                                 {{actualite.date_publication_format }} : {{ actualite.titre }}
+                                        </a>
+                                    </li>
+                                {% endfor %}
+   {% endverbatim %}
+
+
+</script>
+
+<article class="col-sm-12 col-md-6 col-lg-6" id="widget-actualites">
+    <div class="jarviswidget jarviswidget-color-white" id="wid-id-actus">
+        <header>
+            <span class="widget-icon"> <i class="glyphicon glyphicons calendar"></i> </span>
+            <h2> Actualités de nos logiciels </h2>
+        </header>
+        <div>
+            <div class="widget-body">
+                <div class="col-xs-12 nopadding">
+                    <div class="table-responsive col-xs-12 nopadding">
+                        <ul class="col-xs-12 nopadding container_liste_tutos" style="list-style: none;" id="container_liste_tutos"></ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</article>
+
+<script>
+    var actualites = [];
+    $(document).ready(function () {
+        getActualitesBlog();
+    })
+
+    async function getActualitesBlog() {
+        let params = new URLSearchParams({'status': 'publish', 'per_page': 10});
+
+        $('#container_liste_tutos').addClass('loading');
+        // voir pour ajouter le loading
+        await fetch('https://blog.moncabinetliberal.com/wp-json/wp/v2/posts?' + params,
+            {
+                method: 'GET',
+            }).then((response) => {
+            return response.json()
+        }).then(async (response) => {
+            response.forEach((element) => {
+                let actualite = {
+                    titre: element.title.rendered,
+                    url: element.link,
+                    date_publication: moment(element.date).format('YYYYMMDDHHmm'),
+                    date_publication_format: moment(element.date).format('DD/MM/YYYY'),
+                    logiciel: 'mcl',
+                };
+                actualites.push(actualite);
+            });
+
+            params = new URLSearchParams({'status': 'publish', 'per_page': 10});
+            await fetch('https://blog.webosteo.com/wp-json/wp/v2/posts?' + params,
+                {
+                    method: 'GET',
+                }).then((response) => {
+                return response.json()
+            }).then((response) => {
+                response.forEach((element) => {
+                    let actualite = {
+                        titre: element.title.rendered,
+                        url: element.link,
+                        date_publication: moment(element.date).format('YYYYMMDDHHmm'),
+                        date_publication_format: moment(element.date).format('DD/MM/YYYY'),
+                        logiciel: 'webosteo',
+                    };
+                    actualites.push(actualite);
+                });
+                actualites.sort(function (a, b) {
+                    // Turn your strings into dates, and then subtract them
+                    // to get a value that is either negative, positive, or zero.
+                    return (b.date_publication - a.date_publication);
+                });
+                $('#container_liste_tutos').removeClass('loading').html(transformeTemplateJs($('#template-liste-actualites-blog').html(), {liste_actualites: actualites}));
+
+            })
+
+
+        })
+
+
+    }
+</script>

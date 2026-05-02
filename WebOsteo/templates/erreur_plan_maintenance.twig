@@ -1,0 +1,26 @@
+{% import 'macros.twig' as macros_base %}
+{% from 'macros.twig' import replaceGuillemets %}
+{% from 'macros.twig' import dateToText %}
+
+<div style="width: calc(100% - 110px); float:left;">
+    Cette fonctionnalité est réservée aux utilisateurs qui ont un <b>plan de maintenance</b> valide. Le votre est expiré depuis le <b>{{ dateToText(date_fin_assistance) }}</b>.
+Pour rappel, le plan de maintenance permet de bénéficier de plusieurs services additionnels à votre licence d'utilisation du logiciel, tels que :
+<ul style="list-style-type: none; margin:0px; padding: 0px; margin-bottom: 30px; margin-top: 15px;">
+    <li><i class="fa fa-check checkVert"></i> assistance sans délai en cas de problème</li>
+    <li><i class="fa fa-check checkVert"></i> envoi des factures par email</li>
+    <li><i class="fa fa-check checkVert"></i> télétransmission des factures aux mutuelles</li>
+    <li><i class="fa fa-check checkVert"></i> sauvegarde des données en ligne</li>
+    <li>etc...</li>
+</ul>
+
+
+
+    <div class="alignCenter" style="margin-bottom:20px;">
+        <a href="https://www.webosteo.com/acheter.html#f_assistance" class="btn btn-primary" target="_blank">
+            <i class="fa fa-external-link"></i> Renouveler mon plan de maintenance
+        </a>
+    </div>
+
+</div>
+
+<div class="clear"></div>

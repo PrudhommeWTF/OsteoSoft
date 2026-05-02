@@ -1,0 +1,24 @@
+<script type="text/twig" id="templateValidAndrew">
+          La synchronisation avec Andrew® a bien été effectuée. Vous pouvez maintenant inviter vos patients à s'inscrire à Andrew® pour leur offrir du contenu gratuit.
+<br/><br/>Vous allez être automatiquement redirigé vers le tableau de bord dans quelques secondes.
+</script>
+
+<script type="text/javascript">
+    $(document).ready(function() {
+        showMsgSwal({
+            titre: "Synchronisation Andrew® effectuée",
+            msg: transformeTemplateJs($('#templateValidAndrew').html(), {}),
+            showConfirmButton: false,
+            showCancelButton: false,
+            showCroixExit: false,
+            type:'success'
+        });
+        window.setTimeout(function() {
+            window.location.href = '{{ url_retour }}';
+            //alert('{{ url_retour }}');
+        },5000);
+    });
+
+</script>
+
+

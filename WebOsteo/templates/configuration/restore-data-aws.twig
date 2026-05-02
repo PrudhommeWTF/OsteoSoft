@@ -1,0 +1,48 @@
+{% import 'macros.twig' as macros_base %}
+{% from 'macros.twig' import afficheDate %}
+
+{% if files['this']|length> 0 or files['other']|length> 0 %}
+
+    <div class="alert alert-info">
+        <i class="fa fa-info-circle"></i> Voici la liste des sauvegardes en ligne précédemment effectuées avec votre licence, et que vous pouvez restaurer. Attention, si vous restaurez une de ces sauvegardes, les données contenues dans la sauvegarde remplaceront intègralement vos données actuelles (y compris les accès utilisateurs).
+    </div>
+
+
+
+    {% if files['this']|length>0 %}
+        <h5 style="font-weight: bold">
+            <i class="fa fa-list"></i> Sauvegardes effectuées via cette installation de Webosteo :</h5>
+        <table class="table table-striped table-hover table-condensed" style="margin-bottom: 30px;">
+            <tbody>
+            {% for file in files['this'] %}
+                <tr class="cursor pair" onclick="restoreBackupHds('{{ file.Key }}', '{{ afficheDate(file.LastModified,'d/m/Y H:i:s',config.timezone,true)|trim }}')">
+                    <td>{{ afficheDate(file.LastModified,'d/m/Y H:i:s',config.timezone,true) }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+
+    {% if files['other']|length>0 %}
+
+
+
+
+        <h5 style="font-weight: bold">
+            <i class="fa fa-list"></i> Sauvegardes effectuées via une autre installation de Webosteo :</h5>
+
+
+        <table class="table table-striped table-hover table-condensed" style="margin-bottom: 30px;">
+            <tbody>
+            {% for file in files['other'] %}
+                <tr class="cursor pair" onclick="restoreBackupHds('{{ file.Key }}', '{{ afficheDate(file.LastModified,'d/m/Y H:i:s',config.timezone,true)|trim }}')">
+                    <td>{{ afficheDate(file.LastModified,'d/m/Y H:i:s',config.timezone,true) }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+    {% endif %}
+{% endif %}
+
+<div class="clear"></div>

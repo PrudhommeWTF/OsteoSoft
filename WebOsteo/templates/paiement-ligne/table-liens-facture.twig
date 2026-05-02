@@ -1,0 +1,22 @@
+<table class="table table-striped table-hover table-condensed tablePaiementsLigne">
+    <tbody>
+    {% for transaction in facture.liens_paiement %}
+        <tr style="cursor:default" data-uuid="{{ transaction.uuid }}">
+            <td>
+                <i class="fa fa-fw fa-money"></i>
+                <b><span style="text-transform:uppercase ">{{ transaction.partner }}</span> : {{ transaction.amount }}  {{ facture.devise }}
+                </b> le {{ transaction.send_date_format }}.
+                {% if transaction.status in ['pending','','scheduled','link_clicked'] %}
+                    <span class="label label-warning">{{ transaction.statut_text }}</span>
+                {% endif %}
+                {% if transaction.status=='failed' %}
+                    <span class="label label-danger">{{ transaction.statut_text }}</span>
+                {% endif %}
+                {% if transaction.status in ['success','successful'] %}
+                    <span class="label label-success">{{ transaction.statut_text }}</span>
+                {% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>

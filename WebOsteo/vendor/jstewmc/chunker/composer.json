@@ -1,0 +1,30 @@
+{
+	"name": "jstewmc/chunker",
+	"description": "Chunk a very large file or string with PHP (multi-byte safe)",
+	"license": "MIT",
+	"keywords": ["PHP", "chunk", "file", "string", "multi-byte"],
+	"authors": [
+		{
+			"name": "Contributors",
+			"homepage": "https://github.com/jstewmc/php-helpers/contributors"
+		}
+	],
+	"require": {
+		"ext-mbstring": "*",
+		"php": "^7.4 || ^8.0"
+	},
+	"require-dev": {
+		"mikey179/vfsstream": "^1.6",
+		"phpunit/phpunit": "^9",
+		"roave/security-advisories": "dev-latest",
+    "slevomat/coding-standard": "^6"
+	},
+	"autoload": {
+		"psr-4": {
+			"Jstewmc\\Chunker\\": "src/"
+		},
+		"classmap": [
+        "tests/TestCase.php"
+    ]
+	}
+}

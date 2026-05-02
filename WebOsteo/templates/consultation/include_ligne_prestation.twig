@@ -1,0 +1,44 @@
+{% import 'macros.twig' as macros_base %}
+{% from 'macros.twig' import replaceGuillemets %}
+
+
+
+
+<tr idRow='{{ prestation.idLigne }}' id='idRow_{{ prestation.idLigne }}' idConsult='{{ consultation.id }}'>
+    <td style="max-width: 200px;">
+        <select class="form-control input-sm selectpicker" onchange="updatePrix('{{ prestation.idLigne }}',true);" data-width="100%" id='selPresta_{{ prestation.idLigne }}' addResults='1' data-live-search='true' style="max-width: 150px;">
+            {% set trouve = false %}
+            {% for prestation_generale in prestations %}
+                {% set selected = false %}
+                {% if (prestation_generale.libelle|lower == prestation.libelle|lower) %}
+                    {% set selected = true %}
+                    {% set trouve = true %}
+                {% endif %}
+                <option {% if selected %}selected{% endif %} data-subtext="{{ replaceGuillemets(prestation_generale.montant_ht) }} {{ config.devise }}" value="{{ replaceGuillemets(prestation_generale.libelle) }}" montant_ht="{{ replaceGuillemets(prestation_generale.montant_ht) }}" tva="{{ replaceGuillemets(prestation_generale.tva) }}">{{ prestation_generale.libelle }}</option>
+            {% endfor %}
+
+            {% if trouve == false %}
+                <option selected data-subtext="{{ replaceGuillemets(prestation.montant_ht) }} {{ config.devise }}" value="{{ replaceGuillemets(prestation.libelle) }}" montant_ht="{{ replaceGuillemets(prestation.montant_ht) }}" tva="{{ replaceGuillemets(prestation.tva) }}">{{ prestation.libelle }}</option>
+            {% endif %}
+        </select>
+    </td>
+    <td class='alignRight'>
+        <input type="text" onkeyup="updatePrix('{{ prestation.idLigne }}');" onblur="updatePrix('{{ prestation.idLigne }}');" class="form-control input-sm quantite" style='width:100%; text-align:right' value="{{ (prestation.quantite) }}" size='5' entier='entier' valNulle='0'/>
+    </td>
+    <td class='alignRight'>
+        <input type="text" onkeyup="updatePrix('{{ prestation.idLigne }}');" onblur="updatePrix('{{ prestation.idLigne }}');" class="form-control input-sm montant_ht" style='width:70px; text-align:right' value="{{ replaceGuillemets(prestation.montant_ht) }}" size='5' entier='entier' valNulle='0'/> {{ config.devise }}
+    </td>
+    <td class='alignRight'>
+        <input type="text" onkeyup="updatePrix('{{ prestation.idLigne }}');" onblur="updatePrix('{{ prestation.idLigne }}');" class="form-control input-sm tva" style='width:50px; text-align:right' value="{{ replaceGuillemets(prestation.tva) }}" size='5' entier='entier' valNulle='0'/> %
+    </td>
+    <td class='alignRight'>
+        <span class='total' id='totalRow_{{ prestation.idLigne }}'>{{ prestation.total }}</span> {{ config.devise }}
+    </td>
+    <td class='alignRight'>
+        <a class="btn btn-default btn-sm tooltipTop del" href="javascript:void(0)" title='Supprimer la ligne' onclick="deletePresta('{{ prestation.idLigne }}');"><i class="fa fa-minus-circle"></i></a>
+        <a class="btn btn-default btn-sm tooltipTop addRow" href="javascript:void(0)" title='Ajouter une ligne'><i class="fa fa-plus"></i></a>
+        <!--
+        <a class="btn btn-default btn-sm tooltipTop" href="javascript:void(0)" onclick="addLinePrestation('{{ consultation.id }}')" title='Ajouter une ligne'><i class="fa fa-plus"></i></a>
+        -->
+    </td>
+</tr>

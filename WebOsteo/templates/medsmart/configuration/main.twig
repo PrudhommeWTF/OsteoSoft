@@ -1,0 +1,31 @@
+<div class="row">
+    <div class="col-xs-12 col-md-2" style="">
+        <a href="https://www.medsmart.fr" target="_blank">
+            <img src="/images/partenariats/logo-medsmart-bleu.png" style="width: 100%;"/> </a>
+    </div>
+    <div class="col-xs-12 col-md-10">
+
+
+        <h4 style=" margin-top: 0; margin-bottom: 30px;">Télétransmission des factures aux mutuelles</h4>
+
+        {% if client.medsmart_connected !='1' %}
+            <p>Faites bénéficier vos patients du remboursement mutuelle en 2 clics (inclus dans votre logiciel Webosteo sous réserve de plan de maintenance valide).</p>
+
+            <br>
+            <button type="button" id="launchConfigurationMedsmart" class="btn btn-default btn-sm rounded btFacture">
+                <i class="fa fa-cog"></i> Configurer mon compte MedSmart
+            </button>
+        {% else %}
+            <p>Faites bénéficier vos patients du remboursement mutuelle en 2 clics (inclus dans votre logiciel Webosteo sous réserve de plan de maintenance valide).</p>
+            <p><i class="fa fa-check checkVert"></i> Vous êtes actuellement connecté(e) à l'application MedSmart® avec l'adresse mail :
+                <b class="bold rose">{{ client.email }}</b></p>
+
+            <br>
+            <button type="button" id="logoutMedsmart" class="btn btn-default btn-sm rounded btFacture">
+                <i class="glyphicon glyphicon-off"></i> Déconnecter mon compte MedSmart
+            </button>
+
+        {% endif %}
+    </div>
+    <div class="clear"></div>
+</div>

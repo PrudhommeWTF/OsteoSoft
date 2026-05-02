@@ -1,0 +1,28 @@
+<div class="row">
+    <div class="col-xs-12 col-md-2" style="padding:20px;">
+        <a href="https://www.andrewapp.fr/webosteo" target="_blank">
+            <img src="/images/partenariats/logo_andrewapp.png" style="width: 100%;"/> </a>
+    </div>
+    <div class="col-xs-12 col-md-10">
+        <h4 style=" margin-top: 0; margin-bottom: 30px;">Andrew® : outil de suivi patient</h4>
+
+        {% if config.andrew_connected ==false %}
+            <p>Des centaines d’heures de contenus santé exclusifs pour vos patients (inclus dans votre logiciel Webosteo sous réserve de plan de maintenance valide) :</p>
+            <p>Découvrez Andrew® avec l'avantage Webosteo en allant sur <a href="https://www.andrewapp.fr/webosteo" target="_blank"><b>https://www.andrewapp.fr/webosteo</b></a></p>
+
+            <br>
+            <button type="button" id="launchConfigurationAndrew" onclick="loginAndrewApp()" class="btn btn-default btn-sm rounded btFacture">
+                <i class="fa fa-cog"></i> Configurer mon compte Andrew®
+            </button>
+        {% else %}
+            <p>Des centaines d’heures de contenus santé exclusifs pour vos patients (inclus dans votre logiciel Webosteo sous réserve de plan de maintenance valide) :</p>
+            <p><i class="fa fa-check checkVert"></i> Vous êtes actuellement connecté(e) à l'application Andrew® avec l'adresse mail :
+                <b class="bold rose">{{ config.partenaire_andrew_email }}</b></p>
+            <br>
+            <button type="button" id="logoutAndrew" onclick="logoutAndrewApp()" class="btn btn-default btn-sm rounded btFacture">
+                <i class="fa fa-cog"></i> Déconnecter mon compte Andrew®
+            </button>
+        {% endif %}
+    </div>
+    <div class="clear"></div>
+</div>

@@ -1,0 +1,212 @@
+{% import 'macros.twig' as macros_base %}
+{% from 'macros.twig' import replaceGuillemets %}
+
+
+
+{% set class = ' row_' ~ consultation.createdby %}
+
+{% if consultation.etat_facturation == 'non_facturable' %}
+    {% set class = class ~ ' gratuit info' %}
+{% endif %}
+{% if facture.etat_paiement == 'finalisee' %}
+    {% set class = class ~ ' success' %}
+{% endif %}
+{% if facture.etat_paiement == 'attente' %}
+    {% set class = class ~ ' warning' %}
+{% endif %}
+{% if facture.etat_paiement == 'partiel' %}
+    {% set class = class ~ ' warning' %}
+{% endif %}
+{% if facture.etat_paiement == 'payee' %}
+    {% set class = class ~ ' success' %}
+{% endif %}
+{% if facture.etat_paiement == 'troppercu' %}
+    {% set class = class ~ ' warning' %}
+{% endif %}
+{% if facture.etat == 'annulee' %}
+    {% set class = 'row_' ~ consultation.createdby ~ ' danger' %}
+{% endif %}
+{% if facture.famille == 'avoirs' %}
+    {% set class = 'danger' %}
+{% endif %}
+
+
+<tr typerow='facture' class='{{ class }}'>
+    <td class='num nowrap'>
+        <div class='checkbox checkbox-inline checkbox-primary sm '>
+            <input id='ck_{{ facture.id }}' value="{{ facture.id }}" type='checkbox' name='ckIdC[]'/><label for='ck_{{ facture.id }}'></label>
+        </div>
+        {{ ind }}
+    </td>
+
+    <td class='date nowrap'>
+        {% if config.consultation_heure_compta == '1' %}
+            {{ consultation.date_consult_format_full }}
+        {% else %}
+            {{ consultation.date_consult_format }}
+        {% endif %}
+    </td>
+    <td>
+        {% if user.login != '' %}
+            Consultation pour {{ patient.nom }} {{ patient.prenom }}
+        {% else %}
+            <!--Consultation de {{ facture.personne_praticien.nom_prenom }} pour {{ patient.nom }} {{ patient.prenom }}-->
+            Consultation de {{ utilisateurs[consultation.createdby]['login_texte'] }} pour {{ patient.nom }} {{ patient.prenom }}
+        {% endif %}
+    </td>
+    <td class='montant nowrap'><br/></td>
+    <td class='montant nowrap' data-montant_ht="{{ facture.montant_ht }}">
+        {% if config.ttc_ou_ht == 'ttc' %}
+            {{ facture.montant_ttc }}
+        {% else %}
+            {{ facture.montant_ht }}
+        {% endif %}
+        {{ facture.devise }}
+    </td>
+
+    <td class='nowrap montant'>
+
+        {% if facture.famille == 'factures' %}
+            {% if facture.etat == 'finalisee' %}
+                <input {% if user_connecte.droits.compta_retro == false %}disabled{% endif %} type='text' class='form-control input-sm retro' value="{{ facture.retro_taux| default(0)|format_number({max_fraction_digit: 2})|replace({',':'.'}) }}" size='3' onKeyUp='updateTabCa("tabCA","{{ facture.id }}",this.value)' entier='entier' maxlength='6' style='width:25px'/> % pour
+                <select {% if user_connecte.droits.compta_retro == false %}disabled{% endif %} class='form-control input-sm _selectpicker' onChange='updateRetroDest("{{ facture.id }}",this.value)' data-width='auto'>
+                    <option value='' selected='selected'></option>
+                    {% for user_tmp in liste_users %}
+                        <option {% if user_tmp.login == facture.retro_destinataire %}selected{% endif %} value="{{ user_tmp.login }}">{{ user_tmp.login_texte }}</option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+
+        {% endif %}
+
+
+    </td>
+
+    <td class='numfacture'>
+
+
+        {% if hide_cancelled=='1' %}
+            {% if facture.id is not empty %}
+                {% set class = 'success' %}
+                {% if facture.etat == 'annulee' %}
+                    {% set class = 'danger' %}
+                {% endif %}
+                {% if facture.famille == 'avoirs' %}
+                    {% set class = 'primary' %}
+                {% endif %}
+                {% set titl = 'Facture finalisée de ' ~ facture.montant_ttc ~ ' ' ~ facture.devise %}
+                {% if facture.commentaire_interne is not empty %}
+                    {% set titl = titl ~ '. Commentaire : ' ~ facture.commentaire_interne %}
+                {% endif %}
+                <a href="/ajax/genere_facture.php?idFacture={{ facture.id }}" target="_blank" class="tooltipTop noHover" title="{{ titl }}">
+                    <span class="label label-{{ class }}">
+                        {% if facture.commentaire_interne is not empty %}
+                            <i class="fa fa-info-circle"></i>
+                        {% endif %}
+                        {{ facture.numero_formatte }}
+                    </span> </a>
+            {% endif %}
+        {% else %}
+            {% for facture_bis in ligne.factures %}
+                {% if facture_bis.id is not empty %}
+
+
+                    {% set class = 'success' %}
+                    {% set titl = 'Facture finalisée' %}
+                    {% if facture_bis.etat == 'annulee' %}
+                        {% set class = 'danger' %}
+                        {% set titl = 'Facture annulée' %}
+                    {% endif %}
+                    {% if facture_bis.famille == 'avoirs' %}
+                        {% set class = 'primary' %}
+                        {% set titl = 'Avoir lié à l\'anulation de la facture ' ~ facture_bis.num_facture_origine_formatte %}
+
+                    {% endif %}
+                    {% if facture_bis.commentaire_interne is not empty %}
+                        {% set titl = titl ~ '. Commentaire : ' ~ facture_bis.commentaire_interne %}
+                    {% endif %}
+                    <a href="/ajax/genere_facture.php?idFacture={{ facture_bis.id }}" target="_blank" class="tooltipTop noHover" title="{{ titl }} de {{ facture_bis.montant_ttc }} {{ facture_bis.devise }}">
+                        <span class="label label-{{ class }}">
+                            {% if facture_bis.commentaire_interne is not empty %}
+                                <i class="fa fa-info-circle"></i>
+                            {% endif %}
+                            {{ facture_bis.numero_formatte }}
+                        </span> </a>
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+
+
+    </td>
+
+    <td class='comment'>
+
+
+        {% for paiement_facture in facture.paiements_facture %}
+            {% if paiement_facture.paiement.moyen_paiement != 'avoir' %}
+                {% set comment = '' %}
+                {% if paiement_facture.paiement.reference is not empty %}
+                    {% set comment = 'Référence : ' ~ paiement_facture.paiement.reference ~ '. ' %}
+                {% endif %}
+                {% if paiement_facture.paiement.commentaire != '' %}
+                    {% set comment = comment ~ 'Commentaire : ' ~ paiement_facture.paiement.commentaire ~ ' ' %}
+                {% endif %}
+                {% set libelle_moyen = liste_paiements[paiement_facture.paiement.moyen_paiement].libelle %}
+                {% if comment is not empty %}
+                    {% set libelle_moyen = '<i class="fa fa-info-circle"></i> ' ~ libelle_moyen %}
+                {% endif %}
+
+                {% if paiement_facture.paiement.remise is not empty %}
+                    {% if paiement_facture.paiement.moyen_paiement == 'cheque' %}
+                        <span class='label label-success pointer cursor tooltipTop' title="Remis en banque. {{ replaceGuillemets(comment) }}" onclick="genereRemiseCheque('{{ paiement_facture.paiement.remise }}');" style="cursor:pointer">
+                            <i class='glyphicon glyphicons bank'></i>
+                            {{ libelle_moyen }} {{ paiement_facture.montant }} {{ facture.devise }}
+                        </span>
+                    {% endif %}
+                    {% if paiement_facture.paiement.moyen_paiement == 'especes' %}
+                        <span class='label label-success pointer cursor tooltipTop' title="Remis en banque. {{ replaceGuillemets(comment) }}" onclick="genereRemiseEspeces('{{ paiement_facture.paiement.remise }}');" style="cursor:pointer">
+                            <i class='glyphicon glyphicons bank'></i>
+                            {{ libelle_moyen }} {{ paiement_facture.montant }} {{ facture.devise }}
+                        </span>
+                    {% endif %}
+                {% else %}
+                    <span class='label label-success tooltipTop' title="{{ replaceGuillemets(comment) }}">
+                        {% if  paiement_facture.paiement.partner_payment=='cashlee' %}
+                            <i class="fa fa-shopping-cart tooltipTop" title="Paiement par lien Cashlee"></i>&nbsp;{% endif %} {{ libelle_moyen }} {{ paiement_facture.montant }} {{ facture.devise }}</span>
+                {% endif %}
+            {% endif %}
+
+        {% endfor %}
+
+        {% if ligne.partner_payment_pending >0 %}
+            kevinTest
+        {% endif %}
+        {% if facture.etat_paiement in ['attente','partiel'] %}
+            <span class='label label-warning'>En attente de {{ facture.balance }} {{ facture.devise }}</span>
+        {% endif %}
+        {% if facture.etat_paiement == 'troppercu' %}
+            <span class='label label-warning'>Trop perçu de {{ facture.balance }} {{ facture.devise }}</span>
+        {% endif %}
+    </td>
+
+
+    <td class='edit nowrap'>
+        <a class='btn btn-default btn-sm tooltipTop' href='/index.php?p=patient&id={{ patient.id }}&consult={{ consultation.id }}' title='Ouvrir cette consultation' onclick="window.open(this.href,'_blank');return false;">
+            <span class='fa fa-fw fa-folder-open'></span> </a>
+        {% if facture.etat_paiement == 'attente' %}
+            <button type='button' class='btn btn-default btn-sm tooltipTop' onclick="lettreRelance('{{ facture.id }}')" title='Écrire une lettre de relance'>
+                <span class='fa fa-fw fa-envelope'></span>
+            </button>
+        {% endif %}
+        {% if facture.id is not empty and config.facture_masquer_send_email != '1' and config.offline_mode != '1' %}
+            <button type="button" class="btn btn-default btn-sm tooltipTop" data-toggle="dropdown" aria-expanded="false" onclick="sendFacture('{{ facture.id }}')" title="Envoyer la facture par email">
+                <i class="fa fa-fw fa-at"></i>
+            </button>
+        {% endif %}
+    </td>
+
+
+</tr>
+
+
+

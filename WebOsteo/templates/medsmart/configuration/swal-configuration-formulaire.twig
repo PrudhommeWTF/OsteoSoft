@@ -1,0 +1,53 @@
+
+Vous êtes sur le point d’établir une connexion à l’application MedSmart®. Cette fonctionnalité est gratuite et sans engagement. En liant Webosteo avec MedSmart®, vous pourrez télétransmettre les factures aux mutuelles de vos patients.
+<br/>
+<br/>
+
+<b><i class="fa fa-warning"></i> Merci de lire les informations importantes suivantes :</b>
+<br/>
+<br/>- vous allez vous connecter avec le numéro ADELI / RPPS suivant : <span class="rose">{{ rpps|default(adeli) }}</span>. Si celui-ci est incorrect merci de le modifier en <a href="javascripd:void(0)" onclick="modifUser('{{ id }}')">cliquant ici</a>
+<br/>- munissez-vous de votre carte d'identité et de votre téléphone portable. Une vérification d'identité sera réalisée par un prestataire spécialisé.
+
+
+
+
+<div class="cgu_medsmart">
+
+    <div class="alignCenter" style="margin-bottom: 30px;">
+        <img src="/images/partenariats/logo-medsmart-bleu.png" alt="Medsmart" style="max-width: 200px" />
+    </div>
+
+    MedSmart, responsable du traitement, doit traiter vos données pour créer et administrer votre compte dans le cadre de l’usage de notre solution, assurer son bon fonctionnement, réaliser des statistiques et autres actions sur l’utilisation de nos services et traiter vos demandes. Tous les champs doivent obligatoirement être remplis afin de sécuriser votre compte et permettre l’accès à nos services. Le traitement de vos données dans ce cadre est basé sur votre consentement, ou sur les intérêts légitimes de MedSmart ou sur le respect de ses obligations légales. Selon les conditions applicables, vous pouvez modifier et accéder à vos données, demander leur effacement ou leur portabilité, exercer votre droit d’opposition ou de limitation du traitement, et définir des directives quant au sort de vos données, directement grâce aux paramètres de votre compte ou par courriel à <a href="mailto:contact.dataprivacy@medsmart.fr">contact.dataprivacy@medsmart.fr</a>. Vous pouvez retirer à tout moment votre consentement au traitement de vos données.
+    Pour plus d’informations, nous vous invitons à consulter notre politique des données personnelles.
+
+    <div style="margin-top: 40px;">
+        <div class="checkbox checkbox-inline checkbox-primary sm ">
+            <input id="ck_medsmart_pdp" value="1" type="checkbox" name='ck_medsmart_pdp'/>
+            <label for="ck_medsmart_pdp">
+                Je déclare avoir pris connaissance de la <a href="https://medsmart.fr/terms-pdp-fr/" target="_blank" class="rose">Politique de protection des données personnelles</a> et accepte que mes données soient collectées et traitées par MedSmart
+            </label>
+        </div>
+    </div>
+
+    <div style="margin-top: 20px;">
+        <div class="checkbox checkbox-inline checkbox-primary sm ">
+            <input id="ck_medsmart_cgu" value="1" type="checkbox" name='ck_medsmart_cgu'/>
+            <label for="ck_medsmart_cgu">
+                Je déclare avoir pris connaissance et accepter les <a href="https://medsmart.fr/terms-cgu-fr/" target="_blank" class="rose">Conditions générales d'utilisation</a> de MedSmart
+            </label>
+        </div>
+    </div>
+
+</div>
+
+<style type="text/css">
+    .cgu_medsmart {
+        border: 1px solid #ccc;
+        margin-top: 30px;
+        padding: 20px;
+        border-radius: 5px;
+        background: #f7f7f6;
+        font-size: 14px;
+        text-align: left;
+    }
+</style>

@@ -1,0 +1,274 @@
+{% macro replaceGuillemets(valeur='') %}{% set valeur = valeur ~ "" %}{{ valeur|replace({'"':'&quot;'})|raw }}{% endmacro %}
+
+
+{% macro display_number(nombre,devise='',nbDecimal = 2, separateur='.',separateurMille = ' ') %}{{ nombre|number_format(nbDecimal, separateur, separateurMille) }} {% if devise is not empty %}{{ devise }}{% endif %}{% endmacro %}
+{% macro dateToText(valeur='') %}{% if (valeur|length >= 8) %}{{ valeur|slice(6, 2) ~ '/' ~ valeur|slice(4, 2) ~ '/' ~ valeur|slice(0, 4) }}{% endif %}{% endmacro %}
+
+
+{% macro input(id,name, value, label,obligatoire=false,type = "text", label_class='col-xs-12 col-sm-4 col-md-4 col-lg-4' ,div_class='col-xs-12 col-sm-6 col-md-6 col-lg-6  col-xl-6',html_after='',input_class='',html_before='',style_input='',attributes,main_class='') %}
+
+    {% set value = value ~ "" %}
+    <div class="form-group col-xs-12 nopadding {{ main_class }}" id="formgroup-{{ id }}">
+        <label for="{{ id }}" class="{{ label_class }}">
+            {{ label|raw }}
+            {% if obligatoire is same as(true) %}
+                *
+            {% endif %}
+        </label>
+        <div class="{{ div_class }} ">
+            {% if html_before is not empty %} {{ html_before|raw }} {% endif %}
+            <input type="{{ type }}" name="{{ name }}" class="form-control input-sm {{ input_class }} {% if obligatoire is same as(true) %}obligatoire{% endif %}" placeholder="" value="{{ value|replace({'"':'&quot;'}) | raw }}" id="{{ id }}" {% if style_input is not empty %}style="{{ style_input }}"{% endif %} {% for idattribut,valeurattribut in attributes %} {{ idattribut }}="{{ valeurattribut }}"
+            {% endfor %}
+            />
+            {% if html_after is not empty %} {{ html_after|raw }} {% endif %}
+        </div>
+    </div>
+{% endmacro %}
+
+{% macro checkbox(id,name, value, label='',obligatoire=false, label_class='col-xs-12 col-sm-4 col-md-4 col-lg-4' ,div_class='col-xs-12 col-sm-6 col-md-6 col-lg-6  col-xl-6',input_class='',disabled = false) %}
+    {% set value = value ~ "" %}
+    <div class="form-group col-xs-12 nopadding" id="formgroup-{{ id }}">
+        <label for="{{ id }}" class="{{ label_class }}">
+            {{ label|raw }}
+            {% if obligatoire is same as(true) %}
+                *
+            {% endif %}
+        </label>
+        <div class="{{ div_class }} checkbox-primary">
+            <div class=" checkbox checkbox-sm" id="container-{{ id }}">
+                <input type="checkbox" name="{{ name }}" class="{% if obligatoire is same as(true) %}obligatoire{% endif %} {{ input_class }}" value="1" id="{{ id }}" {% if value =='1' %}checked=""{% endif %} {% if disabled %}disabled{% endif %}>
+                <label for="{{ id }}"></label>
+            </div>
+        </div>
+    </div>
+{% endmacro %}
+
+
+{% macro textarea(id,name, value, label='',obligatoire=false, label_class='col-xs-12 col-sm-4 col-md-4 col-lg-4' ,div_class='col-xs-12 col-sm-6 col-md-6 col-lg-6  col-xl-6',html_after='',input_class='',rows='3',attributes) %}
+    <div class="form-group col-xs-12 nopadding" id="formgroup-{{ id }}">
+        <label for="{{ id }}" class="{{ label_class }}">
+            {{ label }}
+            {% if obligatoire is same as(true) %}
+                *
+            {% endif %}
+        </label>
+        <div class="{{ div_class }} ">
+            <textarea resizer="true" name="{{ name }}" class="form-control input-sm {{ input_class }} {% if obligatoire is same as(true) %}obligatoire{% endif %}" placeholder="" id="{{ id }}" rows="{{ rows }}"
+            {% for idattribut,valeurattribut in attributes %}
+                {{ idattribut }}="{{ valeurattribut }}"
+            {% endfor %}
+            >{{ value }}</textarea>
+            {% if html_after is not empty %}
+                {{ html_after|raw }}
+            {% endif %}
+        </div>
+    </div>
+{% endmacro %}
+
+
+{% macro select(id,name, values,value,label,obligatoire=false, label_class='col-xs-12 col-sm-4 col-md-4 col-lg-4' ,div_class='col-xs-12 col-sm-6 col-md-6 col-lg-6  col-xl-6',label_class_supplement='',html_after='',input_class='',html = false, attributes) %}
+
+    {% set value = value ~ "" %}
+
+    {% set label_class = label_class|default('col-xs-12 col-sm-4 col-md-4 col-lg-4') %}
+    {% set div_class = div_class|default('col-xs-12 col-sm-6 col-md-6 col-lg-6 col-xl-6') %}
+
+    <div class="form-group col-xs-12 nopadding" id="formgroup-{{ id }}">
+        <label for="{{ id }}" class="{{ label_class }} {{ label_class_supplement }}">
+            {{ label|raw }}
+            {% if obligatoire is same as(true) %}
+                *
+            {% endif %}
+        </label>
+        <div class="{{ div_class }} ">
+            <select name="{{ name }}" class="{{ input_class }} {% if obligatoire is same as(true) %}obligatoire{% endif %}" data-size="10" value="{{ value|replace({'"':'&quot;'}) | raw }}" data-container="parent" id="{{ id }}"
+            {% for idattribut,valeurattribut in attributes %}
+                {{ idattribut }}="{{ valeurattribut }}"
+            {% endfor %}
+            >
+            {% for key,option in values %}
+                <option value="{{ key| raw }}" {% if key == value or option.selected %}selected{% endif %} data-content="{{ option| raw }}">{{ option| raw }}</option>
+            {% endfor %}
+
+            {% if (value not in values|keys) and (value is not empty) %}
+                <option value="{{ value }}" selected data-content="{{ value| raw }}">{{ value| raw }}</option>
+            {% endif %}
+
+            </select>
+            {% if html_after is not empty %}
+                {{ html_after|raw }}
+            {% endif %}
+        </div>
+    </div>
+{% endmacro %}
+
+
+{% macro select_multiple(id,name, values,values_selected,label,obligatoire=false, label_class='col-xs-12 col-sm-4 col-md-4 col-lg-4' ,div_class='col-xs-12 col-sm-6 col-md-6 col-lg-6  col-xl-6',label_class_supplement='',html_after='',input_class='',html = false, attributes) %}
+
+    {% set label_class = label_class|default('col-xs-12 col-sm-4 col-md-4 col-lg-4') %}
+    {% set div_class = div_class|default('col-xs-12 col-sm-6 col-md-6 col-lg-6 col-xl-6') %}
+
+    <div class="form-group col-xs-12 nopadding" id="formgroup-{{ id }}">
+        <label for="{{ id }}" class="{{ label_class }} {{ label_class_supplement }}">
+            {{ label|raw }}
+            {% if obligatoire is same as(true) %}
+                *
+            {% endif %}
+        </label>
+        <div class="{{ div_class }} ">
+            <select name="{{ name }}" multiple class="{{ input_class }} {% if obligatoire is same as(true) %}obligatoire{% endif %}" data-size="10" value="{{ value|replace({'"':'&quot;'}) | raw }}" data-container="parent" id="{{ id }}"
+            {% for idattribut,valeurattribut in attributes %}
+                {{ idattribut }}="{{ valeurattribut }}"
+            {% endfor %}
+            >
+            {% for key,option in values %}
+                <option value="{{ key| raw }}" {% if key in values_selected %}selected{% endif %} data-content="{{ option| raw }}">{{ option| raw }}</option>
+            {% endfor %}
+
+            {% for valeur_selected in values_selected %}
+                {% if (valeur_selected not in values|keys) and (valeur_selected is not empty) %}
+                    <option value="{{ valeur_selected }}" selected data-content="{{ valeur_selected| raw }}">{{ valeur_selected| raw }}</option>
+                {% endif %}
+            {% endfor %}
+
+
+            </select>
+            {% if html_after is not empty %}
+                {{ html_after|raw }}
+            {% endif %}
+        </div>
+    </div>
+{% endmacro %}
+
+
+{% macro display_personne(personne,brut=false,target=false) %}
+    {% if personne.type_entite=='patient' %}
+        {% if brut is same as(true) %}
+            <a href="/{{ personne.idcabinet }}/patients/{{ personne.id_entite }}" class="noHover" {% if target is same as(true) %}target="_blank"{% endif %}>{{ personne.NomPrenom_brut }}</a>
+        {% else %}
+            <a href="/{{ personne.idcabinet }}/patients/{{ personne.id_entite }}" class="noHover" {% if target is same as(true) %}target="_blank"{% endif %}>{{ personne.NomPrenom|raw }}</a>
+        {% endif %}
+    {% endif %}
+
+    {% if personne.type_entite=='contact' %}
+        {% if brut is same as(true) %}
+            {{ personne.NomPrenom_brut }}
+        {% else %}
+            {{ personne.NomPrenom|raw }}
+        {% endif %}
+    {% endif %}
+
+
+    {% if personne.type_entite=='client' %}
+        {% if brut is same as(true) %}
+            {{ personne.NomPrenom_brut }}
+        {% else %}
+            {{ personne.NomPrenom|raw }}
+        {% endif %}
+    {% endif %}
+
+
+    {% if personne.type_entite=='cabinet' %}
+        {% if brut is same as(true) %}
+            {{ personne.NomPrenom_brut }}
+        {% else %}
+            <i class="fal fa-fw fa-hospital"></i>  {{ personne.NomPrenom|raw }}
+        {% endif %}
+    {% endif %}
+
+
+    {% if personne.type_entite=='' %}
+        {% if brut is same as(true) %}
+            {{ personne.NomPrenom_brut }}
+        {% else %}
+            {{ personne.NomPrenom|raw }}
+        {% endif %}
+    {% endif %}
+{% endmacro %}
+
+{% macro afficheChampPDF(titre='' , valeur = '', soustitre = '', forceAffiche = false) %}
+    {% set valeur = valeur|trimPDF %}
+    {% set pair = isPair() %}
+    {% if forceAffiche is same as (true) or valeur is not empty %}
+        {% set valeur = valeur|replacePDF %}
+        <div class="ligne {% if pair is same as(true) %}pair{% endif %}">
+            <div class="titre {% if pair is same as(true) %}pair{% endif %}">{{ titre }}
+                {% if soustitre is not empty %}
+                    <br/><span class='soustitre'>
+                {{ soustitre }}
+                    </span>
+                {% endif %}
+            </div>
+            <div class="valeur {% if pair is same as(true) %}pair{% endif %}">{{ valeur }}</div>
+            <div style='clear:both'></div>
+        </div>
+    {% endif %}
+{% endmacro %}
+
+{% macro afficheChampTherapeutePDF(titre='' , valeur = '', soustitre = '') %}
+    {% set valeur = valeur|trimPDF %}
+    {% set pair = isPair() %}
+    {% set valeur = valeur|replacePDF %}
+    <div class="ligne {% if pair is same as(true) %}pair{% endif %}">
+        <div class="titre {% if pair is same as(true) %}pair{% endif %}">{{ titre }}</div>
+        <div class="valeur {% if pair is same as(true) %}pair{% endif %}">{{ valeur }}</div>
+        <div style='clear:both'></div>
+        {% if soustitre is not empty %}
+            <br/><span class='soustitre' style='width: 100%;text-align: right;float:right'>{{ soustitre }}</span><br>
+        {% endif %}
+    </div>
+{% endmacro %}
+
+{% macro afficheTitreChampPDF(titre='' , soustitre = '') %}
+    {% set pair = isPair() %}
+    <div class="ligne {% if pair is same as(true) %}pair{% endif %}">
+        <div class="titre {% if pair is same as(true) %}pair{% endif %}">{{ titre }}
+            {% if soustitre is not empty %}
+                <br/><span class='soustitre'>
+                {{ soustitre }}
+                    </span>
+            {% endif %}
+        </div>
+        <div style='clear:both'></div>
+    </div>
+{% endmacro %}
+
+
+{% macro afficheImagePDF(titre='' , soustitre = '',url='',commentaire='') %}
+    {% set pair = isPair() %}
+
+    <div class="ligne page_break {% if pair is same as(true) %}pair{% endif %}" style='border:1px solid #eee;'>
+        <div class="document-container-image"><img src="{{ url }}" style="max-width:100%" class="document-image"/><br/>
+        </div>
+        <div style='clear:both'><br/></div>
+        <div class='document-body'>
+            <div class='document-titre {% if pair is same as(true) %}pair{% endif %}'>Titre :</div>
+            <div class='document-valeur {% if pair is same as(true) %}pair{% endif %}'>{{ titre }}</div>
+            <div style='clear:both'></div>
+            {% if commentaire is not empty %}
+                <div class='document-titre {% if pair is same as(true) %}pair{% endif %}'>Commentaire :</div>
+                <div class='document-valeur {% if pair is same as(true) %}pair{% endif %}'>{{ commentaire }}</div>
+                <div style='clear:both'></div>
+            {% endif %}
+            <div style='clear:both'><br/></div>
+            {% if soustitre is not empty %}
+                <div class="document-soustitre {% if pair is same as(true) %}pair{% endif %}">{{ soustitre }}</div>
+                <div style='clear:both'></div>
+            {% endif %}
+        </div>
+    </div>
+{% endmacro %}
+{% macro afficheDate(valeur,format,timezone,showDay) %}
+    {% set days = {
+        'Monday': 'Lundi',
+        'Tuesday': 'Mardi',
+        'Wednesday': 'Mercredi',
+        'Thursday': 'Jeudi',
+        'Friday': 'Vendredi',
+        'Saturday': 'Samedi',
+        'Sunday': 'Dimanche'
+    } %}{% if showDay %}{{ days[valeur|date('l')] }} {% endif %}{{ valeur|date(format,timezone) }}
+{% endmacro %}
+
+
+
