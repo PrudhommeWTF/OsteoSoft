@@ -2725,9 +2725,17 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
     const lastName = pickArrayValue(lastNamePool);
     const city = pickArrayValue(availableCities) || String(baseDemoPatients[0]?.city ?? 'Nantes');
     const postalCode = cityToPostalCode.get(city) || String(baseDemoPatients[0]?.postalCode ?? '44000');
-    const relatedPeople = randomInt(0, 100) < 12
-      ? `${pickArrayValue(lastNamePool)} ${pickArrayValue([...maleFirstNames, ...femaleFirstNames])}`
-      : '';
+    const relatedRoll = randomInt(0, 99);
+    let relatedPeople = '';
+    if (relatedRoll < 15) {
+      // Partenaire / conjoint
+      const partnerFirstName = isFemale ? pickArrayValue(maleFirstNames) : pickArrayValue(femaleFirstNames);
+      relatedPeople = `${lastName} ${partnerFirstName}`;
+    } else if (relatedRoll < 27) {
+      // Enfant (lien de parentalite)
+      const childFirstName = randomInt(0, 1) === 0 ? pickArrayValue(maleFirstNames) : pickArrayValue(femaleFirstNames);
+      relatedPeople = `${lastName} ${childFirstName}`;
+    }
 
     return {
       lastName,
@@ -2742,12 +2750,29 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
     };
   });
 
-  const consultationTemplates = [
+  // Templates for occasional patients (recent history only)
+  const consultationTemplatesShort = [
+    { minDaysAgo: 120, maxDaysAgo: 360, hour: 10, minute: 30, title: 'Consultation douleur aigue', amountCents: 7200 },
+    { minDaysAgo: 20, maxDaysAgo: 110, hour: 14, minute: 0, title: 'Premier bilan osteopathique', amountCents: 7000 }
+  ];
+  // Templates for regular patients (standard history ~3 years)
+  const consultationTemplatesBase = [
     { minDaysAgo: 1180, maxDaysAgo: 1540, hour: 9, minute: 0, title: 'Bilan osteopathique annuel', amountCents: 7000 },
     { minDaysAgo: 780, maxDaysAgo: 1090, hour: 11, minute: 15, title: 'Suivi fonctionnel', amountCents: 6500 },
     { minDaysAgo: 420, maxDaysAgo: 720, hour: 15, minute: 45, title: 'Controle postural', amountCents: 6800 },
     { minDaysAgo: 120, maxDaysAgo: 360, hour: 10, minute: 30, title: 'Consultation douleur aigue', amountCents: 7200 },
     { minDaysAgo: 20, maxDaysAgo: 110, hour: 14, minute: 0, title: 'Suivi trimestriel', amountCents: 6900 }
+  ];
+  // Additional templates for chronic patients (extended history ~5 years)
+  const consultationTemplatesChronique = [
+    { minDaysAgo: 1600, maxDaysAgo: 1970, hour: 9, minute: 30, title: 'Premier bilan osteopathique', amountCents: 7000 },
+    { minDaysAgo: 1300, maxDaysAgo: 1580, hour: 10, minute: 0, title: 'Suivi post-bilan', amountCents: 6700 },
+    { minDaysAgo: 980, maxDaysAgo: 1280, hour: 11, minute: 30, title: 'Bilan de mi-annee', amountCents: 6800 },
+    { minDaysAgo: 660, maxDaysAgo: 960, hour: 14, minute: 30, title: 'Suivi semestriel', amountCents: 6900 },
+    { minDaysAgo: 340, maxDaysAgo: 640, hour: 9, minute: 0, title: 'Controle postural', amountCents: 6800 },
+    { minDaysAgo: 180, maxDaysAgo: 320, hour: 15, minute: 45, title: 'Consultation preventive', amountCents: 6500 },
+    { minDaysAgo: 60, maxDaysAgo: 170, hour: 11, minute: 0, title: 'Suivi trimestriel', amountCents: 6900 },
+    { minDaysAgo: 8, maxDaysAgo: 55, hour: 14, minute: 0, title: 'Consultation de suivi recente', amountCents: 7000 }
   ];
 
   const consultationProfiles = ['Adulte', 'Enfant', 'Senior', 'Perinatalite', 'Sportif'];
@@ -2763,7 +2788,7 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
     'Suivi sportif preventif',
     'Point postural'
   ];
-  const paidMethods = ['cb', 'especes', 'virement', 'cheque'];
+  const paidMethods = ['cb', 'especes', 'virement', 'cheque', 'cb', 'cb', 'especes'];
   const unpaidMethods = ['cheque', 'virement'];
 
   const seededUnit = (seed) => {
@@ -2806,6 +2831,17 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
      (patient_id, invoice_number, amount_cents, status, issued_at, due_at, notes_cipher, office_id, consultation_id, payment_method)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
+  const insertInvoicePaymentForDemo = db.prepare(
+    `INSERT INTO invoice_payments (invoice_id, paid_at, amount_cents, currency, payment_method, bank_name_cipher, cheque_number, reference, notes, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const insertAccountingDepositForDemo = db.prepare(
+    `INSERT INTO accounting_deposits (occurred_at, office_id, owner_user_id, type, deposit_code, bank_name_cipher, account_label, title, amount_cents, currency, notes, retrocession_percent, retrocession_recipient, is_deleted, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const insertDepositItemForDemo = db.prepare(
+    `INSERT INTO accounting_deposit_items (deposit_id, source_type, source_id, created_at) VALUES (?, ?, ?, ?)`
+  );
   const insertDirectoryContact = db.prepare(
     `INSERT INTO directory_contacts (
        office_id, kind, first_name, last_name, organization, role,
@@ -2826,6 +2862,11 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
   let appointmentCount = 0;
   let invoiceCount = 0;
   let directoryContactCount = 0;
+  let depositCount = 0;
+
+  // Pending cheque/especes payments to batch into weekly bank remittances
+  const pendingCheques = []; // { invoiceId, amountCents, issuedAt, ownerUserId }
+  const pendingEspeces = []; // { invoiceId, amountCents, issuedAt, ownerUserId }
 
   const tx = db.transaction(() => {
     for (const [patientIndex, patient] of demoPatients.entries()) {
@@ -2884,6 +2925,20 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
       const patientId = Number(patientResult.lastInsertRowid);
       patientCount += 1;
 
+      // Determine consultation history depth per patient profile
+      const patientProfileRoll = seededUnit(patientSeedBase + 500);
+      let consultationTemplates;
+      if (patientProfileRoll < 0.20) {
+        // Nouveau patient (occasional): 2 consultations recent history
+        consultationTemplates = consultationTemplatesShort;
+      } else if (patientProfileRoll < 0.55) {
+        // Patient regulier: base 5 consultations
+        consultationTemplates = consultationTemplatesBase;
+      } else {
+        // Patient chronique: extended 8 consultations over ~5 years
+        consultationTemplates = consultationTemplatesChronique;
+      }
+
       for (const [index, template] of consultationTemplates.entries()) {
         const jitterSeed = patientSeedBase + ((index + 1) * 71);
         const hourJitter = ((jitterSeed * 13) % 3) - 1;
@@ -2916,11 +2971,11 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
         let invoiceStatus = 'payee';
         if (!isFreeConsultation) {
           const statusRoll = seededUnit(jitterSeed + 41);
-          if (statusRoll < 0.52) {
+          if (statusRoll < 0.78) {
             invoiceStatus = 'payee';
-          } else if (statusRoll < 0.76) {
+          } else if (statusRoll < 0.87) {
             invoiceStatus = 'impayee';
-          } else if (statusRoll < 0.9) {
+          } else if (statusRoll < 0.93) {
             invoiceStatus = 'partiellement_payee';
           } else {
             invoiceStatus = 'annulee';
@@ -2971,7 +3026,7 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
             ? (pickFrom(unpaidMethods, jitterSeed + 61) || 'cheque')
             : (pickFrom(paidMethods, jitterSeed + 67) || 'cb');
 
-          insertInvoice.run(
+          const invoiceResult = insertInvoice.run(
             patientId,
             invoiceNumber,
             invoiceAmountCents,
@@ -2988,6 +3043,35 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
             paymentMethod
           );
           invoiceCount += 1;
+          const invoiceId = Number(invoiceResult.lastInsertRowid);
+
+          // Add invoice_payments record for paid/partially paid invoices
+          if (invoiceAmountCents > 0 && (invoiceStatus === 'payee' || invoiceStatus === 'partiellement_payee')) {
+            const paymentAmountCents = invoiceStatus === 'partiellement_payee'
+              ? Math.round(invoiceAmountCents * (0.4 + seededUnit(jitterSeed + 99) * 0.4))
+              : invoiceAmountCents;
+            const chequeNumber = paymentMethod === 'cheque'
+              ? `CHQ${String(patientIndex + 1).padStart(5, '0')}${String(index + 1)}`
+              : '';
+            insertInvoicePaymentForDemo.run(
+              invoiceId,
+              issuedAt,
+              paymentAmountCents,
+              'EUR',
+              paymentMethod,
+              '',
+              chequeNumber,
+              '',
+              '',
+              null
+            );
+            // Collect cheque/especes for bank remittances
+            if (paymentMethod === 'cheque') {
+              pendingCheques.push({ invoiceId, amountCents: paymentAmountCents, issuedAt });
+            } else if (paymentMethod === 'especes') {
+              pendingEspeces.push({ invoiceId, amountCents: paymentAmountCents, issuedAt });
+            }
+          }
         }
       }
 
@@ -3017,6 +3101,70 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
         appointmentCount += 1;
       }
     }
+
+    // Create weekly bank remittances (remises de banques) from collected cheque/especes payments
+    const groupByWeek = (payments) => {
+      const groups = new Map();
+      for (const p of payments) {
+        const d = new Date(p.issuedAt);
+        const dayOfWeek = d.getDay(); // 0=Sun, 1=Mon...
+        const daysToMonday = (dayOfWeek + 6) % 7;
+        const monday = new Date(d.getTime() - (daysToMonday * 24 * 60 * 60 * 1000));
+        const key = monday.toISOString().slice(0, 10);
+        if (!groups.has(key)) {
+          groups.set(key, []);
+        }
+        groups.get(key).push(p);
+      }
+      return groups;
+    };
+
+    const trigram = practitionerName
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Z0-9]/g, '')
+      .slice(0, 3)
+      .padEnd(3, 'X');
+
+    const createDeposits = (payments, type) => {
+      const groups = groupByWeek(payments);
+      for (const [weekStart, items] of groups.entries()) {
+        const totalAmountCents = items.reduce((sum, p) => sum + p.amountCents, 0);
+        if (totalAmountCents <= 0) {
+          continue;
+        }
+        const [yyyy, mm, dd] = weekStart.split('-');
+        const depositCode = `${trigram}-${yyyy}${mm}${dd}`;
+        const title = type === 'cheque' ? 'Remise de cheques' : 'Remise d\'especes';
+        const occurredAt = `${weekStart}T10:00:00.000Z`;
+        const depositResult = insertAccountingDepositForDemo.run(
+          occurredAt,
+          normalizedOfficeId,
+          null,
+          type,
+          depositCode,
+          '',
+          '',
+          title,
+          totalAmountCents,
+          'EUR',
+          '',
+          0,
+          '',
+          0,
+          null
+        );
+        const depositId = Number(depositResult.lastInsertRowid);
+        depositCount += 1;
+        for (const item of items) {
+          insertDepositItemForDemo.run(depositId, 'invoice', item.invoiceId, occurredAt);
+        }
+      }
+    };
+
+    createDeposits(pendingCheques, 'cheque');
+    createDeposits(pendingEspeces, 'especes');
 
     for (const contact of directoryContacts) {
       insertDirectoryContact.run(
@@ -3049,6 +3197,7 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
     consultations: consultationCount,
     appointments: appointmentCount,
     invoices: invoiceCount,
+    deposits: depositCount,
     directoryContacts: directoryContactCount
   };
 }
