@@ -2342,13 +2342,29 @@ export class SettingsPage implements OnDestroy {
     return Boolean(envelope.manifest && typeof envelope.manifest === 'object' && envelope.data && typeof envelope.data === 'object');
   }
 
+  private normalizeForStableHash(value: unknown): unknown {
+    if (Array.isArray(value)) {
+      return value.map((item) => this.normalizeForStableHash(item));
+    }
+
+    if (value !== null && typeof value === 'object') {
+      const sortedEntries = Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, nestedValue]) => [key, this.normalizeForStableHash(nestedValue)]);
+      return Object.fromEntries(sortedEntries);
+    }
+
+    return value;
+  }
+
   private async verifyBackupChecksum(payload: { manifest: Record<string, unknown>; data: unknown }): Promise<void> {
     const expectedChecksum = String(payload.manifest['dataSha256'] ?? '').trim().toLowerCase();
     if (!expectedChecksum) {
       throw new Error('Missing checksum');
     }
 
-    const actualChecksum = await this.computeSha256Hex(JSON.stringify(payload.data));
+    const stableData = this.normalizeForStableHash(payload.data);
+    const actualChecksum = await this.computeSha256Hex(JSON.stringify(stableData));
     if (actualChecksum !== expectedChecksum) {
       throw new Error('Checksum mismatch');
     }
