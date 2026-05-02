@@ -7342,6 +7342,7 @@ app.use(
 const LARGE_BODY_ROUTE_PATTERNS = [
   /^\/api\/data-management\/restore$/,
   /^\/api\/data-management\/import$/,
+  /^\/api\/data-management\/webosteo-import$/,
   /^\/api\/patients\/\d{1,10}\/documents$/,
   /^\/api\/patients\/\d{1,10}\/consultations$/,
   /^\/api\/patients\/\d{1,10}\/consultation-drafts\/new-consultation$/,
@@ -9726,6 +9727,633 @@ app.post('/api/data-management/restore', authMiddleware, requirePermission('mana
   } catch (error) {
     const message = error instanceof Error ? error.message : 'La restauration de la sauvegarde a echoue';
     return res.status(400).json({ message });
+  }
+});
+
+app.post('/api/data-management/webosteo-import', authMiddleware, requirePermission('manage-data-import'), async (req, res) => {
+  const parsedBody = z.object({
+    officeId: z.number().int().positive(),
+    contentBase64: z.string().min(1),
+    fileName: z.string().min(1).max(260)
+  }).safeParse(req.body);
+
+  if (!parsedBody.success) {
+    return res.status(400).json({ message: 'Payload d\'import WebOsteo invalide' });
+  }
+
+  const { officeId, contentBase64, fileName } = parsedBody.data;
+
+  const allowedOfficeIds = new Set(getDataManagementScopedOfficeIds(req.userAccess));
+  if (!allowedOfficeIds.has(officeId)) {
+    return res.status(403).json({ message: 'Acces refuse au cabinet cible' });
+  }
+
+  const officeExists = db.prepare('SELECT id FROM offices WHERE id = ?').get(officeId);
+  if (!officeExists) {
+    return res.status(404).json({ message: 'Cabinet cible introuvable' });
+  }
+
+  const normalizedBase64 = contentBase64.includes(',')
+    ? contentBase64.slice(contentBase64.indexOf(',') + 1)
+    : contentBase64;
+  const fileBuffer = Buffer.from(normalizedBase64, 'base64');
+  if (fileBuffer.length === 0) {
+    return res.status(400).json({ message: 'Fichier importe vide ou invalide' });
+  }
+
+  const lowerFileName = fileName.toLowerCase();
+  if (!lowerFileName.endsWith('.bck') && !lowerFileName.endsWith('.data') && !lowerFileName.endsWith('.sqlite') && !lowerFileName.endsWith('.db')) {
+    return res.status(400).json({ message: 'Format invalide. Utilisez un fichier .bck (archive WebOsteo) ou .data/.sqlite' });
+  }
+
+  const tempDbPath = path.join(dataDir, `webosteo-import-${Date.now()}-${Math.random().toString(36).slice(2)}.sqlite`);
+  let weoDb = null;
+
+  try {
+    // Extract SQLite from ZIP if .bck, otherwise use directly
+    let sqliteBuffer = fileBuffer;
+    if (lowerFileName.endsWith('.bck')) {
+      const zip = await JSZip.loadAsync(fileBuffer);
+      const sqliteEntry = zip.file('webosteo.data') || zip.file(/\.data$/i)[0] || zip.file(/\.sqlite$/i)[0] || zip.file(/\.db$/i)[0];
+      if (!sqliteEntry) {
+        return res.status(400).json({ message: 'Archive .bck invalide: fichier de base de donnees WebOsteo introuvable dans l\'archive' });
+      }
+      sqliteBuffer = await sqliteEntry.async('nodebuffer');
+    }
+
+    fs.writeFileSync(tempDbPath, sqliteBuffer);
+    weoDb = new Database(tempDbPath, { readonly: true });
+
+    // Helper: safely get a string field
+    const str = (val) => String(val ?? '').trim();
+    const num = (val) => { const n = Number(val); return Number.isFinite(n) ? n : 0; };
+
+    // Parse WebOsteo date YYYYMMDD -> YYYY-MM-DD
+    function parseWeoDate(raw) {
+      const s = str(raw);
+      if (s.length === 8 && /^\d{8}$/.test(s)) {
+        return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+      }
+      return null;
+    }
+
+    // Parse WebOsteo datetime YYYYMMDDHHmm -> ISO
+    function parseWeoDateTime(raw) {
+      const s = str(raw);
+      if (s.length >= 12 && /^\d{12}/.test(s)) {
+        return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T${s.slice(8, 10)}:${s.slice(10, 12)}:00.000Z`;
+      }
+      if (s.length === 8 && /^\d{8}$/.test(s)) {
+        return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T08:00:00.000Z`;
+      }
+      return null;
+    }
+
+    // Map WebOsteo marital status to OsteoSoft
+    function mapMaritalStatus(raw) {
+      const v = str(raw).toLowerCase();
+      if (v === 'c' || v === 'cel' || v === 'celibataire') return 'Celibataire';
+      if (v === 'm' || v === 'marie' || v === 'married') return 'Marie(e)';
+      if (v === 'p' || v === 'pacs' || v === 'pacse') return 'Pacse(e)';
+      if (v === 'd' || v === 'div' || v === 'divorce') return 'Divorce(e)';
+      if (v === 'v' || v === 'veuf' || v === 'veuve') return 'Veuf(ve)';
+      return 'Non renseigne';
+    }
+
+    // Map sex
+    function mapSex(raw) {
+      const v = str(raw).toLowerCase();
+      if (v === 'f') return 'F';
+      if (v === 'm') return 'M';
+      return 'Non renseigne';
+    }
+
+    // Build name recovery map from agenda.libelle for each patient
+    function buildNameRecoveryMap() {
+      const map = new Map(); // patientId -> { nom, prenom }
+      try {
+        const agendaRows = weoDb.prepare('SELECT patient, libelle FROM agenda WHERE patient IS NOT NULL AND libelle IS NOT NULL AND libelle != \'\'').all();
+        for (const row of agendaRows) {
+          const pid = str(row.patient);
+          if (!pid || map.has(pid)) continue;
+          const libelle = str(row.libelle);
+          // Pattern: "NOM [NOM2...] Prenom [- comment]" where NOM is all-uppercase
+          // Strip comment after " - "
+          const mainPart = libelle.split(' - ')[0].split('PATIENT SUPPRIME')[0].trim();
+          const tokens = mainPart.split(/\s+/).filter(Boolean);
+          if (tokens.length < 2) continue;
+          // Collect leading uppercase tokens as nom
+          const nomTokens = [];
+          let i = 0;
+          while (i < tokens.length && /^[A-ZÀÂÄÉÈÊËÎÏÔÖÙÛÜÆŒÇ\-']+$/.test(tokens[i])) {
+            nomTokens.push(tokens[i]);
+            i++;
+          }
+          if (nomTokens.length === 0 || i >= tokens.length) continue;
+          const nom = nomTokens.join(' ');
+          const prenom = tokens.slice(i).join(' ');
+          if (nom && prenom) {
+            map.set(pid, { nom, prenom });
+          }
+        }
+      } catch { /* ignore */ }
+      return map;
+    }
+
+    const nameRecovery = buildNameRecoveryMap();
+
+    const errors = [];
+    const tempPasswords = {};
+    const userLoginToUsername = new Map(); // WebOsteo login -> OsteoSoft username
+    const weoPatientIdToOsteoId = new Map(); // WebOsteo patient.id -> OsteoSoft patients.id
+    const weoConsultationIdToOsteoId = new Map(); // WebOsteo consultation.id -> OsteoSoft consultations.id
+
+    let importedUsers = 0;
+    let importedPatients = 0;
+    let importedConsultations = 0;
+    let importedAppointments = 0;
+    let importedInvoices = 0;
+    let importedContacts = 0;
+
+    // ---- Utilisateurs ----
+    let weoUsers = [];
+    try { weoUsers = weoDb.prepare('SELECT * FROM utilisateur').all(); } catch { /* table may not exist */ }
+
+    for (const wu of weoUsers) {
+      try {
+        const username = str(wu.login);
+        if (!username) continue;
+        const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+        if (existing) {
+          userLoginToUsername.set(username, username);
+          continue;
+        }
+
+        const tempPassword = crypto.randomBytes(8).toString('hex');
+        const hash = await argon2.hash(tempPassword, {
+          type: argon2.argon2id,
+          memoryCost: 2 ** 16,
+          timeCost: 3,
+          parallelism: 1
+        });
+
+        const role = str(wu.admin) === '1' ? 'admin' : 'user';
+        const isActive = str(wu.enabled).toLowerCase() !== 'non' ? 1 : 0;
+        const retro = num(wu.retro_defaut);
+
+        const inserted = db.prepare(
+          `INSERT INTO users (username, password_hash, role, is_active, office_id, last_name, first_name, email, mobile_phone, country, siret, adeli_code, rpps_code, ape_naf_code, color_hex, retrocession_percent, must_change_password)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`
+        ).run(
+          username,
+          hash,
+          role,
+          isActive,
+          officeId,
+          str(wu.nom).slice(0, 100),
+          str(wu.prenom).slice(0, 100),
+          str(wu.email).slice(0, 150),
+          str(wu.telephone1).slice(0, 50),
+          str(wu.pays) || 'France',
+          str(wu.siret).slice(0, 30),
+          str(wu.adeli).slice(0, 40),
+          str(wu.rpps).slice(0, 40),
+          str(wu.ape).slice(0, 40),
+          str(wu.couleur) || '#4d92d1',
+          retro
+        );
+
+        tempPasswords[username] = tempPassword;
+        userLoginToUsername.set(username, username);
+        importedUsers += 1;
+      } catch (err) {
+        errors.push({ entity: 'utilisateur', message: `Login ${str(wu.login)}: ${err instanceof Error ? err.message : 'Erreur'}` });
+      }
+    }
+
+    // ---- Patients ----
+    let weoPatients = [];
+    try { weoPatients = weoDb.prepare('SELECT * FROM patient').all(); } catch { /* ignore */ }
+
+    const retentionDate = new Date();
+    retentionDate.setFullYear(retentionDate.getFullYear() + 10);
+    const retentionUntil = retentionDate.toISOString().slice(0, 10);
+    const now = new Date().toISOString();
+
+    for (const wp of weoPatients) {
+      try {
+        const pid = str(wp.id);
+        if (!pid) continue;
+
+        // Recover name from agenda if possible
+        const recovered = nameRecovery.get(pid);
+        const lastName = recovered ? recovered.nom : '[Non dechiffre]';
+        const firstName = recovered ? recovered.prenom : str(wp.prenom) || '[Non dechiffre]';
+        const fullName = `${lastName} ${firstName}`.trim();
+        const birthDate = parseWeoDate(wp.date_naissance);
+
+        // Idempotency: skip if same name+birthdate already exists in this office
+        const existingRows = db.prepare(
+          'SELECT id, cipher_full_name FROM patients WHERE birth_date = ? AND office_id = ? AND is_deleted = 0'
+        ).all(birthDate, officeId);
+        let duplicate = false;
+        for (const er of existingRows) {
+          try {
+            const existingName = decryptSensitiveField(er.cipher_full_name);
+            if (existingName.trim().toLowerCase() === fullName.toLowerCase()) {
+              weoPatientIdToOsteoId.set(pid, Number(er.id));
+              duplicate = true;
+              break;
+            }
+          } catch { /* ignore decrypt error */ }
+        }
+        if (duplicate) continue;
+
+        const sex = mapSex(wp.sexe);
+        const maritalStatus = mapMaritalStatus(wp.statut_marital);
+        const childrenCount = Math.max(0, num(wp.nombre_enfant));
+
+        const medicalRecord = {
+          generalRemarks: [str(wp.remarques_antecedents), str(wp.remarques)].filter(Boolean).join('\n').trim(),
+          medicalHistory: '',
+          consultationNote: '',
+          relatedPeople: '',
+          mobilePhone: '',
+          landlinePhone: '',
+          email: '',
+          address1: '',
+          address2: '',
+          postalCode: '',
+          city: '',
+          country: str(wp.pays) || 'France',
+          maritalStatus,
+          childrenCount,
+          occupationOrSchool: str(wp.profession),
+          hobbies: str(wp.activites),
+          primaryDoctor: str(wp.medecin),
+          socialSecurityNumber: str(wp.secu),
+          referredBy: str(wp.envoye_par),
+          manualPreference: 'Non renseigne',
+          isDeceased: Number(wp.decede) === 1
+        };
+
+        const inserted = db.prepare(
+          `INSERT INTO patients
+           (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count, last_visit, consent_signed, consent_signed_at, consent_form_version, retention_until, office_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+          encryptSensitiveField(fullName),
+          encryptSensitiveField('Non renseigne'),
+          encryptSensitiveField(JSON.stringify(medicalRecord)),
+          sex,
+          birthDate,
+          maritalStatus,
+          childrenCount,
+          null,
+          1,
+          now,
+          CURRENT_CONSENT_FORM_VERSION,
+          retentionUntil,
+          officeId
+        );
+
+        const newOsteoId = Number(inserted.lastInsertRowid);
+        weoPatientIdToOsteoId.set(pid, newOsteoId);
+        importedPatients += 1;
+      } catch (err) {
+        errors.push({ entity: 'patient', message: `ID ${str(wp.id)}: ${err instanceof Error ? err.message : 'Erreur'}` });
+      }
+    }
+
+    // ---- Antecedents ----
+    let weoAntecedents = [];
+    let weoAntecedentPatients = [];
+    try {
+      weoAntecedents = weoDb.prepare('SELECT * FROM antecedent').all();
+      weoAntecedentPatients = weoDb.prepare('SELECT * FROM antecedent_patient').all();
+    } catch { /* ignore */ }
+
+    const antecedentById = new Map();
+    for (const a of weoAntecedents) {
+      antecedentById.set(str(a.id), a);
+    }
+
+    for (const ap of weoAntecedentPatients) {
+      try {
+        const patientId = weoPatientIdToOsteoId.get(str(ap.patient));
+        if (!patientId) continue;
+        const antecedent = antecedentById.get(str(ap.antecedent));
+        if (!antecedent) continue;
+
+        const category = str(antecedent.nom) || str(antecedent.type) || 'Antecedent';
+        const description = str(ap.comment) || str(antecedent.nom) || '';
+        const important = Number(ap.important) === 1 ? 1 : 0;
+        const sortKey = Number(antecedent.ordre) || 99;
+
+        storeAntecedentTypes([category]);
+
+        db.prepare(
+          `INSERT INTO patient_antecedents (patient_id, date_precision, date_display, category, description, important, sort_key)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+          patientId,
+          null,
+          encryptSensitiveField(''),
+          category,
+          encryptSensitiveField(description),
+          important,
+          sortKey
+        );
+      } catch (err) {
+        errors.push({ entity: 'antecedent', message: err instanceof Error ? err.message : 'Erreur' });
+      }
+    }
+
+    // ---- Consultations ----
+    let weoConsultations = [];
+    try { weoConsultations = weoDb.prepare('SELECT * FROM consultation').all(); } catch { /* ignore */ }
+
+    for (const wc of weoConsultations) {
+      try {
+        const patientId = weoPatientIdToOsteoId.get(str(wc.patient));
+        if (!patientId) continue;
+
+        const startedAt = parseWeoDateTime(wc.date_consult);
+        if (!startedAt) continue;
+
+        const practitioner = str(wc.createdby);
+        const taille = str(wc.taille);
+        const poids = str(wc.poids);
+        const heightCm = taille ? (parseFloat(taille) || null) : null;
+        const weightKg = poids ? (parseFloat(poids) || null) : null;
+        const evaBefore = Math.min(10, Math.max(0, num(wc.douleur)));
+        const important = str(wc.important) === '1' ? 1 : 0;
+        const profile = str(wc.nourrisson).toLowerCase() === 'oui' ? 'Nourrisson' : 'Adulte';
+        const title = str(wc.titre).slice(0, 200);
+
+        const inserted = db.prepare(
+          `INSERT INTO consultations (patient_id, started_at, office_id, practitioner, title, important, height_cm, weight_kg, eva_before, eva_after, profile)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+          patientId,
+          startedAt,
+          officeId,
+          practitioner.slice(0, 100),
+          title,
+          important,
+          heightCm,
+          weightKg,
+          evaBefore,
+          0,
+          profile
+        );
+
+        const consultationId = Number(inserted.lastInsertRowid);
+        weoConsultationIdToOsteoId.set(str(wc.id), consultationId);
+
+        replaceConsultationSections(consultationId, {
+          motifMainHtml: '',
+          testsHtml: str(wc.tests),
+          schemaHtml: str(wc.schemadysfonctionnel),
+          treatmentsHtml: str(wc.traitement),
+          remarksHtml: str(wc.remarques)
+        });
+
+        importedConsultations += 1;
+      } catch (err) {
+        errors.push({ entity: 'consultation', message: `ID ${str(wc.id)}: ${err instanceof Error ? err.message : 'Erreur'}` });
+      }
+    }
+
+    // ---- Agenda ----
+    let weoAgenda = [];
+    try { weoAgenda = weoDb.prepare('SELECT * FROM agenda').all(); } catch { /* ignore */ }
+
+    for (const wa of weoAgenda) {
+      try {
+        const patientId = weoPatientIdToOsteoId.get(str(wa.patient));
+        if (!patientId) continue;
+
+        const startsAt = parseWeoDateTime(wa.start_rdv);
+        if (!startsAt) continue;
+
+        const libelle = str(wa.libelle);
+        const statut = str(wa.statut).toLowerCase();
+        let status = 'Confirme';
+        if (statut === 'absent' || str(wa.absent).toLowerCase() === 'oui') {
+          status = 'Absent';
+        }
+
+        db.prepare(
+          `INSERT INTO appointments (patient_id, starts_at, reason_cipher, status, office_id, local_calendar_id, consultation_id, practitioner, is_private)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+          patientId,
+          startsAt,
+          encryptSensitiveField(libelle),
+          status,
+          officeId,
+          null,
+          null,
+          str(wa.createdby).slice(0, 100),
+          0
+        );
+
+        importedAppointments += 1;
+      } catch (err) {
+        errors.push({ entity: 'agenda', message: `ID ${str(wa.id)}: ${err instanceof Error ? err.message : 'Erreur'}` });
+      }
+    }
+
+    // ---- Factures ----
+    let weoFactures = [];
+    let weoPersonnes = [];
+    let weoFactureLines = [];
+    let weoPaiements = [];
+    let weoPaiementFactures = [];
+    try {
+      weoFactures = weoDb.prepare('SELECT * FROM facture').all();
+      weoPersonnes = weoDb.prepare('SELECT * FROM personne').all();
+      weoFactureLines = weoDb.prepare('SELECT * FROM facture_ligne').all();
+      weoPaiements = weoDb.prepare('SELECT * FROM paiement').all();
+      weoPaiementFactures = weoDb.prepare('SELECT * FROM paiement_facture').all();
+    } catch { /* ignore */ }
+
+    const personneById = new Map();
+    for (const p of weoPersonnes) {
+      personneById.set(str(p.id), p);
+    }
+
+    const factureLinesByFacture = new Map();
+    for (const fl of weoFactureLines) {
+      const key = str(fl.id_facture);
+      if (!factureLinesByFacture.has(key)) factureLinesByFacture.set(key, []);
+      factureLinesByFacture.get(key).push(fl);
+    }
+
+    const paiementById = new Map();
+    for (const p of weoPaiements) {
+      paiementById.set(str(p.id), p);
+    }
+
+    const paiementsByFacture = new Map();
+    for (const pf of weoPaiementFactures) {
+      const key = str(pf.id_facture);
+      if (!paiementsByFacture.has(key)) paiementsByFacture.set(key, []);
+      paiementsByFacture.get(key).push(pf);
+    }
+
+    for (const wf of weoFactures) {
+      try {
+        // Find patient via personne
+        const personne = personneById.get(str(wf.personne_client));
+        let patientId = null;
+        if (personne && str(personne.type_entite) === 'patient') {
+          patientId = weoPatientIdToOsteoId.get(str(personne.id_entite)) ?? null;
+        }
+        if (!patientId) continue;
+
+        const issuedAt = parseWeoDate(wf.date_facture);
+        if (!issuedAt) continue;
+
+        const amountCents = Math.round(num(wf.montant_ttc) * 100);
+        const etatPaiement = str(wf.etat_paiement).toLowerCase();
+        const etat = str(wf.etat).toLowerCase();
+        let invoiceStatus = 'En attente';
+        if (etatPaiement === 'paye') invoiceStatus = 'Payee';
+        else if (etat === 'annulee') invoiceStatus = 'Annulee';
+
+        const consultationId = weoConsultationIdToOsteoId.get(str(wf.id_consultation)) ?? null;
+
+        const inserted = db.prepare(
+          `INSERT INTO invoices (patient_id, invoice_number, amount_cents, status, issued_at, due_at, notes_cipher, office_id, consultation_id, payment_method)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+          patientId,
+          str(wf.numero_formatte) || str(wf.numero) || '',
+          amountCents,
+          invoiceStatus,
+          issuedAt,
+          issuedAt,
+          encryptSensitiveField(str(wf.commentaire)),
+          officeId,
+          consultationId,
+          ''
+        );
+
+        const invoiceId = Number(inserted.lastInsertRowid);
+
+        // Invoice lines
+        const lines = factureLinesByFacture.get(str(wf.id)) ?? [];
+        for (let idx = 0; idx < lines.length; idx++) {
+          const fl = lines[idx];
+          try {
+            db.prepare(
+              `INSERT INTO invoice_line_items (invoice_id, label, quantity, unit_amount_ht_cents, vat_rate, display_order)
+               VALUES (?, ?, ?, ?, ?, ?)`
+            ).run(
+              invoiceId,
+              str(fl.libelle).slice(0, 200),
+              num(fl.quantite) || 1,
+              Math.round(num(fl.montant_ht_unitaire) * 100),
+              num(fl.taux_tva),
+              num(fl.ordre) || idx
+            );
+          } catch { /* ignore line errors */ }
+        }
+
+        // Payments
+        const paiementFactures = paiementsByFacture.get(str(wf.id)) ?? [];
+        for (const pf of paiementFactures) {
+          const paiement = paiementById.get(str(pf.id_paiement));
+          if (!paiement) continue;
+          try {
+            const paidAt = parseWeoDate(paiement.date_paiement) ?? issuedAt;
+            db.prepare(
+              `INSERT INTO invoice_payments (invoice_id, paid_at, amount_cents, currency, payment_method, bank_name, cheque_number, reference, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            ).run(
+              invoiceId,
+              paidAt,
+              Math.round(num(paiement.montant) * 100),
+              str(wf.devise) || 'EUR',
+              str(paiement.moyen_paiement),
+              str(paiement.paiement_banque),
+              str(paiement.reference),
+              str(paiement.libelle),
+              str(paiement.commentaire)
+            );
+          } catch { /* ignore payment errors */ }
+        }
+
+        importedInvoices += 1;
+      } catch (err) {
+        errors.push({ entity: 'facture', message: `ID ${str(wf.id)}: ${err instanceof Error ? err.message : 'Erreur'}` });
+      }
+    }
+
+    // ---- Contacts ----
+    let weoContacts = [];
+    try { weoContacts = weoDb.prepare('SELECT * FROM contact').all(); } catch { /* ignore */ }
+
+    for (const wc of weoContacts) {
+      try {
+        db.prepare(
+          `INSERT INTO directory_contacts (office_id, kind, first_name, last_name, email, mobile_phone, landline_phone, address_line1, address_line2, postal_code, city, country, notes, role, organization, created_by, updated_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+          officeId,
+          'person',
+          str(wc.prenom).slice(0, 120),
+          str(wc.nom).slice(0, 120),
+          str(wc.email).slice(0, 160),
+          str(wc.telephone1).slice(0, 50),
+          str(wc.telephone2).slice(0, 50),
+          str(wc.adresse1).slice(0, 200),
+          str(wc.adresse2).slice(0, 200),
+          str(wc.code_postal).slice(0, 20),
+          str(wc.ville).slice(0, 120),
+          'France',
+          str(wc.profession).slice(0, 4000),
+          str(wc.profession).slice(0, 120),
+          '',
+          req.user.sub,
+          req.user.sub
+        );
+        importedContacts += 1;
+      } catch (err) {
+        errors.push({ entity: 'contact', message: `ID ${str(wc.id)}: ${err instanceof Error ? err.message : 'Erreur'}` });
+      }
+    }
+
+    writeAuditLog(req.user.sub, 'IMPORT', 'data-management-webosteo', String(officeId), {
+      importedUsers,
+      importedPatients,
+      importedConsultations,
+      importedAppointments,
+      importedInvoices,
+      importedContacts,
+      errorCount: errors.length
+    });
+
+    return res.json({
+      importedUsers,
+      importedPatients,
+      importedConsultations,
+      importedAppointments,
+      importedInvoices,
+      importedContacts,
+      errors: errors.slice(0, 100),
+      tempPasswords
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Echec de l\'import WebOsteo';
+    return res.status(400).json({ message });
+  } finally {
+    if (weoDb) {
+      try { weoDb.close(); } catch { /* ignore */ }
+    }
+    try { if (fs.existsSync(tempDbPath)) fs.unlinkSync(tempDbPath); } catch { /* ignore */ }
   }
 });
 

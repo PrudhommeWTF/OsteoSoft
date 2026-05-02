@@ -54,6 +54,8 @@ import {
   DataCleanupKind,
   DataImportPayload,
   DataImportResult,
+  WebosteoImportPayload,
+  WebosteoImportResult,
   GeneralSettingsPayload,
   InvoiceSummaryTile,
   LocationPair,
@@ -878,6 +880,12 @@ export class ApiService {
   async importDataFile(payload: DataImportPayload): Promise<DataImportResult> {
     return firstValueFrom(
       this.http.post<DataImportResult>(`${this.baseUrl}/data-management/import`, payload)
+    );
+  }
+
+  async importWebosteoData(payload: WebosteoImportPayload): Promise<WebosteoImportResult> {
+    return firstValueFrom(
+      this.http.post<WebosteoImportResult>(`${this.baseUrl}/data-management/webosteo-import`, payload)
     );
   }
 

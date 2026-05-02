@@ -375,6 +375,95 @@
               </article>
             </div>
 
+            <div class="col-12">
+              <article class="settings-card">
+                <p class="settings-card-status mb-2">Migration depuis WebOsteo</p>
+                <h3 class="settings-card-title">Importer depuis WebOsteo</h3>
+                <p class="settings-card-copy mb-3">
+                  Importez vos données depuis une installation WebOsteo existante. Sélectionnez le fichier de sauvegarde <strong>.bck</strong>
+                  (archive exportée depuis WebOsteo) ou directement le fichier <strong>webosteo.data</strong> (base SQLite).
+                  L'import couvre les utilisateurs, patients, consultations, rendez-vous, factures et contacts du répertoire.
+                </p>
+
+                <div class="row g-3">
+                  <div class="col-12 col-md-4">
+                    <label class="form-label" for="webosteo-import-office">Cabinet cible</label>
+                    <select
+                      id="webosteo-import-office"
+                      class="form-select"
+                      [disabled]="isImportingWebosteo() || isOfficesLoading()"
+                      [value]="dataImportTargetOfficeId() ?? ''"
+                      (change)="onDataImportOfficeChange($any($event.target).value || '')"
+                    >
+                      <option value="">Sélectionner un cabinet</option>
+                      @for (office of offices(); track office.id) {
+                        <option [value]="office.id">{{ office.name }}</option>
+                      }
+                    </select>
+                  </div>
+
+                  <div class="col-12 col-md-8">
+                    <label class="form-label" for="webosteo-import-file">Fichier WebOsteo (.bck ou .data)</label>
+                    <input
+                      id="webosteo-import-file"
+                      type="file"
+                      class="form-control"
+                      accept=".bck,.data,.sqlite,.db"
+                      [disabled]="isImportingWebosteo()"
+                      (change)="onWebosteoFileSelected($event)"
+                    />
+                    @if (selectedWebosteoFileName()) {
+                      <p class="small text-secondary mt-2 mb-0">Fichier sélectionné: {{ selectedWebosteoFileName() }}</p>
+                    }
+                  </div>
+
+                  <div class="col-12 d-flex align-items-end">
+                    <button
+                      type="button"
+                      class="btn btn-primary"
+                      [disabled]="isImportingWebosteo() || !selectedWebosteoFileBase64() || !dataImportTargetOfficeId()"
+                      (click)="runWebosteoImport()"
+                      title="Lancer l'import WebOsteo" bsTooltip
+                    >
+                      @if (isImportingWebosteo()) {
+                        <i class="fa-solid fa-circle-notch fa-spin me-1"></i>Import en cours...
+                      } @else {
+                        <i class="fa-solid fa-database me-1"></i>Lancer l'import WebOsteo
+                      }
+                    </button>
+                  </div>
+                </div>
+
+                @if (webosteoImportResult(); as result) {
+                  <div class="mt-3 border rounded p-3 bg-light-subtle">
+                    <p class="mb-2 fw-semibold">Résultat de l'import WebOsteo</p>
+                    <div class="small text-secondary mb-2">
+                      Utilisateurs: {{ result.importedUsers }} — Patients: {{ result.importedPatients }} — Consultations: {{ result.importedConsultations }} — Rendez-vous: {{ result.importedAppointments }} — Factures: {{ result.importedInvoices }} — Contacts: {{ result.importedContacts }}
+                    </div>
+
+                    @if (result.errors.length > 0) {
+                      <p class="small fw-semibold mb-1">Erreurs ({{ result.errors.length }})</p>
+                      <ul class="small mb-0 ps-3">
+                        @for (error of result.errors.slice(0, 10); track $index) {
+                          <li>{{ error.entity }}: {{ error.message }}</li>
+                        }
+                      </ul>
+                    }
+
+                    @if (result.tempPasswords && objectEntries(result.tempPasswords).length > 0) {
+                      <p class="small fw-semibold mt-2 mb-1">Mots de passe temporaires (à communiquer aux utilisateurs)</p>
+                      <ul class="small mb-0 ps-3">
+                        @for (entry of objectEntries(result.tempPasswords); track entry[0]) {
+                          <li><strong>{{ entry[0] }}</strong>: {{ entry[1] }}</li>
+                        }
+                      </ul>
+                      <p class="small text-warning mt-1 mb-0"><i class="fa-solid fa-triangle-exclamation me-1"></i>Notez ces mots de passe, ils ne seront plus affichés. Les utilisateurs devront les changer à leur prochaine connexion.</p>
+                    }
+                  </div>
+                }
+              </article>
+            </div>
+
           </section>
         } @else {
           <section class="row g-3 mb-4" aria-label="Nettoyage des données" role="tabpanel" id="data-management-cleanup-panel" aria-labelledby="data-management-cleanup-tab">

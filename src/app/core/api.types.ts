@@ -1203,6 +1203,23 @@ export type DataCleanupApplyResult = {
   updatedCount: number;
 };
 
+export type WebosteoImportPayload = {
+  officeId: number;
+  contentBase64: string;
+  fileName: string;
+};
+
+export type WebosteoImportResult = {
+  importedUsers: number;
+  importedPatients: number;
+  importedConsultations: number;
+  importedAppointments: number;
+  importedInvoices: number;
+  importedContacts: number;
+  errors: Array<{ entity: string; message: string }>;
+  tempPasswords: Record<string, string>;
+};
+
 export type UpdatePatientPayload = {
   lastName?: string;
   firstName?: string;

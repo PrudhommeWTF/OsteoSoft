@@ -16,6 +16,7 @@ import {
   DataImportDataset,
   DataImportFormat,
   DataImportResult,
+  WebosteoImportResult,
   GeneralSettingsPayload,
   LocalAgendaCalendar,
   NewOfficeDraft,
@@ -437,6 +438,10 @@ export class SettingsPage implements OnDestroy {
   readonly isDownloadingImportTemplate = signal(false);
   readonly isImportingDataFile = signal(false);
   readonly dataImportResult = signal<DataImportResult | null>(null);
+  readonly isImportingWebosteo = signal(false);
+  readonly selectedWebosteoFileName = signal('');
+  readonly selectedWebosteoFileBase64 = signal('');
+  readonly webosteoImportResult = signal<WebosteoImportResult | null>(null);
   readonly activeCleanupTabId = signal<DataCleanupKind>('cities');
   readonly cleanupRows = signal<DataCleanupRow[]>([]);
   readonly cleanupDoctorSuggestions = signal<string[]>([]);
@@ -4689,5 +4694,80 @@ export class SettingsPage implements OnDestroy {
     }
 
     return defaults;
+  }
+
+  async onWebosteoFileSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement | null;
+    const file = input?.files?.item(0) ?? null;
+
+    this.dataManagementError.set('');
+    this.dataManagementSuccess.set('');
+    this.webosteoImportResult.set(null);
+
+    if (!file) {
+      this.selectedWebosteoFileName.set('');
+      this.selectedWebosteoFileBase64.set('');
+      return;
+    }
+
+    const ext = file.name.toLowerCase();
+    if (!(ext.endsWith('.bck') || ext.endsWith('.data') || ext.endsWith('.sqlite') || ext.endsWith('.db'))) {
+      this.dataManagementError.set('Format invalide. Utilisez un fichier .bck (archive WebOsteo) ou .data/.sqlite.');
+      this.selectedWebosteoFileName.set('');
+      this.selectedWebosteoFileBase64.set('');
+      if (input) input.value = '';
+      return;
+    }
+
+    this.selectedWebosteoFileName.set(file.name);
+
+    try {
+      const contentBase64 = await this.readFileAsBase64(file);
+      this.selectedWebosteoFileBase64.set(contentBase64);
+      this.dataManagementSuccess.set('Fichier WebOsteo prêt pour import.');
+    } catch {
+      this.selectedWebosteoFileBase64.set('');
+      this.dataManagementError.set('Impossible de lire le fichier sélectionné.');
+    }
+  }
+
+  async runWebosteoImport(): Promise<void> {
+    const officeId = this.dataImportTargetOfficeId();
+    if (!officeId) {
+      this.dataManagementError.set('Sélectionnez un cabinet cible pour l\'import.');
+      return;
+    }
+
+    const fileName = this.selectedWebosteoFileName();
+    const contentBase64 = this.selectedWebosteoFileBase64();
+    if (!fileName || !contentBase64) {
+      this.dataManagementError.set('Sélectionnez un fichier WebOsteo à importer.');
+      return;
+    }
+
+    if (this.isImportingWebosteo()) {
+      return;
+    }
+
+    this.dataManagementError.set('');
+    this.dataManagementSuccess.set('');
+    this.webosteoImportResult.set(null);
+    this.isImportingWebosteo.set(true);
+
+    try {
+      const result = await this.api.importWebosteoData({ officeId, fileName, contentBase64 });
+      this.webosteoImportResult.set(result);
+      this.dataManagementSuccess.set(
+        `Import WebOsteo terminé: ${result.importedPatients} patient(s), ${result.importedConsultations} consultation(s), ${result.importedAppointments} rendez-vous, ${result.importedInvoices} facture(s), ${result.importedContacts} contact(s).`
+      );
+    } catch {
+      this.dataManagementError.set('Echec de l\'import WebOsteo. Vérifiez le fichier sélectionné.');
+    } finally {
+      this.isImportingWebosteo.set(false);
+    }
+  }
+
+  objectEntries(obj: Record<string, string>): [string, string][] {
+    return Object.entries(obj);
   }
 }
