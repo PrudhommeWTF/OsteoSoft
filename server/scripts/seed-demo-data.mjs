@@ -1,5 +1,5 @@
 /**
- * Seed demo data: appointments, consultations, invoices.
+ * Seed demo data: appointments, consultations, invoices, bank deposits.
  * Usage: node server/scripts/seed-demo-data.mjs
  */
 import http from 'http';
@@ -56,9 +56,22 @@ const TITRES_CONSULTATION = [
   'Bilan osteopathique complet',
   'Seance de traitement',
   'Consultation urgente',
+  'Suivi trimestriel',
+  'Controle postural',
 ];
 
 const PRATICIENS = ['Dr. Claire Martin', 'Dr. Antoine Rousseau', 'Admin'];
+
+// Multiple consultations per patient spread over past years
+const CONSULTATION_TEMPLATES = [
+  { daysAgo: 730, hour: 9, min: 0, title: 'Premier bilan osteopathique' },
+  { daysAgo: 490, hour: 11, min: 0, title: 'Suivi semestriel' },
+  { daysAgo: 330, hour: 14, min: 30, title: 'Controle postural' },
+  { daysAgo: 180, hour: 10, min: 0, title: 'Consultation douleur aigue' },
+  { daysAgo: 90, hour: 15, min: 0, title: 'Bilan osteopathique annuel' },
+  { daysAgo: 30, hour: 9, min: 30, title: 'Suivi trimestriel' },
+  { daysAgo: 7, hour: 11, min: 30, title: 'Consultation de suivi recente' },
+];
 
 async function main() {
   console.log('[seed:demo] Connexion...');
@@ -134,77 +147,151 @@ async function main() {
   console.log(`[seed:demo] ${appointmentCount} rendez-vous crees`);
 
   // --- CONSULTATIONS + FACTURES pour les 20 premiers patients ---
+  // Each patient gets multiple consultations spread over past years
   const toConsult = patients.slice(0, 20);
+  const year = new Date().getFullYear();
+
+  // Payment methods weighted to be realistic (more CB, some cheque, some especes)
+  const paidPaymentMethods = ['carte', 'carte', 'carte', 'especes', 'especes', 'cheque', 'virement'];
+  // Realistic invoice statuses: mostly paid, some unpaid/partial/cancelled
+  const invoiceStatusPool = [
+    'payee', 'payee', 'payee', 'payee', 'payee', 'payee', 'payee', 'payee', // 8/13 = ~62%
+    'impayee', 'impayee',                                                     // 2/13 = ~15%
+    'partiellement_payee',                                                    // 1/13 = ~8%
+    'annulee', 'annulee',                                                     // 2/13 = ~15%
+  ];
+
+  // Collect cheque payments for bank remittances
+  const chequesToDeposit = []; // { invoiceId, amountCents, issuedAt }
+
   for (let i = 0; i < toConsult.length; i++) {
     const patient = toConsult[i];
     const officeId = (i % 2 === 0) ? 1 : 2;
     const praticien = PRATICIENS[i % 2]; // claire ou antoine
-    const daysAgo = -(i * 3 + 1); // entre 1 et 60 jours passes
 
-    // Consultation
-    const cRes = await apiRequest('POST', `/api/patients/${patient.id}/consultations`, {
-      startedAt: isoDate(daysAgo, 10, 0),
-      officeId,
-      practitioner: praticien,
-      title: TITRES_CONSULTATION[i % TITRES_CONSULTATION.length],
-      important: i % 7 === 0,
-      heightCm: 165 + (i % 20),
-      weightKg: 60 + (i % 30),
-      evaBefore: 1 + (i % 7),
-      evaAfter: Math.max(0, (i % 7) - 2),
-      profile: i % 5 === 0 ? 'Pediatrique' : 'Adulte',
-      reasonItems: [{ label: MOTIFS[i % MOTIFS.length], type: 'fonctionnel' }],
-      motifMainHtml: `<p>${MOTIFS[i % MOTIFS.length]}</p>`,
-      testsHtml: '<p>Tests osteopathiques realises.</p>',
-      schemaHtml: '',
-      treatmentsHtml: '<p>Traitement osteopathique global.</p>',
-      remarksHtml: '<p>Revoir dans 3 semaines.</p>',
-      consultationDocuments: [],
-    }, cookie);
+    // Determine how many consultations this patient gets (varied, not always all templates)
+    const patientTemplates = i % 5 === 0
+      ? CONSULTATION_TEMPLATES.slice(-2)  // new patient: last 2 (recent only)
+      : i % 3 === 0
+        ? CONSULTATION_TEMPLATES          // chronic patient: all 7
+        : CONSULTATION_TEMPLATES.slice(2); // regular patient: last 5
 
-    let consultationId = null;
-    if (cRes.status === 201) {
-      consultationCount++;
-      consultationId = JSON.parse(cRes.body)?.consultation?.id ?? null;
-    } else {
-      console.warn(`[seed:demo] Consultation echec patient ${patient.id} (${cRes.status}): ${cRes.body.slice(0, 100)}`);
-    }
+    for (let tIdx = 0; tIdx < patientTemplates.length; tIdx++) {
+      const tmpl = patientTemplates[tIdx];
+      const daysAgo = -(tmpl.daysAgo + (i * 2)); // small offset per patient to avoid duplicate dates
 
-    // Facture associee (60 EUR)
-    const year = new Date().getFullYear();
-    const invNum = `${year}-DEMO${String(i + 1).padStart(4, '0')}`;
-    const issuedAt = isoDate(daysAgo, 11, 0);
-    const paymentMethods = ['especes', 'carte', 'virement', 'especes'];
-    const paymentMethod = paymentMethods[i % paymentMethods.length];
-    const statuses = ['payee', 'payee', 'payee', 'en attente', 'en attente', 'annulee'];
-    const invStatus = statuses[i % statuses.length];
+      const cRes = await apiRequest('POST', `/api/patients/${patient.id}/consultations`, {
+        startedAt: isoDate(daysAgo, tmpl.hour, tmpl.min),
+        officeId,
+        practitioner: praticien,
+        title: tmpl.title,
+        important: tIdx === 0 && i % 4 === 0,
+        heightCm: 165 + (i % 20),
+        weightKg: 60 + (i % 30),
+        evaBefore: 1 + ((i + tIdx) % 7),
+        evaAfter: Math.max(0, ((i + tIdx) % 7) - 2),
+        profile: i % 5 === 0 ? 'Pediatrique' : 'Adulte',
+        reasonItems: [{ label: MOTIFS[(i + tIdx) % MOTIFS.length], type: 'fonctionnel' }],
+        motifMainHtml: `<p>${MOTIFS[(i + tIdx) % MOTIFS.length]}</p>`,
+        testsHtml: '<p>Tests osteopathiques realises.</p>',
+        schemaHtml: '',
+        treatmentsHtml: '<p>Traitement osteopathique global.</p>',
+        remarksHtml: '<p>Revoir dans 3 semaines.</p>',
+        consultationDocuments: [],
+      }, cookie);
 
-    const payments = invStatus === 'payee'
-      ? [{ paymentMethod, currency: 'EUR', amountCents: 6000, paidAt: issuedAt }]
-      : [];
+      let consultationId = null;
+      if (cRes.status === 201) {
+        consultationCount++;
+        consultationId = JSON.parse(cRes.body)?.consultation?.id ?? null;
+      } else {
+        console.warn(`[seed:demo] Consultation echec patient ${patient.id} (${cRes.status}): ${cRes.body.slice(0, 100)}`);
+        continue;
+      }
 
-    const iRes = await apiRequest('POST', '/api/billing/invoices', {
-      patientId: patient.id,
-      consultationId,
-      officeId,
-      invoiceNumber: invNum,
-      amountCents: 6000,
-      status: invStatus,
-      issuedAt,
-      paymentMethod: invStatus === 'payee' ? paymentMethod : '',
-      currency: 'EUR',
-      payments,
-    }, cookie);
+      const invNum = `${year}-DEMO${String(i + 1).padStart(3, '0')}T${String(tIdx + 1).padStart(2, '0')}`;
+      const issuedAt = isoDate(daysAgo, tmpl.hour + 1, 0);
+      const invStatus = invoiceStatusPool[(i * patientTemplates.length + tIdx) % invoiceStatusPool.length];
+      const isInvoicePaid = invStatus === 'payee' || invStatus === 'partiellement_payee';
+      const paymentMethod = isInvoicePaid
+        ? paidPaymentMethods[(i + tIdx) % paidPaymentMethods.length]
+        : '';
+      const INVOICE_AMOUNT_CENTS = 6500;
+      const partialPaymentCents = 3500;
 
-    if (iRes.status === 201 || iRes.status === 200) {
-      invoiceCount++;
-    } else {
-      console.warn(`[seed:demo] Facture echec (${iRes.status}): ${iRes.body.slice(0, 120)}`);
+      const payments = isInvoicePaid
+        ? [{ paymentMethod, currency: 'EUR', amountCents: invStatus === 'partiellement_payee' ? partialPaymentCents : INVOICE_AMOUNT_CENTS, paidAt: issuedAt }]
+        : [];
+
+      const iRes = await apiRequest('POST', '/api/billing/invoices', {
+        patientId: patient.id,
+        consultationId,
+        officeId,
+        invoiceNumber: invNum,
+        amountCents: INVOICE_AMOUNT_CENTS,
+        status: invStatus,
+        issuedAt,
+        paymentMethod: isInvoicePaid ? paymentMethod : '',
+        currency: 'EUR',
+        payments,
+      }, cookie);
+
+      if (iRes.status === 201 || iRes.status === 200) {
+        invoiceCount++;
+        const invoiceId = JSON.parse(iRes.body)?.invoiceId;
+        // Collect cheques for bank remittances
+        if (isInvoicePaid && paymentMethod === 'cheque' && invoiceId) {
+          chequesToDeposit.push({
+            invoiceId,
+            amountCents: invStatus === 'partiellement_payee' ? partialPaymentCents : INVOICE_AMOUNT_CENTS,
+            issuedAt: issuedAt.slice(0, 10),
+          });
+        }
+      } else {
+        console.warn(`[seed:demo] Facture echec (${iRes.status}): ${iRes.body.slice(0, 120)}`);
+      }
     }
   }
 
   console.log(`[seed:demo] ${consultationCount} consultations creees`);
   console.log(`[seed:demo] ${invoiceCount} factures creees`);
+
+  // --- REMISES DE CHEQUES (bank deposits) ---
+  // Group cheques by calendar week and create one deposit per week per office
+  let depositCount = 0;
+  if (chequesToDeposit.length > 0) {
+    // Group by week
+    const weekGroups = new Map();
+    for (const c of chequesToDeposit) {
+      const d = new Date(c.issuedAt);
+      const daysToMonday = (d.getDay() + 6) % 7;
+      const monday = new Date(d.getTime() - (daysToMonday * 24 * 60 * 60 * 1000));
+      const key = monday.toISOString().slice(0, 10);
+      if (!weekGroups.has(key)) {
+        weekGroups.set(key, []);
+      }
+      weekGroups.get(key).push(c);
+    }
+
+    for (const [weekStart, items] of weekGroups.entries()) {
+      const totalCents = items.reduce((s, c) => s + c.amountCents, 0);
+      const dRes = await apiRequest('POST', '/api/billing/deposits', {
+        occurredAt: `${weekStart}T10:00:00.000Z`,
+        type: 'cheque',
+        officeId: 1,
+        amount: totalCents / 100,
+        currency: 'EUR',
+        operationIds: items.map((c) => `invoice-${c.invoiceId}`),
+      }, cookie);
+      if (dRes.status === 201 || dRes.status === 200) {
+        depositCount++;
+      } else {
+        console.warn(`[seed:demo] Remise echec (${dRes.status}): ${dRes.body.slice(0, 120)}`);
+      }
+    }
+  }
+
+  console.log(`[seed:demo] ${depositCount} remises de banque creees`);
   console.log('[seed:demo] Termine.');
 }
 
