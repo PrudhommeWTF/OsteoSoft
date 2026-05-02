@@ -9798,13 +9798,14 @@ app.post('/api/data-management/webosteo-import', authMiddleware, requirePermissi
     }
 
     // Parse WebOsteo datetime YYYYMMDDHHmm -> ISO
+    const DEFAULT_TIME_FOR_DATE_ONLY = '08:00:00';
     function parseWeoDateTime(raw) {
       const s = str(raw);
       if (s.length >= 12 && /^\d{12}/.test(s)) {
         return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T${s.slice(8, 10)}:${s.slice(10, 12)}:00.000Z`;
       }
       if (s.length === 8 && /^\d{8}$/.test(s)) {
-        return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T08:00:00.000Z`;
+        return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T${DEFAULT_TIME_FOR_DATE_ONLY}.000Z`;
       }
       return null;
     }
@@ -10279,8 +10280,8 @@ app.post('/api/data-management/webosteo-import', authMiddleware, requirePermissi
               str(wf.devise) || 'EUR',
               str(paiement.moyen_paiement),
               str(paiement.paiement_banque),
-              str(paiement.libelle),
               str(paiement.reference),
+              str(paiement.libelle),
               str(paiement.commentaire)
             );
           } catch { /* ignore payment errors */ }
