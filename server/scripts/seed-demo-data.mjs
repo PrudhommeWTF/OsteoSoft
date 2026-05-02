@@ -209,15 +209,18 @@ async function main() {
         continue;
       }
 
-      const invNum = `${year}-DEMO${String(i + 1).padStart(3, '0')}-${String(tIdx + 1).padStart(2, '0')}`;
+      const invNum = `${year}-DEMO${String(i + 1).padStart(3, '0')}T${String(tIdx + 1).padStart(2, '0')}`;
       const issuedAt = isoDate(daysAgo, tmpl.hour + 1, 0);
       const invStatus = invoiceStatusPool[(i * patientTemplates.length + tIdx) % invoiceStatusPool.length];
-      const paymentMethod = invStatus === 'payee' || invStatus === 'partiellement_payee'
+      const isInvoicePaid = invStatus === 'payee' || invStatus === 'partiellement_payee';
+      const paymentMethod = isInvoicePaid
         ? paidPaymentMethods[(i + tIdx) % paidPaymentMethods.length]
-        : 'cheque';
+        : '';
+      const INVOICE_AMOUNT_CENTS = 6500;
+      const partialPaymentCents = 3500;
 
-      const payments = (invStatus === 'payee' || invStatus === 'partiellement_payee')
-        ? [{ paymentMethod, currency: 'EUR', amountCents: invStatus === 'partiellement_payee' ? 3500 : 6500, paidAt: issuedAt }]
+      const payments = isInvoicePaid
+        ? [{ paymentMethod, currency: 'EUR', amountCents: invStatus === 'partiellement_payee' ? partialPaymentCents : INVOICE_AMOUNT_CENTS, paidAt: issuedAt }]
         : [];
 
       const iRes = await apiRequest('POST', '/api/billing/invoices', {
@@ -225,10 +228,10 @@ async function main() {
         consultationId,
         officeId,
         invoiceNumber: invNum,
-        amountCents: 6500,
+        amountCents: INVOICE_AMOUNT_CENTS,
         status: invStatus,
         issuedAt,
-        paymentMethod: invStatus === 'payee' || invStatus === 'partiellement_payee' ? paymentMethod : '',
+        paymentMethod: isInvoicePaid ? paymentMethod : '',
         currency: 'EUR',
         payments,
       }, cookie);
@@ -237,10 +240,10 @@ async function main() {
         invoiceCount++;
         const invoiceId = JSON.parse(iRes.body)?.invoiceId;
         // Collect cheques for bank remittances
-        if ((invStatus === 'payee' || invStatus === 'partiellement_payee') && paymentMethod === 'cheque' && invoiceId) {
+        if (isInvoicePaid && paymentMethod === 'cheque' && invoiceId) {
           chequesToDeposit.push({
             invoiceId,
-            amountCents: invStatus === 'partiellement_payee' ? 3500 : 6500,
+            amountCents: invStatus === 'partiellement_payee' ? partialPaymentCents : INVOICE_AMOUNT_CENTS,
             issuedAt: issuedAt.slice(0, 10),
           });
         }

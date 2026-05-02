@@ -3051,7 +3051,7 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
               ? Math.round(invoiceAmountCents * (0.4 + seededUnit(jitterSeed + 99) * 0.4))
               : invoiceAmountCents;
             const chequeNumber = paymentMethod === 'cheque'
-              ? `CHQ${String(patientIndex + 1).padStart(5, '0')}${String(index + 1)}`
+              ? `CHQ${String((patientIndex * 100) + index + 1).padStart(7, '0')}`
               : '';
             insertInvoicePaymentForDemo.run(
               invoiceId,
