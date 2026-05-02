@@ -10279,8 +10279,8 @@ app.post('/api/data-management/webosteo-import', authMiddleware, requirePermissi
               str(wf.devise) || 'EUR',
               str(paiement.moyen_paiement),
               str(paiement.paiement_banque),
-              str(paiement.reference),
               str(paiement.libelle),
+              str(paiement.reference),
               str(paiement.commentaire)
             );
           } catch { /* ignore payment errors */ }
