@@ -10058,7 +10058,7 @@ app.post('/api/data-management/webosteo-import', authMiddleware, requirePermissi
            VALUES (?, ?, ?, ?, ?, ?, ?)`
         ).run(
           patientId,
-          null,
+          'date',
           encryptSensitiveField(''),
           category,
           encryptSensitiveField(description),
@@ -10280,9 +10280,9 @@ app.post('/api/data-management/webosteo-import', authMiddleware, requirePermissi
               str(wf.devise) || 'EUR',
               str(paiement.moyen_paiement),
               str(paiement.paiement_banque),
+              str(paiement.cheque_emetteur),
               str(paiement.reference),
-              str(paiement.libelle),
-              str(paiement.commentaire)
+              str(paiement.commentaire) || str(paiement.libelle)
             );
           } catch { /* ignore payment errors */ }
         }
