@@ -41,6 +41,7 @@ import { AuthService } from '../../core/auth.service';
 import { HtmlSanitizerService } from '../../core/html-sanitizer.service';
 import { TopbarService } from '../../core/topbar.service';
 import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
+import { ConsultationCanvasComponent } from '../consultation-canvas/consultation-canvas.component';
 
 declare const $: any;
 declare const bootstrap: any;
@@ -125,7 +126,7 @@ Je vous remercie par avance, et vous prie d'agréer mes sincères salutations.`;
 
 @Component({
   selector: 'app-patient-detail-page',
-  imports: [RouterLink, ReactiveFormsModule, BsTooltipDirective],
+  imports: [RouterLink, ReactiveFormsModule, BsTooltipDirective, ConsultationCanvasComponent],
   templateUrl: './patient-detail.page.html',
   styleUrl: './patient-detail.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -149,7 +150,6 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   private readonly consultationModalRef = viewChild<ElementRef<HTMLDivElement>>('consultationModal');
   private readonly consultationMotifMainEditorRef = viewChild<ElementRef<HTMLDivElement>>('consultationMotifMainEditor');
   private readonly consultationTestsEditorRef = viewChild<ElementRef<HTMLDivElement>>('consultationTestsEditor');
-  private readonly consultationSchemaEditorRef = viewChild<ElementRef<HTMLDivElement>>('consultationSchemaEditor');
   private readonly consultationTreatmentsEditorRef = viewChild<ElementRef<HTMLDivElement>>('consultationTreatmentsEditor');
   private readonly consultationRemarksEditorRef = viewChild<ElementRef<HTMLDivElement>>('consultationRemarksEditor');
 
@@ -2009,7 +2009,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       writeSection('Motifs sélectionnés', selectedReasons || '- Aucun motif sélectionné');
       writeSection('Motif principal', this.htmlToPlainText(this.consultationMotifMainHtml()));
       writeSection('Tests', this.htmlToPlainText(this.consultationTestsHtml()));
-      writeSection('Schema', this.htmlToPlainText(this.consultationSchemaHtml()));
+      const schemaText = this.schemaToPlainText(this.consultationSchemaHtml());
+      if (schemaText) writeSection('Schema', schemaText);
       writeSection('Traitements proposes', this.htmlToPlainText(this.consultationTreatmentsHtml()));
       writeSection('Remarques', this.htmlToPlainText(this.consultationRemarksHtml()));
 
@@ -4219,7 +4220,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   private getConsultationEditorElement(section: ConsultationEditorSection): HTMLDivElement | null {
     if (section === 'motifMainHtml') return this.consultationMotifMainEditorRef()?.nativeElement ?? null;
     if (section === 'testsHtml') return this.consultationTestsEditorRef()?.nativeElement ?? null;
-    if (section === 'schemaHtml') return this.consultationSchemaEditorRef()?.nativeElement ?? null;
+    if (section === 'schemaHtml') return null;
     if (section === 'treatmentsHtml') return this.consultationTreatmentsEditorRef()?.nativeElement ?? null;
     return this.consultationRemarksEditorRef()?.nativeElement ?? null;
   }
@@ -4901,6 +4902,12 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     }
 
     this.applyConsultationBillingDefaults();
+  }
+
+  private schemaToPlainText(value: string): string {
+    if (!value || !value.trim()) return '';
+    if (value.startsWith('{')) return '[Schéma dessiné]';
+    return this.htmlToPlainText(value);
   }
 
   private htmlToPlainText(html: string): string {

@@ -1001,15 +1001,10 @@
           </div>
 
           <div class="mb-3">
-            <label class="form-label fw-semibold">Schema</label>
-            <div class="wysiwyg-toolbar">
-              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('schema', 'bold')" title="Gras" bsTooltip><i class="fa-solid fa-bold"></i></button>
-              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('schema', 'italic')" title="Italique" bsTooltip><i class="fa-solid fa-italic"></i></button>
-              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('schema', 'underline')" title="Souligner" bsTooltip><i class="fa-solid fa-underline"></i></button>
-              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('schema', 'insertUnorderedList')" title="Liste à puces" bsTooltip><i class="fa-solid fa-list-ul"></i></button>
-              <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('schema', 'insertOrderedList')" title="Liste numérotée" bsTooltip><i class="fa-solid fa-list-ol"></i></button>
-            </div>
-            <div #schemaEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('schema', $event)"></div>
+            <app-consultation-canvas
+              [value]="consultationSchemaHtml()"
+              (valueChange)="onConsultationSchemaChange($event)"
+            ></app-consultation-canvas>
           </div>
 
           <div class="mb-3">

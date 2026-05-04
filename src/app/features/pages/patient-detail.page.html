@@ -1043,15 +1043,10 @@
             </div>
 
             <div class="mb-3">
-              <label class="form-label fw-semibold">Schema</label>
-              <div class="wysiwyg-toolbar">
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'bold')" title="Modifier" bsTooltip><i class="fa-solid fa-bold"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'italic')" title="Modifier" bsTooltip><i class="fa-solid fa-italic"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'underline')" title="Modifier" bsTooltip><i class="fa-solid fa-underline"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'insertUnorderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ul"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('schemaHtml', 'insertOrderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ol"></i></button>
-              </div>
-              <div #consultationSchemaEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('schemaHtml', $event)"></div>
+              <app-consultation-canvas
+                [value]="consultationSchemaHtml()"
+                (valueChange)="consultationSchemaHtml.set($event)"
+              ></app-consultation-canvas>
             </div>
 
             <div class="mb-3">

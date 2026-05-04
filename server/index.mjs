@@ -7074,7 +7074,7 @@ const updateConsultationSchema = z.object({
   ).optional().default([]),
   motifMainHtml: z.string().max(50_000).optional().default(''),
   testsHtml: z.string().max(50_000).optional().default(''),
-  schemaHtml: z.string().max(50_000).optional().default(''),
+  schemaHtml: z.string().max(500_000).optional().default(''),
   treatmentsHtml: z.string().max(50_000).optional().default(''),
   remarksHtml: z.string().max(50_000).optional().default('')
 });
