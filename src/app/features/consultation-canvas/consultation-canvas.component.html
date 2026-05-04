@@ -1,0 +1,137 @@
+<div class="consultation-canvas-section">
+  <div class="form-check canvas-section-header mb-2">
+    <input
+      class="form-check-input"
+      type="checkbox"
+      [id]="checkboxId"
+      [checked]="enabled()"
+      (change)="toggleEnabled($event)"
+    />
+    <label class="form-check-label fw-semibold" [for]="checkboxId">Schémas</label>
+  </div>
+
+  @if (enabled()) {
+    <div class="canvas-container border rounded">
+      <div class="canvas-toolbar">
+        <div class="toolbar-group">
+          <button
+            type="button"
+            class="toolbar-btn"
+            title="Effacer tout"
+            (click)="clearCanvas()"
+          >
+            <i class="fa-regular fa-file"></i>
+          </button>
+          <button
+            type="button"
+            class="toolbar-btn"
+            [class.active]="!erasing()"
+            title="Stylo"
+            (click)="erasing.set(false)"
+          >
+            <i class="fa-solid fa-pen"></i>
+          </button>
+          <button
+            type="button"
+            class="toolbar-btn"
+            [class.active]="erasing()"
+            title="Gomme"
+            (click)="erasing.set(true)"
+          >
+            <i class="fa-solid fa-eraser"></i>
+          </button>
+          <button
+            type="button"
+            class="toolbar-btn"
+            [disabled]="!canUndo()"
+            title="Annuler"
+            (click)="undo()"
+          >
+            <i class="fa-solid fa-rotate-left"></i>
+          </button>
+          <button
+            type="button"
+            class="toolbar-btn"
+            [disabled]="!canRedo()"
+            title="Rétablir"
+            (click)="redo()"
+          >
+            <i class="fa-solid fa-rotate-right"></i>
+          </button>
+        </div>
+
+        <div class="toolbar-group toolbar-colors">
+          @for (c of colors; track c.value) {
+            <button
+              type="button"
+              class="color-btn"
+              [class.selected]="selectedColor() === c.value && !erasing()"
+              [style.background-color]="c.value"
+              [title]="c.label"
+              (click)="setColor(c.value)"
+            ></button>
+          }
+        </div>
+
+        <div class="toolbar-group toolbar-brushes">
+          @for (s of brushSizes; track s.value) {
+            <button
+              type="button"
+              class="brush-btn"
+              [class.selected]="brushSize() === s.value"
+              [title]="'Épaisseur ' + s.value"
+              (click)="setBrushSize(s.value)"
+            >
+              <span
+                class="brush-dot"
+                [style.width.px]="s.dotSize"
+                [style.height.px]="s.dotSize"
+              ></span>
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="canvas-wrapper">
+        <img
+          [src]="bgSrc()"
+          class="canvas-bg"
+          alt="Schéma anatomique"
+          draggable="false"
+        />
+        <canvas
+          #drawingCanvas
+          class="drawing-canvas"
+          (mousedown)="onMouseDown($event)"
+          (mousemove)="onMouseMove($event)"
+          (mouseup)="onMouseUp()"
+          (mouseleave)="onMouseUp()"
+          (touchstart)="onTouchStart($event)"
+          (touchmove)="onTouchMove($event)"
+          (touchend)="onMouseUp()"
+        ></canvas>
+      </div>
+
+      <div class="bg-switcher mt-2">
+        <button
+          type="button"
+          class="btn btn-sm"
+          [class.btn-primary]="bg() === 'adulte'"
+          [class.btn-outline-secondary]="bg() !== 'adulte'"
+          (click)="setBg('adulte')"
+        >
+          Adulte
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm ms-1"
+          [class.btn-primary]="bg() === 'bb'"
+          [class.btn-outline-secondary]="bg() !== 'bb'"
+          (click)="setBg('bb')"
+        >
+          Nourrisson
+        </button>
+      </div>
+    </div>
+  }
+</div>

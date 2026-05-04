@@ -11,6 +11,7 @@ import { ConsultationReasonItem, LocationPair, MyUserProfile, Office, OfficeCons
 import { ConsultationDocumentUploadPayload, CreatePatientPayload } from '../../core/api.types';
 import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 import { HtmlSanitizerService } from '../../core/html-sanitizer.service';
+import { ConsultationCanvasComponent } from '../consultation-canvas/consultation-canvas.component';
 
 declare const $: any;
 
@@ -126,7 +127,7 @@ const parentContactFields: ParentContactField[] = [
 
 @Component({
   selector: 'app-patient-create-page',
-  imports: [ReactiveFormsModule, BsTooltipDirective],
+  imports: [ReactiveFormsModule, BsTooltipDirective, ConsultationCanvasComponent],
   templateUrl: './patient-create.page.html',
   styleUrl: './patient-create.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -142,7 +143,6 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   private readonly antecedentDateInputRef = viewChild<ElementRef<HTMLInputElement>>('antecedentDateInput');
   private readonly motifMainEditorRef = viewChild<ElementRef<HTMLDivElement>>('motifMainEditor');
   private readonly testsEditorRef = viewChild<ElementRef<HTMLDivElement>>('testsEditor');
-  private readonly schemaEditorRef = viewChild<ElementRef<HTMLDivElement>>('schemaEditor');
   private readonly treatmentsEditorRef = viewChild<ElementRef<HTMLDivElement>>('treatmentsEditor');
   private readonly remarksEditorRef = viewChild<ElementRef<HTMLDivElement>>('remarksEditor');
 
@@ -423,12 +423,6 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   private readonly testsEditorEffect = effect(() => {
     const html = this.consultationTestsHtml();
     const el = this.testsEditorRef()?.nativeElement;
-    if (el && document.activeElement !== el) { el.innerHTML = this.htmlSanitizer.sanitize(html); }
-  });
-
-  private readonly schemaEditorEffect = effect(() => {
-    const html = this.consultationSchemaHtml();
-    const el = this.schemaEditorRef()?.nativeElement;
     if (el && document.activeElement !== el) { el.innerHTML = this.htmlSanitizer.sanitize(html); }
   });
 
@@ -1065,6 +1059,11 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     this.consultationDocuments.update((items) =>
       items.map((item) => (item.tempKey === tempKey ? { ...item, comment } : item))
     );
+    this.syncConsultationNoteFromState();
+  }
+
+  onConsultationSchemaChange(value: string): void {
+    this.consultationSchemaHtml.set(value);
     this.syncConsultationNoteFromState();
   }
 
@@ -3113,7 +3112,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   private getEditorElement(field: 'motifMain' | 'tests' | 'schema' | 'treatments' | 'remarks'): HTMLDivElement | null {
     if (field === 'motifMain') return this.motifMainEditorRef()?.nativeElement ?? null;
     if (field === 'tests') return this.testsEditorRef()?.nativeElement ?? null;
-    if (field === 'schema') return this.schemaEditorRef()?.nativeElement ?? null;
+    if (field === 'schema') return null;
     if (field === 'treatments') return this.treatmentsEditorRef()?.nativeElement ?? null;
     return this.remarksEditorRef()?.nativeElement ?? null;
   }
