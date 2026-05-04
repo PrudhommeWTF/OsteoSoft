@@ -95,7 +95,7 @@ import {
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = 'http://localhost:3000/api';
+  private readonly baseUrl = 'http://localhost:4199/api';
 
   async login(username: string, password: string, remember: boolean): Promise<AuthUser> {
     const response = await firstValueFrom(

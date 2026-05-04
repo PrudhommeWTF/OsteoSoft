@@ -63,7 +63,7 @@ npm install
 Créer un fichier `.env` à la racine du projet. Exemple minimal:
 
 ```env
-API_PORT=3000
+API_PORT=4199
 JWT_SECRET=change-me-in-production
 NODE_ENV=development
 ```
@@ -83,7 +83,7 @@ npm run start:full
 
 Ensuite:
 - Frontend: http://localhost:4200
-- API: http://localhost:3000
+- API: http://localhost:4199
 
 ### Option B - Démarrage séparé
 
@@ -108,7 +108,7 @@ docker compose up -d --build
 ```
 
 - Frontend: http://localhost:4200
-- API: http://localhost:3000
+- API: http://localhost:4199
 
 Les données SQLite sont conservées dans le volume Docker `osteosoft_data` entre les redémarrages.
 

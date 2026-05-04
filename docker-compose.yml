@@ -6,10 +6,10 @@ services:
     env_file:
       - .env
     environment:
-      API_PORT: 3000
+      API_PORT: 4199
       CLIENT_ORIGIN: http://localhost:4200
     ports:
-      - "3000:3000"
+      - "4199:4199"
     volumes:
       - osteosoft_data:/app/server/data
     restart: unless-stopped

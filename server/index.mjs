@@ -19,7 +19,7 @@ import { z } from 'zod';
 dotenv.config();
 
 const app = express();
-const port = Number(process.env.API_PORT ?? 3000);
+const port = Number(process.env.API_PORT ?? 4199);
 const dataDir = path.resolve(process.cwd(), 'server/data');
 const dbPath = path.resolve(dataDir, 'osteo.db');
 const jwtSecret = process.env.JWT_SECRET ?? 'dev-only-jwt-secret-change-me';

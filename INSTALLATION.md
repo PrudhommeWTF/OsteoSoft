@@ -25,7 +25,7 @@ Ce document décrit les options d'installation d'OsteoSoft:
 
 - `OSTEOSOFT_DATA_KEY` — clé AES-256 pour le chiffrement des données sensibles (**obligatoire en production**)
 - `JWT_SECRET` — secret de signature des tokens de session (**obligatoire en production**)
-- `API_PORT` (par défaut: 3000)
+- `API_PORT` (par défaut: 4199)
 - `CLIENT_ORIGIN` (par défaut: http://localhost:4200)
 
 Génération rapide d'une clé de chiffrement (32 bytes base64):
@@ -49,7 +49,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 3. Accéder à l'application:
 
 - Frontend: http://localhost:4200
-- API: http://localhost:3000
+- API: http://localhost:4199
 
 ## Option B - Installation Docker Compose
 
@@ -64,7 +64,7 @@ docker compose up -d --build
 ### 2) Vérification
 
 - Frontend: http://localhost:4200
-- API: http://localhost:3000/api/config
+- API: http://localhost:4199/api/config
 
 ### 3) Arrêt
 
@@ -114,7 +114,7 @@ server {
 
     # API Node.js
     location /api/ {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://localhost:4199;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
