@@ -7441,14 +7441,15 @@ const setupLimiter = rateLimit({
 
 // Rate limiter for expensive/destructive data-management operations (import, restore, anonymize).
 // Limit is intentionally low: these operations are rare and resource-intensive.
+// Applied before auth middleware so it also guards against unauthenticated flood attempts.
 const heavyOperationLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 5,
   handler: (req, res) => {
     writeAuditLog(req.user?.sub ?? null, 'SECURITY', 'data-management', null, {
       event: 'heavy_operation_rate_limit_blocked',
-      route: String(req.originalUrl ?? '').split('?')[0],
-      method: String(req.method ?? '').toUpperCase()
+      route: req.path,
+      method: req.method
     });
     return res.status(429).json({ message: 'Trop de requêtes. Réessayez dans quelques minutes.' });
   }
@@ -9190,7 +9191,7 @@ app.get('/api/data-management/import-template', authMiddleware, requirePermissio
   return res.status(200).send(workbookBuffer);
 });
 
-app.post('/api/data-management/import', authMiddleware, requirePermission('manage-data-import'), heavyOperationLimiter, async (req, res) => {
+app.post('/api/data-management/import', heavyOperationLimiter, authMiddleware, requirePermission('manage-data-import'), async (req, res) => {
   const parsed = dataImportPayloadSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: 'Payload d\'import invalide' });
@@ -9736,7 +9737,7 @@ app.post('/api/data-management/reset-demo', authMiddleware, adminOnlyMiddleware,
   }
 });
 
-app.post('/api/data-management/restore', authMiddleware, requirePermission('manage-data-backup-restore'), heavyOperationLimiter, async (req, res) => {
+app.post('/api/data-management/restore', heavyOperationLimiter, authMiddleware, requirePermission('manage-data-backup-restore'), async (req, res) => {
   if (!isApplicationSuperAdmin(req.userAccess)) {
     return res.status(403).json({
       message: 'Restauration globale reservee au super administrateur application. Utilisez un compte super administrateur application pour restaurer une sauvegarde complete.'
@@ -9781,7 +9782,7 @@ app.post('/api/data-management/restore', authMiddleware, requirePermission('mana
   }
 });
 
-app.post('/api/data-management/webosteo-import', authMiddleware, requirePermission('manage-data-import'), heavyOperationLimiter, async (req, res) => {
+app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMiddleware, requirePermission('manage-data-import'), async (req, res) => {
   const parsedBody = z.object({
     officeId: z.number().int().positive(),
     contentBase64: z.string().min(1),
@@ -13802,7 +13803,7 @@ app.post('/api/patients/:id/update-consent', authMiddleware, requirePermission('
   return res.status(200).json({ consentSignedAt: signedAt, consentFormVersion: CURRENT_CONSENT_FORM_VERSION });
 });
 
-app.post('/api/patients/:id/anonymize', authMiddleware, adminOnlyMiddleware, heavyOperationLimiter, (req, res) => {
+app.post('/api/patients/:id/anonymize', heavyOperationLimiter, authMiddleware, adminOnlyMiddleware, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
     return res.status(400).json({ message: 'Identifiant patient invalide' });

@@ -2874,7 +2874,7 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     try {
       // Exclude sensitive PII fields that must not be persisted in plain-text browser storage.
       // socialSecurityNumber (NIR) is a health-linked identifier — never cache it locally.
-      const { socialSecurityNumber: _ssn, ...safePayload } = payload as Record<string, unknown>;
+      const { socialSecurityNumber, ...safePayload } = payload as Record<string, unknown>;
       window.localStorage.setItem(
         LOCAL_DRAFT_KEY,
         JSON.stringify({
