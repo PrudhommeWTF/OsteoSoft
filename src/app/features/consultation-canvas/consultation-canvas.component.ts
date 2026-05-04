@@ -1,5 +1,6 @@
 import {
   AfterViewInit,
+  AfterViewChecked,
   ChangeDetectionStrategy,
   Component,
   ElementRef,
@@ -68,7 +69,7 @@ function parseSchemaData(value: string): SchemaData | null {
   styleUrls: ['./consultation-canvas.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class ConsultationCanvasComponent implements AfterViewInit, OnChanges, OnDestroy {
+export class ConsultationCanvasComponent implements AfterViewInit, AfterViewChecked, OnChanges, OnDestroy {
   @Input() value = '';
   @Output() valueChange = new EventEmitter<string>();
 
@@ -107,6 +108,18 @@ export class ConsultationCanvasComponent implements AfterViewInit, OnChanges, On
     }
   }
 
+  ngAfterViewChecked(): void {
+    if (this.enabled() && !this.ctx) {
+      this.initCanvas();
+      if (this.pendingLoad !== null) {
+        this.loadDrawing(this.pendingLoad);
+        this.pendingLoad = null;
+      } else {
+        this.emitValue();
+      }
+    }
+  }
+
   ngOnChanges(changes: SimpleChanges): void {
     if (!changes['value']) return;
     const parsed = parseSchemaData(this.value);
@@ -131,11 +144,10 @@ export class ConsultationCanvasComponent implements AfterViewInit, OnChanges, On
     const checked = (event.target as HTMLInputElement).checked;
     this.enabled.set(checked);
     if (!checked) {
+      this.ctx = null;
       this.valueChange.emit('');
-    } else {
-      this.clearCanvas(false);
-      this.emitValue();
     }
+    // when checked = true, ngAfterViewChecked handles initCanvas()
   }
 
   setBg(bg: CanvasBg): void {

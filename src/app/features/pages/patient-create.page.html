@@ -988,6 +988,13 @@
             <div #motifMainEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('motifMain', $event)"></div>
           </div>
 
+          <div class="mb-0">
+            <app-consultation-canvas
+              [value]="consultationSchemaHtml()"
+              (valueChange)="onConsultationSchemaChange($event)"
+            ></app-consultation-canvas>
+          </div>
+
           <div class="mb-3">
             <label class="form-label fw-semibold">Tests</label>
             <div class="wysiwyg-toolbar">
@@ -998,13 +1005,6 @@
               <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyEditorCommand('tests', 'insertOrderedList')" title="Liste numérotée" bsTooltip><i class="fa-solid fa-list-ol"></i></button>
             </div>
             <div #testsEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('tests', $event)"></div>
-          </div>
-
-          <div class="mb-3">
-            <app-consultation-canvas
-              [value]="consultationSchemaHtml()"
-              (valueChange)="onConsultationSchemaChange($event)"
-            ></app-consultation-canvas>
           </div>
 
           <div class="mb-3">
