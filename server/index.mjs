@@ -39,6 +39,10 @@ const SESSION_DEFAULT_MAX_AGE_MS = Number(process.env.SESSION_DEFAULT_MAX_AGE_MS
 const SESSION_REMEMBER_TTL = process.env.SESSION_REMEMBER_TTL ?? '12h';
 const SESSION_DEFAULT_TTL = process.env.SESSION_DEFAULT_TTL ?? '2h';
 const CURRENT_CONSENT_FORM_VERSION = '1.0';
+// Audit log retention: default 3 years (1095 days). Set to 0 to disable automatic purge.
+const AUDIT_LOG_RETENTION_DAYS = Number(process.env.AUDIT_LOG_RETENTION_DAYS ?? 1095);
+// Draft retention: drafts not updated in 7 days are considered orphaned and purged.
+const DRAFT_RETENTION_DAYS = Number(process.env.DRAFT_RETENTION_DAYS ?? 7);
 
 if (isProduction && jwtSecret === 'dev-only-jwt-secret-change-me') {
   throw new Error('JWT_SECRET must be configured in production.');
@@ -990,6 +994,38 @@ function processExpiredPatients() {
   }
 
   return expired.length;
+}
+
+function processExpiredDrafts() {
+  if (DRAFT_RETENTION_DAYS <= 0) {
+    return 0;
+  }
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - DRAFT_RETENTION_DAYS);
+  const cutoffIso = cutoff.toISOString().slice(0, 19).replace('T', ' ');
+
+  const result = db
+    .prepare(`DELETE FROM draft WHERE updated_at < ?`)
+    .run(cutoffIso);
+
+  return result.changes;
+}
+
+function processExpiredAuditLogs() {
+  if (AUDIT_LOG_RETENTION_DAYS <= 0) {
+    return 0;
+  }
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - AUDIT_LOG_RETENTION_DAYS);
+  const cutoffIso = cutoff.toISOString().slice(0, 19).replace('T', ' ');
+
+  const result = db
+    .prepare(`DELETE FROM audit_logs WHERE created_at < ?`)
+    .run(cutoffIso);
+
+  return result.changes;
 }
 
 function shouldAutoTraceRequest(req) {
@@ -7403,6 +7439,22 @@ const setupLimiter = rateLimit({
   }
 });
 
+// Rate limiter for expensive/destructive data-management operations (import, restore, anonymize).
+// Limit is intentionally low: these operations are rare and resource-intensive.
+// Applied before auth middleware so it also guards against unauthenticated flood attempts.
+const heavyOperationLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  handler: (req, res) => {
+    writeAuditLog(req.user?.sub ?? null, 'SECURITY', 'data-management', null, {
+      event: 'heavy_operation_rate_limit_blocked',
+      route: req.path,
+      method: req.method
+    });
+    return res.status(429).json({ message: 'Trop de requêtes. Réessayez dans quelques minutes.' });
+  }
+});
+
 app.use((req, res, next) => {
   const startedAt = Date.now();
 
@@ -9139,7 +9191,7 @@ app.get('/api/data-management/import-template', authMiddleware, requirePermissio
   return res.status(200).send(workbookBuffer);
 });
 
-app.post('/api/data-management/import', authMiddleware, requirePermission('manage-data-import'), async (req, res) => {
+app.post('/api/data-management/import', heavyOperationLimiter, authMiddleware, requirePermission('manage-data-import'), async (req, res) => {
   const parsed = dataImportPayloadSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: 'Payload d\'import invalide' });
@@ -9685,7 +9737,7 @@ app.post('/api/data-management/reset-demo', authMiddleware, adminOnlyMiddleware,
   }
 });
 
-app.post('/api/data-management/restore', authMiddleware, requirePermission('manage-data-backup-restore'), async (req, res) => {
+app.post('/api/data-management/restore', heavyOperationLimiter, authMiddleware, requirePermission('manage-data-backup-restore'), async (req, res) => {
   if (!isApplicationSuperAdmin(req.userAccess)) {
     return res.status(403).json({
       message: 'Restauration globale reservee au super administrateur application. Utilisez un compte super administrateur application pour restaurer une sauvegarde complete.'
@@ -9730,7 +9782,7 @@ app.post('/api/data-management/restore', authMiddleware, requirePermission('mana
   }
 });
 
-app.post('/api/data-management/webosteo-import', authMiddleware, requirePermission('manage-data-import'), async (req, res) => {
+app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMiddleware, requirePermission('manage-data-import'), async (req, res) => {
   const parsedBody = z.object({
     officeId: z.number().int().positive(),
     contentBase64: z.string().min(1),
@@ -13751,7 +13803,7 @@ app.post('/api/patients/:id/update-consent', authMiddleware, requirePermission('
   return res.status(200).json({ consentSignedAt: signedAt, consentFormVersion: CURRENT_CONSENT_FORM_VERSION });
 });
 
-app.post('/api/patients/:id/anonymize', authMiddleware, adminOnlyMiddleware, (req, res) => {
+app.post('/api/patients/:id/anonymize', heavyOperationLimiter, authMiddleware, adminOnlyMiddleware, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
     return res.status(400).json({ message: 'Identifiant patient invalide' });
@@ -18273,5 +18325,10 @@ app.listen(port, () => {
 });
 
 processExpiredPatients();
+processExpiredDrafts();
+processExpiredAuditLogs();
+
 const retentionCheckIntervalMs = 24 * 60 * 60 * 1000;
 const retentionCheckInterval = setInterval(processExpiredPatients, retentionCheckIntervalMs);
+const draftPurgeInterval = setInterval(processExpiredDrafts, retentionCheckIntervalMs);
+const auditLogPurgeInterval = setInterval(processExpiredAuditLogs, retentionCheckIntervalMs);
