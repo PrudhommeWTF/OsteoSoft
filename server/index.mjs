@@ -3981,7 +3981,7 @@ function buildDataBackupSnapshot(options = {}) {
     patientDocuments: db.prepare(
       `SELECT id, document_ref, patient_id, consultation_id, office_id, created_by,
               file_name, mime_type, size_bytes, title_cipher, comment_cipher,
-              content_cipher, created_at
+              content_cipher, document_type, created_at
        FROM patient_documents
        ORDER BY id ASC`
     ).all(),
@@ -4184,8 +4184,8 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
       `INSERT INTO patient_documents (
          id, document_ref, patient_id, consultation_id, office_id, created_by,
          file_name, mime_type, size_bytes, title_cipher, comment_cipher,
-         content_cipher, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         content_cipher, document_type, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const insertAntecedentType = db.prepare(
       `INSERT INTO antecedent_types (id, label, created_at)
@@ -4611,6 +4611,7 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
         row.title_cipher ?? null,
         row.comment_cipher ?? null,
         String(row.content_cipher ?? ''),
+        String(row.document_type ?? 'document'),
         row.created_at ?? new Date().toISOString()
       );
     }
@@ -5285,6 +5286,7 @@ async function ensureSeedData() {
   ensureUserOfficeLinks();
   ensureColumn('patients', 'sex', "sex TEXT NOT NULL DEFAULT 'Non renseigne'");
   ensureColumn('patients', 'birth_date', 'birth_date TEXT');
+  ensureColumn('patient_documents', 'document_type', "document_type TEXT NOT NULL DEFAULT 'document'");
   normalizeLegacySeedPatients();
   ensureDefaultLocalCalendars();
 
@@ -12552,7 +12554,7 @@ app.get('/api/patients/:id/documents', authMiddleware, requirePermission('read-p
   }
 
   const rows = db.prepare(
-    `SELECT id, document_ref, consultation_id, office_id, file_name, mime_type, size_bytes, title_cipher, comment_cipher, created_at
+    `SELECT id, document_ref, consultation_id, office_id, file_name, mime_type, size_bytes, title_cipher, comment_cipher, document_type, created_at
      FROM patient_documents
      WHERE patient_id = ?
      ORDER BY datetime(created_at) DESC, id DESC`
@@ -12568,6 +12570,7 @@ app.get('/api/patients/:id/documents', authMiddleware, requirePermission('read-p
     sizeBytes: Number(row.size_bytes) || 0,
     title: row.title_cipher ? decryptSensitiveField(row.title_cipher) : '',
     comment: row.comment_cipher ? decryptSensitiveField(row.comment_cipher) : '',
+    documentType: String(row.document_type ?? 'document'),
     createdAt: row.created_at,
     link: `/api/patient-documents/${encodeURIComponent(row.document_ref)}`
   }));
@@ -12583,7 +12586,7 @@ app.get('/api/patient-documents/:documentRef', authMiddleware, requirePermission
 
   const row = db.prepare(
     `SELECT id, document_ref, patient_id, consultation_id, office_id, file_name, mime_type, size_bytes,
-            title_cipher, comment_cipher, content_cipher, created_at
+            title_cipher, comment_cipher, content_cipher, document_type, created_at
      FROM patient_documents
      WHERE document_ref = ?
      LIMIT 1`
@@ -12614,6 +12617,7 @@ app.get('/api/patient-documents/:documentRef', authMiddleware, requirePermission
       sizeBytes: Number(row.size_bytes) || 0,
       title: row.title_cipher ? decryptSensitiveField(row.title_cipher) : '',
       comment: row.comment_cipher ? decryptSensitiveField(row.comment_cipher) : '',
+      documentType: String(row.document_type ?? 'document'),
       contentBase64: decryptSensitiveField(row.content_cipher),
       createdAt: row.created_at
     }
@@ -12644,6 +12648,9 @@ app.post('/api/patients/:id/documents', authMiddleware, requirePermission('creat
   const consultationIdRaw = Number(req.body?.consultationId);
   const requestedOfficeId = Number.isInteger(officeIdRaw) && officeIdRaw > 0 ? officeIdRaw : null;
   const consultationId = Number.isInteger(consultationIdRaw) && consultationIdRaw > 0 ? consultationIdRaw : null;
+  const VALID_DOCUMENT_TYPES = ['document', 'invoice', 'letter'];
+  const rawDocumentType = String(req.body?.documentType ?? '').trim();
+  const documentType = VALID_DOCUMENT_TYPES.includes(rawDocumentType) ? rawDocumentType : 'document';
 
   if (!fileName || !contentBase64) {
     return res.status(400).json({ message: 'Fichier invalide' });
@@ -12691,8 +12698,8 @@ app.post('/api/patients/:id/documents', authMiddleware, requirePermission('creat
   const documentRef = `doc-${crypto.randomUUID()}`;
   db.prepare(
     `INSERT INTO patient_documents
-      (document_ref, patient_id, consultation_id, office_id, created_by, file_name, mime_type, size_bytes, title_cipher, comment_cipher, content_cipher)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      (document_ref, patient_id, consultation_id, office_id, created_by, file_name, mime_type, size_bytes, title_cipher, comment_cipher, content_cipher, document_type)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     documentRef,
     patientId,
@@ -12704,7 +12711,8 @@ app.post('/api/patients/:id/documents', authMiddleware, requirePermission('creat
     contentSizeBytes,
     title ? encryptSensitiveField(title) : null,
     comment ? encryptSensitiveField(comment) : null,
-    encryptSensitiveField(contentBase64)
+    encryptSensitiveField(contentBase64),
+    documentType
   );
 
   return res.status(201).json({
@@ -12718,6 +12726,7 @@ app.post('/api/patients/:id/documents', authMiddleware, requirePermission('creat
       sizeBytes: contentSizeBytes,
       title,
       comment,
+      documentType,
       createdAt: new Date().toISOString(),
       link: `/api/patient-documents/${encodeURIComponent(documentRef)}`
     }

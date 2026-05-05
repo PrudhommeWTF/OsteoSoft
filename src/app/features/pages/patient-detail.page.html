@@ -1235,6 +1235,40 @@
                 </div>
               }
             </section>
+
+            @if (consultationModalMode() !== 'create') {
+              @if (activeConsultationLetters().length === 0) {
+                <div class="empty-tab-state mt-3">
+                  <i class="fa-solid fa-envelope-open-text"></i>
+                  <h3>Aucun courrier sortant</h3>
+                  <p>Les courriers rédigés pour cette consultation apparaîtront ici.</p>
+                </div>
+              } @else {
+                <div class="d-flex flex-column gap-3 mt-3">
+                  @for (letter of activeConsultationLetters(); track letter.documentRef) {
+                    <article class="border rounded-3 p-3 bg-body">
+                      <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                        <div>
+                          <p class="fw-semibold mb-1">{{ letter.title || letter.fileName }}</p>
+                          <p class="text-muted small mb-0">{{ letter.comment }} · {{ formatFileSize(letter.sizeBytes) }}</p>
+                        </div>
+                        <div class="btn-group btn-group-sm">
+                          <button type="button" class="btn btn-outline-primary" (click)="openPatientDocument(letter)" title="Ouvrir" bsTooltip>
+                            <i class="fa-solid fa-eye me-1"></i>Ouvrir
+                          </button>
+                          <button type="button" class="btn btn-outline-secondary" (click)="openPatientDocument(letter, true)" title="Télécharger" bsTooltip>
+                            <i class="fa-solid fa-download me-1"></i>Télécharger
+                          </button>
+                          <button type="button" class="btn btn-outline-danger" [disabled]="isDocumentSaving(letter.documentRef) || !canEditPatient()" (click)="deleteConsultationDocument(letter.documentRef)" title="Supprimer" bsTooltip>
+                            <i class="fa-solid fa-trash me-1"></i>Supprimer
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  }
+                </div>
+              }
+            }
           }
 
           @if (consultationActiveTab() === 'paiement') {

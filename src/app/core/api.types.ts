@@ -1074,6 +1074,7 @@ export type PatientDocumentSummary = {
   sizeBytes: number;
   title: string;
   comment: string;
+  documentType: string;
   createdAt: string;
   link: string;
 };
@@ -1092,6 +1093,7 @@ export type CreatePatientDocumentPayload = {
   title: string;
   comment: string;
   contentBase64: string;
+  documentType?: string;
 };
 
 export type UpdatePatientDocumentPayload = {
