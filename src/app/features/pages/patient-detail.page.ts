@@ -580,6 +580,14 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     );
   });
 
+  readonly consultationPendingLetters = computed(() =>
+    this.consultationPendingDocuments().filter((doc) => doc.documentType === 'letter')
+  );
+
+  readonly consultationPendingNonLetterDocuments = computed(() =>
+    this.consultationPendingDocuments().filter((doc) => doc.documentType !== 'letter')
+  );
+
   readonly practitionerPickerOptions = computed(() => {
     return this.practitioners().map((practitioner) => {
       const displayName = String(practitioner.displayName ?? '').trim() || practitioner.username;
@@ -1525,7 +1533,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
             sizeBytes: doc.sizeBytes,
             title: doc.title,
             comment: doc.comment,
-            contentBase64: doc.contentBase64
+            contentBase64: doc.contentBase64,
+            documentType: doc.documentType
           }))
         );
 
@@ -1685,6 +1694,25 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       const subject = String(raw.subject ?? '').trim() || 'Courrier patient';
       const letterDate = this.fromDateInputValue(String(raw.date ?? '').trim()) ?? new Date().toISOString();
       const fileName = `${this.toFileSlug(currentPatient.fullName)}_courrier_${this.toFileSlug(subject) || 'patient'}.pdf`;
+
+      if (this.consultationModalMode() === 'create') {
+        this.consultationPendingDocuments.update((items) => [
+          ...items,
+          {
+            tempKey: this.createTempKey('letter'),
+            documentRef: this.createDocumentRef(),
+            fileName,
+            mimeType: 'application/pdf',
+            sizeBytes: pdfBlob.size,
+            title: subject,
+            comment: `Courrier patient du ${this.formatShortDate(letterDate)}`,
+            contentBase64,
+            documentType: 'letter'
+          }
+        ]);
+        this.closePatientLetterComposeModal();
+        return;
+      }
 
       const created = await this.api.createPatientDocument(currentPatient.id, {
         consultationId: this.activeConsultation()?.id ?? null,
@@ -3445,7 +3473,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
         sizeBytes: doc.sizeBytes,
         title: doc.title,
         comment: doc.comment,
-        contentBase64: doc.contentBase64
+        contentBase64: doc.contentBase64,
+        documentType: doc.documentType
       }))
     };
   }

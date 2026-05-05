@@ -1089,7 +1089,7 @@
                 </div>
               </div>
 
-              @if (consultationPendingDocuments().length === 0) {
+              @if (consultationPendingNonLetterDocuments().length === 0) {
                 <div class="empty-tab-state">
                   <i class="fa-regular fa-folder-open"></i>
                   <h3>Aucun document ajoute</h3>
@@ -1097,7 +1097,7 @@
                 </div>
               } @else {
                 <div class="d-flex flex-column gap-3">
-                  @for (document of consultationPendingDocuments(); track document.tempKey) {
+                  @for (document of consultationPendingNonLetterDocuments(); track document.tempKey) {
                     <article class="border rounded-3 p-3 bg-body">
                       <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
                         <div>
@@ -1236,7 +1236,34 @@
               }
             </section>
 
-            @if (consultationModalMode() !== 'create') {
+            @if (consultationModalMode() === 'create') {
+              @if (consultationPendingLetters().length === 0) {
+                <div class="empty-tab-state mt-3">
+                  <i class="fa-solid fa-envelope-open-text"></i>
+                  <h3>Aucun courrier sortant</h3>
+                  <p>Les courriers rédigés pour cette consultation seront sauvegardés à la création de la consultation.</p>
+                </div>
+              } @else {
+                <div class="d-flex flex-column gap-3 mt-3">
+                  @for (letter of consultationPendingLetters(); track letter.tempKey) {
+                    <article class="border rounded-3 p-3 bg-body">
+                      <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                        <div>
+                          <p class="fw-semibold mb-1">{{ letter.title || letter.fileName }}</p>
+                          <p class="text-muted small mb-0">{{ letter.comment ? letter.comment + ' · ' : '' }}{{ formatFileSize(letter.sizeBytes) }}</p>
+                        </div>
+                        <button
+                          type="button"
+                          class="btn btn-outline-danger btn-sm"
+                          (click)="removePendingConsultationDocument(letter.tempKey)" title="Supprimer" bsTooltip>
+                          <i class="fa-solid fa-trash me-1"></i>Supprimer
+                        </button>
+                      </div>
+                    </article>
+                  }
+                </div>
+              }
+            } @else {
               @if (activeConsultationLetters().length === 0) {
                 <div class="empty-tab-state mt-3">
                   <i class="fa-solid fa-envelope-open-text"></i>
