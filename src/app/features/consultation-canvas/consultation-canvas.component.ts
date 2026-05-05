@@ -6,7 +6,6 @@ import {
   ElementRef,
   Input,
   OnChanges,
-  OnDestroy,
   Output,
   EventEmitter,
   SimpleChanges,
@@ -14,7 +13,6 @@ import {
   computed,
   viewChild
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
 
 type CanvasBg = 'adulte' | 'bb';
 
@@ -64,12 +62,12 @@ function parseSchemaData(value: string): SchemaData | null {
 @Component({
   selector: 'app-consultation-canvas',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './consultation-canvas.component.html',
   styleUrls: ['./consultation-canvas.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class ConsultationCanvasComponent implements AfterViewInit, AfterViewChecked, OnChanges, OnDestroy {
+export class ConsultationCanvasComponent implements AfterViewInit, AfterViewChecked, OnChanges {
   @Input() value = '';
   @Output() valueChange = new EventEmitter<string>();
 
@@ -134,10 +132,6 @@ export class ConsultationCanvasComponent implements AfterViewInit, AfterViewChec
     } else {
       this.enabled.set(false);
     }
-  }
-
-  ngOnDestroy(): void {
-    // nothing to clean up
   }
 
   toggleEnabled(event: Event): void {

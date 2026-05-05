@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
 import { ApiService } from '../../core/api.service';
@@ -44,7 +44,7 @@ type DepositCandidateGroup = {
 
 @Component({
   selector: 'app-billing-page',
-  imports: [CommonModule, RouterLink, BsTooltipDirective],
+  imports: [DatePipe, RouterLink, BsTooltipDirective],
   templateUrl: './billing.page.html',
   styleUrl: './billing.page.scss',
   host: {
