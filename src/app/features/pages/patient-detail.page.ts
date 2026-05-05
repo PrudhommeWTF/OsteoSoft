@@ -569,6 +569,17 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     return this.patientDocuments().filter((document) => document.consultationId === consultationId);
   });
 
+  readonly activeConsultationLetters = computed(() => {
+    const consultationId = this.activeConsultation()?.id;
+    if (!consultationId) {
+      return [];
+    }
+
+    return this.patientDocuments().filter(
+      (document) => document.consultationId === consultationId && document.documentType === 'letter'
+    );
+  });
+
   readonly practitionerPickerOptions = computed(() => {
     return this.practitioners().map((practitioner) => {
       const displayName = String(practitioner.displayName ?? '').trim() || practitioner.username;
@@ -1683,7 +1694,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
         sizeBytes: pdfBlob.size,
         title: subject,
         comment: `Courrier patient du ${this.formatShortDate(letterDate)}`,
-        contentBase64
+        contentBase64,
+        documentType: 'letter'
       });
 
       this.patientDocuments.update((items) => [created, ...items]);
@@ -2157,7 +2169,8 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
         sizeBytes: pdfBlob.size,
         title: rawName,
         comment: String(raw.internalComment ?? '').trim(),
-        contentBase64: base64
+        contentBase64: base64,
+        documentType: 'invoice'
       });
 
       this.patientDocuments.update((items) => [created, ...items]);
@@ -4442,11 +4455,17 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
       return '';
     }
 
-    const invoiceDocs = docs.filter((item) => {
-      const title = String(item.title ?? '').toLowerCase();
-      const fileName = String(item.fileName ?? '').toLowerCase();
-      return title.includes('facture') || fileName.includes('facture');
-    });
+    // Prefer documents explicitly typed as invoices.
+    const typedInvoiceDocs = docs.filter((item) => item.documentType === 'invoice');
+
+    // Fall back to heuristic title/filename matching for older documents without a documentType.
+    const invoiceDocs = typedInvoiceDocs.length > 0
+      ? typedInvoiceDocs
+      : docs.filter((item) => {
+          const title = String(item.title ?? '').toLowerCase();
+          const fileName = String(item.fileName ?? '').toLowerCase();
+          return title.includes('facture') || fileName.includes('facture');
+        });
 
     const candidates = invoiceDocs.length > 0 ? invoiceDocs : docs;
     const issuedAtMs = new Date(issuedAtIso).getTime();
