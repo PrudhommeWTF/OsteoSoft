@@ -12667,7 +12667,7 @@ app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-lis
     // patient in accessible offices so we can both filter and display a count.
     const countRows = db
       .prepare(
-        `SELECT patient_id, COUNT(*) AS consultation_count
+        `SELECT patient_id, COUNT(*) AS activity_count
          FROM (
            SELECT patient_id FROM appointments WHERE office_id IN (${placeholders})
            UNION ALL
@@ -12681,9 +12681,9 @@ app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-lis
 
     for (const row of countRows) {
       const patientId = Number(row.patient_id);
-      const consultationCount = Number(row.consultation_count ?? 0);
+      const activityCount = Number(row.activity_count ?? 0);
       if (Number.isInteger(patientId) && patientId > 0) {
-        consultationCountByPatientId.set(patientId, consultationCount);
+        consultationCountByPatientId.set(patientId, activityCount);
         visiblePatientIds.add(patientId);
       }
     }
@@ -15016,11 +15016,11 @@ function canUserAccessPatient(patientId, userAccess) {
   // (all rows have NULL office_id), they remain visible to every practitioner.
   const hasAnyOfficeLink = db.prepare(`
     SELECT 1 FROM (
-      SELECT 1 FROM consultations WHERE patient_id = ? AND office_id IS NOT NULL
+      SELECT 1 FROM consultations WHERE patient_id = ? AND office_id IS NOT NULL LIMIT 1
       UNION ALL
-      SELECT 1 FROM appointments WHERE patient_id = ? AND office_id IS NOT NULL
+      SELECT 1 FROM appointments WHERE patient_id = ? AND office_id IS NOT NULL LIMIT 1
       UNION ALL
-      SELECT 1 FROM patients WHERE id = ? AND office_id IS NOT NULL AND is_deleted = 0
+      SELECT 1 FROM patients WHERE id = ? AND office_id IS NOT NULL AND is_deleted = 0 LIMIT 1
     ) LIMIT 1
   `).get(patientId, patientId, patientId);
 
@@ -17242,11 +17242,15 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('invoice-con
     }
   }
 
-  // Determine the effective office for the invoice. Use the explicitly requested
-  // office if valid; otherwise fall back to the first of the user's accessible
-  // offices so that invoices are never orphaned with a NULL office_id.
+  // Determine the effective office for the invoice. Prefer the explicitly
+  // requested office; otherwise use the user's first accessible office.
+  // Reject the request if neither is available to avoid NULL orphaned invoices.
+  const accessibleOfficeIdsForInvoice = getAccessibleBillingOfficeIds(req.userAccess);
   const effectiveOfficeId = requestedOfficeId
-    ?? (getAccessibleBillingOfficeIds(req.userAccess)[0] ?? null);
+    ?? (accessibleOfficeIdsForInvoice.length > 0 ? accessibleOfficeIdsForInvoice[0] : null);
+  if (effectiveOfficeId === null) {
+    return res.status(400).json({ message: 'Cabinet requis pour la création d\'une facture' });
+  }
   const effectiveConsultationId = Number.isInteger(consultationId) && consultationId > 0 ? consultationId : null;
   const effectiveStatus = computeInvoiceStatusFromPayments(amountCents, payments, status);
   const dueAt = issuedAt;
