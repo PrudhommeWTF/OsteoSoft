@@ -12665,6 +12665,7 @@ app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-lis
 
     // Count activity (appointments + consultations + patients.office_id) per
     // patient in accessible offices so we can both filter and display a count.
+    const activityParams = [...scopedOfficeIds, ...scopedOfficeIds, ...scopedOfficeIds];
     const countRows = db
       .prepare(
         `SELECT patient_id, COUNT(*) AS activity_count
@@ -12677,7 +12678,7 @@ app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-lis
          )
          GROUP BY patient_id`
       )
-      .all(...scopedOfficeIds, ...scopedOfficeIds, ...scopedOfficeIds);
+      .all(...activityParams);
 
     for (const row of countRows) {
       const patientId = Number(row.patient_id);
