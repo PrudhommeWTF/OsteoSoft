@@ -18,6 +18,12 @@ import { z } from 'zod';
 
 dotenv.config();
 
+const { createRequire } = await import('node:module');
+const requireJson = createRequire(import.meta.url);
+const packageJson = requireJson('../package.json');
+const APP_VERSION = packageJson.version ?? '0.0.0';
+const changelogPath = path.resolve(process.cwd(), 'CHANGELOG.md');
+
 const app = express();
 const port = Number(process.env.API_PORT ?? 4199);
 const dataDir = path.resolve(process.cwd(), 'server/data');
@@ -7495,6 +7501,14 @@ const heavyOperationLimiter = rateLimit({
   }
 });
 
+const publicEndpointLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  handler: (_req, res) => {
+    return res.status(429).json({ message: 'Trop de requêtes. Réessayez dans quelques secondes.' });
+  }
+});
+
 app.use((req, res, next) => {
   const startedAt = Date.now();
 
@@ -7524,12 +7538,59 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.get('/api/config', (_req, res) => {
+app.get('/api/config', publicEndpointLimiter, (_req, res) => {
   const appName = db.prepare('SELECT value FROM config WHERE key = ?').get('app_name');
   res.json({
-    app_name: appName?.value ?? 'OsteoSoft'
-    // version intentionally omitted from public endpoint
+    app_name: appName?.value ?? 'OsteoSoft',
+    version: APP_VERSION
   });
+});
+
+app.get('/api/changelog', publicEndpointLimiter, (_req, res) => {
+  let raw = '';
+  try {
+    raw = fs.readFileSync(changelogPath, 'utf-8');
+  } catch {
+    return res.json([]);
+  }
+
+  const entries = [];
+  const versionBlocks = raw.split(/^## /m).slice(1);
+
+  for (const block of versionBlocks.slice(0, 10)) {
+    const lines = block.split('\n');
+    const headerLine = lines[0] ?? '';
+    const versionMatch = headerLine.match(/\[([^\]]+)\]/);
+    const dateMatch = headerLine.match(/\d{4}-\d{2}-\d{2}/);
+
+    if (!versionMatch) {
+      continue;
+    }
+
+    const version = versionMatch[1];
+    const date = dateMatch ? dateMatch[0] : null;
+
+    const sections = [];
+    let currentSection = null;
+
+    for (const line of lines.slice(1)) {
+      const sectionMatch = line.match(/^### (.+)/);
+      if (sectionMatch) {
+        currentSection = { label: sectionMatch[1], items: [] };
+        sections.push(currentSection);
+        continue;
+      }
+
+      const itemMatch = line.match(/^- (.+)/);
+      if (itemMatch && currentSection) {
+        currentSection.items.push(itemMatch[1]);
+      }
+    }
+
+    entries.push({ version, date, sections });
+  }
+
+  return res.json(entries);
 });
 
 app.get('/api/settings/general', authMiddleware, adminOnlyMiddleware, (_req, res) => {

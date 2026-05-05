@@ -13,7 +13,11 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test --watch=false --browsers=ChromeHeadless",
-    "test:watch": "ng test"
+    "test:watch": "ng test",
+    "release": "standard-version",
+    "release:patch": "standard-version --release-as patch",
+    "release:minor": "standard-version --release-as minor",
+    "release:major": "standard-version --release-as major"
   },
   "private": true,
   "packageManager": "npm@11.11.0",
@@ -64,6 +68,7 @@
     "karma-jasmine": "^5.1.0",
     "karma-jasmine-html-reporter": "^2.2.0",
     "prettier": "^3.8.1",
+    "standard-version": "^9.5.0",
     "typescript": "~5.9.2"
   }
 }

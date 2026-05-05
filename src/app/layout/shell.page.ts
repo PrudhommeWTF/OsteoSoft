@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { ApiService } from '../core/api.service';
-import { Patient } from '../core/api.types';
+import { ChangelogEntry, Patient } from '../core/api.types';
 import { AuthService } from '../core/auth.service';
 import { ConfigService } from '../core/config.service';
 import { ThemeService } from '../core/theme.service';
@@ -50,6 +50,8 @@ export class ShellPage implements OnInit, OnDestroy {
 
   readonly isMenuOpen = signal(false);
   readonly isCreditsModalOpen = signal(false);
+  readonly isChangelogModalOpen = signal(false);
+  readonly changelogEntries = signal<ChangelogEntry[]>([]);
   readonly username = this.authService.username;
   readonly role = this.authService.role;
   readonly profileLabel = this.authService.profileLabel;
@@ -112,6 +114,12 @@ export class ShellPage implements OnInit, OnDestroy {
     this.clockTimer = setInterval(() => {
       this.now.set(new Date());
     }, 1000);
+
+    this.api.getChangelog().then((entries) => {
+      this.changelogEntries.set(entries);
+    }).catch(() => {
+      this.changelogEntries.set([]);
+    });
 
     this.api.getPatientCount().then((count) => {
       this.navItems.update((items) =>
@@ -241,6 +249,14 @@ export class ShellPage implements OnInit, OnDestroy {
 
   closeCreditsModal(): void {
     this.isCreditsModalOpen.set(false);
+  }
+
+  openChangelogModal(): void {
+    this.isChangelogModalOpen.set(true);
+  }
+
+  closeChangelogModal(): void {
+    this.isChangelogModalOpen.set(false);
   }
 
   toggleQuickTheme(): void {

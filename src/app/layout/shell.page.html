@@ -161,6 +161,16 @@
         <button
           type="button"
           class="credits-inline-btn"
+          aria-label="Afficher les nouveautés"
+          title="Afficher les nouveautés"
+          bsTooltip
+          (click)="openChangelogModal()"
+        >
+          <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-scroll fa-fw"></i></span>
+        </button>
+        <button
+          type="button"
+          class="credits-inline-btn"
           aria-label="Afficher les crédits"
           title="Afficher les crédits et les dépendances"
           bsTooltip
@@ -259,6 +269,54 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" title="Fermer" bsTooltip (click)="closeCreditsModal()">Fermer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop fade show"></div>
+}
+
+@if (isChangelogModalOpen()) {
+  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="changelog-modal-title">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="changelog-modal-title" class="modal-title h5 mb-0">Nouveautés</h3>
+          <button type="button" class="btn-close" aria-label="Fermer" title="Fermer" bsTooltip (click)="closeChangelogModal()"></button>
+        </div>
+        <div class="modal-body">
+          @if (changelogEntries().length === 0) {
+            <p class="text-secondary">Aucune entrée disponible.</p>
+          } @else {
+            @for (entry of changelogEntries(); track entry.version; let first = $first) {
+              <div class="mb-4">
+                <h4 class="h6 fw-bold mb-1">
+                  v{{ entry.version }}
+                  @if (entry.date) {
+                    <span class="text-secondary fw-normal ms-2">{{ entry.date }}</span>
+                  }
+                  @if (first) {
+                    <span class="badge text-bg-success ms-2">Version actuelle</span>
+                  }
+                </h4>
+                @if (entry.sections.length === 0) {
+                  <p class="text-secondary small mb-0">Aucun détail disponible.</p>
+                } @else {
+                  @for (section of entry.sections; track section.label) {
+                    <p class="fw-semibold small mb-1 mt-2">{{ section.label }}</p>
+                    <ul class="mb-0 ps-3">
+                      @for (item of section.items; track item) {
+                        <li class="small">{{ item }}</li>
+                      }
+                    </ul>
+                  }
+                }
+              </div>
+            }
+          }
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" title="Fermer" bsTooltip (click)="closeChangelogModal()">Fermer</button>
         </div>
       </div>
     </div>
