@@ -2441,66 +2441,6 @@
                                       </div>
                                     </div>
                                   </div>
-
-                                  <div class="settings-invoice-template-builder mt-4">
-                                    <div class="d-flex align-items-center justify-content-between mb-2">
-                                      <h6 class="mb-0">Template builder facture PDF</h6>
-                                      <small class="text-secondary">Position en pourcentage de page</small>
-                                    </div>
-
-                                    <div class="row g-3">
-                                      <div class="col-12 col-xl-7">
-                                        <div class="settings-invoice-template-controls">
-                                          @for (block of invoiceTemplateBlockOptions; track block.key) {
-                                            <div class="settings-invoice-template-control-item">
-                                              <div class="d-flex align-items-center justify-content-between gap-2">
-                                                <p class="fw-semibold mb-0">{{ block.label }}</p>
-                                                <small class="text-secondary">
-                                                  X: {{ invoiceTemplateBlockValue(block.key, 'x') }}% ·
-                                                  Y: {{ invoiceTemplateBlockValue(block.key, 'y') }}%
-                                                </small>
-                                              </div>
-                                              <div class="mt-2">
-                                                <label class="form-label small mb-1" [for]="'invoice-edit-' + block.key + '-w'">Largeur</label>
-                                                <input
-                                                  [id]="'invoice-edit-' + block.key + '-w'"
-                                                  type="range"
-                                                  class="form-range"
-                                                  min="20"
-                                                  max="96"
-                                                  [value]="invoiceTemplateBlockValue(block.key, 'w')"
-                                                  (input)="updateInvoiceTemplateBlock(block.key, 'w', $any($event.target).value || '20')"
-                                                />
-                                              </div>
-                                            </div>
-                                          }
-                                        </div>
-                                      </div>
-
-                                      <div class="col-12 col-xl-5">
-                                        <div
-                                          class="settings-invoice-template-preview"
-                                          (dragover)="onInvoiceTemplatePreviewDragOver($event)"
-                                          (drop)="onInvoiceTemplatePreviewDrop($event)"
-                                        >
-                                          @for (block of invoiceTemplateBlockOptions; track block.key) {
-                                            <div
-                                              class="settings-invoice-template-preview-block"
-                                              [class.is-dragging]="draggedInvoiceTemplateBlockId() === block.key"
-                                              draggable="true"
-                                              (dragstart)="onInvoiceTemplateDragStart($event, block.key)"
-                                              (dragend)="onInvoiceTemplateDragEnd()"
-                                              [style.left.%]="invoiceTemplateBlockValue(block.key, 'x')"
-                                              [style.top.%]="invoiceTemplateBlockValue(block.key, 'y')"
-                                              [style.width.%]="invoiceTemplateBlockValue(block.key, 'w')"
-                                            >
-                                              {{ block.label }}
-                                            </div>
-                                          }
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
                                 </div>
                               </div>
                             </div>
