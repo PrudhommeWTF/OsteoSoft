@@ -356,7 +356,6 @@ export class SettingsPage implements OnDestroy {
     logoData: [''],
     paymentReminderLetterTitle: ['', [Validators.maxLength(200)]],
     paymentReminderLetterContent: ['', [Validators.maxLength(20_000)]],
-    invoiceTemplateLayoutJson: ['', [Validators.maxLength(20_000)]],
     openingHoursJson: ['']
   });
 
@@ -558,17 +557,6 @@ export class SettingsPage implements OnDestroy {
   ];
   readonly numberingConfigurationOptions = ['Numérotation globale au cabinet', 'Numérotation par praticien'] as const;
   readonly vatRateOptions = [0, 5.5, 10, 20];
-  readonly invoiceTemplateBlockOptions: Array<{ key: InvoiceTemplateBlockId; label: string }> = [
-    { key: 'logo', label: 'Logo cabinet' },
-    { key: 'practitioner', label: 'Infos praticien' },
-    { key: 'patient', label: 'Infos patient' },
-    { key: 'invoiceMeta', label: 'Métadonnées facture' },
-    { key: 'lineItems', label: 'Tableau prestations' },
-    { key: 'totals', label: 'Totaux' },
-    { key: 'payment', label: 'Moyen de paiement' },
-    { key: 'mentions', label: 'Mentions légales' },
-    { key: 'signature', label: 'Zone signature' }
-  ];
   readonly officeLetterCommonVariables: Array<{ token: string; description: string }> = [
     { token: '{$DATE}', description: 'Date du jour' },
     { token: '{$CIVILITE}', description: 'Civilite du patient (Monsieur ou Madame)' },
@@ -675,7 +663,6 @@ export class SettingsPage implements OnDestroy {
   private officeDraftStatusTimer: ReturnType<typeof setInterval> | null = null;
   private isPersistingOfficeDraft = false;
   private pendingOfficeDraftSave = false;
-  private invoiceTemplateDragOffset: { x: number; y: number } | null = null;
 
   readonly profiles = signal<AccessProfile[]>([
     {
@@ -3404,9 +3391,7 @@ export class SettingsPage implements OnDestroy {
       const office = this.offices().find((o) => o.id === officeId);
       if (office) {
         const openingHours = this.ensureOfficeOpeningHours(office.openingHours);
-        const invoiceTemplateLayout = this.parseInvoiceTemplateLayout(office.invoiceTemplateLayoutJson);
         this.officeOpeningHoursDraft.set(openingHours);
-        this.invoiceTemplateLayout.set(invoiceTemplateLayout);
         this.serviceTypes.set(
           office.serviceTypes.map((item, index) => ({
             ...item,
@@ -3448,7 +3433,6 @@ export class SettingsPage implements OnDestroy {
           logoData: office.logoData || '',
           paymentReminderLetterTitle: office.paymentReminderLetterTemplate?.title || DEFAULT_PAYMENT_REMINDER_LETTER_TITLE,
           paymentReminderLetterContent: office.paymentReminderLetterTemplate?.content || DEFAULT_PAYMENT_REMINDER_LETTER_CONTENT,
-          invoiceTemplateLayoutJson: this.stringifyInvoiceTemplateLayout(invoiceTemplateLayout),
           openingHoursJson: JSON.stringify(openingHours)
         });
       }
@@ -3456,9 +3440,7 @@ export class SettingsPage implements OnDestroy {
       this.officeDraftSaveState.set('idle');
       this.lastOfficeDraftSavedAt.set(null);
       const openingHours = this.createDefaultOfficeOpeningHours();
-      const invoiceTemplateLayout = this.createDefaultInvoiceTemplateLayout();
       this.officeOpeningHoursDraft.set(openingHours);
-      this.invoiceTemplateLayout.set(invoiceTemplateLayout);
       this.serviceTypes.set([]);
       this.paymentMethods.set(this.createDefaultPaymentMethods());
       this.consultationProfiles.set([]);
@@ -3485,7 +3467,6 @@ export class SettingsPage implements OnDestroy {
         logoData: '',
         paymentReminderLetterTitle: DEFAULT_PAYMENT_REMINDER_LETTER_TITLE,
         paymentReminderLetterContent: DEFAULT_PAYMENT_REMINDER_LETTER_CONTENT,
-        invoiceTemplateLayoutJson: this.stringifyInvoiceTemplateLayout(invoiceTemplateLayout),
         openingHoursJson: JSON.stringify(openingHours)
       });
 
@@ -4203,13 +4184,8 @@ export class SettingsPage implements OnDestroy {
       logoData: String(payload.logoData ?? ''),
       paymentReminderLetterTitle: String(payload.paymentReminderLetterTemplate?.title ?? ''),
       paymentReminderLetterContent: String(payload.paymentReminderLetterTemplate?.content ?? ''),
-      invoiceTemplateLayoutJson: this.stringifyInvoiceTemplateLayout(
-        this.parseInvoiceTemplateLayout(payload.invoiceTemplateLayoutJson)
-      ),
       openingHoursJson: JSON.stringify(openingHours)
     });
-
-    this.invoiceTemplateLayout.set(this.parseInvoiceTemplateLayout(payload.invoiceTemplateLayoutJson));
 
     this.serviceTypes.set(
       Array.isArray(payload.serviceTypes)
@@ -4507,7 +4483,6 @@ export class SettingsPage implements OnDestroy {
 
   private buildOfficePayload(): CreateOfficePayload {
     const raw = this.officeForm.getRawValue();
-    const invoiceTemplateLayout = this.parseInvoiceTemplateLayout(raw.invoiceTemplateLayoutJson);
     return {
       name: raw.name.trim(),
       defaultSessionDurationMinutes: Number(raw.defaultSessionDurationMinutes) || 60,
@@ -4533,7 +4508,6 @@ export class SettingsPage implements OnDestroy {
         content: String(raw.paymentReminderLetterContent ?? '').trim()
       },
       patientLetterTemplates: this.patientLetterTemplates(),
-      invoiceTemplateLayoutJson: this.stringifyInvoiceTemplateLayout(invoiceTemplateLayout),
       openingHours: this.officeOpeningHoursDraft(),
       consultationProfiles: this.toOfficeConsultationProfiles(),
       officeUserDelegations: this.toOfficeUserDelegationsPayload(),
@@ -4959,8 +4933,13 @@ export class SettingsPage implements OnDestroy {
       this.dataManagementSuccess.set(
         `Import WebOsteo terminé: ${result.importedPatients} patient(s), ${result.importedConsultations} consultation(s), ${result.importedAppointments} rendez-vous, ${result.importedInvoices} facture(s), ${result.importedContacts} contact(s).`
       );
-    } catch {
-      this.dataManagementError.set('Echec de l\'import WebOsteo. Vérifiez le fichier sélectionné.');
+    } catch (error) {
+      if (error instanceof HttpErrorResponse) {
+        const apiMessage = (error.error?.message ?? '').trim();
+        this.dataManagementError.set(apiMessage || 'Echec de l\'import WebOsteo. Vérifiez le fichier sélectionné.');
+      } else {
+        this.dataManagementError.set('Echec de l\'import WebOsteo. Vérifiez le fichier sélectionné.');
+      }
     } finally {
       this.isImportingWebosteo.set(false);
     }

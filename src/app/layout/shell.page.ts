@@ -375,21 +375,17 @@ export class ShellPage implements OnInit, OnDestroy {
     await this.router.navigateByUrl('/login');
   }
 
+  private updateNavBadge(label: string, badge: string): void {
+    this.navItems.update((items) => items.map((item) => (item.label === label ? { ...item, badge } : item)));
+  }
+
   private async refreshBillingBadge(): Promise<void> {
     try {
       const revenue = await this.api.getBillingMonthlyRevenue(this.activeOfficeId());
       const roundedAmount = Math.round(Number(revenue.amountCents ?? 0) / 100);
-      this.navItems.update((items) =>
-        items.map((item) =>
-          item.label === 'Comptabilité' ? { ...item, badge: String(roundedAmount) } : item
-        )
-      );
+      this.updateNavBadge('Comptabilité', String(roundedAmount));
     } catch {
-      this.navItems.update((items) =>
-        items.map((item) =>
-          item.label === 'Comptabilité' ? { ...item, badge: '?' } : item
-        )
-      );
+      this.updateNavBadge('Comptabilité', '?');
     }
   }
 
@@ -398,17 +394,9 @@ export class ShellPage implements OnInit, OnDestroy {
       const payload = await this.api.getAppointments(this.activeOfficeId());
       const value = Number(payload?.stats?.consultationsToday ?? 0);
       const safeValue = Number.isFinite(value) && value >= 0 ? Math.trunc(value) : 0;
-      this.navItems.update((items) =>
-        items.map((item) =>
-          item.label === 'Agenda' ? { ...item, badge: String(safeValue) } : item
-        )
-      );
+      this.updateNavBadge('Agenda', String(safeValue));
     } catch {
-      this.navItems.update((items) =>
-        items.map((item) =>
-          item.label === 'Agenda' ? { ...item, badge: '?' } : item
-        )
-      );
+      this.updateNavBadge('Agenda', '?');
     }
   }
 }

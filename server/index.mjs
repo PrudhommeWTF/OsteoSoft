@@ -1803,6 +1803,7 @@ function normalizeInvoiceTemplateLayoutJson(rawValue) {
   return JSON.stringify(normalized);
 }
 
+
 function normalizeOfficeLetterTitle(rawValue) {
   return String(rawValue ?? '').trim().slice(0, 200);
 }
@@ -2253,7 +2254,6 @@ function mapOfficeRow(row) {
   const {
     openingHoursJson,
     consultationProfilesJson,
-    invoiceTemplateLayoutJson,
     paymentReminderLetterTitle,
     paymentReminderLetterContent,
     patientLettersJson,
@@ -2269,7 +2269,6 @@ function mapOfficeRow(row) {
     numberingConfiguration: normalizeOfficeInvoiceNumberingConfiguration(officeFields.invoiceNumberingConfiguration),
     alwaysShowSocialSecurityAndMutuelle: Boolean(officeFields.invoiceShowInsuranceFields),
     hideVatMention: Boolean(officeFields.invoiceHideVatMention),
-    invoiceTemplateLayoutJson: normalizeInvoiceTemplateLayoutJson(invoiceTemplateLayoutJson),
     paymentReminderLetterTemplate: {
       title: normalizeOfficeLetterTitle(paymentReminderLetterTitle),
       content: normalizeOfficeLetterContent(paymentReminderLetterContent)
@@ -3388,10 +3387,10 @@ async function installDemoInstanceData() {
 
   const insert = db.prepare(`
     INSERT INTO offices (name, default_session_duration_minutes, country, devise, invoice_number_format, invoice_numbering_configuration,
-                         invoice_show_insurance_fields, invoice_hide_vat_mention, invoice_template_layout_json, address_line1, address_line2, postal_code, city, phone_mobile,
+                         invoice_show_insurance_fields, invoice_hide_vat_mention, address_line1, address_line2, postal_code, city, phone_mobile,
                          phone_landline, phone_fax, email, website, vat_number, logo_data, opening_hours_json,
                          consultation_profiles_json, display_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const openingHours = normalizeOfficeOpeningHours({
@@ -3419,7 +3418,6 @@ async function installDemoInstanceData() {
       'Numérotation globale au cabinet',
       0,
       0,
-      '{}',
       office.addressLine1,
       '',
       office.postalCode,
@@ -5107,7 +5105,6 @@ async function ensureSeedData() {
   ensureColumn('offices', 'invoice_numbering_configuration', "invoice_numbering_configuration TEXT NOT NULL DEFAULT 'Numérotation globale au cabinet'");
   ensureColumn('offices', 'invoice_show_insurance_fields', 'invoice_show_insurance_fields INTEGER NOT NULL DEFAULT 0');
   ensureColumn('offices', 'invoice_hide_vat_mention', 'invoice_hide_vat_mention INTEGER NOT NULL DEFAULT 0');
-  ensureColumn('offices', 'invoice_template_layout_json', "invoice_template_layout_json TEXT NOT NULL DEFAULT '{}'");
   ensureColumn('offices', 'opening_hours_json', `opening_hours_json TEXT NOT NULL DEFAULT '{"monday":[],"tuesday":[],"wednesday":[],"thursday":[],"friday":[],"saturday":[],"sunday":[]}'`);
   ensureColumn('offices', 'consultation_profiles_json', "consultation_profiles_json TEXT NOT NULL DEFAULT '[]'");
   ensureColumn('offices', 'payment_reminder_letter_title', "payment_reminder_letter_title TEXT NOT NULL DEFAULT ''");
@@ -7928,7 +7925,6 @@ app.get('/api/offices', authMiddleware, requirePermission('read-office-settings'
     SELECT id, name, default_session_duration_minutes as defaultSessionDurationMinutes, country, devise,
            invoice_number_format as invoiceNumberFormat, invoice_numbering_configuration as invoiceNumberingConfiguration,
            invoice_show_insurance_fields as invoiceShowInsuranceFields, invoice_hide_vat_mention as invoiceHideVatMention,
-           invoice_template_layout_json as invoiceTemplateLayoutJson,
            address_line1 as addressLine1, address_line2 as addressLine2,
            postal_code as postalCode, city, phone_mobile as phoneMobile,
            phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
@@ -7986,7 +7982,6 @@ app.post('/api/offices', authMiddleware, requirePermission('create-office'), (re
     logoData,
     paymentReminderLetterTemplate,
     patientLetterTemplates,
-    invoiceTemplateLayoutJson,
     openingHours,
     consultationProfiles,
     officeUserDelegations,
@@ -8006,7 +8001,6 @@ app.post('/api/offices', authMiddleware, requirePermission('create-office'), (re
   const normalizedInvoiceNumberingConfiguration = normalizeOfficeInvoiceNumberingConfiguration(numberingConfiguration);
   const normalizedInvoiceShowInsuranceFields = alwaysShowSocialSecurityAndMutuelle ? 1 : 0;
   const normalizedInvoiceHideVatMention = hideVatMention ? 1 : 0;
-  const normalizedInvoiceTemplateLayoutJson = normalizeInvoiceTemplateLayoutJson(invoiceTemplateLayoutJson);
   const normalizedConsultationProfiles = normalizeOfficeConsultationProfiles(consultationProfiles);
   const normalizedPaymentReminderLetterTitle = normalizeOfficeLetterTitle(
     paymentReminderLetterTemplate?.title ?? DEFAULT_PAYMENT_REMINDER_LETTER_TITLE
@@ -8022,17 +8016,16 @@ app.post('/api/offices', authMiddleware, requirePermission('create-office'), (re
 
     const insert = db.prepare(`
       INSERT INTO offices (name, default_session_duration_minutes, country, devise, invoice_number_format, invoice_numbering_configuration,
-                           invoice_show_insurance_fields, invoice_hide_vat_mention, invoice_template_layout_json, address_line1, address_line2, postal_code, city, phone_mobile,
+                           invoice_show_insurance_fields, invoice_hide_vat_mention, address_line1, address_line2, postal_code, city, phone_mobile,
                            phone_landline, phone_fax, email, website, vat_number, logo_data, opening_hours_json,
                            consultation_profiles_json, payment_reminder_letter_title, payment_reminder_letter_content,
                            patient_letters_json, display_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = insert.run(
       name, normalizedDefaultSessionDurationMinutes, normalizedCountry, normalizedDevise,
       normalizedInvoiceNumberFormat, normalizedInvoiceNumberingConfiguration, normalizedInvoiceShowInsuranceFields, normalizedInvoiceHideVatMention,
-      normalizedInvoiceTemplateLayoutJson,
       addressLine1 || null, addressLine2 || null, postalCode || null, city || null,
       phoneMobile || null, phoneLandline || null, phoneFax || null, email || null,
       website || null, vatNumber || null, logoData || null, JSON.stringify(normalizedOpeningHours),
@@ -8063,7 +8056,6 @@ app.post('/api/offices', authMiddleware, requirePermission('create-office'), (re
           SELECT id, name, default_session_duration_minutes as defaultSessionDurationMinutes, country, devise,
             invoice_number_format as invoiceNumberFormat, invoice_numbering_configuration as invoiceNumberingConfiguration,
             invoice_show_insurance_fields as invoiceShowInsuranceFields, invoice_hide_vat_mention as invoiceHideVatMention,
-            invoice_template_layout_json as invoiceTemplateLayoutJson,
             address_line1 as addressLine1, address_line2 as addressLine2,
              postal_code as postalCode, city, phone_mobile as phoneMobile,
              phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
@@ -8132,7 +8124,6 @@ app.put('/api/offices/:id', authMiddleware, requirePermission('update-office-set
     logoData,
     paymentReminderLetterTemplate,
     patientLetterTemplates,
-    invoiceTemplateLayoutJson,
     openingHours,
     consultationProfiles,
     officeUserDelegations,
@@ -8153,7 +8144,6 @@ app.put('/api/offices/:id', authMiddleware, requirePermission('update-office-set
   const normalizedInvoiceNumberingConfiguration = normalizeOfficeInvoiceNumberingConfiguration(numberingConfiguration);
   const normalizedInvoiceShowInsuranceFields = alwaysShowSocialSecurityAndMutuelle ? 1 : 0;
   const normalizedInvoiceHideVatMention = hideVatMention ? 1 : 0;
-  const normalizedInvoiceTemplateLayoutJson = normalizeInvoiceTemplateLayoutJson(invoiceTemplateLayoutJson);
   const normalizedConsultationProfiles = normalizeOfficeConsultationProfiles(consultationProfiles);
   const normalizedPaymentReminderLetterTitle = normalizeOfficeLetterTitle(paymentReminderLetterTemplate?.title);
   const normalizedPaymentReminderLetterContent = normalizeOfficeLetterContent(paymentReminderLetterTemplate?.content);
@@ -8163,7 +8153,7 @@ app.put('/api/offices/:id', authMiddleware, requirePermission('update-office-set
     const update = db.prepare(`
       UPDATE offices
         SET name = ?, default_session_duration_minutes = ?, country = ?, devise = ?, invoice_number_format = ?,
-          invoice_numbering_configuration = ?, invoice_show_insurance_fields = ?, invoice_hide_vat_mention = ?, invoice_template_layout_json = ?, address_line1 = ?, address_line2 = ?, postal_code = ?, city = ?,
+          invoice_numbering_configuration = ?, invoice_show_insurance_fields = ?, invoice_hide_vat_mention = ?, address_line1 = ?, address_line2 = ?, postal_code = ?, city = ?,
           phone_mobile = ?, phone_landline = ?, phone_fax = ?, email = ?, website = ?,
           vat_number = ?, logo_data = ?, opening_hours_json = ?, consultation_profiles_json = ?,
           payment_reminder_letter_title = ?, payment_reminder_letter_content = ?,
@@ -8175,7 +8165,6 @@ app.put('/api/offices/:id', authMiddleware, requirePermission('update-office-set
     update.run(
       name, normalizedDefaultSessionDurationMinutes, normalizedCountry, normalizedDevise,
       normalizedInvoiceNumberFormat, normalizedInvoiceNumberingConfiguration, normalizedInvoiceShowInsuranceFields, normalizedInvoiceHideVatMention,
-      normalizedInvoiceTemplateLayoutJson,
       addressLine1 || null, addressLine2 || null, postalCode || null, city || null,
       phoneMobile || null, phoneLandline || null, phoneFax || null, email || null,
       website || null, vatNumber || null, logoData || null, JSON.stringify(normalizedOpeningHours),
@@ -8196,7 +8185,6 @@ app.put('/api/offices/:id', authMiddleware, requirePermission('update-office-set
           SELECT id, name, default_session_duration_minutes as defaultSessionDurationMinutes, country, devise,
             invoice_number_format as invoiceNumberFormat, invoice_numbering_configuration as invoiceNumberingConfiguration,
             invoice_show_insurance_fields as invoiceShowInsuranceFields, invoice_hide_vat_mention as invoiceHideVatMention,
-            invoice_template_layout_json as invoiceTemplateLayoutJson,
             address_line1 as addressLine1, address_line2 as addressLine2,
              postal_code as postalCode, city, phone_mobile as phoneMobile,
              phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
@@ -8357,7 +8345,6 @@ app.post('/api/offices/reorder', authMiddleware, requirePermission('reorder-offi
           SELECT id, name, default_session_duration_minutes as defaultSessionDurationMinutes, country, devise,
             invoice_number_format as invoiceNumberFormat, invoice_numbering_configuration as invoiceNumberingConfiguration,
             invoice_show_insurance_fields as invoiceShowInsuranceFields, invoice_hide_vat_mention as invoiceHideVatMention,
-            invoice_template_layout_json as invoiceTemplateLayoutJson,
             address_line1 as addressLine1, address_line2 as addressLine2,
              postal_code as postalCode, city, phone_mobile as phoneMobile,
              phone_landline as phoneLandline, phone_fax as phoneFax, email, website,
@@ -9853,16 +9840,15 @@ app.post('/api/setup/office', setupLimiter, setupBootstrapGuard, async (req, res
 
     const insert = db.prepare(`
       INSERT INTO offices (name, default_session_duration_minutes, country, devise, invoice_number_format, invoice_numbering_configuration,
-                           invoice_show_insurance_fields, invoice_hide_vat_mention, invoice_template_layout_json, address_line1, address_line2, postal_code, city, phone_mobile,
+                           invoice_show_insurance_fields, invoice_hide_vat_mention, address_line1, address_line2, postal_code, city, phone_mobile,
                            phone_landline, phone_fax, email, website, vat_number, logo_data, opening_hours_json,
                            consultation_profiles_json, display_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = insert.run(
       name.trim(), normalizedDefaultSessionDurationMinutes, normalizedCountry, normalizedDevise,
       normalizedInvoiceNumberFormat, normalizedInvoiceNumberingConfiguration, normalizedInvoiceShowInsuranceFields, 0,
-      '{}',
       addressLine1 || null, addressLine2 || null, postalCode || null, city || null,
       phoneMobile || null, phoneLandline || null, phoneFax || null, email || null,
       website || null, null, logoData || null, JSON.stringify(normalizedOpeningHours),

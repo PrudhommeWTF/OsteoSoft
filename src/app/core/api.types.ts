@@ -1337,7 +1337,6 @@ export type Office = {
   website?: string;
   vatNumber?: string;
   logoData?: string;
-  invoiceTemplateLayoutJson: string;
   openingHours?: OfficeOpeningHours;
   consultationProfiles: OfficeConsultationProfile[];
   paymentReminderLetterTemplate: OfficeLetterTemplate;
@@ -1371,7 +1370,6 @@ export type CreateOfficePayload = {
   website?: string;
   vatNumber?: string;
   logoData?: string;
-  invoiceTemplateLayoutJson: string;
   openingHours?: OfficeOpeningHours;
   consultationProfiles: OfficeConsultationProfile[];
   paymentReminderLetterTemplate: OfficeLetterTemplate;

@@ -7,7 +7,6 @@ import {
   inject,
   signal
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { ApiService } from '../../core/api.service';
@@ -20,7 +19,7 @@ import { sanitizeCellValue } from '../../core/xlsx-export.utils';
 @Component({
   selector: 'app-agenda-page',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, WeekCalendar, BsTooltipDirective],
+  imports: [ReactiveFormsModule, WeekCalendar, BsTooltipDirective],
   templateUrl: './agenda.page.html',
   styleUrl: './agenda.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
