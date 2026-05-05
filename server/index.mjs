@@ -857,7 +857,7 @@ const ACCESS_DOMAIN_DEFINITIONS = {
   ],
   'patients-list': ['read-patient-list', 'search-patient-list', 'export-patient-list'],
   agenda: ['read-agenda', 'create-appointment', 'edit-appointment', 'delete-appointment', 'export-agenda'],
-  billing: ['read-billing-kpis', 'create-invoice', 'mark-payment', 'export-billing'],
+  billing: ['read-billing-kpis', 'create-invoice', 'customize-invoice-template', 'mark-payment', 'export-billing'],
   statistics: ['read-dashboard', 'read-advanced-statistics', 'read-peer-statistics', 'export-statistics'],
   'contact-directory': ['read-directory', 'create-directory-contact', 'edit-directory-contact', 'delete-directory-contact', 'export-directory'],
   'office-management': [
@@ -1713,18 +1713,48 @@ function clampInvoiceTemplateLayoutValue(value, min, max, fallback) {
   return Math.min(max, Math.max(min, Math.round(parsed)));
 }
 
+function defaultInvoiceTemplateBlock(x, y, w) {
+  return { x, y, w, visible: true, fontSize: 10, color: '#000000', borderStyle: 'none' };
+}
+
 function defaultInvoiceTemplateLayout() {
   return {
-    logo: { x: 4, y: 4, w: 24 },
-    practitioner: { x: 30, y: 4, w: 32 },
-    patient: { x: 64, y: 4, w: 32 },
-    invoiceMeta: { x: 64, y: 20, w: 32 },
-    lineItems: { x: 4, y: 32, w: 92 },
-    totals: { x: 56, y: 74, w: 40 },
-    payment: { x: 4, y: 74, w: 50 },
-    mentions: { x: 4, y: 86, w: 92 },
-    signature: { x: 60, y: 92, w: 36 }
+    logo: defaultInvoiceTemplateBlock(4, 4, 24),
+    practitioner: defaultInvoiceTemplateBlock(30, 4, 32),
+    patient: defaultInvoiceTemplateBlock(64, 4, 32),
+    invoiceMeta: defaultInvoiceTemplateBlock(64, 20, 32),
+    lineItems: defaultInvoiceTemplateBlock(4, 32, 92),
+    totals: defaultInvoiceTemplateBlock(56, 74, 40),
+    payment: defaultInvoiceTemplateBlock(4, 74, 50),
+    mentions: defaultInvoiceTemplateBlock(4, 86, 92),
+    signature: defaultInvoiceTemplateBlock(60, 92, 36),
+    _global: { primaryColor: '#4d92d1', fontFamily: 'helvetica', showPageNumber: false, footerText: '' }
   };
+}
+
+function normalizeInvoiceTemplateBlockStyle(candidate, fallback) {
+  const visible = candidate?.visible !== false;
+  const fontSize = clampInvoiceTemplateLayoutValue(candidate?.fontSize, 9, 14, fallback?.fontSize ?? 10);
+  const rawColor = String(candidate?.color ?? fallback?.color ?? '#000000');
+  const color = /^#[0-9a-fA-F]{6}$/.test(rawColor) ? rawColor : '#000000';
+  const borderStyle = ['none', 'line', 'box'].includes(candidate?.borderStyle) ? candidate.borderStyle : 'none';
+  const customLabel = typeof candidate?.customLabel === 'string' ? candidate.customLabel.slice(0, 80) : undefined;
+  const content = typeof candidate?.content === 'string' ? candidate.content.slice(0, 5000) : undefined;
+  return {
+    visible, fontSize, color, borderStyle,
+    ...(customLabel != null ? { customLabel } : {}),
+    ...(content != null ? { content } : {})
+  };
+}
+
+function normalizeInvoiceTemplateGlobalSettings(candidate) {
+  const validFonts = ['helvetica', 'courier', 'times'];
+  const rawColor = String(candidate?.primaryColor ?? '#4d92d1');
+  const primaryColor = /^#[0-9a-fA-F]{6}$/.test(rawColor) ? rawColor : '#4d92d1';
+  const fontFamily = validFonts.includes(candidate?.fontFamily) ? candidate.fontFamily : 'helvetica';
+  const showPageNumber = Boolean(candidate?.showPageNumber);
+  const footerText = String(candidate?.footerText ?? '').slice(0, 200);
+  return { primaryColor, fontFamily, showPageNumber, footerText };
 }
 
 function normalizeInvoiceTemplateLayoutJson(rawValue) {
@@ -1744,16 +1774,19 @@ function normalizeInvoiceTemplateLayoutJson(rawValue) {
     source = rawValue;
   }
 
-  for (const [key, fallback] of Object.entries(normalized)) {
+  const blockKeys = ['logo', 'practitioner', 'patient', 'invoiceMeta', 'lineItems', 'totals', 'payment', 'mentions', 'signature'];
+  for (const key of blockKeys) {
     const candidate = source?.[key];
     if (!candidate || typeof candidate !== 'object') {
       continue;
     }
-
+    const fallback = normalized[key];
+    const style = normalizeInvoiceTemplateBlockStyle(candidate, fallback);
     const next = {
       x: clampInvoiceTemplateLayoutValue(candidate.x, 0, 96, fallback.x),
       y: clampInvoiceTemplateLayoutValue(candidate.y, 0, 96, fallback.y),
-      w: clampInvoiceTemplateLayoutValue(candidate.w, 20, 96, fallback.w)
+      w: clampInvoiceTemplateLayoutValue(candidate.w, 20, 96, fallback.w),
+      ...style
     };
 
     if (next.x + next.w > 100) {
@@ -1761,6 +1794,10 @@ function normalizeInvoiceTemplateLayoutJson(rawValue) {
     }
 
     normalized[key] = next;
+  }
+
+  if (source?._global && typeof source._global === 'object') {
+    normalized._global = normalizeInvoiceTemplateGlobalSettings(source._global);
   }
 
   return JSON.stringify(normalized);
@@ -8177,6 +8214,64 @@ app.put('/api/offices/:id', authMiddleware, requirePermission('update-office-set
   } catch (err) {
     console.error('Error updating office:', err);
     return res.status(500).json({ message: 'Erreur lors de la mise à jour du cabinet' });
+  }
+});
+
+app.patch('/api/offices/:id/invoice-template', authMiddleware, (req, res) => {
+  const officeId = Number(req.params.id);
+  if (!Number.isInteger(officeId) || officeId <= 0) {
+    return res.status(400).json({ message: 'ID de cabinet invalide' });
+  }
+
+  const access = getUserAccessContext(req.user.sub);
+  if (!access) {
+    return res.status(401).json({ message: 'Session invalide' });
+  }
+  req.userAccess = access;
+
+  const isGlobalAdmin = access.role === 'admin' || access.profileId === SUPER_ADMIN_PROFILE_ID;
+  const canCustomize = hasPermission(access.rights, 'customize-invoice-template');
+  const canUpdateOffice = hasPermission(access.rights, 'update-office-settings');
+
+  if (!isGlobalAdmin && !canCustomize && !canUpdateOffice) {
+    writeAuthSecurityLog(req, 'authorization_denied', {
+      userId: access.id,
+      username: access.username,
+      profileId: access.profileId,
+      permissionId: 'customize-invoice-template',
+      reason: 'missing_permission'
+    });
+    return res.status(403).json({ message: 'Droit insuffisant' });
+  }
+
+  if (!isGlobalAdmin) {
+    const scopedOfficeIds = new Set(
+      getScopedOfficeOptions(access, false)
+        .map((office) => Number(office.id))
+        .filter((id) => Number.isInteger(id) && id > 0)
+    );
+    if (!scopedOfficeIds.has(officeId)) {
+      return res.status(403).json({ message: 'Acces interdit a ce cabinet' });
+    }
+  }
+
+  const { invoiceTemplateLayoutJson } = req.body;
+  const normalizedJson = normalizeInvoiceTemplateLayoutJson(invoiceTemplateLayoutJson);
+
+  try {
+    db.prepare('UPDATE offices SET invoice_template_layout_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(normalizedJson, officeId);
+
+    writeAuditLog(req.user.id, 'UPDATE', 'office_invoice_template', officeId, {});
+
+    const row = db.prepare('SELECT invoice_template_layout_json as invoiceTemplateLayoutJson FROM offices WHERE id = ?').get(officeId);
+    if (!row) {
+      return res.status(404).json({ message: 'Cabinet introuvable' });
+    }
+    return res.json({ invoiceTemplateLayoutJson: row.invoiceTemplateLayoutJson });
+  } catch (err) {
+    console.error('Error updating invoice template:', err);
+    return res.status(500).json({ message: 'Erreur lors de la mise à jour du template de facture' });
   }
 });
 

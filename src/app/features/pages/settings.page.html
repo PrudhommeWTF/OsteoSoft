@@ -2443,18 +2443,72 @@
                                   </div>
 
                                   <div class="settings-invoice-template-builder mt-4">
-                                    <div class="d-flex align-items-center justify-content-between mb-2">
-                                      <h6 class="mb-0">Template builder facture PDF</h6>
-                                      <small class="text-secondary">Position en pourcentage de page</small>
+                                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                                      <h6 class="mb-0"><i class="fa-solid fa-file-invoice me-2"></i>Template builder facture PDF</h6>
+                                      <div class="d-flex flex-wrap gap-2 align-items-center">
+                                        <div class="btn-group btn-group-sm">
+                                          <button type="button" class="btn btn-outline-secondary" [class.active]="invoiceTemplatePreviewMode() === 'labels'" (click)="invoiceTemplatePreviewMode.set('labels')" title="Afficher les étiquettes" bsTooltip>Étiquettes</button>
+                                          <button type="button" class="btn btn-outline-secondary" [class.active]="invoiceTemplatePreviewMode() === 'sample-data'" (click)="invoiceTemplatePreviewMode.set('sample-data')" title="Afficher les données exemples" bsTooltip>Exemple</button>
+                                        </div>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" (click)="resetInvoiceTemplateLayout()" title="Réinitialiser le layout" bsTooltip>
+                                          <i class="fa-solid fa-rotate-left me-1"></i>Réinitialiser
+                                        </button>
+                                        <button type="button" class="btn btn-outline-primary btn-sm" (click)="previewInvoiceTemplatePdf()" title="Prévisualiser le PDF" bsTooltip>
+                                          <i class="fa-solid fa-eye me-1"></i>Prévisualiser PDF
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    <!-- Global settings -->
+                                    <div class="card mb-3">
+                                      <div class="card-body py-2">
+                                        <div class="row g-2 align-items-end">
+                                          <div class="col-12 col-md-3">
+                                            <label class="form-label small mb-1">Couleur principale</label>
+                                            <input type="color" class="form-control form-control-sm" style="height:2.1rem"
+                                              [value]="invoiceTemplateLayout()._global.primaryColor"
+                                              (input)="updateInvoiceTemplateGlobalSetting('primaryColor', $any($event.target).value || '#4d92d1')" />
+                                          </div>
+                                          <div class="col-12 col-md-3">
+                                            <label class="form-label small mb-1">Police</label>
+                                            <select class="form-select form-select-sm"
+                                              [value]="invoiceTemplateLayout()._global.fontFamily"
+                                              (change)="updateInvoiceTemplateGlobalSetting('fontFamily', $any($event.target).value)">
+                                              <option value="helvetica">Helvetica (sans-serif)</option>
+                                              <option value="courier">Courier (monospace)</option>
+                                              <option value="times">Times New Roman (serif)</option>
+                                            </select>
+                                          </div>
+                                          <div class="col-12 col-md-4">
+                                            <label class="form-label small mb-1">Pied de page</label>
+                                            <input type="text" class="form-control form-control-sm" maxlength="200" placeholder="Texte de pied de page..."
+                                              [value]="invoiceTemplateLayout()._global.footerText"
+                                              (input)="updateInvoiceTemplateGlobalSetting('footerText', $any($event.target).value || '')" />
+                                          </div>
+                                          <div class="col-12 col-md-2">
+                                            <div class="form-check">
+                                              <input class="form-check-input" type="checkbox" id="invoice-show-page-number"
+                                                [checked]="invoiceTemplateLayout()._global.showPageNumber"
+                                                (change)="updateInvoiceTemplateGlobalSetting('showPageNumber', $any($event.target).checked ? 'true' : 'false')" />
+                                              <label class="form-check-label small" for="invoice-show-page-number">N° de page</label>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
                                     </div>
 
                                     <div class="row g-3">
                                       <div class="col-12 col-xl-7">
                                         <div class="settings-invoice-template-controls">
                                           @for (block of invoiceTemplateBlockOptions; track block.key) {
-                                            <div class="settings-invoice-template-control-item">
+                                            <div class="settings-invoice-template-control-item" [class.is-selected]="selectedInvoiceTemplateBlockId() === block.key" (click)="selectInvoiceTemplateBlock(block.key)">
                                               <div class="d-flex align-items-center justify-content-between gap-2">
-                                                <p class="fw-semibold mb-0">{{ block.label }}</p>
+                                                <div class="d-flex align-items-center gap-2">
+                                                  <button type="button" class="btn btn-sm p-0 border-0 bg-transparent" [class.text-muted]="!invoiceTemplateLayout()[block.key].visible" [class.text-primary]="invoiceTemplateLayout()[block.key].visible" (click)="$event.stopPropagation(); toggleInvoiceTemplateBlockVisible(block.key)" title="Afficher/masquer le bloc" bsTooltip>
+                                                    <i [class]="invoiceTemplateLayout()[block.key].visible ? 'fa-solid fa-eye' : 'fa-solid fa-eye-slash'"></i>
+                                                  </button>
+                                                  <p class="fw-semibold mb-0" [class.text-muted]="!invoiceTemplateLayout()[block.key].visible">{{ invoiceTemplateLayout()[block.key].customLabel || block.label }}</p>
+                                                </div>
                                                 <small class="text-secondary">
                                                   X: {{ invoiceTemplateBlockValue(block.key, 'x') }}% ·
                                                   Y: {{ invoiceTemplateBlockValue(block.key, 'y') }}%
@@ -2484,22 +2538,93 @@
                                           (drop)="onInvoiceTemplatePreviewDrop($event)"
                                         >
                                           @for (block of invoiceTemplateBlockOptions; track block.key) {
-                                            <div
-                                              class="settings-invoice-template-preview-block"
-                                              [class.is-dragging]="draggedInvoiceTemplateBlockId() === block.key"
-                                              draggable="true"
-                                              (dragstart)="onInvoiceTemplateDragStart($event, block.key)"
-                                              (dragend)="onInvoiceTemplateDragEnd()"
-                                              [style.left.%]="invoiceTemplateBlockValue(block.key, 'x')"
-                                              [style.top.%]="invoiceTemplateBlockValue(block.key, 'y')"
-                                              [style.width.%]="invoiceTemplateBlockValue(block.key, 'w')"
-                                            >
-                                              {{ block.label }}
-                                            </div>
+                                            @if (invoiceTemplateLayout()[block.key].visible) {
+                                              <div
+                                                class="settings-invoice-template-preview-block"
+                                                [class.is-dragging]="draggedInvoiceTemplateBlockId() === block.key"
+                                                [class.is-selected]="selectedInvoiceTemplateBlockId() === block.key"
+                                                draggable="true"
+                                                (click)="selectInvoiceTemplateBlock(block.key)"
+                                                (dragstart)="onInvoiceTemplateDragStart($event, block.key)"
+                                                (dragend)="onInvoiceTemplateDragEnd()"
+                                                [style.left.%]="invoiceTemplateBlockValue(block.key, 'x')"
+                                                [style.top.%]="invoiceTemplateBlockValue(block.key, 'y')"
+                                                [style.width.%]="invoiceTemplateBlockValue(block.key, 'w')"
+                                              >
+                                                @if (invoiceTemplatePreviewMode() === 'labels') {
+                                                  {{ invoiceTemplateLayout()[block.key].customLabel || block.label }}
+                                                } @else {
+                                                  <span style="white-space:pre-wrap;font-size:0.6em">{{ invoiceTemplateBlockSampleContent(block.key) }}</span>
+                                                }
+                                              </div>
+                                            }
                                           }
                                         </div>
                                       </div>
                                     </div>
+
+                                    <!-- Properties panel for selected block -->
+                                    @if (selectedInvoiceTemplateBlockId(); as selId) {
+                                      <div class="card mt-3">
+                                        <div class="card-header d-flex align-items-center justify-content-between py-2">
+                                          <span class="fw-semibold small">Propriétés : {{ invoiceTemplateLayout()[selId].customLabel || invoiceTemplateBlockOptions.find(b => b.key === selId)?.label }}</span>
+                                          <button type="button" class="btn btn-sm btn-outline-secondary py-0" (click)="selectInvoiceTemplateBlock(null)" title="Fermer le panneau" bsTooltip>
+                                            <i class="fa-solid fa-xmark"></i>
+                                          </button>
+                                        </div>
+                                        <div class="card-body py-2">
+                                          <div class="row g-2">
+                                            <div class="col-12 col-md-6">
+                                              <label class="form-label small mb-1" [for]="'block-custom-label-' + selId">Titre personnalisé</label>
+                                              <input [id]="'block-custom-label-' + selId" type="text" class="form-control form-control-sm" maxlength="80" placeholder="Titre du bloc..."
+                                                [value]="invoiceTemplateLayout()[selId].customLabel || ''"
+                                                (input)="updateInvoiceTemplateBlockStyle(selId, 'customLabel', $any($event.target).value || '')" />
+                                            </div>
+                                            <div class="col-6 col-md-2">
+                                              <label class="form-label small mb-1" [for]="'block-font-size-' + selId">Taille ({{ invoiceTemplateLayout()[selId].fontSize }}pt)</label>
+                                              <input [id]="'block-font-size-' + selId" type="range" class="form-range" min="9" max="14"
+                                                [value]="invoiceTemplateLayout()[selId].fontSize"
+                                                (input)="updateInvoiceTemplateBlockStyle(selId, 'fontSize', $any($event.target).value || '10')" />
+                                            </div>
+                                            <div class="col-6 col-md-2">
+                                              <label class="form-label small mb-1" [for]="'block-color-' + selId">Couleur</label>
+                                              <input [id]="'block-color-' + selId" type="color" class="form-control form-control-sm" style="height:2.1rem"
+                                                [value]="invoiceTemplateLayout()[selId].color"
+                                                (input)="updateInvoiceTemplateBlockStyle(selId, 'color', $any($event.target).value || '#000000')" />
+                                            </div>
+                                            <div class="col-12 col-md-2">
+                                              <label class="form-label small mb-1">Encadrement</label>
+                                              <div class="d-flex gap-2">
+                                                @for (bStyle of [{ v: 'none', l: 'Aucun' }, { v: 'line', l: 'Ligne' }, { v: 'box', l: 'Cadre' }]; track bStyle.v) {
+                                                  <div class="form-check form-check-inline">
+                                                    <input class="form-check-input" type="radio" [id]="'block-border-' + selId + '-' + bStyle.v" [name]="'block-border-' + selId"
+                                                      [checked]="invoiceTemplateLayout()[selId].borderStyle === bStyle.v"
+                                                      (change)="updateInvoiceTemplateBlockStyle(selId, 'borderStyle', bStyle.v)" />
+                                                    <label class="form-check-label small" [for]="'block-border-' + selId + '-' + bStyle.v">{{ bStyle.l }}</label>
+                                                  </div>
+                                                }
+                                              </div>
+                                            </div>
+
+                                            @if (selId === 'mentions') {
+                                              <div class="col-12">
+                                                <label class="form-label small mb-1" [for]="'block-content-mentions'">Texte des mentions légales</label>
+                                                <textarea [id]="'block-content-mentions'" #mentionsTextarea class="form-control form-control-sm" rows="4" maxlength="5000"
+                                                  [value]="invoiceTemplateLayout()[selId].content || ''"
+                                                  (input)="updateInvoiceTemplateBlockStyle(selId, 'content', $any($event.target).value || '')"></textarea>
+                                                <div class="d-flex flex-wrap gap-1 mt-2">
+                                                  <small class="text-secondary me-1">Insérer :</small>
+                                                  @for (variable of officeLetterCommonVariables; track variable.token) {
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1" style="font-size:0.72em" [title]="variable.description" bsTooltip
+                                                      (click)="insertMentionsVariable(variable.token, mentionsTextarea)">{{ variable.token }}</button>
+                                                  }
+                                                </div>
+                                              </div>
+                                            }
+                                          </div>
+                                        </div>
+                                      </div>
+                                    }
                                   </div>
                                 </div>
                               </div>

@@ -1000,6 +1000,14 @@ export class ApiService {
     return response.office;
   }
 
+  async updateOfficeInvoiceTemplate(id: number, invoiceTemplateLayoutJson: string): Promise<{ invoiceTemplateLayoutJson: string }> {
+    const response = await firstValueFrom(
+      this.http.patch<{ invoiceTemplateLayoutJson: string }>(`${this.baseUrl}/offices/${id}/invoice-template`, { invoiceTemplateLayoutJson })
+    );
+
+    return response;
+  }
+
   async deleteOffice(id: number): Promise<void> {
     await firstValueFrom(
       this.http.delete<{ message: string }>(`${this.baseUrl}/offices/${id}`)
