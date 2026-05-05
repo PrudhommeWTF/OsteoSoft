@@ -114,25 +114,6 @@ type OfficeLetterControlName =
   | 'paymentReminderLetterTitle'
   | 'paymentReminderLetterContent';
 
-type InvoiceTemplateBlockId =
-  | 'logo'
-  | 'practitioner'
-  | 'patient'
-  | 'invoiceMeta'
-  | 'lineItems'
-  | 'totals'
-  | 'payment'
-  | 'mentions'
-  | 'signature';
-
-type InvoiceTemplateBlockLayout = {
-  x: number;
-  y: number;
-  w: number;
-};
-
-type InvoiceTemplateLayout = Record<InvoiceTemplateBlockId, InvoiceTemplateBlockLayout>;
-
 type OfficeModalTabId =
   | 'general'
   | 'contact-details'
@@ -370,7 +351,6 @@ export class SettingsPage implements OnDestroy {
     logoData: [''],
     paymentReminderLetterTitle: ['', [Validators.maxLength(200)]],
     paymentReminderLetterContent: ['', [Validators.maxLength(20_000)]],
-    invoiceTemplateLayoutJson: ['', [Validators.maxLength(20_000)]],
     openingHoursJson: ['']
   });
 
@@ -492,8 +472,6 @@ export class SettingsPage implements OnDestroy {
   readonly officeDraftStatusNowTick = signal(Date.now());
   readonly officeConfigTargetId = signal<number | null>(null);
   readonly officeOpeningHoursDraft = signal<OfficeOpeningHours>(this.createDefaultOfficeOpeningHours());
-  readonly invoiceTemplateLayout = signal<InvoiceTemplateLayout>(this.createDefaultInvoiceTemplateLayout());
-  readonly draggedInvoiceTemplateBlockId = signal<InvoiceTemplateBlockId | null>(null);
   readonly serviceTypes = signal<EditableServiceType[]>([]);
   readonly paymentMethods = signal<EditablePaymentMethod[]>([]);
   readonly consultationProfiles = signal<EditableConsultationProfile[]>([]);
@@ -570,17 +548,6 @@ export class SettingsPage implements OnDestroy {
   ];
   readonly numberingConfigurationOptions = ['Numérotation globale au cabinet', 'Numérotation par praticien'] as const;
   readonly vatRateOptions = [0, 5.5, 10, 20];
-  readonly invoiceTemplateBlockOptions: Array<{ key: InvoiceTemplateBlockId; label: string }> = [
-    { key: 'logo', label: 'Logo cabinet' },
-    { key: 'practitioner', label: 'Infos praticien' },
-    { key: 'patient', label: 'Infos patient' },
-    { key: 'invoiceMeta', label: 'Métadonnées facture' },
-    { key: 'lineItems', label: 'Tableau prestations' },
-    { key: 'totals', label: 'Totaux' },
-    { key: 'payment', label: 'Moyen de paiement' },
-    { key: 'mentions', label: 'Mentions légales' },
-    { key: 'signature', label: 'Zone signature' }
-  ];
   readonly officeLetterCommonVariables: Array<{ token: string; description: string }> = [
     { token: '{$DATE}', description: 'Date du jour' },
     { token: '{$CIVILITE}', description: 'Civilite du patient (Monsieur ou Madame)' },
@@ -687,7 +654,6 @@ export class SettingsPage implements OnDestroy {
   private officeDraftStatusTimer: ReturnType<typeof setInterval> | null = null;
   private isPersistingOfficeDraft = false;
   private pendingOfficeDraftSave = false;
-  private invoiceTemplateDragOffset: { x: number; y: number } | null = null;
 
   readonly profiles = signal<AccessProfile[]>([
     {
@@ -3415,9 +3381,7 @@ export class SettingsPage implements OnDestroy {
       const office = this.offices().find((o) => o.id === officeId);
       if (office) {
         const openingHours = this.ensureOfficeOpeningHours(office.openingHours);
-        const invoiceTemplateLayout = this.parseInvoiceTemplateLayout(office.invoiceTemplateLayoutJson);
         this.officeOpeningHoursDraft.set(openingHours);
-        this.invoiceTemplateLayout.set(invoiceTemplateLayout);
         this.serviceTypes.set(
           office.serviceTypes.map((item, index) => ({
             ...item,
@@ -3459,7 +3423,6 @@ export class SettingsPage implements OnDestroy {
           logoData: office.logoData || '',
           paymentReminderLetterTitle: office.paymentReminderLetterTemplate?.title || DEFAULT_PAYMENT_REMINDER_LETTER_TITLE,
           paymentReminderLetterContent: office.paymentReminderLetterTemplate?.content || DEFAULT_PAYMENT_REMINDER_LETTER_CONTENT,
-          invoiceTemplateLayoutJson: this.stringifyInvoiceTemplateLayout(invoiceTemplateLayout),
           openingHoursJson: JSON.stringify(openingHours)
         });
       }
@@ -3467,9 +3430,7 @@ export class SettingsPage implements OnDestroy {
       this.officeDraftSaveState.set('idle');
       this.lastOfficeDraftSavedAt.set(null);
       const openingHours = this.createDefaultOfficeOpeningHours();
-      const invoiceTemplateLayout = this.createDefaultInvoiceTemplateLayout();
       this.officeOpeningHoursDraft.set(openingHours);
-      this.invoiceTemplateLayout.set(invoiceTemplateLayout);
       this.serviceTypes.set([]);
       this.paymentMethods.set(this.createDefaultPaymentMethods());
       this.consultationProfiles.set([]);
@@ -3496,7 +3457,6 @@ export class SettingsPage implements OnDestroy {
         logoData: '',
         paymentReminderLetterTitle: DEFAULT_PAYMENT_REMINDER_LETTER_TITLE,
         paymentReminderLetterContent: DEFAULT_PAYMENT_REMINDER_LETTER_CONTENT,
-        invoiceTemplateLayoutJson: this.stringifyInvoiceTemplateLayout(invoiceTemplateLayout),
         openingHoursJson: JSON.stringify(openingHours)
       });
 
@@ -3832,103 +3792,6 @@ export class SettingsPage implements OnDestroy {
     ]);
   }
 
-  invoiceTemplateBlockValue(blockId: InvoiceTemplateBlockId, field: 'x' | 'y' | 'w'): number {
-    return this.invoiceTemplateLayout()[blockId][field];
-  }
-
-  updateInvoiceTemplateBlock(blockId: InvoiceTemplateBlockId, field: 'x' | 'y' | 'w', value: string): void {
-    const nextValue = this.clampInvoiceTemplateValue(field, Number(value));
-
-    const nextLayout: InvoiceTemplateLayout = {
-      ...this.invoiceTemplateLayout(),
-      [blockId]: {
-        ...this.invoiceTemplateLayout()[blockId],
-        [field]: nextValue
-      }
-    };
-
-    const block = nextLayout[blockId];
-    if (block.x + block.w > 100) {
-      block.x = Math.max(0, 100 - block.w);
-    }
-
-    this.invoiceTemplateLayout.set(nextLayout);
-    this.officeForm.patchValue({
-      invoiceTemplateLayoutJson: this.stringifyInvoiceTemplateLayout(nextLayout)
-    });
-  }
-
-  onInvoiceTemplateDragStart(event: DragEvent, blockId: InvoiceTemplateBlockId): void {
-    const target = event.currentTarget as HTMLElement | null;
-    const preview = target?.parentElement as HTMLElement | null;
-    if (!target || !preview) {
-      return;
-    }
-
-    const targetRect = target.getBoundingClientRect();
-    const pointerX = Number.isFinite(event.clientX) ? event.clientX : targetRect.left;
-    const pointerY = Number.isFinite(event.clientY) ? event.clientY : targetRect.top;
-
-    this.invoiceTemplateDragOffset = {
-      x: Math.max(0, pointerX - targetRect.left),
-      y: Math.max(0, pointerY - targetRect.top)
-    };
-    this.draggedInvoiceTemplateBlockId.set(blockId);
-
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('text/plain', blockId);
-      event.dataTransfer.setData('application/x-osteo-invoice-block', blockId);
-    }
-  }
-
-  onInvoiceTemplateDragEnd(): void {
-    this.draggedInvoiceTemplateBlockId.set(null);
-    this.invoiceTemplateDragOffset = null;
-  }
-
-  onInvoiceTemplatePreviewDragOver(event: DragEvent): void {
-    event.preventDefault();
-    if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = 'move';
-    }
-  }
-
-  onInvoiceTemplatePreviewDrop(event: DragEvent): void {
-    event.preventDefault();
-
-    const preview = event.currentTarget as HTMLElement | null;
-    if (!preview) {
-      this.onInvoiceTemplateDragEnd();
-      return;
-    }
-
-    const fromTransfer =
-      event.dataTransfer?.getData('application/x-osteo-invoice-block')
-      || event.dataTransfer?.getData('text/plain')
-      || '';
-    const blockId = this.toInvoiceTemplateBlockId(fromTransfer) ?? this.draggedInvoiceTemplateBlockId();
-    if (!blockId) {
-      this.onInvoiceTemplateDragEnd();
-      return;
-    }
-
-    const previewRect = preview.getBoundingClientRect();
-    if (previewRect.width <= 0 || previewRect.height <= 0) {
-      this.onInvoiceTemplateDragEnd();
-      return;
-    }
-
-    const offset = this.invoiceTemplateDragOffset ?? { x: 0, y: 0 };
-    const rawLeft = event.clientX - previewRect.left - offset.x;
-    const rawTop = event.clientY - previewRect.top - offset.y;
-
-    const nextX = (rawLeft / previewRect.width) * 100;
-    const nextY = (rawTop / previewRect.height) * 100;
-    this.setInvoiceTemplateBlockPosition(blockId, nextX, nextY);
-    this.onInvoiceTemplateDragEnd();
-  }
-
   async saveOffice(): Promise<void> {
     const editId = this.editingOfficeId();
     if (editId && !this.canUpdateOfficeSettings()) {
@@ -4115,13 +3978,8 @@ export class SettingsPage implements OnDestroy {
       logoData: String(payload.logoData ?? ''),
       paymentReminderLetterTitle: String(payload.paymentReminderLetterTemplate?.title ?? ''),
       paymentReminderLetterContent: String(payload.paymentReminderLetterTemplate?.content ?? ''),
-      invoiceTemplateLayoutJson: this.stringifyInvoiceTemplateLayout(
-        this.parseInvoiceTemplateLayout(payload.invoiceTemplateLayoutJson)
-      ),
       openingHoursJson: JSON.stringify(openingHours)
     });
-
-    this.invoiceTemplateLayout.set(this.parseInvoiceTemplateLayout(payload.invoiceTemplateLayoutJson));
 
     this.serviceTypes.set(
       Array.isArray(payload.serviceTypes)
@@ -4419,7 +4277,6 @@ export class SettingsPage implements OnDestroy {
 
   private buildOfficePayload(): CreateOfficePayload {
     const raw = this.officeForm.getRawValue();
-    const invoiceTemplateLayout = this.parseInvoiceTemplateLayout(raw.invoiceTemplateLayoutJson);
     return {
       name: raw.name.trim(),
       defaultSessionDurationMinutes: Number(raw.defaultSessionDurationMinutes) || 60,
@@ -4445,7 +4302,6 @@ export class SettingsPage implements OnDestroy {
         content: String(raw.paymentReminderLetterContent ?? '').trim()
       },
       patientLetterTemplates: this.patientLetterTemplates(),
-      invoiceTemplateLayoutJson: this.stringifyInvoiceTemplateLayout(invoiceTemplateLayout),
       openingHours: this.officeOpeningHoursDraft(),
       consultationProfiles: this.toOfficeConsultationProfiles(),
       officeUserDelegations: this.toOfficeUserDelegationsPayload(),
@@ -4462,20 +4318,6 @@ export class SettingsPage implements OnDestroy {
         isActive: item.isActive,
         displayOrder: index + 1
       }))
-    };
-  }
-
-  private createDefaultInvoiceTemplateLayout(): InvoiceTemplateLayout {
-    return {
-      logo: { x: 4, y: 4, w: 24 },
-      practitioner: { x: 30, y: 4, w: 32 },
-      patient: { x: 64, y: 4, w: 32 },
-      invoiceMeta: { x: 64, y: 20, w: 32 },
-      lineItems: { x: 4, y: 32, w: 92 },
-      totals: { x: 56, y: 74, w: 40 },
-      payment: { x: 4, y: 74, w: 50 },
-      mentions: { x: 4, y: 86, w: 92 },
-      signature: { x: 60, y: 92, w: 36 }
     };
   }
 
@@ -4509,80 +4351,6 @@ export class SettingsPage implements OnDestroy {
         tempKey: this.createTempKey('pay')
       }
     ];
-  }
-
-  private parseInvoiceTemplateLayout(rawValue: string | undefined | null): InvoiceTemplateLayout {
-    const fallback = this.createDefaultInvoiceTemplateLayout();
-    if (!rawValue || !String(rawValue).trim()) {
-      return fallback;
-    }
-
-    try {
-      const parsed = JSON.parse(rawValue) as Partial<Record<InvoiceTemplateBlockId, Partial<InvoiceTemplateBlockLayout>>>;
-      const next: InvoiceTemplateLayout = this.createDefaultInvoiceTemplateLayout();
-
-      for (const option of this.invoiceTemplateBlockOptions) {
-        const candidate = parsed?.[option.key];
-        if (!candidate || typeof candidate !== 'object') {
-          continue;
-        }
-
-        next[option.key] = {
-          x: this.clampInvoiceTemplateValue('x', Number(candidate.x)),
-          y: this.clampInvoiceTemplateValue('y', Number(candidate.y)),
-          w: this.clampInvoiceTemplateValue('w', Number(candidate.w))
-        };
-
-        if (next[option.key].x + next[option.key].w > 100) {
-          next[option.key].x = Math.max(0, 100 - next[option.key].w);
-        }
-      }
-
-      return next;
-    } catch {
-      return fallback;
-    }
-  }
-
-  private stringifyInvoiceTemplateLayout(layout: InvoiceTemplateLayout): string {
-    return JSON.stringify(layout);
-  }
-
-  private clampInvoiceTemplateValue(field: 'x' | 'y' | 'w', value: number): number {
-    const min = field === 'w' ? 20 : 0;
-    const max = field === 'w' ? 96 : 96;
-    if (!Number.isFinite(value)) {
-      return field === 'w' ? 24 : 0;
-    }
-    return Math.min(max, Math.max(min, Math.round(value)));
-  }
-
-  private setInvoiceTemplateBlockPosition(blockId: InvoiceTemplateBlockId, nextX: number, nextY: number): void {
-    const nextLayout: InvoiceTemplateLayout = {
-      ...this.invoiceTemplateLayout(),
-      [blockId]: {
-        ...this.invoiceTemplateLayout()[blockId],
-        x: this.clampInvoiceTemplateValue('x', nextX),
-        y: this.clampInvoiceTemplateValue('y', nextY)
-      }
-    };
-
-    const block = nextLayout[blockId];
-    if (block.x + block.w > 100) {
-      block.x = Math.max(0, 100 - block.w);
-    }
-
-    this.invoiceTemplateLayout.set(nextLayout);
-    this.officeForm.patchValue({
-      invoiceTemplateLayoutJson: this.stringifyInvoiceTemplateLayout(nextLayout)
-    });
-  }
-
-  private toInvoiceTemplateBlockId(raw: string): InvoiceTemplateBlockId | null {
-    const normalized = String(raw ?? '').trim();
-    return this.invoiceTemplateBlockOptions.some((item) => item.key === normalized as InvoiceTemplateBlockId)
-      ? (normalized as InvoiceTemplateBlockId)
-      : null;
   }
 
   private toEditableConsultationProfiles(profiles: OfficeConsultationProfile[] | undefined): EditableConsultationProfile[] {

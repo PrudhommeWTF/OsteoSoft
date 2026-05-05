@@ -541,7 +541,6 @@ export class InstallationPage {
         content: DEFAULT_PAYMENT_REMINDER_LETTER_CONTENT
       },
       patientLetterTemplates: [],
-      invoiceTemplateLayoutJson: '{}',
       openingHours: this.officeOpeningHoursDraft(),
       consultationProfiles: this.toOfficeConsultationProfiles(),
       officeUserDelegations: [],
