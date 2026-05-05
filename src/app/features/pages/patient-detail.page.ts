@@ -576,7 +576,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     }
 
     return this.patientDocuments().filter(
-      (document) => document.consultationId === consultationId && String(document.documentType ?? '') === 'letter'
+      (document) => document.consultationId === consultationId && document.documentType === 'letter'
     );
   });
 
@@ -4456,7 +4456,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     }
 
     // Prefer documents explicitly typed as invoices.
-    const typedInvoiceDocs = docs.filter((item) => String(item.documentType ?? '') === 'invoice');
+    const typedInvoiceDocs = docs.filter((item) => item.documentType === 'invoice');
 
     // Fall back to heuristic title/filename matching for older documents without a documentType.
     const invoiceDocs = typedInvoiceDocs.length > 0

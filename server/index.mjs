@@ -4611,7 +4611,7 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
         row.title_cipher ?? null,
         row.comment_cipher ?? null,
         String(row.content_cipher ?? ''),
-        String(row.document_type ?? 'document'),
+        row.document_type ?? 'document',
         row.created_at ?? new Date().toISOString()
       );
     }
@@ -12570,7 +12570,7 @@ app.get('/api/patients/:id/documents', authMiddleware, requirePermission('read-p
     sizeBytes: Number(row.size_bytes) || 0,
     title: row.title_cipher ? decryptSensitiveField(row.title_cipher) : '',
     comment: row.comment_cipher ? decryptSensitiveField(row.comment_cipher) : '',
-    documentType: String(row.document_type ?? 'document'),
+    documentType: row.document_type ?? 'document',
     createdAt: row.created_at,
     link: `/api/patient-documents/${encodeURIComponent(row.document_ref)}`
   }));
@@ -12617,7 +12617,7 @@ app.get('/api/patient-documents/:documentRef', authMiddleware, requirePermission
       sizeBytes: Number(row.size_bytes) || 0,
       title: row.title_cipher ? decryptSensitiveField(row.title_cipher) : '',
       comment: row.comment_cipher ? decryptSensitiveField(row.comment_cipher) : '',
-      documentType: String(row.document_type ?? 'document'),
+      documentType: row.document_type ?? 'document',
       contentBase64: decryptSensitiveField(row.content_cipher),
       createdAt: row.created_at
     }

@@ -1250,7 +1250,7 @@
                       <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
                         <div>
                           <p class="fw-semibold mb-1">{{ letter.title || letter.fileName }}</p>
-                          <p class="text-muted small mb-0">{{ letter.comment }} · {{ formatFileSize(letter.sizeBytes) }}</p>
+                          <p class="text-muted small mb-0">{{ letter.comment ? letter.comment + ' · ' : '' }}{{ formatFileSize(letter.sizeBytes) }}</p>
                         </div>
                         <div class="btn-group btn-group-sm">
                           <button type="button" class="btn btn-outline-primary" (click)="openPatientDocument(letter)" title="Ouvrir" bsTooltip>
