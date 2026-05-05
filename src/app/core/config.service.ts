@@ -22,7 +22,8 @@ export class ConfigService {
       console.error('Failed to load config:', error);
       // Set default config if API fails
       this.config.set({
-        app_name: 'OsteoSoft'
+        app_name: 'OsteoSoft',
+        version: '0.0.2'
       });
     } finally {
       this.isLoaded.set(true);

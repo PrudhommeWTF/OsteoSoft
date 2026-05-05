@@ -925,7 +925,13 @@ export type StatisticsPayload = {
 
 export type AppConfig = {
   app_name: string;
-  version?: string;
+  version: string;
+};
+
+export type ChangelogEntry = {
+  version: string;
+  date: string | null;
+  sections: { label: string; items: string[] }[];
 };
 
 export type AntecedentTypesPayload = {

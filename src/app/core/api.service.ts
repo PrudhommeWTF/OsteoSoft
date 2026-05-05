@@ -15,6 +15,7 @@ import {
   Appointment,
   AppointmentsPayload,
   AuthUser,
+  ChangelogEntry,
   CreatePatientDocumentPayload,
   ConsultationRecord,
   ConsultationUpdatePayload,
@@ -541,6 +542,10 @@ export class ApiService {
 
   async getConfig(): Promise<AppConfig> {
     return firstValueFrom(this.http.get<AppConfig>(`${this.baseUrl}/config`));
+  }
+
+  async getChangelog(): Promise<ChangelogEntry[]> {
+    return firstValueFrom(this.http.get<ChangelogEntry[]>(`${this.baseUrl}/changelog`));
   }
 
   async getAntecedentTypes(): Promise<string[]> {
