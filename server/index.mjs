@@ -33,6 +33,7 @@ const trustedProxies = process.env.TRUST_PROXY === 'true' || process.env.TRUST_P
   ? 1
   : (process.env.TRUST_PROXY === 'loopback' ? 'loopback' : false);
 const SESSION_COOKIE_NAME = 'os_session';
+const CSRF_COOKIE_NAME = 'os_csrf';
 const SESSION_COOKIE_PATH = '/';
 const SESSION_REMEMBER_MAX_AGE_MS = Number(process.env.SESSION_REMEMBER_MAX_AGE_MS ?? 12 * 60 * 60 * 1000);
 const SESSION_DEFAULT_MAX_AGE_MS = Number(process.env.SESSION_DEFAULT_MAX_AGE_MS ?? 2 * 60 * 60 * 1000);
@@ -802,9 +803,32 @@ function buildSessionCookieOptions(remember) {
   };
 }
 
+function generateCsrfToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function buildCsrfCookieOptions(remember) {
+  return {
+    httpOnly: false,
+    sameSite: 'lax',
+    secure: isProduction,
+    path: SESSION_COOKIE_PATH,
+    maxAge: remember ? SESSION_REMEMBER_MAX_AGE_MS : SESSION_DEFAULT_MAX_AGE_MS
+  };
+}
+
 function clearSessionCookie(res) {
   res.clearCookie(SESSION_COOKIE_NAME, {
     httpOnly: true,
+    sameSite: 'lax',
+    secure: isProduction,
+    path: SESSION_COOKIE_PATH
+  });
+}
+
+function clearCsrfCookie(res) {
+  res.clearCookie(CSRF_COOKIE_NAME, {
+    httpOnly: false,
     sameSite: 'lax',
     secure: isProduction,
     path: SESSION_COOKIE_PATH
@@ -6780,6 +6804,9 @@ function buildPatientUpdateChanges(beforeSnapshot, afterSnapshot) {
   return changes;
 }
 
+// HTTP methods that are safe (idempotent, no side effects) — exempt from CSRF validation
+const SAFE_HTTP_METHODS_CSRF = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 // Routes that remain accessible even when must_change_password is set
 const ROUTES_ALLOWED_WITH_MUST_CHANGE_PASSWORD = new Set([
   '/api/auth/logout',
@@ -6816,6 +6843,19 @@ function authMiddleware(req, res, next) {
         }
       }
       // mcp === false → no restriction, skip DB check
+    }
+
+    // CSRF validation: reject state-mutating requests missing a valid double-submit token
+    if (!SAFE_HTTP_METHODS_CSRF.has(req.method)) {
+      const cookieCsrf = req.cookies[CSRF_COOKIE_NAME];
+      const headerCsrf = req.headers['x-csrf-token'];
+      if (!cookieCsrf || !headerCsrf || cookieCsrf !== headerCsrf) {
+        writeAuthSecurityLog(req, 'csrf_token_mismatch', {
+          reason: 'csrf_validation_failed',
+          statusCode: 403
+        });
+        return res.status(403).json({ message: 'Requête rejetée (protection CSRF)' });
+      }
     }
 
     return next();
@@ -7752,6 +7792,7 @@ app.put('/api/profile/me', authMiddleware, async (req, res) => {
     if (updatedUser) {
       const newToken = signTokenForSession(updatedUser, false);
       res.cookie(SESSION_COOKIE_NAME, newToken, buildSessionCookieOptions(false));
+      res.cookie(CSRF_COOKIE_NAME, generateCsrfToken(), buildCsrfCookieOptions(false));
     }
   }
 
@@ -10676,21 +10717,14 @@ app.get('/api/patients/:id/antecedents', authMiddleware, requirePermission('read
   }
 
   const patient = db
-    .prepare('SELECT id, cipher_medical_notes, office_id FROM patients WHERE id = ? AND is_deleted = 0')
+    .prepare('SELECT id, cipher_medical_notes FROM patients WHERE id = ? AND is_deleted = 0')
     .get(patientId);
   if (!patient) {
     return res.status(404).json({ message: 'Patient introuvable' });
   }
 
-  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
-  if (patientOfficeId !== null) {
-    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
-    if (!isAdmin) {
-      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
-      if (!accessibleOfficeIds.includes(patientOfficeId)) {
-        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
-      }
-    }
+  if (!canUserAccessPatient(patientId, req.userAccess)) {
+    return res.status(403).json({ message: 'Accès refusé' });
   }
 
   let rows = db
@@ -11586,6 +11620,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
 
   const token = signTokenForSession(user, Boolean(parsed.data.remember));
   res.cookie(SESSION_COOKIE_NAME, token, buildSessionCookieOptions(Boolean(parsed.data.remember)));
+  res.cookie(CSRF_COOKIE_NAME, generateCsrfToken(), buildCsrfCookieOptions(Boolean(parsed.data.remember)));
 
   writeAuditLog(user.id, 'LOGIN', 'auth', String(user.id));
   writeAuthSecurityLog(req, 'login_attempt_succeeded', {
@@ -11614,6 +11649,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
 
 app.post('/api/auth/logout', authMiddleware, (req, res) => {
   clearSessionCookie(res);
+  clearCsrfCookie(res);
   writeAuditLog(req.user.sub, 'LOGOUT', 'auth', String(req.user.sub));
   res.status(204).send();
 });
@@ -12364,20 +12400,13 @@ app.get('/api/patients/:id/documents', authMiddleware, requirePermission('read-p
     return res.status(400).json({ message: 'Identifiant patient invalide' });
   }
 
-  const patient = db.prepare('SELECT id, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
+  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
   if (!patient) {
     return res.status(404).json({ message: 'Patient introuvable' });
   }
 
-  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
-  if (patientOfficeId !== null) {
-    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
-    if (!isAdmin) {
-      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
-      if (!accessibleOfficeIds.includes(patientOfficeId)) {
-        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
-      }
-    }
+  if (!canUserAccessPatient(patientId, req.userAccess)) {
+    return res.status(403).json({ message: 'Accès refusé' });
   }
 
   const rows = db.prepare(
@@ -12422,22 +12451,13 @@ app.get('/api/patient-documents/:documentRef', authMiddleware, requirePermission
     return res.status(404).json({ message: 'Document introuvable' });
   }
 
-  const patient = db.prepare('SELECT id, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(Number(row.patient_id));
+  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(Number(row.patient_id));
   if (!patient) {
     return res.status(404).json({ message: 'Patient introuvable' });
   }
 
-  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
-  const documentOfficeId = row.office_id != null ? Number(row.office_id) : null;
-  const effectiveOfficeId = documentOfficeId ?? patientOfficeId;
-  if (effectiveOfficeId !== null) {
-    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
-    if (!isAdmin) {
-      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
-      if (!accessibleOfficeIds.includes(effectiveOfficeId)) {
-        return res.status(403).json({ message: 'Accès refusé - document d\'un autre cabinet' });
-      }
-    }
+  if (!canUserAccessPatient(Number(row.patient_id), req.userAccess)) {
+    return res.status(403).json({ message: 'Accès refusé' });
   }
 
   return res.json({
@@ -12464,20 +12484,13 @@ app.post('/api/patients/:id/documents', authMiddleware, requirePermission('creat
     return res.status(400).json({ message: 'Identifiant patient invalide' });
   }
 
-  const patient = db.prepare('SELECT id, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
+  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
   if (!patient) {
     return res.status(404).json({ message: 'Patient introuvable' });
   }
 
-  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
-  if (patientOfficeId !== null) {
-    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
-    if (!isAdmin) {
-      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
-      if (!accessibleOfficeIds.includes(patientOfficeId)) {
-        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
-      }
-    }
+  if (!canUserAccessPatient(patientId, req.userAccess)) {
+    return res.status(403).json({ message: 'Accès refusé' });
   }
 
   const fileName = String(req.body?.fileName ?? '').trim();
@@ -12521,11 +12534,7 @@ app.post('/api/patients/:id/documents', authMiddleware, requirePermission('creat
     return res.status(415).json({ message: err.message || 'Type de fichier non autorisé' });
   }
 
-  if (requestedOfficeId !== null && patientOfficeId !== null && requestedOfficeId !== patientOfficeId) {
-    return res.status(400).json({ message: 'Cabinet du document incoherent avec le patient' });
-  }
-
-  const officeId = patientOfficeId ?? requestedOfficeId;
+  const officeId = requestedOfficeId;
 
   if (consultationId !== null) {
     const consultation = db
@@ -12595,17 +12604,8 @@ app.patch('/api/patient-documents/:documentRef', authMiddleware, requirePermissi
     return res.status(404).json({ message: 'Patient introuvable' });
   }
 
-  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
-  const documentOfficeId = row.office_id != null ? Number(row.office_id) : null;
-  const effectiveOfficeId = documentOfficeId ?? patientOfficeId;
-  if (effectiveOfficeId !== null) {
-    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
-    if (!isAdmin) {
-      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
-      if (!accessibleOfficeIds.includes(effectiveOfficeId)) {
-        return res.status(403).json({ message: 'Accès refusé - document d\'un autre cabinet' });
-      }
-    }
+  if (!canUserAccessPatient(Number(row.patient_id), req.userAccess)) {
+    return res.status(403).json({ message: 'Accès refusé' });
   }
 
   const title = String(req.body?.title ?? '').trim();
@@ -12651,22 +12651,13 @@ app.delete('/api/patient-documents/:documentRef', authMiddleware, requirePermiss
     return res.status(404).json({ message: 'Document introuvable' });
   }
 
-  const patient = db.prepare('SELECT id, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(Number(existing.patient_id));
+  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(Number(existing.patient_id));
   if (!patient) {
     return res.status(404).json({ message: 'Patient introuvable' });
   }
 
-  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
-  const documentOfficeId = existing.office_id != null ? Number(existing.office_id) : null;
-  const effectiveOfficeId = documentOfficeId ?? patientOfficeId;
-  if (effectiveOfficeId !== null) {
-    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
-    if (!isAdmin) {
-      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
-      if (!accessibleOfficeIds.includes(effectiveOfficeId)) {
-        return res.status(403).json({ message: 'Accès refusé - document d\'un autre cabinet' });
-      }
-    }
+  if (!canUserAccessPatient(Number(existing.patient_id), req.userAccess)) {
+    return res.status(403).json({ message: 'Accès refusé' });
   }
 
   db.prepare('DELETE FROM patient_documents WHERE document_ref = ?').run(documentRef);
@@ -12689,7 +12680,11 @@ app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-lis
     ? [selectedOfficeId]
     : (isAdmin ? null : accessibleOfficeIds);
 
-  const consultationCountByPatientId = new Map();
+  const activityCountByPatientId = new Map();
+  // For non-admin users, tracks exactly which patient IDs are visible.
+  // null means admin — all patients may be shown.
+  let visiblePatientIds = null;
+
   if (scopedOfficeIds === null) {
     const rows = db
       .prepare(
@@ -12702,28 +12697,55 @@ app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-lis
 
     for (const row of rows) {
       const patientId = Number(row.patient_id);
-      const consultationCount = Number(row.consultation_count ?? 0);
-      if (Number.isInteger(patientId) && patientId > 0 && consultationCount > 0) {
-        consultationCountByPatientId.set(patientId, consultationCount);
+      const appointmentCount = Number(row.consultation_count ?? 0);
+      if (Number.isInteger(patientId) && patientId > 0 && appointmentCount > 0) {
+        activityCountByPatientId.set(patientId, appointmentCount);
       }
     }
   } else if (scopedOfficeIds.length > 0) {
+    visiblePatientIds = new Set();
     const placeholders = scopedOfficeIds.map(() => '?').join(', ');
-    const rows = db
+
+    // Count activity (appointments + consultations + patients.office_id) per
+    // patient in accessible offices so we can both filter and display a count.
+    const activityParams = [...scopedOfficeIds, ...scopedOfficeIds, ...scopedOfficeIds];
+    const countRows = db
       .prepare(
-        `SELECT patient_id, COUNT(*) AS consultation_count
-         FROM appointments
-         WHERE office_id IN (${placeholders})
+        `SELECT patient_id, COUNT(*) AS activity_count
+         FROM (
+           SELECT patient_id FROM appointments WHERE office_id IN (${placeholders})
+           UNION ALL
+           SELECT patient_id FROM consultations WHERE office_id IN (${placeholders})
+           UNION ALL
+           SELECT id AS patient_id FROM patients WHERE office_id IN (${placeholders}) AND is_deleted = 0
+         )
          GROUP BY patient_id`
       )
-      .all(...scopedOfficeIds);
+      .all(...activityParams);
 
-    for (const row of rows) {
+    for (const row of countRows) {
       const patientId = Number(row.patient_id);
-      const consultationCount = Number(row.consultation_count ?? 0);
-      if (Number.isInteger(patientId) && patientId > 0 && consultationCount > 0) {
-        consultationCountByPatientId.set(patientId, consultationCount);
+      const activityCount = Number(row.activity_count ?? 0);
+      if (Number.isInteger(patientId) && patientId > 0) {
+        activityCountByPatientId.set(patientId, activityCount);
+        visiblePatientIds.add(patientId);
       }
+    }
+
+    // Backward compatibility: patients with no office affiliation anywhere
+    // (legacy data before office tracking) remain visible to all practitioners.
+    const legacyRows = db
+      .prepare(
+        `SELECT id FROM patients
+         WHERE is_deleted = 0
+           AND office_id IS NULL
+           AND NOT EXISTS (SELECT 1 FROM consultations WHERE patient_id = patients.id AND office_id IS NOT NULL)
+           AND NOT EXISTS (SELECT 1 FROM appointments  WHERE patient_id = patients.id AND office_id IS NOT NULL)`
+      )
+      .all();
+
+    for (const row of legacyRows) {
+      visiblePatientIds.add(Number(row.id));
     }
   }
 
@@ -12743,11 +12765,20 @@ app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-lis
 
   const patients = [];
   for (const row of rows) {
-    const consultationCount = Number(consultationCountByPatientId.get(Number(row.id)) ?? 0);
-    if (consultationCount <= 0) {
-      continue;
+    // For admins (visiblePatientIds === null): only show patients with activity.
+    // For practitioners: only show patients in their accessible offices.
+    if (visiblePatientIds !== null) {
+      if (!visiblePatientIds.has(Number(row.id))) {
+        continue;
+      }
+    } else {
+      const count = Number(activityCountByPatientId.get(Number(row.id)) ?? 0);
+      if (count <= 0) {
+        continue;
+      }
     }
 
+    const consultationCount = Number(activityCountByPatientId.get(Number(row.id)) ?? 0);
     const fullName = decryptSensitiveField(row.cipher_full_name);
 
     // Short-circuit before additional expensive decryptions/parsing when searching.
@@ -12788,22 +12819,36 @@ app.get('/api/patients/locations', authMiddleware, requirePermission('search-pat
   const requestedLimit = Number(req.query.limit ?? 100);
   const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(5000, Math.floor(requestedLimit))) : 100;
 
-  const rows = db
-    .prepare('SELECT cipher_medical_notes, office_id FROM patients WHERE is_deleted = 0')
-    .all();
-
   const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
   const accessibleOfficeIds = isAdmin ? null : getAccessibleBillingOfficeIds(req.userAccess);
+
+  let rows;
+  if (isAdmin || !accessibleOfficeIds || accessibleOfficeIds.length === 0) {
+    rows = db.prepare('SELECT cipher_medical_notes FROM patients WHERE is_deleted = 0').all();
+  } else {
+    const placeholders = accessibleOfficeIds.map(() => '?').join(', ');
+    rows = db
+      .prepare(
+        `SELECT cipher_medical_notes FROM patients
+         WHERE is_deleted = 0
+           AND (
+             id IN (SELECT DISTINCT patient_id FROM consultations WHERE office_id IN (${placeholders}))
+             OR id IN (SELECT DISTINCT patient_id FROM appointments  WHERE office_id IN (${placeholders}))
+             OR office_id IN (${placeholders})
+             OR (
+               office_id IS NULL
+               AND NOT EXISTS (SELECT 1 FROM consultations WHERE patient_id = patients.id AND office_id IS NOT NULL)
+               AND NOT EXISTS (SELECT 1 FROM appointments  WHERE patient_id = patients.id AND office_id IS NOT NULL)
+             )
+           )`
+      )
+      .all(...accessibleOfficeIds, ...accessibleOfficeIds, ...accessibleOfficeIds);
+  }
 
   const seen = new Set();
   const locations = [];
 
   for (const row of rows) {
-    const patientOfficeId = row.office_id != null ? Number(row.office_id) : null;
-    if (patientOfficeId !== null && !isAdmin && !accessibleOfficeIds.includes(patientOfficeId)) {
-      continue;
-    }
-
     let notes;
     try {
       notes = JSON.parse(decryptSensitiveField(row.cipher_medical_notes));
@@ -12849,12 +12894,36 @@ app.get('/api/patients/locations', authMiddleware, requirePermission('search-pat
 
 app.get('/api/patients/count', authMiddleware, requirePermission('read-patient-list'), (req, res) => {
   const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
-  const accessibleOfficeIds = isAdmin ? null : getAccessibleBillingOfficeIds(req.userAccess);
-  const rows = db.prepare('SELECT office_id FROM patients WHERE is_deleted = 0').all();
-  const count = rows.filter((row) => {
-    const patientOfficeId = row.office_id != null ? Number(row.office_id) : null;
-    return patientOfficeId === null || isAdmin || accessibleOfficeIds.includes(patientOfficeId);
-  }).length;
+
+  let count;
+  if (isAdmin) {
+    const row = db.prepare('SELECT COUNT(*) AS cnt FROM patients WHERE is_deleted = 0').get();
+    count = Number(row?.cnt ?? 0);
+  } else {
+    const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
+    if (accessibleOfficeIds.length === 0) {
+      count = 0;
+    } else {
+      const placeholders = accessibleOfficeIds.map(() => '?').join(', ');
+      const row = db
+        .prepare(
+          `SELECT COUNT(DISTINCT id) AS cnt FROM patients
+           WHERE is_deleted = 0
+             AND (
+               id IN (SELECT DISTINCT patient_id FROM consultations WHERE office_id IN (${placeholders}))
+               OR id IN (SELECT DISTINCT patient_id FROM appointments  WHERE office_id IN (${placeholders}))
+               OR office_id IN (${placeholders})
+               OR (
+                 office_id IS NULL
+                 AND NOT EXISTS (SELECT 1 FROM consultations WHERE patient_id = patients.id AND office_id IS NOT NULL)
+                 AND NOT EXISTS (SELECT 1 FROM appointments  WHERE patient_id = patients.id AND office_id IS NOT NULL)
+               )
+             )`
+        )
+        .get(...accessibleOfficeIds, ...accessibleOfficeIds, ...accessibleOfficeIds);
+      count = Number(row?.cnt ?? 0);
+    }
+  }
 
   return res.json({ count });
 });
@@ -12881,15 +12950,8 @@ app.get('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
 
   if (!row) return res.status(404).json({ message: 'Patient introuvable' });
 
-  const patientOfficeId = row.office_id != null ? Number(row.office_id) : null;
-  if (patientOfficeId !== null) {
-    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
-    if (!isAdmin) {
-      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
-      if (!accessibleOfficeIds.includes(patientOfficeId)) {
-        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
-      }
-    }
+  if (!canUserAccessPatient(id, req.userAccess)) {
+    return res.status(403).json({ message: 'Accès refusé' });
   }
 
   const fullName = decryptSensitiveField(row.cipher_full_name);
@@ -12954,18 +13016,11 @@ app.get('/api/patients/:id/consultations', authMiddleware, requirePermission('re
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: 'ID invalide' });
 
-  const patient = db.prepare('SELECT id, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(id);
+  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(id);
   if (!patient) return res.status(404).json({ message: 'Patient introuvable' });
 
-  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
-  if (patientOfficeId !== null) {
-    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
-    if (!isAdmin) {
-      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
-      if (!accessibleOfficeIds.includes(patientOfficeId)) {
-        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
-      }
-    }
+  if (!canUserAccessPatient(id, req.userAccess)) {
+    return res.status(403).json({ message: 'Accès refusé' });
   }
 
   let consultationRows = [];
@@ -13244,18 +13299,11 @@ app.get('/api/patients/:id/audit-logs', authMiddleware, requirePermission('read-
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: 'ID invalide' });
 
-  const patient = db.prepare('SELECT id, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(id);
+  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(id);
   if (!patient) return res.status(404).json({ message: 'Patient introuvable' });
 
-  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
-  if (patientOfficeId !== null) {
-    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
-    if (!isAdmin) {
-      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
-      if (!accessibleOfficeIds.includes(patientOfficeId)) {
-        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
-      }
-    }
+  if (!canUserAccessPatient(id, req.userAccess)) {
+    return res.status(403).json({ message: 'Accès refusé' });
   }
 
   const rows = db
@@ -13311,19 +13359,12 @@ app.put('/api/patients/:id', authMiddleware, requirePermission('read-patient-rec
   if (!parsed.success) return res.status(400).json({ message: 'Payload invalide' });
 
   const existing = db
-    .prepare('SELECT cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count, office_id FROM patients WHERE id = ? AND is_deleted = 0')
+    .prepare('SELECT cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count FROM patients WHERE id = ? AND is_deleted = 0')
     .get(id);
   if (!existing) return res.status(404).json({ message: 'Patient introuvable' });
 
-  const patientOfficeId = existing.office_id != null ? Number(existing.office_id) : null;
-  if (patientOfficeId !== null) {
-    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
-    if (!isAdmin) {
-      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
-      if (!accessibleOfficeIds.includes(patientOfficeId)) {
-        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
-      }
-    }
+  if (!canUserAccessPatient(id, req.userAccess)) {
+    return res.status(403).json({ message: 'Accès refusé' });
   }
 
   const existingFullName = decryptSensitiveField(existing.cipher_full_name);
@@ -13500,7 +13541,7 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
     .prepare(
       `SELECT id, cipher_full_name, cipher_phone, cipher_medical_notes,
               sex, birth_date, last_visit, consent_signed, consent_signed_at, consent_form_version, consent_withdrawn_at,
-              retention_until, created_at, updated_at, office_id
+              retention_until, created_at, updated_at
        FROM patients WHERE id = ? AND is_deleted = 0`
     )
     .get(id);
@@ -13509,15 +13550,8 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
     return res.status(404).json({ message: 'Patient introuvable' });
   }
 
-  const patientOfficeId = row.office_id != null ? Number(row.office_id) : null;
-  if (patientOfficeId !== null) {
-    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
-    if (!isAdmin) {
-      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
-      if (!accessibleOfficeIds.includes(patientOfficeId)) {
-        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
-      }
-    }
+  if (!canUserAccessPatient(id, req.userAccess)) {
+    return res.status(403).json({ message: 'Accès refusé' });
   }
 
   const fullName = decryptSensitiveField(row.cipher_full_name);
@@ -13726,20 +13760,13 @@ app.post('/api/patients/:id/withdraw-consent', authMiddleware, requirePermission
     return res.status(400).json({ message: 'ID invalide' });
   }
 
-  const patient = db.prepare('SELECT id, consent_withdrawn_at, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(id);
+  const patient = db.prepare('SELECT id, consent_withdrawn_at FROM patients WHERE id = ? AND is_deleted = 0').get(id);
   if (!patient) {
     return res.status(404).json({ message: 'Patient introuvable' });
   }
 
-  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
-  if (patientOfficeId !== null) {
-    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
-    if (!isAdmin) {
-      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
-      if (!accessibleOfficeIds.includes(patientOfficeId)) {
-        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
-      }
-    }
+  if (!canUserAccessPatient(id, req.userAccess)) {
+    return res.status(403).json({ message: 'Accès refusé' });
   }
 
   if (patient.consent_withdrawn_at) {
@@ -13766,7 +13793,7 @@ app.post('/api/patients/:id/update-consent', authMiddleware, requirePermission('
     return res.status(400).json({ message: 'ID invalide' });
   }
 
-  const patient = db.prepare('SELECT id, consent_withdrawn_at, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(id);
+  const patient = db.prepare('SELECT id, consent_withdrawn_at FROM patients WHERE id = ? AND is_deleted = 0').get(id);
   if (!patient) {
     return res.status(404).json({ message: 'Patient introuvable' });
   }
@@ -13775,15 +13802,8 @@ app.post('/api/patients/:id/update-consent', authMiddleware, requirePermission('
     return res.status(409).json({ message: 'Impossible de mettre à jour le consentement d\'un patient dont le consentement a été retiré' });
   }
 
-  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
-  if (patientOfficeId !== null) {
-    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
-    if (!isAdmin) {
-      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
-      if (!accessibleOfficeIds.includes(patientOfficeId)) {
-        return res.status(403).json({ message: 'Accès refusé - patient d\'un autre cabinet' });
-      }
-    }
+  if (!canUserAccessPatient(id, req.userAccess)) {
+    return res.status(403).json({ message: 'Accès refusé' });
   }
 
   const signedAt = new Date().toISOString();
@@ -15004,6 +15024,49 @@ function getScopedBillingOfficeIds(access, requestedOfficeId) {
     return allowed.has(asked) ? [asked] : [];
   }
   return [...allowed];
+}
+
+// Returns true if the requesting user can access the given patient record.
+// A practitioner has access when the patient has at least one consultation or
+// appointment in any of their accessible offices, or when patients.office_id
+// matches one of their offices.  Patients that have no office affiliation at
+// all (legacy data created before office tracking) remain accessible to every
+// practitioner for backward compatibility.
+function canUserAccessPatient(patientId, userAccess) {
+  if (!userAccess) return false;
+  if (userAccess.role === 'admin' || userAccess.profileId === SUPER_ADMIN_PROFILE_ID) return true;
+
+  const officeIds = getAccessibleBillingOfficeIds(userAccess);
+  if (officeIds.length === 0) return false;
+
+  const placeholders = officeIds.map(() => '?').join(', ');
+
+  // Fast path: patient linked to an accessible office via consultations,
+  // appointments or their registration office (patients.office_id).
+  const hasAccess = db.prepare(`
+    SELECT 1 FROM consultations WHERE patient_id = ? AND office_id IN (${placeholders}) LIMIT 1
+    UNION ALL
+    SELECT 1 FROM appointments  WHERE patient_id = ? AND office_id IN (${placeholders}) LIMIT 1
+    UNION ALL
+    SELECT 1 FROM patients WHERE id = ? AND is_deleted = 0 AND office_id IN (${placeholders}) LIMIT 1
+    LIMIT 1
+  `).get(patientId, ...officeIds, patientId, ...officeIds, patientId, ...officeIds);
+
+  if (hasAccess) return true;
+
+  // Backward compatibility: if the patient has no office affiliation anywhere
+  // (all rows have NULL office_id), they remain visible to every practitioner.
+  const hasAnyOfficeLink = db.prepare(`
+    SELECT 1 FROM (
+      SELECT 1 FROM consultations WHERE patient_id = ? AND office_id IS NOT NULL LIMIT 1
+      UNION ALL
+      SELECT 1 FROM appointments WHERE patient_id = ? AND office_id IS NOT NULL LIMIT 1
+      UNION ALL
+      SELECT 1 FROM patients WHERE id = ? AND office_id IS NOT NULL AND is_deleted = 0 LIMIT 1
+    ) LIMIT 1
+  `).get(patientId, patientId, patientId);
+
+  return hasAnyOfficeLink == null;
 }
 
 function normalizeInvoiceLineItems(rawItems, fallbackAmountCents) {
@@ -17199,20 +17262,13 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('invoice-con
     return res.status(400).json({ message: 'Montant invalide' });
   }
 
-  const patient = db.prepare('SELECT id, office_id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
+  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
   if (!patient) {
     return res.status(404).json({ message: 'Patient introuvable' });
   }
 
-  const patientOfficeId = patient.office_id != null ? Number(patient.office_id) : null;
-  if (patientOfficeId !== null) {
-    const isAdmin = req.userAccess?.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
-    if (!isAdmin) {
-      const accessibleOfficeIds = getAccessibleBillingOfficeIds(req.userAccess);
-      if (!accessibleOfficeIds.includes(patientOfficeId)) {
-        return res.status(403).json({ message: 'Acces refuse - patient d\'un autre cabinet' });
-      }
-    }
+  if (!canUserAccessPatient(patientId, req.userAccess)) {
+    return res.status(403).json({ message: 'Accès refusé' });
   }
 
   const existing = db.prepare('SELECT id FROM invoices WHERE invoice_number = ?').get(invoiceNumber);
@@ -17228,7 +17284,15 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('invoice-con
     }
   }
 
-  const effectiveOfficeId = requestedOfficeId ?? patientOfficeId;
+  // Determine the effective office for the invoice. Prefer the explicitly
+  // requested office; otherwise use the user's first accessible office.
+  // Reject the request if neither is available to avoid NULL orphaned invoices.
+  const accessibleOfficeIdsForInvoice = getAccessibleBillingOfficeIds(req.userAccess);
+  const effectiveOfficeId = requestedOfficeId
+    ?? (accessibleOfficeIdsForInvoice.length > 0 ? accessibleOfficeIdsForInvoice[0] : null);
+  if (effectiveOfficeId === null) {
+    return res.status(400).json({ message: 'Cabinet requis pour la création d\'une facture' });
+  }
   const effectiveConsultationId = Number.isInteger(consultationId) && consultationId > 0 ? consultationId : null;
   const effectiveStatus = computeInvoiceStatusFromPayments(amountCents, payments, status);
   const dueAt = issuedAt;
