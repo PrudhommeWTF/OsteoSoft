@@ -12637,7 +12637,7 @@ app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-lis
     ? [selectedOfficeId]
     : (isAdmin ? null : accessibleOfficeIds);
 
-  const consultationCountByPatientId = new Map();
+  const activityCountByPatientId = new Map();
   // For non-admin users, tracks exactly which patient IDs are visible.
   // null means admin — all patients may be shown.
   let visiblePatientIds = null;
@@ -12654,9 +12654,9 @@ app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-lis
 
     for (const row of rows) {
       const patientId = Number(row.patient_id);
-      const consultationCount = Number(row.consultation_count ?? 0);
-      if (Number.isInteger(patientId) && patientId > 0 && consultationCount > 0) {
-        consultationCountByPatientId.set(patientId, consultationCount);
+      const appointmentCount = Number(row.consultation_count ?? 0);
+      if (Number.isInteger(patientId) && patientId > 0 && appointmentCount > 0) {
+        activityCountByPatientId.set(patientId, appointmentCount);
       }
     }
   } else if (scopedOfficeIds.length > 0) {
@@ -12684,7 +12684,7 @@ app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-lis
       const patientId = Number(row.patient_id);
       const activityCount = Number(row.activity_count ?? 0);
       if (Number.isInteger(patientId) && patientId > 0) {
-        consultationCountByPatientId.set(patientId, activityCount);
+        activityCountByPatientId.set(patientId, activityCount);
         visiblePatientIds.add(patientId);
       }
     }
@@ -12729,13 +12729,13 @@ app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-lis
         continue;
       }
     } else {
-      const count = Number(consultationCountByPatientId.get(Number(row.id)) ?? 0);
+      const count = Number(activityCountByPatientId.get(Number(row.id)) ?? 0);
       if (count <= 0) {
         continue;
       }
     }
 
-    const consultationCount = Number(consultationCountByPatientId.get(Number(row.id)) ?? 0);
+    const consultationCount = Number(activityCountByPatientId.get(Number(row.id)) ?? 0);
     const fullName = decryptSensitiveField(row.cipher_full_name);
 
     // Short-circuit before additional expensive decryptions/parsing when searching.
@@ -15001,15 +15001,13 @@ function canUserAccessPatient(patientId, userAccess) {
   // Fast path: patient linked to an accessible office via consultations,
   // appointments or their registration office (patients.office_id).
   const hasAccess = db.prepare(`
-    SELECT 1 FROM (
-      SELECT office_id FROM consultations WHERE patient_id = ?
-      UNION ALL
-      SELECT office_id FROM appointments WHERE patient_id = ?
-      UNION ALL
-      SELECT office_id FROM patients WHERE id = ? AND is_deleted = 0
-    ) WHERE office_id IN (${placeholders})
+    SELECT 1 FROM consultations WHERE patient_id = ? AND office_id IN (${placeholders}) LIMIT 1
+    UNION ALL
+    SELECT 1 FROM appointments  WHERE patient_id = ? AND office_id IN (${placeholders}) LIMIT 1
+    UNION ALL
+    SELECT 1 FROM patients WHERE id = ? AND is_deleted = 0 AND office_id IN (${placeholders}) LIMIT 1
     LIMIT 1
-  `).get(patientId, patientId, patientId, ...officeIds);
+  `).get(patientId, ...officeIds, patientId, ...officeIds, patientId, ...officeIds);
 
   if (hasAccess) return true;
 
