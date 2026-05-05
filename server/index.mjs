@@ -8217,7 +8217,7 @@ app.put('/api/offices/:id', authMiddleware, requirePermission('update-office-set
   }
 });
 
-app.patch('/api/offices/:id/invoice-template', authMiddleware, (req, res) => {
+app.patch('/api/offices/:id/invoice-template', publicEndpointLimiter, authMiddleware, (req, res) => {
   const officeId = Number(req.params.id);
   if (!Number.isInteger(officeId) || officeId <= 0) {
     return res.status(400).json({ message: 'ID de cabinet invalide' });
@@ -8251,7 +8251,7 @@ app.patch('/api/offices/:id/invoice-template', authMiddleware, (req, res) => {
         .filter((id) => Number.isInteger(id) && id > 0)
     );
     if (!scopedOfficeIds.has(officeId)) {
-      return res.status(403).json({ message: 'Acces interdit a ce cabinet' });
+      return res.status(403).json({ message: 'Accès interdit à ce cabinet' });
     }
   }
 
