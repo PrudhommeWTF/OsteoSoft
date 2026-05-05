@@ -356,7 +356,8 @@ export class SettingsPage implements OnDestroy {
     logoData: [''],
     paymentReminderLetterTitle: ['', [Validators.maxLength(200)]],
     paymentReminderLetterContent: ['', [Validators.maxLength(20_000)]],
-    openingHoursJson: ['']
+    openingHoursJson: [''],
+    invoiceTemplateLayoutJson: ['']
   });
 
   readonly agendaSettingsForm = this.fb.nonNullable.group({
@@ -481,6 +482,18 @@ export class SettingsPage implements OnDestroy {
   readonly draggedInvoiceTemplateBlockId = signal<InvoiceTemplateBlockId | null>(null);
   readonly selectedInvoiceTemplateBlockId = signal<InvoiceTemplateBlockId | null>(null);
   readonly invoiceTemplatePreviewMode = signal<'labels' | 'sample-data'>('labels');
+  readonly invoiceTemplateBlockOptions: Array<{ key: InvoiceTemplateBlockId; label: string }> = [
+    { key: 'logo', label: 'Logo' },
+    { key: 'practitioner', label: 'Praticien' },
+    { key: 'patient', label: 'Patient' },
+    { key: 'invoiceMeta', label: 'Informations facture' },
+    { key: 'lineItems', label: 'Lignes de prestation' },
+    { key: 'totals', label: 'Totaux' },
+    { key: 'payment', label: 'Paiement' },
+    { key: 'mentions', label: 'Mentions légales' },
+    { key: 'signature', label: 'Signature' }
+  ];
+  invoiceTemplateDragOffset: { x: number; y: number } | null = null;
   readonly serviceTypes = signal<EditableServiceType[]>([]);
   readonly paymentMethods = signal<EditablePaymentMethod[]>([]);
   readonly consultationProfiles = signal<EditableConsultationProfile[]>([]);

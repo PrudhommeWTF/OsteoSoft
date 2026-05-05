@@ -1338,6 +1338,7 @@ export type Office = {
   vatNumber?: string;
   logoData?: string;
   openingHours?: OfficeOpeningHours;
+  invoiceTemplateLayoutJson?: string;
   consultationProfiles: OfficeConsultationProfile[];
   paymentReminderLetterTemplate: OfficeLetterTemplate;
   patientLetterTemplates: OfficeLetterTemplate[];
@@ -1433,4 +1434,4 @@ export type InvoiceTemplateLayout = {
   mentions: InvoiceTemplateBlockLayout;
   signature: InvoiceTemplateBlockLayout;
   _global: InvoiceTemplateGlobalSettings;
-};
+} & Record<InvoiceTemplateBlockId, InvoiceTemplateBlockLayout>;
