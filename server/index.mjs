@@ -7461,6 +7461,14 @@ const heavyOperationLimiter = rateLimit({
   }
 });
 
+const publicEndpointLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  handler: (_req, res) => {
+    return res.status(429).json({ message: 'Trop de requêtes. Réessayez dans quelques secondes.' });
+  }
+});
+
 app.use((req, res, next) => {
   const startedAt = Date.now();
 
@@ -7490,7 +7498,7 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.get('/api/config', (_req, res) => {
+app.get('/api/config', publicEndpointLimiter, (_req, res) => {
   const appName = db.prepare('SELECT value FROM config WHERE key = ?').get('app_name');
   res.json({
     app_name: appName?.value ?? 'OsteoSoft',
@@ -7498,7 +7506,7 @@ app.get('/api/config', (_req, res) => {
   });
 });
 
-app.get('/api/changelog', (_req, res) => {
+app.get('/api/changelog', publicEndpointLimiter, (_req, res) => {
   let raw = '';
   try {
     raw = fs.readFileSync(changelogPath, 'utf-8');
