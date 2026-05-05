@@ -9,11 +9,17 @@ import {
   BillingDepositListItem,
   BillingForecastPayload,
   BillingInsightsPayload,
+  BillingInvoiceDetail,
   BillingOperation,
   BillingOperationsPayload,
   BillingUserOption,
   InvoiceSummaryTile,
+  InvoiceTemplateBlockId,
+  InvoiceTemplateBlockLayout,
+  InvoiceTemplateGlobalSettings,
+  InvoiceTemplateLayout,
   MyUserProfile,
+  Office,
   OfficeOption
 } from '../../core/api.types';
 import { AuthService } from '../../core/auth.service';
@@ -151,6 +157,49 @@ export class BillingPage implements OnDestroy {
 
   readonly canExportBilling = computed(() => this.authService.hasPermission('export-billing'));
   readonly canManageBilling = computed(() => this.authService.hasPermission('mark-payment'));
+  readonly canCustomizeInvoiceTemplate = computed(() =>
+    this.authService.hasPermission('customize-invoice-template') ||
+    this.authService.hasPermission('update-office-settings')
+  );
+
+  // Invoice template tab state
+  readonly activeBillingTab = signal<'operations' | 'invoice-template'>('operations');
+  readonly fullOfficesCache = signal<Office[]>([]);
+  readonly isLoadingFullOffices = signal(false);
+  readonly invoiceTemplateSelectedOfficeId = signal<number | null>(null);
+  readonly invoiceTemplateLayout = signal<InvoiceTemplateLayout>(this.createDefaultInvoiceTemplateLayout());
+  readonly isSavingInvoiceTemplate = signal(false);
+  readonly invoiceTemplateSaveSuccess = signal('');
+  readonly invoiceTemplateSaveError = signal('');
+  readonly draggedInvoiceTemplateBlockId = signal<InvoiceTemplateBlockId | null>(null);
+  readonly selectedInvoiceTemplateBlockId = signal<InvoiceTemplateBlockId | null>(null);
+  readonly invoiceTemplatePreviewMode = signal<'labels' | 'sample-data'>('labels');
+  private invoiceTemplateDragOffset: { x: number; y: number } | null = null;
+
+  readonly invoiceTemplateSelectedOffice = computed(() => {
+    const id = this.invoiceTemplateSelectedOfficeId();
+    return this.fullOfficesCache().find((o) => o.id === id) ?? null;
+  });
+
+  readonly invoiceTemplateBlockOptions: Array<{ key: InvoiceTemplateBlockId; label: string }> = [
+    { key: 'logo', label: 'Logo' },
+    { key: 'practitioner', label: 'Infos praticien' },
+    { key: 'patient', label: 'Infos patient' },
+    { key: 'invoiceMeta', label: 'Métadonnées facture' },
+    { key: 'lineItems', label: 'Lignes de facturation' },
+    { key: 'totals', label: 'Totaux' },
+    { key: 'payment', label: 'Paiement' },
+    { key: 'mentions', label: 'Mentions légales' },
+    { key: 'signature', label: 'Zone signature' }
+  ];
+
+  readonly officeLetterCommonVariables: Array<{ token: string; description: string }> = [
+    { token: '{$DATE}', description: 'Date du jour' },
+    { token: '{$NOM}', description: 'Nom du patient' },
+    { token: '{$PRENOM}', description: 'Prénom du patient' },
+    { token: '{$NOMPRATICIEN}', description: 'Nom du praticien' },
+    { token: '{$PRENOMPRATICIEN}', description: 'Prénom du praticien' }
+  ];
   private readonly activeOfficeSyncEffect = effect(() => {
     const activeOfficeId = this.authService.activeOfficeId();
     if (this.isAllOfficesOverride()) {
@@ -689,6 +738,234 @@ export class BillingPage implements OnDestroy {
   closeActionMenus(): void {
     this.isDepositMenuOpen.set(false);
     this.isExportMenuOpen.set(false);
+  }
+
+  async switchBillingTab(tab: 'operations' | 'invoice-template'): Promise<void> {
+    this.activeBillingTab.set(tab);
+    if (tab === 'invoice-template' && this.fullOfficesCache().length === 0) {
+      await this.loadFullOffices();
+    }
+  }
+
+  async loadFullOffices(): Promise<void> {
+    if (this.isLoadingFullOffices()) {
+      return;
+    }
+    this.isLoadingFullOffices.set(true);
+    try {
+      const offices = await this.api.getOffices();
+      this.fullOfficesCache.set(offices);
+      if (this.invoiceTemplateSelectedOfficeId() === null && offices.length > 0) {
+        const activeId = this.authService.activeOfficeId();
+        const found = offices.find((o) => o.id === activeId) ?? offices[0];
+        this.invoiceTemplateSelectedOfficeId.set(found.id);
+        this.invoiceTemplateLayout.set(this.parseInvoiceTemplateLayout(found.invoiceTemplateLayoutJson));
+      }
+    } catch {
+      // Non-blocking
+    } finally {
+      this.isLoadingFullOffices.set(false);
+    }
+  }
+
+  onInvoiceTemplateOfficeChange(officeId: number): void {
+    this.invoiceTemplateSelectedOfficeId.set(officeId);
+    const office = this.fullOfficesCache().find((o) => o.id === officeId);
+    if (office) {
+      this.invoiceTemplateLayout.set(this.parseInvoiceTemplateLayout(office.invoiceTemplateLayoutJson));
+    }
+    this.selectedInvoiceTemplateBlockId.set(null);
+    this.invoiceTemplateSaveSuccess.set('');
+    this.invoiceTemplateSaveError.set('');
+  }
+
+  async saveInvoiceTemplate(): Promise<void> {
+    const officeId = this.invoiceTemplateSelectedOfficeId();
+    if (!officeId || !this.canCustomizeInvoiceTemplate()) {
+      return;
+    }
+    this.isSavingInvoiceTemplate.set(true);
+    this.invoiceTemplateSaveSuccess.set('');
+    this.invoiceTemplateSaveError.set('');
+    try {
+      const json = JSON.stringify(this.invoiceTemplateLayout());
+      const result = await this.api.updateOfficeInvoiceTemplate(officeId, json);
+      // Update cache
+      const cache = this.fullOfficesCache().map((o) =>
+        o.id === officeId ? { ...o, invoiceTemplateLayoutJson: result.invoiceTemplateLayoutJson } : o
+      );
+      this.fullOfficesCache.set(cache);
+      this.invoiceTemplateSaveSuccess.set('Template enregistré avec succès.');
+      setTimeout(() => this.invoiceTemplateSaveSuccess.set(''), 3000);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erreur lors de la sauvegarde';
+      this.invoiceTemplateSaveError.set(msg);
+    } finally {
+      this.isSavingInvoiceTemplate.set(false);
+    }
+  }
+
+  resetInvoiceTemplateLayout(): void {
+    this.invoiceTemplateLayout.set(this.createDefaultInvoiceTemplateLayout());
+    this.selectedInvoiceTemplateBlockId.set(null);
+  }
+
+  invoiceTemplateBlockValue(blockId: InvoiceTemplateBlockId, field: 'x' | 'y' | 'w'): number {
+    return this.invoiceTemplateLayout()[blockId][field];
+  }
+
+  updateInvoiceTemplateBlock(blockId: InvoiceTemplateBlockId, field: 'x' | 'y' | 'w', value: string): void {
+    const nextValue = this.clampTemplateValue(field, Number(value));
+    const nextLayout: InvoiceTemplateLayout = {
+      ...this.invoiceTemplateLayout(),
+      [blockId]: { ...this.invoiceTemplateLayout()[blockId], [field]: nextValue }
+    };
+    const block = nextLayout[blockId];
+    if (block.x + block.w > 100) {
+      block.x = Math.max(0, 100 - block.w);
+    }
+    this.invoiceTemplateLayout.set(nextLayout);
+  }
+
+  selectInvoiceTemplateBlock(blockId: InvoiceTemplateBlockId | null): void {
+    this.selectedInvoiceTemplateBlockId.set(blockId);
+  }
+
+  toggleInvoiceTemplateBlockVisible(blockId: InvoiceTemplateBlockId): void {
+    const layout = this.invoiceTemplateLayout();
+    this.invoiceTemplateLayout.set({
+      ...layout,
+      [blockId]: { ...layout[blockId], visible: !layout[blockId].visible }
+    });
+  }
+
+  updateInvoiceTemplateBlockStyle(
+    blockId: InvoiceTemplateBlockId,
+    field: 'fontSize' | 'color' | 'borderStyle' | 'customLabel' | 'content',
+    value: string
+  ): void {
+    const layout = this.invoiceTemplateLayout();
+    let parsed: string | number = value;
+    if (field === 'fontSize') {
+      parsed = this.clampTemplateValue('fontSize', Number(value));
+    } else if (field === 'customLabel') {
+      parsed = value.slice(0, 80);
+    } else if (field === 'content') {
+      parsed = value.slice(0, 5000);
+    }
+    this.invoiceTemplateLayout.set({
+      ...layout,
+      [blockId]: { ...layout[blockId], [field]: parsed }
+    });
+  }
+
+  updateInvoiceTemplateGlobalSetting<K extends keyof InvoiceTemplateGlobalSettings>(key: K, value: string): void {
+    const layout = this.invoiceTemplateLayout();
+    const parsed: InvoiceTemplateGlobalSettings[K] = key === 'showPageNumber'
+      ? (value === 'true') as InvoiceTemplateGlobalSettings[K]
+      : value as InvoiceTemplateGlobalSettings[K];
+    this.invoiceTemplateLayout.set({
+      ...layout,
+      _global: { ...layout._global, [key]: parsed }
+    });
+  }
+
+  onInvoiceTemplateDragStart(event: DragEvent, blockId: InvoiceTemplateBlockId): void {
+    const target = event.currentTarget as HTMLElement | null;
+    const preview = target?.parentElement as HTMLElement | null;
+    if (!target || !preview) return;
+    const targetRect = target.getBoundingClientRect();
+    const pointerX = Number.isFinite(event.clientX) ? event.clientX : targetRect.left;
+    const pointerY = Number.isFinite(event.clientY) ? event.clientY : targetRect.top;
+    this.invoiceTemplateDragOffset = {
+      x: Math.max(0, pointerX - targetRect.left),
+      y: Math.max(0, pointerY - targetRect.top)
+    };
+    this.draggedInvoiceTemplateBlockId.set(blockId);
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', blockId);
+      event.dataTransfer.setData('application/x-osteo-invoice-block', blockId);
+    }
+  }
+
+  onInvoiceTemplateDragEnd(): void {
+    this.draggedInvoiceTemplateBlockId.set(null);
+    this.invoiceTemplateDragOffset = null;
+  }
+
+  onInvoiceTemplatePreviewDragOver(event: DragEvent): void {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  }
+
+  onInvoiceTemplatePreviewDrop(event: DragEvent): void {
+    event.preventDefault();
+    const preview = event.currentTarget as HTMLElement | null;
+    if (!preview) { this.onInvoiceTemplateDragEnd(); return; }
+    const fromTransfer = event.dataTransfer?.getData('application/x-osteo-invoice-block') || event.dataTransfer?.getData('text/plain') || '';
+    const blockId = this.toInvoiceTemplateBlockId(fromTransfer) ?? this.draggedInvoiceTemplateBlockId();
+    if (!blockId) { this.onInvoiceTemplateDragEnd(); return; }
+    const previewRect = preview.getBoundingClientRect();
+    if (previewRect.width <= 0 || previewRect.height <= 0) { this.onInvoiceTemplateDragEnd(); return; }
+    const offset = this.invoiceTemplateDragOffset ?? { x: 0, y: 0 };
+    const rawLeft = event.clientX - previewRect.left - offset.x;
+    const rawTop = event.clientY - previewRect.top - offset.y;
+    const nextX = (rawLeft / previewRect.width) * 100;
+    const nextY = (rawTop / previewRect.height) * 100;
+    const layout = this.invoiceTemplateLayout();
+    const nextLayout: InvoiceTemplateLayout = {
+      ...layout,
+      [blockId]: {
+        ...layout[blockId],
+        x: this.clampTemplateValue('x', nextX),
+        y: this.clampTemplateValue('y', nextY)
+      }
+    };
+    const block = nextLayout[blockId];
+    if (block.x + block.w > 100) block.x = Math.max(0, 100 - block.w);
+    this.invoiceTemplateLayout.set(nextLayout);
+    this.onInvoiceTemplateDragEnd();
+  }
+
+  insertMentionsVariable(token: string, textareaEl: HTMLTextAreaElement | null): void {
+    if (!textareaEl) return;
+    const start = textareaEl.selectionStart ?? textareaEl.value.length;
+    const end = textareaEl.selectionEnd ?? start;
+    const next = textareaEl.value.slice(0, start) + token + textareaEl.value.slice(end);
+    this.updateInvoiceTemplateBlockStyle('mentions', 'content', next);
+    textareaEl.value = next;
+    const cursor = start + token.length;
+    setTimeout(() => { textareaEl.setSelectionRange(cursor, cursor); textareaEl.focus(); });
+  }
+
+  async previewInvoiceTemplatePdf(): Promise<void> {
+    const JsPdf = await this.loadJsPdf();
+    const pdf = this.buildSampleInvoicePdf(this.invoiceTemplateLayout(), JsPdf);
+    const blob = pdf.output('blob');
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
+  async downloadInvoicePdf(invoiceId: number, officeId: number | null): Promise<void> {
+    try {
+      const [invoice, offices] = await Promise.all([
+        this.api.getBillingInvoice(invoiceId),
+        this.fullOfficesCache().length > 0
+          ? Promise.resolve(this.fullOfficesCache())
+          : this.api.getOffices().then((os) => { this.fullOfficesCache.set(os); return os; })
+      ]);
+      const office = offices.find((o) => o.id === officeId) ?? null;
+      const layout = office
+        ? this.parseInvoiceTemplateLayout(office.invoiceTemplateLayoutJson)
+        : this.createDefaultInvoiceTemplateLayout();
+      const JsPdf = await this.loadJsPdf();
+      const pdf = this.buildInvoicePdf(invoice, office, layout, JsPdf);
+      pdf.save(`facture-${invoice.invoiceNumber || invoiceId}.pdf`);
+    } catch (err) {
+      console.error('Error generating invoice PDF:', err);
+    }
   }
 
   openConsultationSelectionModal(mode: 'bulk-update' | 'payment'): void {
@@ -2152,5 +2429,299 @@ export class BillingPage implements OnDestroy {
     anchor.download = filename;
     anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+
+  private createDefaultInvoiceTemplateLayout(): InvoiceTemplateLayout {
+    const block = (x: number, y: number, w: number): InvoiceTemplateBlockLayout => ({
+      x, y, w, visible: true, fontSize: 10, color: '#000000', borderStyle: 'none'
+    });
+    return {
+      logo: block(4, 4, 24),
+      practitioner: block(30, 4, 32),
+      patient: block(64, 4, 32),
+      invoiceMeta: block(64, 20, 32),
+      lineItems: block(4, 32, 92),
+      totals: block(56, 74, 40),
+      payment: block(4, 74, 50),
+      mentions: block(4, 86, 92),
+      signature: block(60, 92, 36),
+      _global: { primaryColor: '#4d92d1', fontFamily: 'helvetica', showPageNumber: false, footerText: '' }
+    };
+  }
+
+  private parseInvoiceTemplateLayout(rawValue: string | undefined | null): InvoiceTemplateLayout {
+    const fallback = this.createDefaultInvoiceTemplateLayout();
+    if (!rawValue || !String(rawValue).trim()) return fallback;
+    try {
+      const parsed = JSON.parse(rawValue) as Partial<Record<string, unknown>>;
+      const next: InvoiceTemplateLayout = this.createDefaultInvoiceTemplateLayout();
+      for (const option of this.invoiceTemplateBlockOptions) {
+        const candidate = parsed?.[option.key] as Partial<InvoiceTemplateBlockLayout> | undefined;
+        if (!candidate || typeof candidate !== 'object') continue;
+        const fallbackBlock = fallback[option.key];
+        next[option.key] = {
+          x: this.clampTemplateValue('x', Number(candidate.x)),
+          y: this.clampTemplateValue('y', Number(candidate.y)),
+          w: this.clampTemplateValue('w', Number(candidate.w)),
+          visible: candidate.visible !== false,
+          fontSize: this.clampTemplateValue('fontSize', Number(candidate.fontSize) || fallbackBlock.fontSize),
+          color: typeof candidate.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(candidate.color) ? candidate.color : '#000000',
+          borderStyle: (['none', 'line', 'box'] as const).includes(candidate.borderStyle as 'none')
+            ? candidate.borderStyle as 'none' | 'line' | 'box' : 'none',
+          ...(typeof candidate.customLabel === 'string' ? { customLabel: candidate.customLabel.slice(0, 80) } : {}),
+          ...(typeof candidate.content === 'string' ? { content: candidate.content.slice(0, 5000) } : {})
+        };
+        if (next[option.key].x + next[option.key].w > 100) {
+          next[option.key].x = Math.max(0, 100 - next[option.key].w);
+        }
+      }
+      const globalCandidate = parsed?.['_global'] as Partial<InvoiceTemplateGlobalSettings> | undefined;
+      if (globalCandidate && typeof globalCandidate === 'object') {
+        next._global = {
+          primaryColor: typeof globalCandidate.primaryColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(globalCandidate.primaryColor)
+            ? globalCandidate.primaryColor : '#4d92d1',
+          fontFamily: (['helvetica', 'courier', 'times'] as const).includes(globalCandidate.fontFamily as 'helvetica')
+            ? globalCandidate.fontFamily as 'helvetica' | 'courier' | 'times' : 'helvetica',
+          showPageNumber: Boolean(globalCandidate.showPageNumber),
+          footerText: String(globalCandidate.footerText ?? '').slice(0, 200)
+        };
+      }
+      return next;
+    } catch {
+      return fallback;
+    }
+  }
+
+  private clampTemplateValue(field: 'x' | 'y' | 'w' | 'fontSize', value: number): number {
+    if (field === 'fontSize') {
+      return !Number.isFinite(value) ? 10 : Math.min(14, Math.max(9, Math.round(value)));
+    }
+    const min = field === 'w' ? 20 : 0;
+    const max = 96;
+    return !Number.isFinite(value) ? (field === 'w' ? 24 : 0) : Math.min(max, Math.max(min, Math.round(value)));
+  }
+
+  private toInvoiceTemplateBlockId(raw: string): InvoiceTemplateBlockId | null {
+    const normalized = String(raw ?? '').trim();
+    return this.invoiceTemplateBlockOptions.some((b) => b.key === normalized)
+      ? normalized as InvoiceTemplateBlockId
+      : null;
+  }
+
+  invoiceTemplateBlockSampleContent(blockId: InvoiceTemplateBlockId): string {
+    const map: Record<InvoiceTemplateBlockId, string> = {
+      logo: '[ Logo cabinet ]',
+      practitioner: 'Dr. Martin Dupont\n12 rue des Ostéopathes\n75001 Paris\nRPPS: 10001234567',
+      patient: 'Mme. Sophie Lefort\n5 av. du Parc\n69000 Lyon\nNN: 2 85 12 69 001 012 34',
+      invoiceMeta: 'Facture N° DEMO-001\nDate: 01/01/2025\nÉchéance: 01/01/2025',
+      lineItems: 'Consultation ostéopathique  1  60,00 €\nBilan postural              1  20,00 €',
+      totals: 'Total HT: 80,00 €\nTVA (0%): 0,00 €\nTotal TTC: 80,00 €',
+      payment: 'Payé par CB\nDate: 01/01/2025\nMontant: 80,00 €',
+      mentions: 'Non remboursé par la Sécurité Sociale.\nConservez ce document à des fins fiscales.',
+      signature: '____________________\nSignature'
+    };
+    return map[blockId] ?? blockId;
+  }
+
+  private buildSampleInvoicePdf(layout: InvoiceTemplateLayout, JsPdf: typeof import('jspdf').jsPDF) {
+    const PAGE_W = 210;
+    const PAGE_H = 297;
+    const pdf = new JsPdf({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const fontFamily = layout._global.fontFamily;
+    const primaryHex = layout._global.primaryColor;
+    const pr = parseInt(primaryHex.slice(1, 3), 16);
+    const pg = parseInt(primaryHex.slice(3, 5), 16);
+    const pb = parseInt(primaryHex.slice(5, 7), 16);
+    const blockOrder = this.invoiceTemplateBlockOptions
+      .filter((opt) => layout[opt.key].visible)
+      .sort((a, b) => layout[a.key].y - layout[b.key].y);
+    for (const opt of blockOrder) {
+      const block = layout[opt.key];
+      const x = (block.x / 100) * PAGE_W;
+      const y = (block.y / 100) * PAGE_H;
+      const w = (block.w / 100) * PAGE_W;
+      const cr = parseInt(block.color.slice(1, 3), 16);
+      const cg = parseInt(block.color.slice(3, 5), 16);
+      const cb = parseInt(block.color.slice(5, 7), 16);
+      pdf.setFont(fontFamily, 'normal');
+      pdf.setFontSize(block.fontSize);
+      pdf.setTextColor(cr, cg, cb);
+      if (block.borderStyle === 'line') {
+        pdf.setDrawColor(pr, pg, pb);
+        pdf.line(x, y - 1, x + w, y - 1);
+      } else if (block.borderStyle === 'box') {
+        pdf.setDrawColor(pr, pg, pb);
+        pdf.rect(x, y - 1, w, block.fontSize * 0.5 + 3);
+      }
+      if (block.customLabel) {
+        pdf.setFont(fontFamily, 'bold');
+        pdf.setFontSize(block.fontSize - 1);
+        pdf.text(block.customLabel, x, y);
+        pdf.setFont(fontFamily, 'normal');
+        pdf.setFontSize(block.fontSize);
+      }
+      const contentText = block.content || this.invoiceTemplateBlockSampleContent(opt.key);
+      const lines = pdf.splitTextToSize(contentText, w) as string[];
+      const textY = block.customLabel ? y + block.fontSize * 0.4 : y;
+      pdf.text(lines, x, textY);
+    }
+    if (layout._global.footerText) {
+      pdf.setFont(fontFamily, 'normal');
+      pdf.setFontSize(8);
+      pdf.setTextColor(120, 120, 120);
+      const footerLines = pdf.splitTextToSize(layout._global.footerText, PAGE_W - 28) as string[];
+      pdf.text(footerLines, 14, PAGE_H - 8);
+    }
+    if (layout._global.showPageNumber) {
+      pdf.setFont(fontFamily, 'normal');
+      pdf.setFontSize(8);
+      pdf.setTextColor(120, 120, 120);
+      pdf.text('Page 1 / 1', PAGE_W - 25, PAGE_H - 5);
+    }
+    return pdf;
+  }
+
+  private buildInvoicePdf(
+    invoice: BillingInvoiceDetail,
+    office: Office | null,
+    layout: InvoiceTemplateLayout,
+    JsPdf: typeof import('jspdf').jsPDF
+  ) {
+    const PAGE_W = 210;
+    const PAGE_H = 297;
+    const pdf = new JsPdf({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const fontFamily = layout._global.fontFamily;
+    const primaryHex = layout._global.primaryColor;
+    const pr = parseInt(primaryHex.slice(1, 3), 16);
+    const pg = parseInt(primaryHex.slice(3, 5), 16);
+    const pb = parseInt(primaryHex.slice(5, 7), 16);
+
+    const formatAmount = (cents: number, currency = 'EUR') => `${(cents / 100).toFixed(2)} ${currency}`;
+    const formatDate = (iso: string) => {
+      const d = new Date(iso);
+      return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('fr-FR');
+    };
+
+    const getBlockContent = (blockId: InvoiceTemplateBlockId): string => {
+      const block = layout[blockId];
+      if (block.content) return block.content;
+      switch (blockId) {
+        case 'logo': return office?.logoData ? '' : '[ Logo ]';
+        case 'practitioner':
+          return [
+            office?.name,
+            [office?.addressLine1, office?.addressLine2].filter(Boolean).join(', '),
+            [office?.postalCode, office?.city].filter(Boolean).join(' '),
+            office?.email,
+            office?.phoneMobile
+          ].filter(Boolean).join('\n');
+        case 'patient':
+          return invoice.patientName;
+        case 'invoiceMeta':
+          return [
+            `Facture N° ${invoice.invoiceNumber}`,
+            `Date : ${formatDate(invoice.issuedAt)}`,
+            invoice.dueAt !== invoice.issuedAt ? `Échéance : ${formatDate(invoice.dueAt)}` : ''
+          ].filter(Boolean).join('\n');
+        case 'lineItems':
+          if (!invoice.lineItems.length) return 'Consultation';
+          return invoice.lineItems.map((li) => {
+            const ht = formatAmount(li.unitAmountHtCents * li.quantity);
+            const vat = li.vatRate > 0 ? ` (TVA ${li.vatRate}%)` : '';
+            return `${li.label}  ×${li.quantity}  ${ht}${vat}`;
+          }).join('\n');
+        case 'totals': {
+          const totalHt = invoice.lineItems.reduce((s, li) => s + li.unitAmountHtCents * li.quantity, 0);
+          const totalTtc = invoice.amountCents;
+          const totalVat = totalTtc - totalHt;
+          return [
+            `Total HT : ${formatAmount(totalHt)}`,
+            `TVA : ${formatAmount(totalVat)}`,
+            `Total TTC : ${formatAmount(totalTtc)}`
+          ].join('\n');
+        }
+        case 'payment': {
+          if (!invoice.payments.length) return `Méthode : ${invoice.paymentMethod || '-'}`;
+          return invoice.payments.map((p) =>
+            `${formatDate(p.paidAt)} — ${formatAmount(p.amountCents, p.currency)} — ${p.paymentMethod}`
+          ).join('\n');
+        }
+        case 'mentions':
+          return 'Prestation non remboursée par la Sécurité Sociale.';
+        case 'signature':
+          return '____________________\nSignature';
+        default:
+          return '';
+      }
+    };
+
+    const blockOrder = this.invoiceTemplateBlockOptions
+      .filter((opt) => layout[opt.key].visible)
+      .sort((a, b) => layout[a.key].y - layout[b.key].y);
+
+    for (const opt of blockOrder) {
+      const block = layout[opt.key];
+      const x = (block.x / 100) * PAGE_W;
+      const y = (block.y / 100) * PAGE_H;
+      const w = (block.w / 100) * PAGE_W;
+      const cr = parseInt(block.color.slice(1, 3), 16);
+      const cg = parseInt(block.color.slice(3, 5), 16);
+      const cb = parseInt(block.color.slice(5, 7), 16);
+
+      pdf.setFont(fontFamily, 'normal');
+      pdf.setFontSize(block.fontSize);
+      pdf.setTextColor(cr, cg, cb);
+
+      if (block.borderStyle === 'line') {
+        pdf.setDrawColor(pr, pg, pb);
+        pdf.line(x, y - 1, x + w, y - 1);
+      } else if (block.borderStyle === 'box') {
+        pdf.setDrawColor(pr, pg, pb);
+        pdf.rect(x, y - 1, w, block.fontSize * 0.5 + 3);
+      }
+
+      if (opt.key === 'logo' && office?.logoData) {
+        try {
+          const logoW = Math.min(w, 40);
+          const logoH = 15;
+          pdf.addImage(office.logoData, 'JPEG', x, y - logoH + 2, logoW, logoH);
+          continue;
+        } catch {
+          // Fall through to text
+        }
+      }
+
+      if (block.customLabel) {
+        pdf.setFont(fontFamily, 'bold');
+        pdf.setFontSize(block.fontSize - 1);
+        pdf.text(block.customLabel, x, y);
+        pdf.setFont(fontFamily, 'normal');
+        pdf.setFontSize(block.fontSize);
+      }
+
+      const contentText = getBlockContent(opt.key);
+      if (contentText) {
+        const lines = pdf.splitTextToSize(contentText, w) as string[];
+        const textY = block.customLabel ? y + block.fontSize * 0.4 : y;
+        pdf.text(lines, x, textY);
+      }
+    }
+
+    if (layout._global.footerText) {
+      pdf.setFont(fontFamily, 'normal');
+      pdf.setFontSize(8);
+      pdf.setTextColor(120, 120, 120);
+      const footerLines = pdf.splitTextToSize(layout._global.footerText, PAGE_W - 28) as string[];
+      pdf.text(footerLines, 14, PAGE_H - 8);
+    }
+
+    if (layout._global.showPageNumber) {
+      pdf.setFont(fontFamily, 'normal');
+      pdf.setFontSize(8);
+      pdf.setTextColor(120, 120, 120);
+      pdf.text('Page 1 / 1', PAGE_W - 25, PAGE_H - 5);
+    }
+
+    return pdf;
   }
 }

@@ -1391,3 +1391,46 @@ export type UpdateOfficePayload = CreateOfficePayload & {
 export type OfficesPayload = {
   offices: Office[];
 };
+
+export type InvoiceTemplateBlockId =
+  | 'logo'
+  | 'practitioner'
+  | 'patient'
+  | 'invoiceMeta'
+  | 'lineItems'
+  | 'totals'
+  | 'payment'
+  | 'mentions'
+  | 'signature';
+
+export type InvoiceTemplateBlockLayout = {
+  x: number;
+  y: number;
+  w: number;
+  visible: boolean;
+  fontSize: number;
+  color: string;
+  borderStyle: 'none' | 'line' | 'box';
+  customLabel?: string;
+  content?: string;
+};
+
+export type InvoiceTemplateGlobalSettings = {
+  primaryColor: string;
+  fontFamily: 'helvetica' | 'courier' | 'times';
+  showPageNumber: boolean;
+  footerText: string;
+};
+
+export type InvoiceTemplateLayout = {
+  logo: InvoiceTemplateBlockLayout;
+  practitioner: InvoiceTemplateBlockLayout;
+  patient: InvoiceTemplateBlockLayout;
+  invoiceMeta: InvoiceTemplateBlockLayout;
+  lineItems: InvoiceTemplateBlockLayout;
+  totals: InvoiceTemplateBlockLayout;
+  payment: InvoiceTemplateBlockLayout;
+  mentions: InvoiceTemplateBlockLayout;
+  signature: InvoiceTemplateBlockLayout;
+  _global: InvoiceTemplateGlobalSettings;
+};
