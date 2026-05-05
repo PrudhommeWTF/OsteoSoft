@@ -17242,7 +17242,11 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('invoice-con
     }
   }
 
-  const effectiveOfficeId = requestedOfficeId;
+  // Determine the effective office for the invoice. Use the explicitly requested
+  // office if valid; otherwise fall back to the first of the user's accessible
+  // offices so that invoices are never orphaned with a NULL office_id.
+  const effectiveOfficeId = requestedOfficeId
+    ?? (getAccessibleBillingOfficeIds(req.userAccess)[0] ?? null);
   const effectiveConsultationId = Number.isInteger(consultationId) && consultationId > 0 ? consultationId : null;
   const effectiveStatus = computeInvoiceStatusFromPayments(amountCents, payments, status);
   const dueAt = issuedAt;
