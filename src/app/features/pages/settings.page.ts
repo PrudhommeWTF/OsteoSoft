@@ -4528,8 +4528,13 @@ export class SettingsPage implements OnDestroy {
       this.dataManagementSuccess.set(
         `Import WebOsteo terminé: ${result.importedPatients} patient(s), ${result.importedConsultations} consultation(s), ${result.importedAppointments} rendez-vous, ${result.importedInvoices} facture(s), ${result.importedContacts} contact(s).`
       );
-    } catch {
-      this.dataManagementError.set('Echec de l\'import WebOsteo. Vérifiez le fichier sélectionné.');
+    } catch (error) {
+      if (error instanceof HttpErrorResponse) {
+        const apiMessage = String(error.error?.message ?? '').trim();
+        this.dataManagementError.set(apiMessage || 'Echec de l\'import WebOsteo. Vérifiez le fichier sélectionné.');
+      } else {
+        this.dataManagementError.set('Echec de l\'import WebOsteo. Vérifiez le fichier sélectionné.');
+      }
     } finally {
       this.isImportingWebosteo.set(false);
     }
