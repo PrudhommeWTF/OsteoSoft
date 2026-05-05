@@ -6357,6 +6357,10 @@ async function normalizeConsultationDocumentsPayload(rawDocuments) {
 
     const mimeType = await validateDocumentMimeType(contentBase64);
 
+    const VALID_DOCUMENT_TYPES_INLINE = ['document', 'invoice', 'letter'];
+    const rawDocType = String(item?.documentType ?? '').trim();
+    const documentType = VALID_DOCUMENT_TYPES_INLINE.includes(rawDocType) ? rawDocType : 'document';
+
     normalized.push({
       documentRef,
       fileName,
@@ -6364,7 +6368,8 @@ async function normalizeConsultationDocumentsPayload(rawDocuments) {
       sizeBytes: Math.max(0, Number(item?.sizeBytes) || 0),
       title: String(item?.title ?? '').trim(),
       comment: String(item?.comment ?? '').trim(),
-      contentBase64
+      contentBase64,
+      documentType
     });
   }
 
@@ -6383,8 +6388,8 @@ function insertNormalizedDocuments(patientId, consultationId, officeId, createdB
 
   const insertDocument = db.prepare(
     `INSERT INTO patient_documents
-      (document_ref, patient_id, consultation_id, office_id, created_by, file_name, mime_type, size_bytes, title_cipher, comment_cipher, content_cipher)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      (document_ref, patient_id, consultation_id, office_id, created_by, file_name, mime_type, size_bytes, title_cipher, comment_cipher, content_cipher, document_type)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
   const insertMany = db.transaction((items) => {
@@ -6400,7 +6405,8 @@ function insertNormalizedDocuments(patientId, consultationId, officeId, createdB
         doc.sizeBytes,
         doc.title ? encryptSensitiveField(doc.title) : null,
         doc.comment ? encryptSensitiveField(doc.comment) : null,
-        encryptSensitiveField(doc.contentBase64)
+        encryptSensitiveField(doc.contentBase64),
+        doc.documentType ?? 'document'
       );
     }
   });
@@ -7207,7 +7213,8 @@ const createPatientConsultationSchema = updateConsultationSchema.extend({
       sizeBytes: z.number().int().nonnegative().optional().default(0),
       title: z.string().max(200).optional().default(''),
       comment: z.string().max(2000).optional().default(''),
-      contentBase64: z.string().min(1).max(20_000_000)
+      contentBase64: z.string().min(1).max(20_000_000),
+      documentType: z.string().max(40).optional().default('document')
     })
   ).optional().default([])
 });

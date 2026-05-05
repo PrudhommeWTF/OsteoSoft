@@ -276,6 +276,7 @@ export type ConsultationDocumentUploadPayload = {
   title: string;
   comment: string;
   contentBase64: string;
+  documentType?: string;
 };
 
 export type PeoplePickerContact = {
