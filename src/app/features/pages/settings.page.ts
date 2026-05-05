@@ -4530,7 +4530,7 @@ export class SettingsPage implements OnDestroy {
       );
     } catch (error) {
       if (error instanceof HttpErrorResponse) {
-        const apiMessage = String(error.error?.message ?? '').trim();
+        const apiMessage = (error.error?.message ?? '').trim();
         this.dataManagementError.set(apiMessage || 'Echec de l\'import WebOsteo. Vérifiez le fichier sélectionné.');
       } else {
         this.dataManagementError.set('Echec de l\'import WebOsteo. Vérifiez le fichier sélectionné.');
