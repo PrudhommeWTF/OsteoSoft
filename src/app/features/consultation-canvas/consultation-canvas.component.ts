@@ -83,7 +83,7 @@ export class ConsultationCanvasComponent implements AfterViewInit, AfterViewChec
   readonly canUndo = signal(false);
   readonly canRedo = signal(false);
 
-  readonly bgSrc = computed(() => this.bg() === 'bb' ? 'squelette-bb.jpg' : 'squelette.jpg');
+  readonly bgSrc = computed(() => this.bg() === 'bb' ? 'squelette-bb.svg' : 'squelette.svg');
 
   readonly colors = COLORS;
   readonly brushSizes = BRUSH_SIZES;
