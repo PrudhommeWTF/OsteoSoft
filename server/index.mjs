@@ -33,6 +33,7 @@ const trustedProxies = process.env.TRUST_PROXY === 'true' || process.env.TRUST_P
   ? 1
   : (process.env.TRUST_PROXY === 'loopback' ? 'loopback' : false);
 const SESSION_COOKIE_NAME = 'os_session';
+const CSRF_COOKIE_NAME = 'os_csrf';
 const SESSION_COOKIE_PATH = '/';
 const SESSION_REMEMBER_MAX_AGE_MS = Number(process.env.SESSION_REMEMBER_MAX_AGE_MS ?? 12 * 60 * 60 * 1000);
 const SESSION_DEFAULT_MAX_AGE_MS = Number(process.env.SESSION_DEFAULT_MAX_AGE_MS ?? 2 * 60 * 60 * 1000);
@@ -802,9 +803,32 @@ function buildSessionCookieOptions(remember) {
   };
 }
 
+function generateCsrfToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function buildCsrfCookieOptions(remember) {
+  return {
+    httpOnly: false,
+    sameSite: 'lax',
+    secure: isProduction,
+    path: SESSION_COOKIE_PATH,
+    maxAge: remember ? SESSION_REMEMBER_MAX_AGE_MS : SESSION_DEFAULT_MAX_AGE_MS
+  };
+}
+
 function clearSessionCookie(res) {
   res.clearCookie(SESSION_COOKIE_NAME, {
     httpOnly: true,
+    sameSite: 'lax',
+    secure: isProduction,
+    path: SESSION_COOKIE_PATH
+  });
+}
+
+function clearCsrfCookie(res) {
+  res.clearCookie(CSRF_COOKIE_NAME, {
+    httpOnly: false,
     sameSite: 'lax',
     secure: isProduction,
     path: SESSION_COOKIE_PATH
@@ -6780,6 +6804,9 @@ function buildPatientUpdateChanges(beforeSnapshot, afterSnapshot) {
   return changes;
 }
 
+// HTTP methods that are safe (idempotent, no side effects) — exempt from CSRF validation
+const SAFE_HTTP_METHODS_CSRF = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 // Routes that remain accessible even when must_change_password is set
 const ROUTES_ALLOWED_WITH_MUST_CHANGE_PASSWORD = new Set([
   '/api/auth/logout',
@@ -6816,6 +6843,19 @@ function authMiddleware(req, res, next) {
         }
       }
       // mcp === false → no restriction, skip DB check
+    }
+
+    // CSRF validation: reject state-mutating requests missing a valid double-submit token
+    if (!SAFE_HTTP_METHODS_CSRF.has(req.method)) {
+      const cookieCsrf = req.cookies[CSRF_COOKIE_NAME];
+      const headerCsrf = req.headers['x-csrf-token'];
+      if (!cookieCsrf || !headerCsrf || cookieCsrf !== headerCsrf) {
+        writeAuthSecurityLog(req, 'csrf_token_mismatch', {
+          reason: 'csrf_validation_failed',
+          statusCode: 403
+        });
+        return res.status(403).json({ message: 'Requête rejetée (protection CSRF)' });
+      }
     }
 
     return next();
@@ -7752,6 +7792,7 @@ app.put('/api/profile/me', authMiddleware, async (req, res) => {
     if (updatedUser) {
       const newToken = signTokenForSession(updatedUser, false);
       res.cookie(SESSION_COOKIE_NAME, newToken, buildSessionCookieOptions(false));
+      res.cookie(CSRF_COOKIE_NAME, generateCsrfToken(), buildCsrfCookieOptions(false));
     }
   }
 
@@ -11579,6 +11620,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
 
   const token = signTokenForSession(user, Boolean(parsed.data.remember));
   res.cookie(SESSION_COOKIE_NAME, token, buildSessionCookieOptions(Boolean(parsed.data.remember)));
+  res.cookie(CSRF_COOKIE_NAME, generateCsrfToken(), buildCsrfCookieOptions(Boolean(parsed.data.remember)));
 
   writeAuditLog(user.id, 'LOGIN', 'auth', String(user.id));
   writeAuthSecurityLog(req, 'login_attempt_succeeded', {
@@ -11607,6 +11649,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
 
 app.post('/api/auth/logout', authMiddleware, (req, res) => {
   clearSessionCookie(res);
+  clearCsrfCookie(res);
   writeAuditLog(req.user.sub, 'LOGOUT', 'auth', String(req.user.sub));
   res.status(204).send();
 });
