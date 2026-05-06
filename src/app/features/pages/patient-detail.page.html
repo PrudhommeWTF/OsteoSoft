@@ -109,7 +109,7 @@
                   </div>
                   <div class="col-12 col-md-6">
                     <label class="form-label fw-semibold" for="edit-birthdate">Date de naissance</label>
-                    <input #birthDateInput id="edit-birthdate" class="form-control cursor-pointer" type="text" autocomplete="off" placeholder="jj/mm/aaaa" readonly formControlName="birthDate" />
+                    <input id="edit-birthdate" type="date" class="form-control" autocomplete="bday" formControlName="birthDate" [max]="todayIso" />
                   </div>
                   <div class="col-12 col-md-6 d-flex align-items-end">
                     <div class="d-flex flex-wrap align-items-center gap-3">
@@ -878,7 +878,7 @@
 
                   <div class="mb-3">
                     <label class="form-label" for="consultation-weight">Poids (kg)</label>
-                    <input id="consultation-weight" type="number" class="form-control" formControlName="weightKg" min="0" step="0.1" />
+                    <input id="consultation-weight" type="text" inputmode="decimal" class="form-control" placeholder="ex: 70 ou 3,5" formControlName="weightKg" />
                   </div>
 
                   <div class="mb-3">

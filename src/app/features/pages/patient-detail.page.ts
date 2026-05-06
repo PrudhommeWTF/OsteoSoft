@@ -1,5 +1,4 @@
 import {
-  AfterViewInit,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
@@ -131,7 +130,7 @@ Je vous remercie par avance, et vous prie d'agréer mes sincères salutations.`;
   styleUrl: './patient-detail.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
+export class PatientDetailPage implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly authService = inject(AuthService);
   private readonly htmlSanitizer = inject(HtmlSanitizerService);
@@ -145,7 +144,6 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     maximumFractionDigits: 2
   });
 
-  private readonly birthDateInputRef = viewChild<ElementRef<HTMLInputElement>>('birthDateInput');
   private readonly antecedentDateInputRef = viewChild<ElementRef<HTMLInputElement>>('antecedentDateInputRef');
   private readonly consultationModalRef = viewChild<ElementRef<HTMLDivElement>>('consultationModal');
   private readonly consultationMotifMainEditorRef = viewChild<ElementRef<HTMLDivElement>>('consultationMotifMainEditor');
@@ -153,10 +151,7 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   private readonly consultationTreatmentsEditorRef = viewChild<ElementRef<HTMLDivElement>>('consultationTreatmentsEditor');
   private readonly consultationRemarksEditorRef = viewChild<ElementRef<HTMLDivElement>>('consultationRemarksEditor');
 
-  private isViewReady = false;
-  private isDatepickerInitialized = false;
   private antecedentDatepickerMode: AntecedentPrecision | null = null;
-  private pendingBirthDateIso = '';
   private pendingFocusedConsultationId: number | null = null;
   private relatedSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
   private relatedSearchRequestId = 0;
@@ -269,7 +264,6 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   readonly withdrawConsentSuccess = signal('');
   readonly isDownloadingConsentPdf = signal(false);
 
-  private readonly birthDateIso = signal('');
   private readonly editSex = signal<PatientDetail['sex']>('Non renseigne');
   private isSynchronizingLocationFields = false;
 
@@ -299,6 +293,15 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     medicalHistory: ['', Validators.maxLength(5000)],
     isDeceased: [false]
   });
+
+  /** ISO date (yyyy-mm-dd) derived from the edit form birth date control */
+  private readonly birthDateIso = toSignal(
+    this.editForm.controls.birthDate.valueChanges,
+    { initialValue: this.editForm.controls.birthDate.value ?? '' }
+  );
+
+  /** Today's date in YYYY-MM-DD format — used as max for the birth date input */
+  readonly todayIso = new Date().toISOString().slice(0, 10);
 
   readonly consultationEditForm = this.fb.nonNullable.group({
     startedAtLocal: ['', [Validators.required]],
@@ -818,25 +821,11 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     void this.load(id);
   }
 
-  ngAfterViewInit(): void {
-    this.isViewReady = true;
-    queueMicrotask(() => this.initDatepicker());
-  }
-
   ngOnDestroy(): void {
     this.topbar.clear();
     this.stopPatientAutosave();
     this.stopConsultationAutosave();
     this.clearAutosaveToastTimer();
-
-    const input = this.birthDateInputRef()?.nativeElement;
-    if (input) {
-      try {
-        $(input).datepicker('destroy');
-      } catch {
-        // ignore
-      }
-    }
 
     this.destroyAntecedentDatepicker();
 
@@ -2793,22 +2782,10 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
     });
 
     this.editSex.set(patient.sex);
-    this.birthDateIso.set(patient.birthDate ?? '');
     this.saveError.set('');
     this.primaryDoctorSearch.set(patient.primaryDoctor ?? '');
     this.hydrateSelectedRelatedPatients(patient.relatedPeople);
     this.updateLocationSuggestions(patient.postalCode, patient.city);
-
-    if (this.isViewReady) {
-      queueMicrotask(() => {
-        this.initDatepicker();
-        if (patient.birthDate) {
-          this.applyBirthDateToPicker(patient.birthDate);
-        }
-      });
-    } else if (patient.birthDate) {
-      this.pendingBirthDateIso = patient.birthDate;
-    }
   }
 
   private hydrateSelectedRelatedPatients(relatedPeople: string): void {
@@ -2988,54 +2965,6 @@ export class PatientDetailPage implements OnInit, AfterViewInit, OnDestroy {
   private syncRelatedPeopleField(): void {
     const value = this.selectedRelatedPatients().map((patient) => patient.fullName).join(', ');
     this.editForm.controls.relatedPeople.setValue(value);
-  }
-
-  private initDatepicker(): void {
-    const input = this.birthDateInputRef()?.nativeElement;
-    if (!input || this.isDatepickerInitialized) {
-      return;
-    }
-
-    $(input).datepicker({
-      language: 'fr',
-      format: 'dd/mm/yyyy',
-      container: 'body',
-      autoclose: true,
-      todayHighlight: true,
-      weekStart: 1,
-      startView: 2,
-      endDate: new Date()
-    }).on('changeDate', (event: { date: Date }) => {
-      const date = event.date;
-      const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-      this.editForm.controls.birthDate.setValue(iso);
-      this.birthDateIso.set(iso);
-      this.cdr.markForCheck();
-    });
-
-    this.isDatepickerInitialized = true;
-    if (this.pendingBirthDateIso) {
-      this.applyBirthDateToPicker(this.pendingBirthDateIso);
-      this.pendingBirthDateIso = '';
-    }
-  }
-
-  private applyBirthDateToPicker(iso: string): void {
-    const input = this.birthDateInputRef()?.nativeElement;
-    if (!input || !iso) {
-      return;
-    }
-
-    const [year, month, day] = iso.split('-').map(Number);
-    if (!year || !month || !day) {
-      return;
-    }
-
-    try {
-      $(input).datepicker('setDate', new Date(year, month - 1, day));
-    } catch {
-      // ignore
-    }
   }
 
   private initAntecedentDatepicker(forceReinit = false): void {
