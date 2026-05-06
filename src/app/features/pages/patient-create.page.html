@@ -99,11 +99,13 @@
         <div class="row g-3 mb-3">
           <div class="col-6">
             <label class="form-label fw-semibold" for="birthDate">Date de naissance <span class="text-danger">*</span></label>
-                 <input id="birthDate" type="date" class="form-control"
-                   formControlName="birthDate"
-                   autocomplete="bday"
-                   [max]="todayIso"
-                   [class.is-invalid]="form.controls.birthDate.touched && form.controls.birthDate.invalid" />
+            <app-date-picker
+              id="birthDate"
+              formControlName="birthDate"
+              autocomplete="bday"
+              [maxDate]="todayNgbDate"
+              [class.is-invalid]="form.controls.birthDate.touched && form.controls.birthDate.invalid"
+            />
             @if (form.controls.birthDate.touched && form.controls.birthDate.errors?.['required']) {
               <div class="invalid-feedback d-block">La date de naissance est obligatoire.</div>
             }
@@ -632,17 +634,21 @@
 
           <div class="mb-3">
             <label class="form-label" for="antecedentDateInput">Date</label>
-            <input
-              #antecedentDateInput
-              id="antecedentDateInput"
-              type="text"
-              class="form-control cursor-pointer"
-              [placeholder]="antecedentDatePrecision() === 'date' ? 'jj/mm/aaaa' : antecedentDatePrecision() === 'month' ? 'mm/aaaa' : 'aaaa'"
-              [readonly]="isDatepickerAvailable()"
-              [value]="antecedentDateDisplay()"
-              (input)="setAntecedentDateDisplay($any($event.target).value)" />
-            @if (!isDatepickerAvailable()) {
-              <div class="form-text">Saisie manuelle attendue au format indique dans le placeholder.</div>
+            @if (antecedentDatePrecision() === 'date') {
+              <app-date-picker
+                id="antecedentDateInput"
+                [formControl]="antecedentDateCtrl"
+                [maxDate]="todayNgbDate"
+              />
+            } @else {
+              <input
+                id="antecedentDateInput"
+                type="text"
+                class="form-control"
+                [placeholder]="antecedentDatePrecision() === 'month' ? 'mm/aaaa' : 'aaaa'"
+                [value]="antecedentDateDisplay()"
+                (input)="setAntecedentDateDisplay($any($event.target).value)" />
+              <div class="form-text">Saisie manuelle au format indiqué dans le placeholder.</div>
             }
           </div>
 

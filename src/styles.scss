@@ -83,12 +83,163 @@ textarea {
   font-size: 0.55rem;
 }
 
-.datepicker {
-  z-index: 2000 !important;
+/* ─── CoreUI-style ng-bootstrap datepicker ───────────────────────────────── */
+ngb-datepicker {
+  border: 1px solid var(--app-card-border) !important;
+  border-radius: 8px !important;
+  background: var(--app-card-bg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+
+  /* Header (navigation row) */
+  .ngb-dp-header {
+    background: var(--app-card-bg);
+    border-bottom: 1px solid var(--app-card-border);
+    padding: 6px 4px;
+  }
+
+  /* Month / year label */
+  .ngb-dp-month-name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--app-text);
+  }
+
+  /* Weekday column headers */
+  .ngb-dp-weekday {
+    color: #adb5bd;
+    font-weight: 600;
+    font-style: normal;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* Day cells */
+  .ngb-dp-day {
+    width: 2.1rem;
+    height: 2.1rem;
+
+    .btn-light {
+      width: 2rem;
+      height: 2rem;
+      padding: 0;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.82rem;
+      color: var(--app-text);
+      background: transparent;
+      border: 1.5px solid transparent;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+
+      &:hover {
+        background-color: rgba(77, 146, 209, 0.15);
+        border-color: transparent;
+      }
+
+      /* Selected date: filled circle */
+      &.bg-primary {
+        background-color: var(--bs-primary) !important;
+        color: #fff !important;
+        border-color: transparent;
+      }
+    }
+  }
+
+  /* Today marker: bordered circle */
+  .ngb-dp-today .btn-light:not(.bg-primary) {
+    border-color: var(--bs-primary) !important;
+    color: var(--bs-primary) !important;
+    font-weight: 700;
+  }
+
+  /* Month padding */
+  .ngb-dp-month:first-child .ngb-dp-week {
+    padding-left: 0.5rem;
+  }
+
+  .ngb-dp-month:last-child .ngb-dp-week {
+    padding-right: 0.5rem;
+  }
+
+  select.custom-select,
+  select {
+    background-color: var(--app-card-bg);
+    color: var(--app-text);
+    border-color: var(--app-card-border);
+  }
 }
 
-.ui-datepicker,
-#ui-datepicker-div,
-.datepicker-dropdown {
-  z-index: 2200 !important;
+/* Navigation chevron arrows */
+.ngb-dp-navigation-chevron {
+  color: var(--bs-primary);
+}
+
+/* Footer buttons (Today / Clear) added via footerTemplate */
+.os-dp-footer {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--app-card-border);
+  background: var(--app-card-bg);
+
+  .os-dp-btn-today {
+    flex: 1;
+    padding: 5px 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border: 1px solid var(--bs-primary);
+    border-radius: 5px;
+    background: var(--bs-primary);
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.15s;
+
+    &:hover {
+      background: color-mix(in srgb, var(--bs-primary) 85%, black);
+    }
+  }
+
+  .os-dp-btn-clear {
+    flex: 1;
+    padding: 5px 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border: 1px solid var(--app-card-border);
+    border-radius: 5px;
+    background: var(--app-card-bg);
+    color: #6c757d;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+
+    &:hover {
+      border-color: #adb5bd;
+      color: var(--app-text);
+    }
+  }
+}
+
+html[data-bs-theme='dark'] {
+  ngb-datepicker {
+    color: var(--app-text);
+
+    .ngb-dp-day .btn-light {
+      background-color: transparent;
+      color: var(--app-text);
+
+      &:hover {
+        background-color: rgba(77, 146, 209, 0.2);
+      }
+    }
+  }
+
+  .os-dp-footer .os-dp-btn-clear {
+    color: #9db0c0;
+
+    &:hover {
+      color: var(--app-text);
+    }
+  }
 }

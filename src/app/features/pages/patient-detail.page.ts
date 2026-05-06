@@ -11,9 +11,10 @@ import {
   viewChild
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { jsPDF } from 'jspdf';
+import { NgbDateStruct } from '@ng-bootstrap/ng-bootstrap';
 
 import { ApiService } from '../../core/api.service';
 import {
@@ -42,8 +43,8 @@ import { TopbarService } from '../../core/topbar.service';
 import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 import { PdfBuilderService, PAYMENT_PENDING_LABEL } from '../../core/pdf-builder.service';
 import { ConsultationCanvasComponent } from '../consultation-canvas/consultation-canvas.component';
+import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 
-declare const $: any;
 declare const bootstrap: any;
 
 type AntecedentPrecision = 'date' | 'month' | 'year';
@@ -125,10 +126,10 @@ Je vous remercie par avance, et vous prie d'agréer mes sincères salutations.`;
 
 @Component({
   selector: 'app-patient-detail-page',
-  imports: [RouterLink, ReactiveFormsModule, BsTooltipDirective, ConsultationCanvasComponent],
+  imports: [RouterLink, ReactiveFormsModule, BsTooltipDirective, ConsultationCanvasComponent, DatePickerComponent],
   templateUrl: './patient-detail.page.html',
   styleUrl: './patient-detail.page.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PatientDetailPage implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
@@ -145,14 +146,12 @@ export class PatientDetailPage implements OnInit, OnDestroy {
     maximumFractionDigits: 2
   });
 
-  private readonly antecedentDateInputRef = viewChild<ElementRef<HTMLInputElement>>('antecedentDateInputRef');
   private readonly consultationModalRef = viewChild<ElementRef<HTMLDivElement>>('consultationModal');
   private readonly consultationMotifMainEditorRef = viewChild<ElementRef<HTMLDivElement>>('consultationMotifMainEditor');
   private readonly consultationTestsEditorRef = viewChild<ElementRef<HTMLDivElement>>('consultationTestsEditor');
   private readonly consultationTreatmentsEditorRef = viewChild<ElementRef<HTMLDivElement>>('consultationTreatmentsEditor');
   private readonly consultationRemarksEditorRef = viewChild<ElementRef<HTMLDivElement>>('consultationRemarksEditor');
 
-  private antecedentDatepickerMode: AntecedentPrecision | null = null;
   private pendingFocusedConsultationId: number | null = null;
   private relatedSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
   private relatedSearchRequestId = 0;
@@ -244,6 +243,11 @@ export class PatientDetailPage implements OnInit, OnDestroy {
   readonly antecedentError = signal('');
   readonly antecedentDatePrecision = signal<AntecedentPrecision>('date');
   readonly antecedentDateDisplay = signal('');
+  readonly antecedentDateCtrl = new FormControl<string | null>(null);
+  readonly todayNgbDate: NgbDateStruct = (() => {
+    const d = new Date();
+    return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() };
+  })();
   readonly antecedentCategory = signal('');
   readonly antecedentDescription = signal('');
   readonly antecedentImportant = signal(false);
@@ -820,6 +824,15 @@ export class PatientDetailPage implements OnInit, OnDestroy {
 
     void this.loadLocationPairs();
     void this.load(id);
+
+    this.antecedentDateCtrl.valueChanges.subscribe((iso) => {
+      if (iso) {
+        const parts = iso.split('-');
+        this.antecedentDateDisplay.set(`${parts[2]}/${parts[1]}/${parts[0]}`);
+      } else {
+        this.antecedentDateDisplay.set('');
+      }
+    });
   }
 
   ngOnDestroy(): void {
@@ -827,8 +840,6 @@ export class PatientDetailPage implements OnInit, OnDestroy {
     this.stopPatientAutosave();
     this.stopConsultationAutosave();
     this.clearAutosaveToastTimer();
-
-    this.destroyAntecedentDatepicker();
 
     if (this.relatedSearchDebounceId !== null) {
       clearTimeout(this.relatedSearchDebounceId);
@@ -893,10 +904,10 @@ export class PatientDetailPage implements OnInit, OnDestroy {
     this.editingAntecedentId.set(null);
     this.antecedentDatePrecision.set('date');
     this.antecedentDateDisplay.set('');
+    this.antecedentDateCtrl.setValue(null, { emitEvent: false });
     this.antecedentCategory.set('');
     this.antecedentDescription.set('');
     this.antecedentImportant.set(false);
-    queueMicrotask(() => this.initAntecedentDatepicker(true));
   }
 
   openAntecedentEditModal(id: string): void {
@@ -910,14 +921,19 @@ export class PatientDetailPage implements OnInit, OnDestroy {
     this.editingAntecedentId.set(current.id);
     this.antecedentDatePrecision.set(current.precision);
     this.antecedentDateDisplay.set(current.dateDisplay);
+    if (current.precision === 'date' && current.dateDisplay) {
+      const parts = current.dateDisplay.split('/');
+      const iso = `${parts[2]}-${parts[1]}-${parts[0]}`;
+      this.antecedentDateCtrl.setValue(iso, { emitEvent: false });
+    } else {
+      this.antecedentDateCtrl.setValue(null, { emitEvent: false });
+    }
     this.antecedentCategory.set(current.category);
     this.antecedentDescription.set(current.description === 'Détail non renseigné' ? '' : current.description);
     this.antecedentImportant.set(current.important);
-    queueMicrotask(() => this.initAntecedentDatepicker(true));
   }
 
   closeAntecedentModal(): void {
-    this.destroyAntecedentDatepicker();
     this.isAntecedentModalOpen.set(false);
     this.antecedentError.set('');
     this.editingAntecedentId.set(null);
@@ -926,7 +942,7 @@ export class PatientDetailPage implements OnInit, OnDestroy {
   setAntecedentPrecision(precision: AntecedentPrecision): void {
     this.antecedentDatePrecision.set(precision);
     this.antecedentDateDisplay.set('');
-    queueMicrotask(() => this.initAntecedentDatepicker(true));
+    this.antecedentDateCtrl.setValue(null, { emitEvent: false });
   }
 
   setAntecedentCategory(value: string): void {
@@ -2935,135 +2951,6 @@ export class PatientDetailPage implements OnInit, OnDestroy {
   private syncRelatedPeopleField(): void {
     const value = this.selectedRelatedPatients().map((patient) => patient.fullName).join(', ');
     this.editForm.controls.relatedPeople.setValue(value);
-  }
-
-  private initAntecedentDatepicker(forceReinit = false): void {
-    const input = this.antecedentDateInputRef()?.nativeElement;
-    if (!input) {
-      return;
-    }
-
-    const precision = this.antecedentDatePrecision();
-    if (!forceReinit && this.antecedentDatepickerMode === precision) {
-      return;
-    }
-
-    this.destroyAntecedentDatepicker();
-
-    const format = precision === 'date' ? 'dd/mm/yyyy' : precision === 'month' ? 'mm/yyyy' : 'yyyy';
-    const minViewMode = precision === 'date' ? 0 : precision === 'month' ? 1 : 2;
-
-    $(input).datepicker({
-      language: 'fr',
-      format,
-      minViewMode,
-      container: 'body',
-      autoclose: true,
-      todayHighlight: true,
-      weekStart: 1,
-      startView: 2,
-      endDate: new Date()
-    }).on('changeDate', (event: { date: Date }) => {
-      const date = event.date;
-      if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
-        return;
-      }
-
-      const value = precision === 'date'
-        ? `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
-        : precision === 'month'
-          ? `${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
-          : String(date.getFullYear());
-
-      this.antecedentDateDisplay.set(value);
-      this.cdr.markForCheck();
-    });
-
-    this.antecedentDatepickerMode = precision;
-    this.applyAntecedentDateToPicker();
-  }
-
-  private destroyAntecedentDatepicker(): void {
-    const input = this.antecedentDateInputRef()?.nativeElement;
-    if (!input) {
-      this.antecedentDatepickerMode = null;
-      return;
-    }
-
-    try {
-      $(input).datepicker('destroy');
-    } catch {
-      // ignore
-    }
-
-    this.antecedentDatepickerMode = null;
-  }
-
-  private applyAntecedentDateToPicker(): void {
-    const input = this.antecedentDateInputRef()?.nativeElement;
-    const raw = this.antecedentDateDisplay().trim();
-    if (!input || !raw) {
-      return;
-    }
-
-    const date = this.parseAntecedentDisplayToDate(this.antecedentDatePrecision(), raw);
-    if (!date) {
-      return;
-    }
-
-    try {
-      $(input).datepicker('setDate', date);
-    } catch {
-      // ignore
-    }
-  }
-
-  private parseAntecedentDisplayToDate(precision: AntecedentPrecision, display: string): Date | null {
-    if (precision === 'year') {
-      const year = Number(display);
-      if (!Number.isInteger(year)) {
-        return null;
-      }
-      const date = new Date(year, 0, 1);
-      return Number.isNaN(date.getTime()) ? null : date;
-    }
-
-    if (precision === 'month') {
-      const match = display.match(/^(\d{2})\/(\d{4})$/);
-      if (!match) {
-        return null;
-      }
-      const month = Number(match[1]);
-      const year = Number(match[2]);
-      if (!Number.isInteger(month) || !Number.isInteger(year) || month < 1 || month > 12) {
-        return null;
-      }
-      const date = new Date(year, month - 1, 1);
-      return Number.isNaN(date.getTime()) ? null : date;
-    }
-
-    const match = display.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (!match) {
-      return null;
-    }
-
-    const day = Number(match[1]);
-    const month = Number(match[2]);
-    const year = Number(match[3]);
-    if (!Number.isInteger(day) || !Number.isInteger(month) || !Number.isInteger(year)) {
-      return null;
-    }
-
-    const date = new Date(year, month - 1, day);
-    if (Number.isNaN(date.getTime())) {
-      return null;
-    }
-
-    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
-      return null;
-    }
-
-    return date;
   }
 
   private parseAntecedents(raw: string): AntecedentTimelineItem[] {
