@@ -13,7 +13,7 @@ import { fileTypeFromBuffer } from 'file-type';
 import helmet from 'helmet';
 import JSZip from 'jszip';
 import jwt from 'jsonwebtoken';
-import XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { z } from 'zod';
 
 dotenv.config();
@@ -8844,27 +8844,111 @@ async function validateImportFileType(buffer, format, fileName) {
   }
 }
 
-function parseDataImportWorkbook(buffer, format) {
-  if (format === 'csv') {
-    const csvText = buffer.toString('utf8');
-    return XLSX.read(csvText, { type: 'string', raw: false });
+/**
+ * Minimal RFC-4180-compliant CSV parser (comma-separated, no regex on cell data).
+ * Returns an array of arrays (rows of field values).
+ */
+function parseCsvToRows(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  const len = text.length;
+
+  for (let i = 0; i < len; i++) {
+    const ch = text[i];
+
+    if (inQuotes) {
+      if (ch === '"') {
+        if (i + 1 < len && text[i + 1] === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      row.push(field);
+      field = '';
+    } else if (ch === '\n') {
+      row.push(field);
+      field = '';
+      rows.push(row);
+      row = [];
+    } else if (ch === '\r') {
+      // skip — \r\n handled by \n
+    } else {
+      field += ch;
+    }
   }
 
-  return XLSX.read(buffer, { type: 'buffer', raw: false });
+  if (field !== '' || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+
+  return rows;
 }
 
-function getDataImportSheetRows(workbook, sheetName) {
-  const actualName = workbook.SheetNames.find((name) => name.toLowerCase() === sheetName.toLowerCase());
-  if (!actualName) {
+async function parseDataImportWorkbook(buffer, format) {
+  const workbook = new ExcelJS.Workbook();
+
+  if (format === 'csv') {
+    const csvText = buffer.toString('utf8').replace(/^\uFEFF/, '');
+    const rows = parseCsvToRows(csvText).filter((r) => r.some((v) => v.trim() !== ''));
+    const sheet = workbook.addWorksheet('Sheet1');
+    for (const row of rows) {
+      sheet.addRow(row);
+    }
+    return workbook;
+  }
+
+  await workbook.xlsx.load(buffer);
+  return workbook;
+}
+
+function getWorksheetRows(worksheet) {
+  if (!worksheet || worksheet.rowCount < 1) {
     return [];
   }
 
-  const sheet = workbook.Sheets[actualName];
+  const headerRow = worksheet.getRow(1);
+  const headers = [];
+  headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    headers[colNumber - 1] = String(cell.value ?? '').trim();
+  });
+
+  if (headers.every((h) => h === '')) {
+    return [];
+  }
+
+  const rows = [];
+  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber === 1) {
+      return;
+    }
+    const obj = {};
+    headers.forEach((header, idx) => {
+      const cell = row.getCell(idx + 1);
+      obj[header] = String(cell.value ?? '').trim();
+    });
+    rows.push(obj);
+  });
+
+  return rows;
+}
+
+function getDataImportSheetRows(workbook, sheetName) {
+  const sheet = workbook.worksheets.find((ws) => ws.name.toLowerCase() === sheetName.toLowerCase());
   if (!sheet) {
     return [];
   }
 
-  return XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+  return getWorksheetRows(sheet);
 }
 
 function getDataImportRows(workbook, dataset) {
@@ -8875,7 +8959,7 @@ function getDataImportRows(workbook, dataset) {
       return { patientRows, contactRows: [], consultationRows };
     }
 
-    const fallback = workbook.SheetNames[0] ? XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '', raw: false }) : [];
+    const fallback = workbook.worksheets.length > 0 ? getWorksheetRows(workbook.worksheets[0]) : [];
     return { patientRows: fallback, contactRows: [], consultationRows };
   }
 
@@ -8885,7 +8969,7 @@ function getDataImportRows(workbook, dataset) {
       return { patientRows: [], contactRows, consultationRows: [] };
     }
 
-    const fallback = workbook.SheetNames[0] ? XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '', raw: false }) : [];
+    const fallback = workbook.worksheets.length > 0 ? getWorksheetRows(workbook.worksheets[0]) : [];
     return { patientRows: [], contactRows: fallback, consultationRows: [] };
   }
 
@@ -8904,32 +8988,26 @@ function buildDataImportTemplateCsv(dataset) {
   return `${DATA_IMPORT_PATIENT_HEADERS.join(',')}\n${DATA_IMPORT_PATIENT_HEADERS.map((header) => serializeCsvCell(DATA_IMPORT_PATIENT_SAMPLE[header], ',')).join(',')}\n`;
 }
 
-function buildDataImportTemplateWorkbook(dataset) {
-  const workbook = XLSX.utils.book_new();
+async function buildDataImportTemplateWorkbook(dataset) {
+  const workbook = new ExcelJS.Workbook();
 
   if (dataset !== 'directory-contacts') {
-    const patientSheet = XLSX.utils.json_to_sheet([sanitizeSpreadsheetRecord(DATA_IMPORT_PATIENT_SAMPLE, DATA_IMPORT_PATIENT_HEADERS)], {
-      header: DATA_IMPORT_PATIENT_HEADERS,
-      skipHeader: false
-    });
-    XLSX.utils.book_append_sheet(workbook, patientSheet, DATA_IMPORT_PATIENTS_SHEET);
+    const patientSheet = workbook.addWorksheet(DATA_IMPORT_PATIENTS_SHEET);
+    patientSheet.addRow(DATA_IMPORT_PATIENT_HEADERS);
+    patientSheet.addRow(DATA_IMPORT_PATIENT_HEADERS.map((h) => sanitizeSpreadsheetRecord(DATA_IMPORT_PATIENT_SAMPLE, DATA_IMPORT_PATIENT_HEADERS)[h]));
 
-    const consultationSheet = XLSX.utils.json_to_sheet([sanitizeSpreadsheetRecord(DATA_IMPORT_CONSULTATION_SAMPLE, DATA_IMPORT_CONSULTATION_HEADERS)], {
-      header: DATA_IMPORT_CONSULTATION_HEADERS,
-      skipHeader: false
-    });
-    XLSX.utils.book_append_sheet(workbook, consultationSheet, DATA_IMPORT_CONSULTATIONS_SHEET);
+    const consultationSheet = workbook.addWorksheet(DATA_IMPORT_CONSULTATIONS_SHEET);
+    consultationSheet.addRow(DATA_IMPORT_CONSULTATION_HEADERS);
+    consultationSheet.addRow(DATA_IMPORT_CONSULTATION_HEADERS.map((h) => sanitizeSpreadsheetRecord(DATA_IMPORT_CONSULTATION_SAMPLE, DATA_IMPORT_CONSULTATION_HEADERS)[h]));
   }
 
   if (dataset !== 'patients') {
-    const contactSheet = XLSX.utils.json_to_sheet([sanitizeSpreadsheetRecord(DATA_IMPORT_CONTACT_SAMPLE, DATA_IMPORT_CONTACT_HEADERS)], {
-      header: DATA_IMPORT_CONTACT_HEADERS,
-      skipHeader: false
-    });
-    XLSX.utils.book_append_sheet(workbook, contactSheet, DATA_IMPORT_CONTACTS_SHEET);
+    const contactSheet = workbook.addWorksheet(DATA_IMPORT_CONTACTS_SHEET);
+    contactSheet.addRow(DATA_IMPORT_CONTACT_HEADERS);
+    contactSheet.addRow(DATA_IMPORT_CONTACT_HEADERS.map((h) => sanitizeSpreadsheetRecord(DATA_IMPORT_CONTACT_SAMPLE, DATA_IMPORT_CONTACT_HEADERS)[h]));
   }
 
-  return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+  return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
 function buildDataImportPatientKey(lastName, firstName, birthDate) {
@@ -9354,7 +9432,7 @@ app.get('/api/data-management/consent-status', authMiddleware, requirePermission
   return res.json({ outdated, currentVersion: CURRENT_CONSENT_FORM_VERSION });
 });
 
-app.get('/api/data-management/import-template', authMiddleware, requirePermission('manage-data-import'), (req, res) => {
+app.get('/api/data-management/import-template', authMiddleware, requirePermission('manage-data-import'), async (req, res) => {
   const format = String(req.query.format ?? 'csv').trim().toLowerCase();
   const dataset = String(req.query.dataset ?? 'patients').trim().toLowerCase();
 
@@ -9378,7 +9456,7 @@ app.get('/api/data-management/import-template', authMiddleware, requirePermissio
     return res.status(200).send(`\uFEFF${csvContent}`);
   }
 
-  const workbookBuffer = buildDataImportTemplateWorkbook(dataset);
+  const workbookBuffer = await buildDataImportTemplateWorkbook(dataset);
   const fileName = `osteosoft-template-${dataset}.xlsx`;
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -9417,7 +9495,7 @@ app.post('/api/data-management/import', heavyOperationLimiter, authMiddleware, r
       return res.status(400).json({ message: 'Fichier importe vide ou invalide' });
     }
     await validateImportFileType(fileBuffer, payload.format, payload.fileName);
-    const workbook = parseDataImportWorkbook(fileBuffer, payload.format);
+    const workbook = await parseDataImportWorkbook(fileBuffer, payload.format);
     const { patientRows, contactRows, consultationRows } = getDataImportRows(workbook, payload.dataset);
 
     const errors = [];
