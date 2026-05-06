@@ -8862,9 +8862,9 @@ function worksheetToJsonRows(worksheet) {
   let headers = null;
   const rows = [];
   worksheet.eachRow((row) => {
-    const maxCol = headers ? headers.length : row.cellCount;
+    const colCount = Math.max(row.cellCount, headers ? headers.length : 0);
     const cells = [];
-    for (let col = 1; col <= Math.max(row.cellCount, maxCol); col++) {
+    for (let col = 1; col <= colCount; col++) {
       const v = row.getCell(col).value;
       if (v === null || v === undefined) {
         cells.push('');
@@ -9373,7 +9373,7 @@ app.get('/api/data-management/consent-status', authMiddleware, requirePermission
   return res.json({ outdated, currentVersion: CURRENT_CONSENT_FORM_VERSION });
 });
 
-app.get('/api/data-management/import-template', authMiddleware, requirePermission('manage-data-import'), async (req, res) => {
+app.get('/api/data-management/import-template', publicEndpointLimiter, authMiddleware, requirePermission('manage-data-import'), async (req, res) => {
   const format = String(req.query.format ?? 'csv').trim().toLowerCase();
   const dataset = String(req.query.dataset ?? 'patients').trim().toLowerCase();
 
