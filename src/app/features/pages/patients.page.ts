@@ -194,7 +194,7 @@ export class PatientsPage {
           `patients-export-${fileDate}.json`
         );
       } else {
-        const xlsx = await import('xlsx');
+        const ExcelJS = await import('exceljs');
         const sheetRows = rows.map((patient) => ({
           nom: sanitizeCellValue(patient.fullName),
           telephone: sanitizeCellValue(patient.phone),
@@ -204,13 +204,16 @@ export class PatientsPage {
           nombreConsultations: patient.consultationCount
         }));
 
-        const worksheet = xlsx.utils.json_to_sheet(sheetRows);
-        const workbook = xlsx.utils.book_new();
-        xlsx.utils.book_append_sheet(workbook, worksheet, 'Patients');
-        const arrayBuffer = xlsx.write(workbook, { bookType: 'xlsx', type: 'array' });
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Patients');
+        if (sheetRows.length > 0) {
+          worksheet.addRow(Object.keys(sheetRows[0]));
+          sheetRows.forEach((row) => worksheet.addRow(Object.values(row)));
+        }
+        const buffer = await workbook.xlsx.writeBuffer();
 
         this.downloadBlob(
-          new Blob([arrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+          new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
           `patients-export-${fileDate}.xlsx`
         );
       }

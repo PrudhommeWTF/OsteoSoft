@@ -207,7 +207,7 @@ export class ShellPage implements OnInit, OnDestroy {
     { name: 'moment', version: '^2.29.4', website: 'https://momentjs.com', scope: 'runtime' },
     { name: 'rxjs', version: '~7.8.0', website: 'https://rxjs.dev', scope: 'runtime' },
     { name: 'tslib', version: '^2.3.0', website: 'https://www.npmjs.com/package/tslib', scope: 'runtime' },
-    { name: 'xlsx', version: '^0.18.5', website: 'https://www.npmjs.com/package/xlsx', scope: 'runtime' },
+    { name: 'exceljs', version: '^4.4.0', website: 'https://www.npmjs.com/package/exceljs', scope: 'runtime' },
     { name: 'zod', version: '^4.3.6', website: 'https://zod.dev', scope: 'runtime' },
     { name: '@angular/build', version: '^21.2.7', website: 'https://www.npmjs.com/package/@angular/build', scope: 'dev' },
     { name: '@angular/cli', version: '^21.2.7', website: 'https://www.npmjs.com/package/@angular/cli', scope: 'dev' },
