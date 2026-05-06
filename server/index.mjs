@@ -34,7 +34,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 const allowRemoteSetup = /^(1|true|yes)$/i.test(String(process.env.ALLOW_REMOTE_SETUP ?? 'false'));
 const SUPER_ADMIN_PROFILE_ID = 'super-admin';
 const requestBodyLimit = process.env.API_BODY_LIMIT ?? '5mb';
-const largeRequestBodyLimit = process.env.API_LARGE_BODY_LIMIT ?? '60mb';
+const largeRequestBodyLimit = process.env.API_LARGE_BODY_LIMIT ?? '200mb';
 const MAX_PATIENT_DOCUMENT_BYTES = Number(process.env.MAX_PATIENT_DOCUMENT_BYTES ?? 15 * 1024 * 1024);
 const trustedProxies = process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1'
   ? 1

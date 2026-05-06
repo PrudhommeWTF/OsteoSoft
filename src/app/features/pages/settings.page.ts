@@ -4954,6 +4954,15 @@ export class SettingsPage implements OnDestroy {
       return;
     }
 
+    const MAX_WEBOSTEO_FILE_BYTES = 150 * 1024 * 1024;
+    if (file.size > MAX_WEBOSTEO_FILE_BYTES) {
+      this.dataManagementError.set(`Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). La taille maximale est de 150 Mo.`);
+      this.selectedWebosteoFileName.set('');
+      this.selectedWebosteoFileBase64.set('');
+      if (input) input.value = '';
+      return;
+    }
+
     this.selectedWebosteoFileName.set(file.name);
 
     try {
