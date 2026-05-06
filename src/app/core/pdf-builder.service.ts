@@ -119,9 +119,10 @@ export class PdfBuilderService {
     const startY = margin;
 
     if (hasLogo) {
-      const format = office!.logoData!.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+      const logoData = office!.logoData!;
+      const format = logoData.startsWith('data:image/png') ? 'PNG' : 'JPEG';
       try {
-        pdf.addImage(office!.logoData!, format, margin, startY, 18, 18);
+        pdf.addImage(logoData, format, margin, startY, 18, 18);
       } catch {
         // Continue without logo if image fails to load
       }

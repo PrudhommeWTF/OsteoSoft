@@ -957,9 +957,7 @@ export class BillingPage implements OnDestroy {
         this.fullOfficesCache().length > 0
           ? Promise.resolve(this.fullOfficesCache())
           : this.api.getOffices().then((os) => { this.fullOfficesCache.set(os); return os; }),
-        this.api.getMyUserProfile().catch(() => null as MyUserProfile | null)
-      ]);
-      const office = offices.find((o) => o.id === officeId) ?? null;
+        this.api.getMyUserProfile().catch(() => null)
       const layout = office
         ? this.parseInvoiceTemplateLayout(office.invoiceTemplateLayoutJson)
         : this.createDefaultInvoiceTemplateLayout();
@@ -1345,9 +1343,7 @@ export class BillingPage implements OnDestroy {
     try {
       const [detail, profile] = await Promise.all([
         this.api.getBillingDepositDetail(depositId),
-        this.api.getMyUserProfile().catch(() => null as MyUserProfile | null)
-      ]);
-      const fileName = `bordereau-${detail.deposit.code || detail.deposit.id}.pdf`;
+        this.api.getMyUserProfile().catch(() => null)
       const JsPdf = await this.loadJsPdf();
       const pdf = this.buildDepositPdf(detail, JsPdf, profile);
       pdf.save(fileName);
