@@ -453,13 +453,13 @@ export class DirectoryPage {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Répertoire');
         if (sheetRows.length > 0) {
-          worksheet.columns = Object.keys(sheetRows[0]).map((key) => ({ header: key, key }));
-          worksheet.addRows(sheetRows);
+          worksheet.addRow(Object.keys(sheetRows[0]));
+          sheetRows.forEach((row) => worksheet.addRow(Object.values(row)));
         }
-        const arrayBuffer = await workbook.xlsx.writeBuffer();
+        const buffer = await workbook.xlsx.writeBuffer();
 
         this.downloadBlob(
-          new Blob([arrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+          new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
           `repertoire-export-${fileDate}.xlsx`
         );
       }

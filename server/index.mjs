@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 
 import argon2 from 'argon2';
 import Database from 'better-sqlite3';
@@ -33,7 +34,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 const allowRemoteSetup = /^(1|true|yes)$/i.test(String(process.env.ALLOW_REMOTE_SETUP ?? 'false'));
 const SUPER_ADMIN_PROFILE_ID = 'super-admin';
 const requestBodyLimit = process.env.API_BODY_LIMIT ?? '5mb';
-const largeRequestBodyLimit = process.env.API_LARGE_BODY_LIMIT ?? '60mb';
+const largeRequestBodyLimit = process.env.API_LARGE_BODY_LIMIT ?? '200mb';
 const MAX_PATIENT_DOCUMENT_BYTES = Number(process.env.MAX_PATIENT_DOCUMENT_BYTES ?? 15 * 1024 * 1024);
 const trustedProxies = process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1'
   ? 1
@@ -8844,111 +8845,51 @@ async function validateImportFileType(buffer, format, fileName) {
   }
 }
 
-/**
- * Minimal RFC-4180-compliant CSV parser (comma-separated, no regex on cell data).
- * Returns an array of arrays (rows of field values).
- */
-function parseCsvToRows(text) {
-  const rows = [];
-  let row = [];
-  let field = '';
-  let inQuotes = false;
-  const len = text.length;
-
-  for (let i = 0; i < len; i++) {
-    const ch = text[i];
-
-    if (inQuotes) {
-      if (ch === '"') {
-        if (i + 1 < len && text[i + 1] === '"') {
-          field += '"';
-          i += 1;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        field += ch;
-      }
-    } else if (ch === '"') {
-      inQuotes = true;
-    } else if (ch === ',') {
-      row.push(field);
-      field = '';
-    } else if (ch === '\n') {
-      row.push(field);
-      field = '';
-      rows.push(row);
-      row = [];
-    } else if (ch === '\r') {
-      // skip — \r\n handled by \n
-    } else {
-      field += ch;
-    }
-  }
-
-  if (field !== '' || row.length > 0) {
-    row.push(field);
-    rows.push(row);
-  }
-
-  return rows;
-}
-
 async function parseDataImportWorkbook(buffer, format) {
   const workbook = new ExcelJS.Workbook();
-
   if (format === 'csv') {
-    const csvText = buffer.toString('utf8').replace(/^\uFEFF/, '');
-    const rows = parseCsvToRows(csvText).filter((r) => r.some((v) => v.trim() !== ''));
-    const sheet = workbook.addWorksheet('Sheet1');
-    for (const row of rows) {
-      sheet.addRow(row);
-    }
-    return workbook;
+    const csvText = buffer.toString('utf8');
+    const text = csvText.startsWith('\uFEFF') ? csvText.slice(1) : csvText;
+    await workbook.csv.read(Readable.from([text]));
+  } else {
+    await workbook.xlsx.load(buffer);
   }
-
-  await workbook.xlsx.load(buffer);
   return workbook;
 }
 
-function getWorksheetRows(worksheet) {
-  if (!worksheet || worksheet.rowCount < 1) {
-    return [];
-  }
-
-  const headerRow = worksheet.getRow(1);
-  const headers = [];
-  headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-    headers[colNumber - 1] = String(cell.value ?? '').trim();
-  });
-
-  if (headers.every((h) => h === '')) {
-    return [];
-  }
-
+function worksheetToJsonRows(worksheet) {
+  if (!worksheet) return [];
+  let headers = null;
   const rows = [];
-  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    if (rowNumber === 1) {
+  worksheet.eachRow((row) => {
+    const colCount = Math.max(row.cellCount, headers ? headers.length : 0);
+    const cells = [];
+    for (let col = 1; col <= colCount; col++) {
+      const v = row.getCell(col).value;
+      if (v === null || v === undefined) {
+        cells.push('');
+      } else if (v instanceof Date) {
+        cells.push(v.toISOString().slice(0, 10));
+      } else if (typeof v === 'object' && 'result' in v) {
+        cells.push(String(v.result ?? ''));
+      } else {
+        cells.push(String(v));
+      }
+    }
+    if (headers === null) {
+      headers = cells;
       return;
     }
     const obj = {};
-    headers.forEach((header, idx) => {
-      const cell = row.getCell(idx + 1);
-      obj[header] = String(cell.value ?? '').trim();
-    });
+    headers.forEach((header, i) => { obj[header] = cells[i] ?? ''; });
     rows.push(obj);
   });
-
   return rows;
 }
 
 function getDataImportSheetRows(workbook, sheetName) {
-  const sheet = workbook.worksheets.find((ws) => ws.name.toLowerCase() === sheetName.toLowerCase());
-  if (!sheet) {
-    return [];
-  }
-
-  return getWorksheetRows(sheet);
+  const worksheet = workbook.worksheets.find((ws) => ws.name.toLowerCase() === sheetName.toLowerCase());
+  return worksheetToJsonRows(worksheet);
 }
 
 function getDataImportRows(workbook, dataset) {
@@ -8959,7 +8900,7 @@ function getDataImportRows(workbook, dataset) {
       return { patientRows, contactRows: [], consultationRows };
     }
 
-    const fallback = workbook.worksheets.length > 0 ? getWorksheetRows(workbook.worksheets[0]) : [];
+    const fallback = workbook.worksheets[0] ? worksheetToJsonRows(workbook.worksheets[0]) : [];
     return { patientRows: fallback, contactRows: [], consultationRows };
   }
 
@@ -8969,7 +8910,7 @@ function getDataImportRows(workbook, dataset) {
       return { patientRows: [], contactRows, consultationRows: [] };
     }
 
-    const fallback = workbook.worksheets.length > 0 ? getWorksheetRows(workbook.worksheets[0]) : [];
+    const fallback = workbook.worksheets[0] ? worksheetToJsonRows(workbook.worksheets[0]) : [];
     return { patientRows: [], contactRows: fallback, consultationRows: [] };
   }
 
@@ -8994,17 +8935,17 @@ async function buildDataImportTemplateWorkbook(dataset) {
   if (dataset !== 'directory-contacts') {
     const patientSheet = workbook.addWorksheet(DATA_IMPORT_PATIENTS_SHEET);
     patientSheet.addRow(DATA_IMPORT_PATIENT_HEADERS);
-    patientSheet.addRow(DATA_IMPORT_PATIENT_HEADERS.map((h) => sanitizeSpreadsheetRecord(DATA_IMPORT_PATIENT_SAMPLE, DATA_IMPORT_PATIENT_HEADERS)[h]));
+    patientSheet.addRow(DATA_IMPORT_PATIENT_HEADERS.map((h) => sanitizeSpreadsheetCellValue(DATA_IMPORT_PATIENT_SAMPLE[h])));
 
     const consultationSheet = workbook.addWorksheet(DATA_IMPORT_CONSULTATIONS_SHEET);
     consultationSheet.addRow(DATA_IMPORT_CONSULTATION_HEADERS);
-    consultationSheet.addRow(DATA_IMPORT_CONSULTATION_HEADERS.map((h) => sanitizeSpreadsheetRecord(DATA_IMPORT_CONSULTATION_SAMPLE, DATA_IMPORT_CONSULTATION_HEADERS)[h]));
+    consultationSheet.addRow(DATA_IMPORT_CONSULTATION_HEADERS.map((h) => sanitizeSpreadsheetCellValue(DATA_IMPORT_CONSULTATION_SAMPLE[h])));
   }
 
   if (dataset !== 'patients') {
     const contactSheet = workbook.addWorksheet(DATA_IMPORT_CONTACTS_SHEET);
     contactSheet.addRow(DATA_IMPORT_CONTACT_HEADERS);
-    contactSheet.addRow(DATA_IMPORT_CONTACT_HEADERS.map((h) => sanitizeSpreadsheetRecord(DATA_IMPORT_CONTACT_SAMPLE, DATA_IMPORT_CONTACT_HEADERS)[h]));
+    contactSheet.addRow(DATA_IMPORT_CONTACT_HEADERS.map((h) => sanitizeSpreadsheetCellValue(DATA_IMPORT_CONTACT_SAMPLE[h])));
   }
 
   return Buffer.from(await workbook.xlsx.writeBuffer());
@@ -9432,7 +9373,7 @@ app.get('/api/data-management/consent-status', authMiddleware, requirePermission
   return res.json({ outdated, currentVersion: CURRENT_CONSENT_FORM_VERSION });
 });
 
-app.get('/api/data-management/import-template', authMiddleware, requirePermission('manage-data-import'), async (req, res) => {
+app.get('/api/data-management/import-template', publicEndpointLimiter, authMiddleware, requirePermission('manage-data-import'), async (req, res) => {
   const format = String(req.query.format ?? 'csv').trim().toLowerCase();
   const dataset = String(req.query.dataset ?? 'patients').trim().toLowerCase();
 

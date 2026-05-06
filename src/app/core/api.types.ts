@@ -1155,6 +1155,7 @@ export type InvoiceNumberingConfiguration = 'Numérotation globale au cabinet' |
 
 export type GeneralSettingsPayload = {
   backupReminderFrequency: 'Toutes les semaines' | 'Tous les mois' | 'Tous les 3 mois';
+  lastBackupAt?: string | null;
 };
 
 export type DataImportFormat = 'csv' | 'xlsx';

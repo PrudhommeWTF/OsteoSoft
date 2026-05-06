@@ -475,13 +475,14 @@ export class AgendaPage implements OnDestroy {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Agenda');
         if (sheetRows.length > 0) {
-          worksheet.columns = Object.keys(sheetRows[0]).map((key) => ({ header: key, key }));
-          worksheet.addRows(sheetRows);
+          worksheet.addRow(Object.keys(sheetRows[0]));
+          sheetRows.forEach((row) => worksheet.addRow(Object.values(row)));
         }
-        const arrayBuffer = await workbook.xlsx.writeBuffer();
+
+        const buffer = await workbook.xlsx.writeBuffer();
         const fileName = `agenda-export-${fileDate}.xlsx`;
         this.downloadBlob(
-          new Blob([arrayBuffer], {
+          new Blob([buffer], {
             type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
           }),
           fileName

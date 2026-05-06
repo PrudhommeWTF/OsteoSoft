@@ -417,6 +417,17 @@ export class SettingsPage implements OnDestroy {
   readonly selectedBackupReminderFrequency = signal<GeneralSettingsPayload['backupReminderFrequency']>('Tous les mois');
   readonly isSavingBackupReminder = signal(false);
   readonly isLoadingGeneralSettings = signal(false);
+  readonly lastBackupAt = signal<string | null>(null);
+  readonly lastBackupAtFormatted = computed(() => {
+    const raw = this.lastBackupAt();
+    if (!raw) {
+      return null;
+    }
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime())
+      ? null
+      : new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long', timeStyle: 'short' }).format(d);
+  });
   readonly selectedBackupFileName = signal('');
   readonly selectedDataImportFileName = signal('');
   readonly selectedDataImportFileBase64 = signal('');
@@ -1941,6 +1952,7 @@ export class SettingsPage implements OnDestroy {
       URL.revokeObjectURL(url);
 
       this.dataManagementSuccess.set('Sauvegarde téléchargée avec succès.');
+      this.lastBackupAt.set(new Date().toISOString());
     } catch {
       this.dataManagementError.set('Impossible de télécharger la sauvegarde pour le moment.');
     } finally {
@@ -1958,6 +1970,7 @@ export class SettingsPage implements OnDestroy {
         ? settings.backupReminderFrequency as GeneralSettingsPayload['backupReminderFrequency']
         : 'Tous les mois';
       this.selectedBackupReminderFrequency.set(frequency);
+      this.lastBackupAt.set(settings.lastBackupAt ?? null);
     } catch {
       this.backupReminderError.set('Impossible de charger les paramètres de rappel.');
     } finally {
@@ -4935,6 +4948,15 @@ export class SettingsPage implements OnDestroy {
     const ext = file.name.toLowerCase();
     if (!(ext.endsWith('.bck') || ext.endsWith('.data') || ext.endsWith('.sqlite') || ext.endsWith('.db'))) {
       this.dataManagementError.set('Format invalide. Utilisez un fichier .bck (archive WebOsteo) ou .data/.sqlite.');
+      this.selectedWebosteoFileName.set('');
+      this.selectedWebosteoFileBase64.set('');
+      if (input) input.value = '';
+      return;
+    }
+
+    const MAX_WEBOSTEO_FILE_BYTES = 150 * 1024 * 1024;
+    if (file.size > MAX_WEBOSTEO_FILE_BYTES) {
+      this.dataManagementError.set(`Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). La taille maximale est de 150 Mo.`);
       this.selectedWebosteoFileName.set('');
       this.selectedWebosteoFileBase64.set('');
       if (input) input.value = '';

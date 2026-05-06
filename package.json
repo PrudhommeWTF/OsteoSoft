@@ -56,6 +56,9 @@
     "zod": "^4.3.6",
     "zone.js": "^0.16.1"
   },
+  "overrides": {
+    "ip-address": "^10.2.0"
+  },
   "devDependencies": {
     "@angular/build": "^21.2.7",
     "@angular/cli": "^21.2.7",
