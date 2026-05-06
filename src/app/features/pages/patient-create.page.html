@@ -99,19 +99,13 @@
         <div class="row g-3 mb-3">
           <div class="col-6">
             <label class="form-label fw-semibold" for="birthDate">Date de naissance <span class="text-danger">*</span></label>
-            <div class="input-group">
-              <input id="birthDate" type="text" class="form-control"
-                formControlName="birthDate"
-                placeholder="jj/mm/aaaa"
-                autocomplete="bday"
-                ngbDatepicker
-                #dpBirth="ngbDatepicker"
-                [maxDate]="todayNgbDate"
-                [class.is-invalid]="form.controls.birthDate.touched && form.controls.birthDate.invalid" />
-              <button class="btn btn-outline-secondary" type="button" (click)="dpBirth.toggle()" title="Choisir une date" bsTooltip>
-                <i class="fa-solid fa-calendar-days"></i>
-              </button>
-            </div>
+            <app-date-picker
+              id="birthDate"
+              formControlName="birthDate"
+              autocomplete="bday"
+              [maxDate]="todayNgbDate"
+              [class.is-invalid]="form.controls.birthDate.touched && form.controls.birthDate.invalid"
+            />
             @if (form.controls.birthDate.touched && form.controls.birthDate.errors?.['required']) {
               <div class="invalid-feedback d-block">La date de naissance est obligatoire.</div>
             }
@@ -641,16 +635,11 @@
           <div class="mb-3">
             <label class="form-label" for="antecedentDateInput">Date</label>
             @if (antecedentDatePrecision() === 'date') {
-              <ngb-datepicker
+              <app-date-picker
+                id="antecedentDateInput"
+                [formControl]="antecedentDateCtrl"
                 [maxDate]="todayNgbDate"
-                [startDate]="antecedentNgbDate() ?? todayNgbDate"
-                (dateSelect)="onAntecedentDateSelect($event)"
               />
-              @if (antecedentDateDisplay()) {
-                <div class="form-text mt-1">
-                  <i class="fa-solid fa-check text-success me-1"></i>Date sélectionnée : <strong>{{ antecedentDateDisplay() }}</strong>
-                </div>
-              }
             } @else {
               <input
                 id="antecedentDateInput"

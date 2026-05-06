@@ -11,10 +11,10 @@ import {
   viewChild
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { jsPDF } from 'jspdf';
-import { NgbDateAdapter, NgbDateParserFormatter, NgbDateStruct, NgbInputDatepicker, NgbDatepicker } from '@ng-bootstrap/ng-bootstrap';
+import { NgbDateStruct } from '@ng-bootstrap/ng-bootstrap';
 
 import { ApiService } from '../../core/api.service';
 import {
@@ -42,8 +42,7 @@ import { HtmlSanitizerService } from '../../core/html-sanitizer.service';
 import { TopbarService } from '../../core/topbar.service';
 import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 import { ConsultationCanvasComponent } from '../consultation-canvas/consultation-canvas.component';
-import { NgbDateIsoAdapter } from '../../core/ngb-date-iso-adapter';
-import { NgbDateFrParserFormatter } from '../../core/ngb-date-fr-parser-formatter';
+import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 
 declare const bootstrap: any;
 
@@ -127,14 +126,10 @@ Je vous remercie par avance, et vous prie d'agréer mes sincères salutations.`;
 
 @Component({
   selector: 'app-patient-detail-page',
-  imports: [RouterLink, ReactiveFormsModule, BsTooltipDirective, ConsultationCanvasComponent, NgbInputDatepicker, NgbDatepicker],
+  imports: [RouterLink, ReactiveFormsModule, BsTooltipDirective, ConsultationCanvasComponent, DatePickerComponent],
   templateUrl: './patient-detail.page.html',
   styleUrl: './patient-detail.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  providers: [
-    { provide: NgbDateAdapter, useClass: NgbDateIsoAdapter },
-    { provide: NgbDateParserFormatter, useClass: NgbDateFrParserFormatter }
-  ]
 })
 export class PatientDetailPage implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
@@ -247,7 +242,7 @@ export class PatientDetailPage implements OnInit, OnDestroy {
   readonly antecedentError = signal('');
   readonly antecedentDatePrecision = signal<AntecedentPrecision>('date');
   readonly antecedentDateDisplay = signal('');
-  readonly antecedentNgbDate = signal<NgbDateStruct | null>(null);
+  readonly antecedentDateCtrl = new FormControl<string | null>(null);
   readonly todayNgbDate: NgbDateStruct = (() => {
     const d = new Date();
     return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() };
@@ -828,6 +823,15 @@ export class PatientDetailPage implements OnInit, OnDestroy {
 
     void this.loadLocationPairs();
     void this.load(id);
+
+    this.antecedentDateCtrl.valueChanges.subscribe((iso) => {
+      if (iso) {
+        const parts = iso.split('-');
+        this.antecedentDateDisplay.set(`${parts[2]}/${parts[1]}/${parts[0]}`);
+      } else {
+        this.antecedentDateDisplay.set('');
+      }
+    });
   }
 
   ngOnDestroy(): void {
@@ -899,7 +903,7 @@ export class PatientDetailPage implements OnInit, OnDestroy {
     this.editingAntecedentId.set(null);
     this.antecedentDatePrecision.set('date');
     this.antecedentDateDisplay.set('');
-    this.antecedentNgbDate.set(null);
+    this.antecedentDateCtrl.setValue(null, { emitEvent: false });
     this.antecedentCategory.set('');
     this.antecedentDescription.set('');
     this.antecedentImportant.set(false);
@@ -916,7 +920,13 @@ export class PatientDetailPage implements OnInit, OnDestroy {
     this.editingAntecedentId.set(current.id);
     this.antecedentDatePrecision.set(current.precision);
     this.antecedentDateDisplay.set(current.dateDisplay);
-    this.antecedentNgbDate.set(current.precision === 'date' ? this.parseDisplayToNgbDate(current.dateDisplay) : null);
+    if (current.precision === 'date' && current.dateDisplay) {
+      const parts = current.dateDisplay.split('/');
+      const iso = `${parts[2]}-${parts[1]}-${parts[0]}`;
+      this.antecedentDateCtrl.setValue(iso, { emitEvent: false });
+    } else {
+      this.antecedentDateCtrl.setValue(null, { emitEvent: false });
+    }
     this.antecedentCategory.set(current.category);
     this.antecedentDescription.set(current.description === 'Détail non renseigné' ? '' : current.description);
     this.antecedentImportant.set(current.important);
@@ -931,15 +941,7 @@ export class PatientDetailPage implements OnInit, OnDestroy {
   setAntecedentPrecision(precision: AntecedentPrecision): void {
     this.antecedentDatePrecision.set(precision);
     this.antecedentDateDisplay.set('');
-    this.antecedentNgbDate.set(null);
-  }
-
-  onAntecedentDateSelect(date: NgbDateStruct): void {
-    const dd = String(date.day).padStart(2, '0');
-    const mm = String(date.month).padStart(2, '0');
-    this.antecedentDateDisplay.set(`${dd}/${mm}/${date.year}`);
-    this.antecedentNgbDate.set(date);
-    this.cdr.markForCheck();
+    this.antecedentDateCtrl.setValue(null, { emitEvent: false });
   }
 
   setAntecedentCategory(value: string): void {
@@ -2979,20 +2981,6 @@ export class PatientDetailPage implements OnInit, OnDestroy {
   private syncRelatedPeopleField(): void {
     const value = this.selectedRelatedPatients().map((patient) => patient.fullName).join(', ');
     this.editForm.controls.relatedPeople.setValue(value);
-  }
-
-  private parseDisplayToNgbDate(display: string): NgbDateStruct | null {
-    const match = display.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (!match) {
-      return null;
-    }
-    const day = Number(match[1]);
-    const month = Number(match[2]);
-    const year = Number(match[3]);
-    if (Number.isNaN(day) || Number.isNaN(month) || Number.isNaN(year) || !day || !month || !year) {
-      return null;
-    }
-    return { day, month, year };
   }
 
   private parseAntecedents(raw: string): AntecedentTimelineItem[] {

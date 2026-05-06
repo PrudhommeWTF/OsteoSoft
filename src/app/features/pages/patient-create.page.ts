@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { jsPDF } from 'jspdf';
-import { NgbDateAdapter, NgbDateParserFormatter, NgbDateStruct, NgbInputDatepicker, NgbDatepicker } from '@ng-bootstrap/ng-bootstrap';
+import { NgbDateStruct } from '@ng-bootstrap/ng-bootstrap';
 
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
@@ -13,8 +13,7 @@ import { ConsultationDocumentUploadPayload, CreatePatientPayload } from '../../c
 import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 import { HtmlSanitizerService } from '../../core/html-sanitizer.service';
 import { ConsultationCanvasComponent } from '../consultation-canvas/consultation-canvas.component';
-import { NgbDateIsoAdapter } from '../../core/ngb-date-iso-adapter';
-import { NgbDateFrParserFormatter } from '../../core/ngb-date-fr-parser-formatter';
+import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 
 type AntecedentPrecision = 'date' | 'month' | 'year';
 
@@ -128,14 +127,10 @@ const parentContactFields: ParentContactField[] = [
 
 @Component({
   selector: 'app-patient-create-page',
-  imports: [ReactiveFormsModule, BsTooltipDirective, ConsultationCanvasComponent, NgbInputDatepicker, NgbDatepicker],
+  imports: [ReactiveFormsModule, BsTooltipDirective, ConsultationCanvasComponent, DatePickerComponent],
   templateUrl: './patient-create.page.html',
   styleUrl: './patient-create.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  providers: [
-    { provide: NgbDateAdapter, useClass: NgbDateIsoAdapter },
-    { provide: NgbDateParserFormatter, useClass: NgbDateFrParserFormatter }
-  ]
 })
 export class PatientCreatePage implements OnInit, OnDestroy {
   private readonly formBuilder = inject(FormBuilder);
@@ -171,7 +166,7 @@ export class PatientCreatePage implements OnInit, OnDestroy {
   readonly antecedentError = signal('');
   readonly antecedentDatePrecision = signal<AntecedentPrecision>('date');
   readonly antecedentDateDisplay = signal('');
-  readonly antecedentNgbDate = signal<NgbDateStruct | null>(null);
+  readonly antecedentDateCtrl = new FormControl<string | null>(null);
   readonly todayNgbDate: NgbDateStruct = (() => {
     const d = new Date();
     return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() };
@@ -806,7 +801,7 @@ export class PatientCreatePage implements OnInit, OnDestroy {
     this.antecedentError.set('');
     this.antecedentDatePrecision.set('date');
     this.antecedentDateDisplay.set('');
-    this.antecedentNgbDate.set(null);
+    this.antecedentDateCtrl.setValue(null, { emitEvent: false });
     this.antecedentCategory.set('');
     this.antecedentDescription.set('');
     this.antecedentImportant.set(false);
@@ -820,18 +815,11 @@ export class PatientCreatePage implements OnInit, OnDestroy {
   setAntecedentPrecision(precision: AntecedentPrecision): void {
     this.antecedentDatePrecision.set(precision);
     this.antecedentDateDisplay.set('');
-    this.antecedentNgbDate.set(null);
+    this.antecedentDateCtrl.setValue(null, { emitEvent: false });
   }
 
   setAntecedentDateDisplay(value: string): void {
     this.antecedentDateDisplay.set(value);
-  }
-
-  onAntecedentDateSelect(date: NgbDateStruct): void {
-    const dd = String(date.day).padStart(2, '0');
-    const mm = String(date.month).padStart(2, '0');
-    this.antecedentDateDisplay.set(`${dd}/${mm}/${date.year}`);
-    this.antecedentNgbDate.set(date);
   }
 
   setAntecedentCategory(value: string): void {
@@ -1197,6 +1185,15 @@ export class PatientCreatePage implements OnInit, OnDestroy {
     this.autosaveTimer = setInterval(() => {
       void this.persistDraft({ isAutoSave: true });
     }, 3 * 60 * 1000);
+
+    this.antecedentDateCtrl.valueChanges.subscribe((iso) => {
+      if (iso) {
+        const parts = iso.split('-');
+        this.antecedentDateDisplay.set(`${parts[2]}/${parts[1]}/${parts[0]}`);
+      } else {
+        this.antecedentDateDisplay.set('');
+      }
+    });
   }
 
   async generateConsultationSummaryPdf(): Promise<void> {
