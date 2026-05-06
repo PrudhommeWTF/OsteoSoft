@@ -2989,7 +2989,7 @@ export class PatientDetailPage implements OnInit, OnDestroy {
     const day = Number(match[1]);
     const month = Number(match[2]);
     const year = Number(match[3]);
-    if (!day || !month || !year) {
+    if (Number.isNaN(day) || Number.isNaN(month) || Number.isNaN(year) || !day || !month) {
       return null;
     }
     return { day, month, year };

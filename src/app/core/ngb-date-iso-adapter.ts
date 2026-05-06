@@ -18,7 +18,7 @@ export class NgbDateIsoAdapter extends NgbDateAdapter<string> {
     const year = Number(parts[0]);
     const month = Number(parts[1]);
     const day = Number(parts[2]);
-    if (!year || !month || !day) {
+    if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day) || !month || !day) {
       return null;
     }
     return { year, month, day };
