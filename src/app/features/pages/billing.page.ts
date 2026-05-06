@@ -958,6 +958,8 @@ export class BillingPage implements OnDestroy {
           ? Promise.resolve(this.fullOfficesCache())
           : this.api.getOffices().then((os) => { this.fullOfficesCache.set(os); return os; }),
         this.api.getMyUserProfile().catch(() => null)
+      ]);
+      const office = offices.find(o => o.id === officeId) ?? null;
       const layout = office
         ? this.parseInvoiceTemplateLayout(office.invoiceTemplateLayoutJson)
         : this.createDefaultInvoiceTemplateLayout();
@@ -1344,9 +1346,10 @@ export class BillingPage implements OnDestroy {
       const [detail, profile] = await Promise.all([
         this.api.getBillingDepositDetail(depositId),
         this.api.getMyUserProfile().catch(() => null)
+      ]);
       const JsPdf = await this.loadJsPdf();
       const pdf = this.buildDepositPdf(detail, JsPdf, profile);
-      pdf.save(fileName);
+      pdf.save(`bordereau-${detail.deposit.code || depositId}.pdf`);
     } catch {
       this.errorMessage.set('Impossible de générer le PDF du bordereau.');
     }
