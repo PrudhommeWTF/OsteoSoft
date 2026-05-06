@@ -149,7 +149,6 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   readonly currentStep = signal<1 | 2 | 3 | 4 | 5>(1);
   readonly isSaving = signal(false);
   readonly errorMessage = signal('');
-  readonly showRelatedPicker = signal(false);
   readonly relatedSearch = signal('');
   readonly relatedSearchResults = signal<Patient[]>([]);
   readonly selectedRelatedPatients = signal<Patient[]>([]);
@@ -596,14 +595,6 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     this.form.controls.city.setValue(city);
     this.syncPostalCodeFromCity(city);
     this.showCitySuggestions.set(false);
-  }
-
-  toggleRelatedPicker(): void {
-    this.showRelatedPicker.update((value) => !value);
-    if (!this.showRelatedPicker()) {
-      this.relatedSearch.set('');
-      this.relatedSearchResults.set([]);
-    }
   }
 
   onRelatedSearchChange(value: string): void {
