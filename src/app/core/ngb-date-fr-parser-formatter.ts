@@ -18,7 +18,7 @@ export class NgbDateFrParserFormatter extends NgbDateParserFormatter {
     const day = Number(parts[0]);
     const month = Number(parts[1]);
     const year = Number(parts[2]);
-    if (Number.isNaN(day) || Number.isNaN(month) || Number.isNaN(year) || !day || !month) {
+    if (Number.isNaN(day) || Number.isNaN(month) || Number.isNaN(year) || !day || !month || !year) {
       return null;
     }
     return { day, month, year };
