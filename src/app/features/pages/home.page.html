@@ -10,16 +10,28 @@
         </div>
         <div class="modal-body">
           @if (canManageBackup()) {
-            <p class="mb-3">
-              La dernière sauvegarde de l'application date de <strong>{{ backupOverdueDays() }} jour{{ backupOverdueDays() > 1 ? 's' : '' }}</strong>.
-              Il est recommandé d'effectuer une sauvegarde régulière pour protéger les données.
-            </p>
-            <p class="mb-0">Veuillez effectuer une sauvegarde dès que possible.</p>
+            @if (noBackupEver()) {
+              <p class="mb-3">
+                Aucune sauvegarde n'a encore été effectuée sur cette application.
+              </p>
+            } @else {
+              <p class="mb-3">
+                La dernière sauvegarde de l'application date de <strong>{{ backupOverdueDays() }} jour{{ backupOverdueDays() > 1 ? 's' : '' }}</strong>.
+              </p>
+            }
+            <p class="mb-0">Il est recommandé d'effectuer une sauvegarde régulière pour protéger les données. Veuillez effectuer une sauvegarde dès que possible.</p>
           } @else {
-            <p class="mb-0">
-              La sauvegarde de l'application n'a pas été effectuée depuis <strong>{{ backupOverdueDays() }} jour{{ backupOverdueDays() > 1 ? 's' : '' }}</strong>.
-              Veuillez contacter un administrateur pour qu'il effectue une sauvegarde.
-            </p>
+            @if (noBackupEver()) {
+              <p class="mb-0">
+                Aucune sauvegarde de l'application n'a encore été effectuée.
+                Veuillez contacter un administrateur pour qu'il effectue une sauvegarde.
+              </p>
+            } @else {
+              <p class="mb-0">
+                La sauvegarde de l'application n'a pas été effectuée depuis <strong>{{ backupOverdueDays() }} jour{{ backupOverdueDays() > 1 ? 's' : '' }}</strong>.
+                Veuillez contacter un administrateur pour qu'il effectue une sauvegarde.
+              </p>
+            }
           }
         </div>
         <div class="modal-footer">

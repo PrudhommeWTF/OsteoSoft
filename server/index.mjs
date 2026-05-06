@@ -9751,7 +9751,7 @@ app.post('/api/data-management/import', heavyOperationLimiter, authMiddleware, r
   }
 });
 
-app.get('/api/data-management/backup', authMiddleware, requirePermission('manage-data-backup-restore'), async (req, res) => {
+app.get('/api/data-management/backup', heavyOperationLimiter, authMiddleware, requirePermission('manage-data-backup-restore'), async (req, res) => {
   const scopedOfficeIds = getDataManagementScopedOfficeIds(req.userAccess);
   const snapshot = buildDataBackupSnapshot(
     isApplicationSuperAdmin(req.userAccess)

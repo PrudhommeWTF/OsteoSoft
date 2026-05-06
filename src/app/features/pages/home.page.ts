@@ -81,6 +81,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   readonly defaultAgendaView = signal<string>('Semaine');
   readonly showBackupReminderModal = signal(false);
   readonly backupOverdueDays = signal(0);
+  readonly noBackupEver = signal(false);
   readonly canManageBackup = computed(() => this.auth.hasPermission('manage-data-backup-restore'));
   readonly pendingPaymentsTotalPages = computed(() =>
     Math.max(1, Math.ceil(this.pendingPayments().length / HomePage.PENDING_PAYMENTS_PAGE_SIZE))
@@ -202,7 +203,8 @@ export class HomePage implements AfterViewInit, OnDestroy {
     const thresholdDays = frequencyDays[frequency] ?? 30;
 
     if (!lastBackupAt) {
-      this.backupOverdueDays.set(thresholdDays);
+      this.noBackupEver.set(true);
+      this.backupOverdueDays.set(0);
       this.showBackupReminderModal.set(true);
       return;
     }
@@ -213,6 +215,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
     if (diffDays >= thresholdDays) {
+      this.noBackupEver.set(false);
       this.backupOverdueDays.set(diffDays);
       this.showBackupReminderModal.set(true);
     }
