@@ -109,7 +109,16 @@
                   </div>
                   <div class="col-12 col-md-6">
                     <label class="form-label fw-semibold" for="edit-birthdate">Date de naissance</label>
-                    <input id="edit-birthdate" type="date" class="form-control" autocomplete="bday" formControlName="birthDate" [max]="todayIso" />
+                    <div class="input-group">
+                      <input id="edit-birthdate" type="text" class="form-control" placeholder="jj/mm/aaaa" autocomplete="bday"
+                        formControlName="birthDate"
+                        ngbDatepicker
+                        #dpEditBirth="ngbDatepicker"
+                        [maxDate]="todayNgbDate" />
+                      <button class="btn btn-outline-secondary" type="button" (click)="dpEditBirth.toggle()" title="Choisir une date" bsTooltip>
+                        <i class="fa-solid fa-calendar-days"></i>
+                      </button>
+                    </div>
                   </div>
                   <div class="col-12 col-md-6 d-flex align-items-end">
                     <div class="d-flex flex-wrap align-items-center gap-3">
@@ -651,14 +660,27 @@
 
         <div class="mb-3">
           <label class="form-label" for="antecedentDateInput">Date</label>
-          <input
-            #antecedentDateInputRef
-            id="antecedentDateInput"
-            type="text"
-            class="form-control"
-            [placeholder]="antecedentDatePrecision() === 'date' ? 'jj/mm/aaaa' : antecedentDatePrecision() === 'month' ? 'mm/aaaa' : 'aaaa'"
-            [value]="antecedentDateDisplay()"
-            (input)="antecedentDateDisplay.set($any($event.target).value)" />
+          @if (antecedentDatePrecision() === 'date') {
+            <ngb-datepicker
+              [maxDate]="todayNgbDate"
+              [startDate]="antecedentNgbDate() ?? todayNgbDate"
+              (dateSelect)="onAntecedentDateSelect($event)"
+            />
+            @if (antecedentDateDisplay()) {
+              <div class="form-text mt-1">
+                <i class="fa-solid fa-check text-success me-1"></i>Date sélectionnée : <strong>{{ antecedentDateDisplay() }}</strong>
+              </div>
+            }
+          } @else {
+            <input
+              id="antecedentDateInput"
+              type="text"
+              class="form-control"
+              [placeholder]="antecedentDatePrecision() === 'month' ? 'mm/aaaa' : 'aaaa'"
+              [value]="antecedentDateDisplay()"
+              (input)="antecedentDateDisplay.set($any($event.target).value)" />
+            <div class="form-text">Saisie manuelle au format indiqué dans le placeholder.</div>
+          }
         </div>
 
         <div class="mb-3">
@@ -1540,7 +1562,19 @@
               <div class="col-12 col-lg-3 fw-semibold">Prénom :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="firstName" /></div>
               <div class="col-12 col-lg-3 fw-semibold">Téléphone portable :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="mobilePhone" /></div>
               <div class="col-12 col-lg-3 fw-semibold">Email :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="email" /></div>
-              <div class="col-12 col-lg-3 fw-semibold">Date de naissance :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="birthDate" /></div>
+              <div class="col-12 col-lg-3 fw-semibold">Date de naissance :</div>
+              <div class="col-12 col-lg-9">
+                <div class="input-group input-group-sm">
+                  <input class="form-control form-control-sm" type="text" placeholder="jj/mm/aaaa"
+                    formControlName="birthDate"
+                    ngbDatepicker
+                    #dpBilling="ngbDatepicker"
+                    [maxDate]="todayNgbDate" />
+                  <button class="btn btn-outline-secondary btn-sm" type="button" (click)="dpBilling.toggle()" title="Choisir une date" bsTooltip>
+                    <i class="fa-solid fa-calendar-days"></i>
+                  </button>
+                </div>
+              </div>
               <div class="col-12 col-lg-3 fw-semibold">Adresse :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="address1" /></div>
               <div class="col-12 col-lg-3 fw-semibold">Adresse (suite) :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="address2" /></div>
               <div class="col-12 col-lg-3 fw-semibold">Code postal :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="postalCode" /></div>

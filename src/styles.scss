@@ -83,12 +83,67 @@ textarea {
   font-size: 0.55rem;
 }
 
-.datepicker {
-  z-index: 2000 !important;
+/* ng-bootstrap datepicker styling */
+ngb-datepicker {
+  border-color: var(--app-card-border) !important;
+  background: var(--app-card-bg);
+
+  .ngb-dp-header {
+    background: var(--app-card-bg);
+    border-bottom-color: var(--app-card-border);
+  }
+
+  .ngb-dp-month-name {
+    font-weight: 600;
+    color: var(--app-text);
+  }
+
+  .ngb-dp-weekday {
+    color: var(--bs-primary);
+    font-weight: 600;
+    font-style: normal;
+  }
+
+  .ngb-dp-day .btn-light {
+    color: var(--app-text);
+
+    &:hover {
+      background-color: rgba(77, 146, 209, 0.15);
+    }
+
+    &.bg-primary {
+      background-color: var(--bs-primary) !important;
+      color: #fff;
+    }
+  }
+
+  select.custom-select,
+  select {
+    background-color: var(--app-card-bg);
+    color: var(--app-text);
+    border-color: var(--app-card-border);
+  }
 }
 
-.ui-datepicker,
-#ui-datepicker-div,
-.datepicker-dropdown {
-  z-index: 2200 !important;
+.ngb-dp-navigation-chevron {
+  color: var(--bs-primary);
+}
+
+html[data-bs-theme='dark'] {
+  ngb-datepicker {
+    color: var(--app-text);
+
+    .ngb-dp-day .btn-light {
+      background-color: transparent;
+      color: var(--app-text);
+
+      &:hover {
+        background-color: rgba(77, 146, 209, 0.2);
+      }
+    }
+
+    .ngb-dp-today .btn-light {
+      border-color: var(--bs-primary);
+    }
+  }
 }

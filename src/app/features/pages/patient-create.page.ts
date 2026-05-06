@@ -4,6 +4,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { jsPDF } from 'jspdf';
+import { NgbDateAdapter, NgbDateParserFormatter, NgbDateStruct, NgbInputDatepicker, NgbDatepicker } from '@ng-bootstrap/ng-bootstrap';
 
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
@@ -12,8 +13,8 @@ import { ConsultationDocumentUploadPayload, CreatePatientPayload } from '../../c
 import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 import { HtmlSanitizerService } from '../../core/html-sanitizer.service';
 import { ConsultationCanvasComponent } from '../consultation-canvas/consultation-canvas.component';
-
-declare const $: any;
+import { NgbDateIsoAdapter } from '../../core/ngb-date-iso-adapter';
+import { NgbDateFrParserFormatter } from '../../core/ngb-date-fr-parser-formatter';
 
 type AntecedentPrecision = 'date' | 'month' | 'year';
 
@@ -127,10 +128,14 @@ const parentContactFields: ParentContactField[] = [
 
 @Component({
   selector: 'app-patient-create-page',
-  imports: [ReactiveFormsModule, BsTooltipDirective, ConsultationCanvasComponent],
+  imports: [ReactiveFormsModule, BsTooltipDirective, ConsultationCanvasComponent, NgbInputDatepicker, NgbDatepicker],
   templateUrl: './patient-create.page.html',
   styleUrl: './patient-create.page.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  providers: [
+    { provide: NgbDateAdapter, useClass: NgbDateIsoAdapter },
+    { provide: NgbDateParserFormatter, useClass: NgbDateFrParserFormatter }
+  ]
 })
 export class PatientCreatePage implements OnInit, OnDestroy {
   private readonly formBuilder = inject(FormBuilder);
@@ -139,7 +144,6 @@ export class PatientCreatePage implements OnInit, OnDestroy {
   private readonly htmlSanitizer = inject(HtmlSanitizerService);
   private readonly router = inject(Router);
 
-  private readonly antecedentDateInputRef = viewChild<ElementRef<HTMLInputElement>>('antecedentDateInput');
   private readonly motifMainEditorRef = viewChild<ElementRef<HTMLDivElement>>('motifMainEditor');
   private readonly testsEditorRef = viewChild<ElementRef<HTMLDivElement>>('testsEditor');
   private readonly treatmentsEditorRef = viewChild<ElementRef<HTMLDivElement>>('treatmentsEditor');
@@ -167,6 +171,11 @@ export class PatientCreatePage implements OnInit, OnDestroy {
   readonly antecedentError = signal('');
   readonly antecedentDatePrecision = signal<AntecedentPrecision>('date');
   readonly antecedentDateDisplay = signal('');
+  readonly antecedentNgbDate = signal<NgbDateStruct | null>(null);
+  readonly todayNgbDate: NgbDateStruct = (() => {
+    const d = new Date();
+    return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() };
+  })();
   readonly antecedentCategory = signal('');
   readonly antecedentDescription = signal('');
   readonly antecedentImportant = signal(false);
@@ -797,31 +806,32 @@ export class PatientCreatePage implements OnInit, OnDestroy {
     this.antecedentError.set('');
     this.antecedentDatePrecision.set('date');
     this.antecedentDateDisplay.set('');
+    this.antecedentNgbDate.set(null);
     this.antecedentCategory.set('');
     this.antecedentDescription.set('');
     this.antecedentImportant.set(false);
-
-    queueMicrotask(() => this.initAntecedentDatepicker());
   }
 
   closeAntecedentModal(): void {
     this.isAntecedentModalOpen.set(false);
     this.antecedentError.set('');
-    this.destroyAntecedentDatepicker();
   }
 
   setAntecedentPrecision(precision: AntecedentPrecision): void {
     this.antecedentDatePrecision.set(precision);
     this.antecedentDateDisplay.set('');
-    this.initAntecedentDatepicker();
+    this.antecedentNgbDate.set(null);
   }
 
   setAntecedentDateDisplay(value: string): void {
     this.antecedentDateDisplay.set(value);
   }
 
-  isDatepickerAvailable(): boolean {
-    return this.hasJQueryDatepicker();
+  onAntecedentDateSelect(date: NgbDateStruct): void {
+    const dd = String(date.day).padStart(2, '0');
+    const mm = String(date.month).padStart(2, '0');
+    this.antecedentDateDisplay.set(`${dd}/${mm}/${date.year}`);
+    this.antecedentNgbDate.set(date);
   }
 
   setAntecedentCategory(value: string): void {
@@ -2132,8 +2142,6 @@ export class PatientCreatePage implements OnInit, OnDestroy {
     }
 
     this.clearDraftToastTimer();
-
-    this.destroyAntecedentDatepicker();
   }
 
   async skipAndSave(): Promise<void> {
@@ -2464,63 +2472,6 @@ export class PatientCreatePage implements OnInit, OnDestroy {
     }
 
     return age >= 0 ? age : null;
-  }
-
-  private initAntecedentDatepicker(): void {
-    if (!this.isAntecedentModalOpen()) {
-      return;
-    }
-
-    if (!this.hasJQueryDatepicker()) {
-      return;
-    }
-
-    const ref = this.antecedentDateInputRef();
-    if (!ref) {
-      return;
-    }
-
-    const el = ref.nativeElement;
-    this.destroyAntecedentDatepicker();
-
-    const precision = this.antecedentDatePrecision();
-    const config =
-      precision === 'year'
-        ? { format: 'yyyy', minViewMode: 2, startView: 2 }
-        : precision === 'month'
-          ? { format: 'mm/yyyy', minViewMode: 1, startView: 1 }
-          : { format: 'dd/mm/yyyy', minViewMode: 0, startView: 0 };
-
-    $(el)
-      .datepicker({
-        language: 'fr',
-        autoclose: true,
-        todayHighlight: true,
-        weekStart: 1,
-        endDate: new Date(),
-        ...config
-      })
-      .on('changeDate', (e: any) => {
-        const picked = e?.format ? e.format(0, config.format) : '';
-        this.antecedentDateDisplay.set(picked);
-      });
-  }
-
-  private destroyAntecedentDatepicker(): void {
-    if (!this.hasJQueryDatepicker()) {
-      return;
-    }
-
-    const ref = this.antecedentDateInputRef();
-    if (!ref) {
-      return;
-    }
-    $(ref.nativeElement).datepicker('destroy');
-  }
-
-  private hasJQueryDatepicker(): boolean {
-    const jq = $ as any;
-    return typeof jq === 'function' && Boolean(jq.fn?.datepicker);
   }
 
   private buildAntecedentSortKey(precision: AntecedentPrecision, display: string): number | null {
