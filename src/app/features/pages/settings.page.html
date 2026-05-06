@@ -70,6 +70,11 @@
                 <p class="settings-card-status mb-2">Sauvegarde</p>
                 <h3 class="settings-card-title">Télécharger une sauvegarde</h3>
                 <p class="settings-card-copy mb-3">Exportez l'intégralité des données dans une archive ZIP (manifest + data) pour archivage ou transfert.</p>
+                @if (lastBackupAtFormatted()) {
+                  <p class="small text-secondary mb-3">Dernière sauvegarde : {{ lastBackupAtFormatted() }}</p>
+                } @else {
+                  <p class="small text-secondary mb-3">Aucune sauvegarde enregistrée.</p>
+                }
                 <button type="button" class="btn btn-primary" [disabled]="isDownloadingBackup()" (click)="downloadBackup()" title="Exporter / Télécharger" bsTooltip>
                   <i class="fa-solid fa-download me-1"></i>Télécharger la sauvegarde
                 </button>
@@ -3344,7 +3349,7 @@
         </section>
       }
 
-      @if (activeSection().id !== 'offices' && activeSection().id !== 'roles-and-access' && activeSection().id !== 'user-management') {
+      @if (activeSection().id !== 'offices' && activeSection().id !== 'roles-and-access' && activeSection().id !== 'user-management' && activeSection().id !== 'data-management') {
         <section class="settings-placeholder" aria-label="Prochaine étape">
           <div>
             <h3 class="h6 mb-2">Prochaine étape d'implémentation</h3>
