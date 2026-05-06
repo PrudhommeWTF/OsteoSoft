@@ -414,6 +414,9 @@ export class SettingsPage implements OnDestroy {
   readonly setupSecurityLogsError = signal('');
   readonly backupReminderError = signal('');
   readonly backupReminderSuccess = signal('');
+  readonly selectedBackupReminderFrequency = signal<GeneralSettingsPayload['backupReminderFrequency']>('Tous les mois');
+  readonly isSavingBackupReminder = signal(false);
+  readonly isLoadingGeneralSettings = signal(false);
   readonly selectedBackupFileName = signal('');
   readonly selectedDataImportFileName = signal('');
   readonly selectedDataImportFileBase64 = signal('');
@@ -551,7 +554,7 @@ export class SettingsPage implements OnDestroy {
     { value: 'setup_restore_rejected', label: 'Restore setup invalide' }
   ];
   readonly generalDeviseOptions = ['EUR', 'USD', 'CHF', 'GBP', 'CAD'];
-  readonly backupReminderOptions = ['Toutes les semaines', 'Tous les 15 jours', 'Tous les mois', 'Tous les 2 mois'] as const;
+  readonly backupReminderOptions = ['Toutes les semaines', 'Tous les mois', 'Tous les 3 mois'] as const;
   readonly dataImportFormatOptions: Array<{ value: DataImportFormat; label: string }> = [
     { value: 'csv', label: 'CSV (une table)' },
     { value: 'xlsx', label: 'Excel XLSX (plusieurs feuilles)' }
@@ -752,6 +755,7 @@ export class SettingsPage implements OnDestroy {
     void this.loadCurrentUser();
     void this.loadUsers();
     void this.loadOffices();
+    void this.loadGeneralSettings();
   }
 
   ngOnDestroy(): void {
@@ -1080,6 +1084,7 @@ export class SettingsPage implements OnDestroy {
           this.activeDataManagementTabId.set(fallbackTabId);
         }
       }
+      void this.loadGeneralSettings();
     }
 
 
@@ -1940,6 +1945,37 @@ export class SettingsPage implements OnDestroy {
       this.dataManagementError.set('Impossible de télécharger la sauvegarde pour le moment.');
     } finally {
       this.isDownloadingBackup.set(false);
+    }
+  }
+
+  async loadGeneralSettings(): Promise<void> {
+    this.isLoadingGeneralSettings.set(true);
+    this.backupReminderError.set('');
+    try {
+      const settings = await this.api.getGeneralSettings();
+      const validOptions = this.backupReminderOptions as readonly string[];
+      const frequency = validOptions.includes(settings.backupReminderFrequency)
+        ? settings.backupReminderFrequency as GeneralSettingsPayload['backupReminderFrequency']
+        : 'Tous les mois';
+      this.selectedBackupReminderFrequency.set(frequency);
+    } catch {
+      this.backupReminderError.set('Impossible de charger les paramètres de rappel.');
+    } finally {
+      this.isLoadingGeneralSettings.set(false);
+    }
+  }
+
+  async saveBackupReminderFrequency(): Promise<void> {
+    this.backupReminderError.set('');
+    this.backupReminderSuccess.set('');
+    this.isSavingBackupReminder.set(true);
+    try {
+      await this.api.updateGeneralSettings({ backupReminderFrequency: this.selectedBackupReminderFrequency() });
+      this.backupReminderSuccess.set('Fréquence de rappel enregistrée.');
+    } catch {
+      this.backupReminderError.set('Impossible d\'enregistrer la fréquence de rappel.');
+    } finally {
+      this.isSavingBackupReminder.set(false);
     }
   }
 

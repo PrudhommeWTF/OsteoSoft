@@ -1,3 +1,43 @@
+@if (showBackupReminderModal()) {
+  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="backup-reminder-modal-title">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="backup-reminder-modal-title" class="modal-title h5 mb-0">
+            <i class="fa-solid fa-triangle-exclamation text-warning me-2" aria-hidden="true"></i>Rappel de sauvegarde
+          </h2>
+          <button type="button" class="btn-close" aria-label="Fermer" (click)="dismissBackupReminderModal()"></button>
+        </div>
+        <div class="modal-body">
+          @if (canManageBackup()) {
+            <p class="mb-3">
+              La dernière sauvegarde de l'application date de <strong>{{ backupOverdueDays() }} jour{{ backupOverdueDays() > 1 ? 's' : '' }}</strong>.
+              Il est recommandé d'effectuer une sauvegarde régulière pour protéger les données.
+            </p>
+            <p class="mb-0">Veuillez effectuer une sauvegarde dès que possible.</p>
+          } @else {
+            <p class="mb-0">
+              La sauvegarde de l'application n'a pas été effectuée depuis <strong>{{ backupOverdueDays() }} jour{{ backupOverdueDays() > 1 ? 's' : '' }}</strong>.
+              Veuillez contacter un administrateur pour qu'il effectue une sauvegarde.
+            </p>
+          }
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" (click)="dismissBackupReminderModal()">
+            Fermer
+          </button>
+          @if (canManageBackup()) {
+            <a [routerLink]="['/parametres']" class="btn btn-primary" (click)="dismissBackupReminderModal()">
+              <i class="fa-solid fa-database me-1" aria-hidden="true"></i>Aller à la gestion des données
+            </a>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop fade show" (click)="dismissBackupReminderModal()"></div>
+}
+
 <section class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
   <div>
     <h1 class="h3 mb-1"><i class="fa-solid fa-house text-primary me-2"></i>Accueil</h1>

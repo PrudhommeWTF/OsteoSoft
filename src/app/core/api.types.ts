@@ -789,6 +789,8 @@ export type DashboardPayload = {
   agendaSettings: AgendaSettings;
   localCalendars: LocalAgendaCalendar[];
   officeOpeningHoursById?: Record<number, OfficeOpeningHours>;
+  lastBackupAt: string | null;
+  backupReminderFrequency: string;
 };
 
 export type StatisticsScopeMode = 'active-office' | 'consolidated';
@@ -1152,7 +1154,7 @@ export type InvoiceNumberFormat =
 export type InvoiceNumberingConfiguration = 'Numérotation globale au cabinet' | 'Numérotation par praticien';
 
 export type GeneralSettingsPayload = {
-  backupReminderFrequency: 'Toutes les semaines' | 'Tous les 15 jours' | 'Tous les mois' | 'Tous les 2 mois';
+  backupReminderFrequency: 'Toutes les semaines' | 'Tous les mois' | 'Tous les 3 mois';
 };
 
 export type DataImportFormat = 'csv' | 'xlsx';

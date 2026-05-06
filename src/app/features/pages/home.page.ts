@@ -27,6 +27,7 @@ import {
 import { RouterLink } from '@angular/router';
 
 import { ApiService } from '../../core/api.service';
+import { AuthService } from '../../core/auth.service';
 import { AgendaSettings, DashboardEvent, DashboardPayload, StatisticsAgeSexPoint } from '../../core/api.types';
 import { WeekCalendar } from './week-calendar';
 
@@ -61,6 +62,7 @@ export class HomePage implements AfterViewInit, OnDestroy {
   private static readonly PENDING_PAYMENTS_MAX_VISIBLE_PAGES = 7;
 
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
   private readonly injector = inject(Injector);
   private readonly eurFormatter = new Intl.NumberFormat('fr-FR', {
     style: 'currency',
@@ -77,6 +79,9 @@ export class HomePage implements AfterViewInit, OnDestroy {
   readonly calendarEvents = signal<DashboardEvent[]>([]);
   readonly calendarSettings = signal<AgendaSettings | null>(null);
   readonly defaultAgendaView = signal<string>('Semaine');
+  readonly showBackupReminderModal = signal(false);
+  readonly backupOverdueDays = signal(0);
+  readonly canManageBackup = computed(() => this.auth.hasPermission('manage-data-backup-restore'));
   readonly pendingPaymentsTotalPages = computed(() =>
     Math.max(1, Math.ceil(this.pendingPayments().length / HomePage.PENDING_PAYMENTS_PAGE_SIZE))
   );
@@ -171,6 +176,9 @@ export class HomePage implements AfterViewInit, OnDestroy {
       this.defaultAgendaView.set(profile.defaultAgendaView || 'Semaine');
       this.pendingPayload.set(payload);
       this.isLoading.set(false);
+
+      this.checkBackupReminder(payload.lastBackupAt, payload.backupReminderFrequency);
+
       afterNextRender(
         () => {
           const p = this.pendingPayload();
@@ -183,6 +191,35 @@ export class HomePage implements AfterViewInit, OnDestroy {
     } catch {
       this.isLoading.set(false);
     }
+  }
+
+  private checkBackupReminder(lastBackupAt: string | null, frequency: string): void {
+    const frequencyDays: Record<string, number> = {
+      'Toutes les semaines': 7,
+      'Tous les mois': 30,
+      'Tous les 3 mois': 90
+    };
+    const thresholdDays = frequencyDays[frequency] ?? 30;
+
+    if (!lastBackupAt) {
+      this.backupOverdueDays.set(thresholdDays);
+      this.showBackupReminderModal.set(true);
+      return;
+    }
+
+    const lastDate = new Date(lastBackupAt);
+    const now = new Date();
+    const diffMs = now.getTime() - lastDate.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays >= thresholdDays) {
+      this.backupOverdueDays.set(diffDays);
+      this.showBackupReminderModal.set(true);
+    }
+  }
+
+  dismissBackupReminderModal(): void {
+    this.showBackupReminderModal.set(false);
   }
 
 
