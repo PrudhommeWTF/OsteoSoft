@@ -99,8 +99,9 @@
         <div class="row g-3 mb-3">
           <div class="col-6">
             <label class="form-label fw-semibold" for="birthDate">Date de naissance <span class="text-danger">*</span></label>
-                 <input #birthDateInput id="birthDate" class="form-control cursor-pointer" type="text"
-                   autocomplete="off" placeholder="jj/mm/aaaa" readonly
+                 <input id="birthDate" type="date" class="form-control"
+                   formControlName="birthDate"
+                   [max]="todayIso"
                    [class.is-invalid]="form.controls.birthDate.touched && form.controls.birthDate.invalid" />
             @if (form.controls.birthDate.touched && form.controls.birthDate.errors?.['required']) {
               <div class="invalid-feedback d-block">La date de naissance est obligatoire.</div>
@@ -843,7 +844,7 @@
 
               <div class="mb-3">
                 <label class="form-label" for="consultationWeightKg">Poids (kg)</label>
-                <input id="consultationWeightKg" type="number" class="form-control" min="0" step="0.1" [value]="consultationWeightKg() ?? ''" (input)="setConsultationWeightKg($any($event.target).value)" />
+                <input id="consultationWeightKg" type="text" inputmode="decimal" class="form-control" placeholder="ex: 70 ou 3,5" [value]="consultationWeightKg() ?? ''" (input)="setConsultationWeightKg($any($event.target).value)" />
               </div>
 
               <div class="mb-3">

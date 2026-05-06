@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
@@ -132,14 +132,13 @@ const parentContactFields: ParentContactField[] = [
   styleUrl: './patient-create.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
+export class PatientCreatePage implements OnInit, OnDestroy {
   private readonly formBuilder = inject(FormBuilder);
   private readonly api = inject(ApiService);
   private readonly authService = inject(AuthService);
   private readonly htmlSanitizer = inject(HtmlSanitizerService);
   private readonly router = inject(Router);
 
-  private readonly birthDateInputRef = viewChild.required<ElementRef<HTMLInputElement>>('birthDateInput');
   private readonly antecedentDateInputRef = viewChild<ElementRef<HTMLInputElement>>('antecedentDateInput');
   private readonly motifMainEditorRef = viewChild<ElementRef<HTMLDivElement>>('motifMainEditor');
   private readonly testsEditorRef = viewChild<ElementRef<HTMLDivElement>>('testsEditor');
@@ -404,8 +403,6 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   private isPersistingDraft = false;
   private pendingDraftSave = false;
   private pendingManualDraftSave = false;
-  private isViewReady = false;
-  private pendingBirthDateIso = '';
   private isSynchronizingLocationFields = false;
   private pendingConsultationLinkStrategy: 'attach-existing' | 'create-new' | null = null;
   private readonly consultationOfficeContextEffect = effect(() => {
@@ -437,8 +434,6 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     if (el && document.activeElement !== el) { el.innerHTML = this.htmlSanitizer.sanitize(html); }
   });
 
-  /** ISO date (yyyy-mm-dd) kept in sync by the datepicker */
-  private readonly birthDateIso = signal('');
 
   readonly form = this.formBuilder.nonNullable.group({
     sex: this.formBuilder.nonNullable.control<'Non renseigne' | 'Femme' | 'Homme'>('Non renseigne'),
@@ -473,6 +468,12 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
 
   /** Reactive snapshot of form values — used in computed signals */
   private readonly formValues = toSignal(this.form.valueChanges, { initialValue: this.form.getRawValue() });
+
+  /** ISO date (yyyy-mm-dd) derived from the birth date form control */
+  private readonly birthDateIso = computed(() => this.formValues().birthDate?.trim() ?? '');
+
+  /** Today's date in YYYY-MM-DD format — used as max for the birth date input */
+  readonly todayIso = new Date().toISOString().slice(0, 10);
 
   readonly sexValue = computed(() => this.formValues().sex ?? 'Non renseigne');
 
@@ -2103,34 +2104,6 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       .replace(/^_+|_+$/g, '');
   }
 
-  ngAfterViewInit(): void {
-    this.isViewReady = true;
-
-    const el = this.birthDateInputRef().nativeElement;
-    if (this.hasJQueryDatepicker()) {
-      $(el).datepicker({
-        language: 'fr',
-        format: 'dd/mm/yyyy',
-        container: 'body',
-        autoclose: true,
-        todayHighlight: true,
-        weekStart: 1,
-        startView: 2,
-        endDate: new Date()
-      }).on('changeDate', (e: any) => {
-        const d: Date = e.date;
-        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        this.form.controls.birthDate.setValue(iso);
-        this.form.controls.birthDate.markAsTouched();
-        this.birthDateIso.set(iso);
-      });
-    }
-
-    if (this.pendingBirthDateIso) {
-      this.applyBirthDateToPicker(this.pendingBirthDateIso);
-    }
-  }
-
   ngOnDestroy(): void {
     this.consultationOfficeContextEffect.destroy();
 
@@ -2161,11 +2134,6 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
     this.clearDraftToastTimer();
 
     this.destroyAntecedentDatepicker();
-
-    const el = this.birthDateInputRef().nativeElement;
-    if (this.hasJQueryDatepicker()) {
-      $(el).datepicker('destroy');
-    }
   }
 
   async skipAndSave(): Promise<void> {
@@ -2624,16 +2592,6 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
         String(draft.payload.city ?? '')
       );
 
-      const birthDate = draft.payload.birthDate?.trim() ?? '';
-      if (birthDate) {
-        this.birthDateIso.set(birthDate);
-        if (this.isViewReady) {
-          this.applyBirthDateToPicker(birthDate);
-        } else {
-          this.pendingBirthDateIso = birthDate;
-        }
-      }
-
       this.restoreAntecedentsFromMedicalHistory(draft.payload.medicalHistory);
       this.restoreConsultationFromNote(draft.payload.consultationNote);
       this.restoreConsultationDocumentsFromPayload(draft.payload.consultationDocuments);
@@ -2648,26 +2606,6 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
         this.loadLocalDraft();
       }
     }
-  }
-
-  private applyBirthDateToPicker(isoDate: string): void {
-    const [yearStr, monthStr, dayStr] = isoDate.split('-');
-    const year = Number(yearStr);
-    const month = Number(monthStr);
-    const day = Number(dayStr);
-
-    if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
-      return;
-    }
-
-    const date = new Date(year, month - 1, day);
-    if (Number.isNaN(date.getTime())) {
-      return;
-    }
-
-    const el = this.birthDateInputRef().nativeElement;
-    $(el).datepicker('setDate', date);
-    this.pendingBirthDateIso = '';
   }
 
   private restoreAntecedentsFromMedicalHistory(raw: string): void {
@@ -2832,16 +2770,6 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
       this.form.patchValue({ ...payload, isDeceased: false });
       this.primaryDoctorSearch.set(String(payload.primaryDoctor ?? ''));
       this.updateLocationSuggestions(String(payload.postalCode ?? ''), String(payload.city ?? ''));
-
-      const birthDate = String(payload.birthDate ?? '').trim();
-      if (birthDate) {
-        this.birthDateIso.set(birthDate);
-        if (this.isViewReady) {
-          this.applyBirthDateToPicker(birthDate);
-        } else {
-          this.pendingBirthDateIso = birthDate;
-        }
-      }
 
       this.restoreAntecedentsFromMedicalHistory(String(payload.medicalHistory ?? ''));
       this.restoreConsultationFromNote(String(payload.consultationNote ?? ''));
@@ -3093,7 +3021,11 @@ export class PatientCreatePage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private parseNullableNumber(value: string): number | null {
-    const parsed = Number(value);
+    const normalized = String(value ?? '').trim().replace(',', '.');
+    if (!normalized) {
+      return null;
+    }
+    const parsed = Number(normalized);
     if (!Number.isFinite(parsed)) {
       return null;
     }
