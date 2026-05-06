@@ -1545,7 +1545,8 @@ function saveUserAgendaPreferences(userId, payload) {
 
 function readGeneralSettings() {
   return {
-    backupReminderFrequency: getConfigValue('settings_backup_reminder_frequency', 'Toutes les semaines')
+    backupReminderFrequency: getConfigValue('settings_backup_reminder_frequency', 'Tous les mois'),
+  lastBackupAt: getConfigValue('settings_last_backup_at', '') || null
   };
 }
 
@@ -5454,7 +5455,7 @@ async function ensureSeedData() {
 
   const defaultSettingConfig = [
     ['settings_pdf_display_mode', 'browser'],
-    ['settings_backup_reminder_frequency', 'Toutes les semaines'],
+    ['settings_backup_reminder_frequency', 'Tous les mois'],
     ['settings_consultation_order', 'Antichronologique'],
     ['settings_group_consultations_by_year_from', '10'],
     ['settings_patient_auto_save_frequency', 'Toutes les 2 minutes'],
@@ -7381,7 +7382,7 @@ const dataRestoreSchema = z.object({
 });
 
 const generalSettingsPayloadSchema = z.object({
-  backupReminderFrequency: z.enum(['Toutes les semaines', 'Tous les 15 jours', 'Tous les mois', 'Tous les 2 mois'])
+  backupReminderFrequency: z.enum(['Toutes les semaines', 'Tous les mois', 'Tous les 3 mois'])
 });
 
 const agendaSettingsPayloadSchema = z.object({
@@ -9750,7 +9751,7 @@ app.post('/api/data-management/import', heavyOperationLimiter, authMiddleware, r
   }
 });
 
-app.get('/api/data-management/backup', authMiddleware, requirePermission('manage-data-backup-restore'), async (req, res) => {
+app.get('/api/data-management/backup', heavyOperationLimiter, authMiddleware, requirePermission('manage-data-backup-restore'), async (req, res) => {
   const scopedOfficeIds = getDataManagementScopedOfficeIds(req.userAccess);
   const snapshot = buildDataBackupSnapshot(
     isApplicationSuperAdmin(req.userAccess)
@@ -9770,6 +9771,11 @@ app.get('/api/data-management/backup', authMiddleware, requirePermission('manage
     compression: 'DEFLATE',
     compressionOptions: { level: 9 }
   });
+
+  db.prepare(
+    `INSERT INTO config (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+  ).run('settings_last_backup_at', new Date().toISOString());
 
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -14958,7 +14964,9 @@ app.get('/api/dashboard', authMiddleware, requirePermission('read-dashboard'), (
     pendingPayments: allPendingPayments,
     agendaSettings: agendaConfig.settings,
     localCalendars: agendaConfig.localCalendars,
-    officeOpeningHoursById
+    officeOpeningHoursById,
+    lastBackupAt: getConfigValue('settings_last_backup_at', '') || null,
+    backupReminderFrequency: getConfigValue('settings_backup_reminder_frequency', 'Tous les mois')
   });
 });
 

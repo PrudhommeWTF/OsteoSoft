@@ -159,9 +159,45 @@
                 <h3 class="settings-card-title">Rappel de sauvegarde</h3>
                 <p class="settings-card-copy mb-3">Réglez la fréquence de rappel pour effectuer une sauvegarde complète des données.</p>
 
-                <div class="mb-3">
-                  <p class="small text-secondary">Cette option peut être configurée dans les paramètres généraux du système.</p>
-                </div>
+                @if (isLoadingGeneralSettings()) {
+                  <p class="text-secondary small">Chargement...</p>
+                } @else {
+                  <div class="d-flex flex-wrap align-items-end gap-3">
+                    <div>
+                      <label class="form-label mb-1" for="backup-reminder-frequency">Fréquence de rappel</label>
+                      <select
+                        id="backup-reminder-frequency"
+                        class="form-select"
+                        [value]="selectedBackupReminderFrequency()"
+                        [disabled]="isSavingBackupReminder()"
+                        (change)="selectedBackupReminderFrequency.set($any($event.target).value)"
+                      >
+                        @for (option of backupReminderOptions; track option) {
+                          <option [value]="option">{{ option }}</option>
+                        }
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      class="btn btn-primary"
+                      [disabled]="isSavingBackupReminder()"
+                      (click)="saveBackupReminderFrequency()"
+                      title="Enregistrer la fréquence de rappel" bsTooltip
+                    >
+                      @if (isSavingBackupReminder()) {
+                        <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                      }
+                      Enregistrer
+                    </button>
+                  </div>
+
+                  @if (backupReminderSuccess()) {
+                    <div class="alert alert-success py-2 mt-3 mb-0" role="status">{{ backupReminderSuccess() }}</div>
+                  }
+                  @if (backupReminderError()) {
+                    <div class="alert alert-danger py-2 mt-3 mb-0" role="alert">{{ backupReminderError() }}</div>
+                  }
+                }
               </article>
             </div>
           </section>
