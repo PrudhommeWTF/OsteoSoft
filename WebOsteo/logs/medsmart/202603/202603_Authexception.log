@@ -1,6 +1,0 @@
-02/03/2026 17:29:55 --------------DEBUT----------------
-02/03/2026 17:29:55 {"msg":"cURL error 28: Connection timed out after 15001 milliseconds (see https:\/\/curl.haxx.se\/libcurl\/c\/libcurl-errors.html) for https:\/\/api.moncabinetliberal.com\/v1\/medsmart\/v2\/facture\/auth","line":0,"facture":"69a5baf46210d"}
-02/03/2026 17:29:55 --------------FIN-------------------
-02/03/2026 18:02:55 --------------DEBUT----------------
-02/03/2026 18:02:55 {"msg":"cURL error 28: Connection timed out after 15003 milliseconds (see https:\/\/curl.haxx.se\/libcurl\/c\/libcurl-errors.html) for https:\/\/api.moncabinetliberal.com\/v1\/medsmart\/v2\/facture\/auth","line":0,"facture":"69a5c2b022969"}
-02/03/2026 18:02:55 --------------FIN-------------------
