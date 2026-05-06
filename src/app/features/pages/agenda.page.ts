@@ -450,7 +450,7 @@ export class AgendaPage implements OnDestroy {
         const fileName = `agenda-export-${fileDate}.json`;
         this.downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' }), fileName);
       } else {
-        const xlsx = await import('xlsx');
+        const ExcelJS = await import('exceljs');
         const sheetRows = rows.map((event) => ({
           date: new Intl.DateTimeFormat('fr-FR', {
             year: 'numeric',
@@ -472,14 +472,17 @@ export class AgendaPage implements OnDestroy {
           remarques: sanitizeCellValue(event.patientRemarks)
         }));
 
-        const worksheet = xlsx.utils.json_to_sheet(sheetRows);
-        const workbook = xlsx.utils.book_new();
-        xlsx.utils.book_append_sheet(workbook, worksheet, 'Agenda');
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Agenda');
+        if (sheetRows.length > 0) {
+          worksheet.addRow(Object.keys(sheetRows[0]));
+          sheetRows.forEach((row) => worksheet.addRow(Object.values(row)));
+        }
 
-        const arrayBuffer = xlsx.write(workbook, { bookType: 'xlsx', type: 'array' });
+        const buffer = await workbook.xlsx.writeBuffer();
         const fileName = `agenda-export-${fileDate}.xlsx`;
         this.downloadBlob(
-          new Blob([arrayBuffer], {
+          new Blob([buffer], {
             type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
           }),
           fileName

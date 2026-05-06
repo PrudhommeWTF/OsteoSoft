@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 
 import argon2 from 'argon2';
 import Database from 'better-sqlite3';
@@ -13,7 +14,7 @@ import { fileTypeFromBuffer } from 'file-type';
 import helmet from 'helmet';
 import JSZip from 'jszip';
 import jwt from 'jsonwebtoken';
-import XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { z } from 'zod';
 
 dotenv.config();
@@ -8844,27 +8845,51 @@ async function validateImportFileType(buffer, format, fileName) {
   }
 }
 
-function parseDataImportWorkbook(buffer, format) {
+async function parseDataImportWorkbook(buffer, format) {
+  const workbook = new ExcelJS.Workbook();
   if (format === 'csv') {
     const csvText = buffer.toString('utf8');
-    return XLSX.read(csvText, { type: 'string', raw: false });
+    const text = csvText.startsWith('\uFEFF') ? csvText.slice(1) : csvText;
+    await workbook.csv.read(Readable.from([text]));
+  } else {
+    await workbook.xlsx.load(buffer);
   }
+  return workbook;
+}
 
-  return XLSX.read(buffer, { type: 'buffer', raw: false });
+function worksheetToJsonRows(worksheet) {
+  if (!worksheet) return [];
+  let headers = null;
+  const rows = [];
+  worksheet.eachRow((row) => {
+    const maxCol = headers ? headers.length : row.cellCount;
+    const cells = [];
+    for (let col = 1; col <= Math.max(row.cellCount, maxCol); col++) {
+      const v = row.getCell(col).value;
+      if (v === null || v === undefined) {
+        cells.push('');
+      } else if (v instanceof Date) {
+        cells.push(v.toISOString().slice(0, 10));
+      } else if (typeof v === 'object' && 'result' in v) {
+        cells.push(String(v.result ?? ''));
+      } else {
+        cells.push(String(v));
+      }
+    }
+    if (headers === null) {
+      headers = cells;
+      return;
+    }
+    const obj = {};
+    headers.forEach((header, i) => { obj[header] = cells[i] ?? ''; });
+    rows.push(obj);
+  });
+  return rows;
 }
 
 function getDataImportSheetRows(workbook, sheetName) {
-  const actualName = workbook.SheetNames.find((name) => name.toLowerCase() === sheetName.toLowerCase());
-  if (!actualName) {
-    return [];
-  }
-
-  const sheet = workbook.Sheets[actualName];
-  if (!sheet) {
-    return [];
-  }
-
-  return XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+  const worksheet = workbook.worksheets.find((ws) => ws.name.toLowerCase() === sheetName.toLowerCase());
+  return worksheetToJsonRows(worksheet);
 }
 
 function getDataImportRows(workbook, dataset) {
@@ -8875,7 +8900,7 @@ function getDataImportRows(workbook, dataset) {
       return { patientRows, contactRows: [], consultationRows };
     }
 
-    const fallback = workbook.SheetNames[0] ? XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '', raw: false }) : [];
+    const fallback = workbook.worksheets[0] ? worksheetToJsonRows(workbook.worksheets[0]) : [];
     return { patientRows: fallback, contactRows: [], consultationRows };
   }
 
@@ -8885,7 +8910,7 @@ function getDataImportRows(workbook, dataset) {
       return { patientRows: [], contactRows, consultationRows: [] };
     }
 
-    const fallback = workbook.SheetNames[0] ? XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '', raw: false }) : [];
+    const fallback = workbook.worksheets[0] ? worksheetToJsonRows(workbook.worksheets[0]) : [];
     return { patientRows: [], contactRows: fallback, consultationRows: [] };
   }
 
@@ -8904,32 +8929,26 @@ function buildDataImportTemplateCsv(dataset) {
   return `${DATA_IMPORT_PATIENT_HEADERS.join(',')}\n${DATA_IMPORT_PATIENT_HEADERS.map((header) => serializeCsvCell(DATA_IMPORT_PATIENT_SAMPLE[header], ',')).join(',')}\n`;
 }
 
-function buildDataImportTemplateWorkbook(dataset) {
-  const workbook = XLSX.utils.book_new();
+async function buildDataImportTemplateWorkbook(dataset) {
+  const workbook = new ExcelJS.Workbook();
 
   if (dataset !== 'directory-contacts') {
-    const patientSheet = XLSX.utils.json_to_sheet([sanitizeSpreadsheetRecord(DATA_IMPORT_PATIENT_SAMPLE, DATA_IMPORT_PATIENT_HEADERS)], {
-      header: DATA_IMPORT_PATIENT_HEADERS,
-      skipHeader: false
-    });
-    XLSX.utils.book_append_sheet(workbook, patientSheet, DATA_IMPORT_PATIENTS_SHEET);
+    const patientSheet = workbook.addWorksheet(DATA_IMPORT_PATIENTS_SHEET);
+    patientSheet.addRow(DATA_IMPORT_PATIENT_HEADERS);
+    patientSheet.addRow(DATA_IMPORT_PATIENT_HEADERS.map((h) => sanitizeSpreadsheetCellValue(DATA_IMPORT_PATIENT_SAMPLE[h])));
 
-    const consultationSheet = XLSX.utils.json_to_sheet([sanitizeSpreadsheetRecord(DATA_IMPORT_CONSULTATION_SAMPLE, DATA_IMPORT_CONSULTATION_HEADERS)], {
-      header: DATA_IMPORT_CONSULTATION_HEADERS,
-      skipHeader: false
-    });
-    XLSX.utils.book_append_sheet(workbook, consultationSheet, DATA_IMPORT_CONSULTATIONS_SHEET);
+    const consultationSheet = workbook.addWorksheet(DATA_IMPORT_CONSULTATIONS_SHEET);
+    consultationSheet.addRow(DATA_IMPORT_CONSULTATION_HEADERS);
+    consultationSheet.addRow(DATA_IMPORT_CONSULTATION_HEADERS.map((h) => sanitizeSpreadsheetCellValue(DATA_IMPORT_CONSULTATION_SAMPLE[h])));
   }
 
   if (dataset !== 'patients') {
-    const contactSheet = XLSX.utils.json_to_sheet([sanitizeSpreadsheetRecord(DATA_IMPORT_CONTACT_SAMPLE, DATA_IMPORT_CONTACT_HEADERS)], {
-      header: DATA_IMPORT_CONTACT_HEADERS,
-      skipHeader: false
-    });
-    XLSX.utils.book_append_sheet(workbook, contactSheet, DATA_IMPORT_CONTACTS_SHEET);
+    const contactSheet = workbook.addWorksheet(DATA_IMPORT_CONTACTS_SHEET);
+    contactSheet.addRow(DATA_IMPORT_CONTACT_HEADERS);
+    contactSheet.addRow(DATA_IMPORT_CONTACT_HEADERS.map((h) => sanitizeSpreadsheetCellValue(DATA_IMPORT_CONTACT_SAMPLE[h])));
   }
 
-  return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+  return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
 function buildDataImportPatientKey(lastName, firstName, birthDate) {
@@ -9354,7 +9373,7 @@ app.get('/api/data-management/consent-status', authMiddleware, requirePermission
   return res.json({ outdated, currentVersion: CURRENT_CONSENT_FORM_VERSION });
 });
 
-app.get('/api/data-management/import-template', authMiddleware, requirePermission('manage-data-import'), (req, res) => {
+app.get('/api/data-management/import-template', authMiddleware, requirePermission('manage-data-import'), async (req, res) => {
   const format = String(req.query.format ?? 'csv').trim().toLowerCase();
   const dataset = String(req.query.dataset ?? 'patients').trim().toLowerCase();
 
@@ -9378,7 +9397,7 @@ app.get('/api/data-management/import-template', authMiddleware, requirePermissio
     return res.status(200).send(`\uFEFF${csvContent}`);
   }
 
-  const workbookBuffer = buildDataImportTemplateWorkbook(dataset);
+  const workbookBuffer = await buildDataImportTemplateWorkbook(dataset);
   const fileName = `osteosoft-template-${dataset}.xlsx`;
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -9417,7 +9436,7 @@ app.post('/api/data-management/import', heavyOperationLimiter, authMiddleware, r
       return res.status(400).json({ message: 'Fichier importe vide ou invalide' });
     }
     await validateImportFileType(fileBuffer, payload.format, payload.fileName);
-    const workbook = parseDataImportWorkbook(fileBuffer, payload.format);
+    const workbook = await parseDataImportWorkbook(fileBuffer, payload.format);
     const { patientRows, contactRows, consultationRows } = getDataImportRows(workbook, payload.dataset);
 
     const errors = [];

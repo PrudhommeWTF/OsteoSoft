@@ -39,6 +39,7 @@
     "cors": "^2.8.6",
     "dompurify": "^3.4.1",
     "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.3.2",
     "file-type": "^21.3.4",
@@ -50,9 +51,11 @@
     "moment": "^2.29.4",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
-    "xlsx": "^0.18.5",
     "zod": "^4.3.6",
     "zone.js": "^0.16.1"
+  },
+  "overrides": {
+    "ip-address": "^10.2.0"
   },
   "devDependencies": {
     "@angular/build": "^21.2.7",

@@ -433,7 +433,7 @@ export class DirectoryPage {
           `repertoire-export-${fileDate}.json`
         );
       } else {
-        const xlsx = await import('xlsx');
+        const ExcelJS = await import('exceljs');
         const sheetRows = rows.map((contact) => ({
           nom: sanitizeCellValue(this.contactName(contact)),
           type: sanitizeCellValue(this.kindLabel(contact.kind)),
@@ -450,13 +450,16 @@ export class DirectoryPage {
           notes: sanitizeCellValue(contact.notes)
         }));
 
-        const worksheet = xlsx.utils.json_to_sheet(sheetRows);
-        const workbook = xlsx.utils.book_new();
-        xlsx.utils.book_append_sheet(workbook, worksheet, 'Répertoire');
-        const arrayBuffer = xlsx.write(workbook, { bookType: 'xlsx', type: 'array' });
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Répertoire');
+        if (sheetRows.length > 0) {
+          worksheet.addRow(Object.keys(sheetRows[0]));
+          sheetRows.forEach((row) => worksheet.addRow(Object.values(row)));
+        }
+        const buffer = await workbook.xlsx.writeBuffer();
 
         this.downloadBlob(
-          new Blob([arrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+          new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
           `repertoire-export-${fileDate}.xlsx`
         );
       }
