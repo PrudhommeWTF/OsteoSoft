@@ -24,6 +24,7 @@ import {
 } from '../../core/api.types';
 import { AuthService } from '../../core/auth.service';
 import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
+import { PdfBuilderService } from '../../core/pdf-builder.service';
 
 type ExportHistoryItem = {
   id: string;
@@ -65,6 +66,7 @@ export class BillingPage implements OnDestroy {
 
   private readonly api = inject(ApiService);
   private readonly authService = inject(AuthService);
+  private readonly pdfBuilder = inject(PdfBuilderService);
 
   readonly tiles = signal<InvoiceSummaryTile[]>([]);
   readonly operations = signal<BillingOperation[]>([]);
@@ -950,18 +952,19 @@ export class BillingPage implements OnDestroy {
 
   async downloadInvoicePdf(invoiceId: number, officeId: number | null): Promise<void> {
     try {
-      const [invoice, offices] = await Promise.all([
+      const [invoice, offices, profile] = await Promise.all([
         this.api.getBillingInvoice(invoiceId),
         this.fullOfficesCache().length > 0
           ? Promise.resolve(this.fullOfficesCache())
-          : this.api.getOffices().then((os) => { this.fullOfficesCache.set(os); return os; })
+          : this.api.getOffices().then((os) => { this.fullOfficesCache.set(os); return os; }),
+        this.api.getMyUserProfile().catch(() => null as MyUserProfile | null)
       ]);
       const office = offices.find((o) => o.id === officeId) ?? null;
       const layout = office
         ? this.parseInvoiceTemplateLayout(office.invoiceTemplateLayoutJson)
         : this.createDefaultInvoiceTemplateLayout();
       const JsPdf = await this.loadJsPdf();
-      const pdf = this.buildInvoicePdf(invoice, office, layout, JsPdf);
+      const pdf = this.buildInvoicePdf(invoice, office, layout, JsPdf, profile);
       pdf.save(`facture-${invoice.invoiceNumber || invoiceId}.pdf`);
     } catch (err) {
       console.error('Error generating invoice PDF:', err);
@@ -1340,10 +1343,13 @@ export class BillingPage implements OnDestroy {
   async downloadDepositPdf(depositId: number): Promise<void> {
     this.errorMessage.set('');
     try {
-      const detail = await this.api.getBillingDepositDetail(depositId);
+      const [detail, profile] = await Promise.all([
+        this.api.getBillingDepositDetail(depositId),
+        this.api.getMyUserProfile().catch(() => null as MyUserProfile | null)
+      ]);
       const fileName = `bordereau-${detail.deposit.code || detail.deposit.id}.pdf`;
       const JsPdf = await this.loadJsPdf();
-      const pdf = this.buildDepositPdf(detail, JsPdf);
+      const pdf = this.buildDepositPdf(detail, JsPdf, profile);
       pdf.save(fileName);
     } catch {
       this.errorMessage.set('Impossible de générer le PDF du bordereau.');
@@ -1441,10 +1447,11 @@ export class BillingPage implements OnDestroy {
     return module.jsPDF;
   }
 
-  private buildDepositPdf(detail: BillingDepositDetail, JsPdf: typeof import('jspdf').jsPDF) {
+  private buildDepositPdf(detail: BillingDepositDetail, JsPdf: typeof import('jspdf').jsPDF, profile: MyUserProfile | null = null) {
     const pdf = new JsPdf({ unit: 'mm', format: 'a4' });
     const margin = 14;
     const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
     const contentWidth = pageWidth - margin * 2;
     let y = margin;
 
@@ -1487,6 +1494,8 @@ export class BillingPage implements OnDestroy {
         y = margin;
       }
     }
+
+    this.pdfBuilder.writeUnifiedFooter(pdf, { margin, pageWidth, pageHeight, profile, office: null });
 
     return pdf;
   }
@@ -2585,7 +2594,8 @@ export class BillingPage implements OnDestroy {
     invoice: BillingInvoiceDetail,
     office: Office | null,
     layout: InvoiceTemplateLayout,
-    JsPdf: typeof import('jspdf').jsPDF
+    JsPdf: typeof import('jspdf').jsPDF,
+    profile: MyUserProfile | null = null
   ) {
     const PAGE_W = 210;
     const PAGE_H = 297;
@@ -2713,6 +2723,18 @@ export class BillingPage implements OnDestroy {
       pdf.setTextColor(120, 120, 120);
       const footerLines = pdf.splitTextToSize(layout._global.footerText, PAGE_W - 28) as string[];
       pdf.text(footerLines, 14, PAGE_H - 8);
+    }
+
+    if (profile) {
+      pdf.setTextColor(0, 0, 0);
+      this.pdfBuilder.writeUnifiedFooter(pdf, {
+        margin: 14,
+        pageWidth: PAGE_W,
+        pageHeight: PAGE_H,
+        profile,
+        office,
+        includeVatMention: true
+      });
     }
 
     if (layout._global.showPageNumber) {
