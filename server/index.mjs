@@ -654,6 +654,7 @@ db.exec(`
 
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_users_office_id ON users(office_id);
+  CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active);
 
   CREATE INDEX IF NOT EXISTS idx_patients_is_deleted_last_visit ON patients(is_deleted, last_visit);
   CREATE INDEX IF NOT EXISTS idx_patients_office_id ON patients(office_id, is_deleted);
