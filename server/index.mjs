@@ -6865,6 +6865,7 @@ const ROUTES_ALLOWED_WITH_MUST_CHANGE_PASSWORD = new Set([
   '/api/auth/logout',
   '/api/auth/me',
   '/api/profile/me',
+  '/api/profile/agenda-preferences',
 ]);
 
 function authMiddleware(req, res, next) {
