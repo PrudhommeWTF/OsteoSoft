@@ -663,11 +663,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_appointments_office_starts_at ON appointments(office_id, starts_at);
   CREATE INDEX IF NOT EXISTS idx_appointments_calendar_starts_at ON appointments(local_calendar_id, starts_at);
   CREATE INDEX IF NOT EXISTS idx_appointments_consultation_id ON appointments(consultation_id);
-  CREATE INDEX IF NOT EXISTS idx_appointments_user_id ON appointments(user_id);
 
   CREATE INDEX IF NOT EXISTS idx_consultations_patient_started_at ON consultations(patient_id, started_at);
   CREATE INDEX IF NOT EXISTS idx_consultations_office_started_at ON consultations(office_id, started_at);
-  CREATE INDEX IF NOT EXISTS idx_consultations_user_id ON consultations(user_id);
   CREATE INDEX IF NOT EXISTS idx_consultation_reason_items_consultation_order ON consultation_reason_items(consultation_id, display_order);
   CREATE INDEX IF NOT EXISTS idx_consultation_sections_consultation_key ON consultation_sections(consultation_id, section_key);
 
@@ -5133,6 +5131,12 @@ async function ensureSeedData() {
   ensureColumn('user_preference', 'slot_duration_minutes', 'slot_duration_minutes INTEGER NOT NULL DEFAULT 15');
   ensureColumn('user_preference', 'display_height', 'display_height INTEGER NOT NULL DEFAULT 14');
   ensureColumn('user_preference', 'theme_mode', "theme_mode TEXT NOT NULL DEFAULT 'system'");
+
+  // These indexes depend on user_id columns added by ensureColumn above, so they must run after migrations.
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_appointments_user_id ON appointments(user_id);
+    CREATE INDEX IF NOT EXISTS idx_consultations_user_id ON consultations(user_id);
+  `);
 
   const fallbackOffice = db.prepare('SELECT id FROM offices ORDER BY display_order ASC, id ASC LIMIT 1').get();
   const defaultOfficeCountry = getConfigValue('settings_general_country', 'France');
