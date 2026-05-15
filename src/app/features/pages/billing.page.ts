@@ -25,6 +25,7 @@ import {
 import { AuthService } from '../../core/auth.service';
 import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 import { PdfBuilderService } from '../../core/pdf-builder.service';
+import { DateRangePickerComponent, DateRangeValue } from '../../shared/date-range-picker/date-range-picker.component';
 
 type ExportHistoryItem = {
   id: string;
@@ -51,7 +52,7 @@ type DepositCandidateGroup = {
 
 @Component({
   selector: 'app-billing-page',
-  imports: [DatePipe, RouterLink, BsTooltipDirective],
+  imports: [DatePipe, RouterLink, BsTooltipDirective, DateRangePickerComponent],
   templateUrl: './billing.page.html',
   styleUrl: './billing.page.scss',
   host: {
@@ -612,39 +613,11 @@ export class BillingPage implements OnDestroy {
     }
   }
 
-  async applyPreset(preset: 'today' | 'yesterday' | 'month' | 'lastMonth' | 'year' | 'lastYear'): Promise<void> {
-    const now = new Date();
-    let from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    let to = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    if (preset === 'yesterday') {
-      from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-      to = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  async onDateRangeChange(range?: DateRangeValue): Promise<void> {
+    if (range) {
+      this.fromDate.set(range.from);
+      this.toDate.set(range.to);
     }
-    if (preset === 'month') {
-      from = new Date(now.getFullYear(), now.getMonth(), 1);
-      to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    }
-    if (preset === 'lastMonth') {
-      from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      to = new Date(now.getFullYear(), now.getMonth(), 0);
-    }
-    if (preset === 'year') {
-      from = new Date(now.getFullYear(), 0, 1);
-      to = new Date(now.getFullYear(), 11, 31);
-    }
-    if (preset === 'lastYear') {
-      from = new Date(now.getFullYear() - 1, 0, 1);
-      to = new Date(now.getFullYear() - 1, 11, 31);
-    }
-
-    this.fromDate.set(this.toDateInputValue(from));
-    this.toDate.set(this.toDateInputValue(to));
-    this.debtorPage.set(1);
-    await this.load();
-  }
-
-  async onDateRangeChange(): Promise<void> {
     this.debtorPage.set(1);
     await this.load();
   }

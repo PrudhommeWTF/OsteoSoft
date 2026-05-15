@@ -5,32 +5,148 @@
   </div>
 </ng-template>
 
-<div class="os-datepicker-wrapper">
-  <input
-    [id]="id"
-    type="text"
-    class="form-control os-dp-input"
-    [formControl]="internalControl"
-    [placeholder]="placeholder"
-    [autocomplete]="autocomplete"
-    [maxDate]="maxDate!"
-    [minDate]="minDate!"
-    [startDate]="today"
-    [footerTemplate]="footerTpl"
-    ngbDatepicker
-    #dpRef="ngbDatepicker"
-    (blur)="onBlur()"
-  />
-  <button
-    type="button"
-    class="os-dp-toggle"
-    (click)="dpRef.toggle()"
-    tabindex="-1"
-    aria-label="Ouvrir le calendrier"
-    [disabled]="isDisabled()"
-  >
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4z"/>
-    </svg>
-  </button>
-</div>
+<!-- ── date mode (NgbInputDatepicker) ──────────────────────────────────────── -->
+@if (mode === 'date') {
+  <div class="os-datepicker-wrapper">
+    <input
+      [id]="id"
+      type="text"
+      class="form-control os-dp-input"
+      [formControl]="internalControl"
+      [placeholder]="computedPlaceholder"
+      [autocomplete]="autocomplete"
+      [maxDate]="maxDate!"
+      [minDate]="minDate!"
+      [startDate]="today"
+      [footerTemplate]="footerTpl"
+      ngbDatepicker
+      #dpRef="ngbDatepicker"
+      (blur)="onBlur()"
+    />
+    <button
+      type="button"
+      class="os-dp-toggle"
+      (click)="dpRef.toggle()"
+      tabindex="-1"
+      aria-label="Ouvrir le calendrier"
+      [disabled]="isDisabled()"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4z"/>
+      </svg>
+    </button>
+  </div>
+}
+
+<!-- ── month mode ──────────────────────────────────────────────────────────── -->
+@if (mode === 'month') {
+  <div class="os-datepicker-wrapper">
+    <input
+      [id]="id"
+      type="text"
+      class="form-control os-dp-input"
+      readonly
+      [value]="displayValue()"
+      [placeholder]="computedPlaceholder"
+      (click)="togglePanel()"
+      (blur)="onBlur()"
+    />
+    <button
+      type="button"
+      class="os-dp-toggle"
+      (click)="togglePanel()"
+      tabindex="-1"
+      aria-label="Ouvrir le sélecteur de mois"
+      [disabled]="isDisabled()"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4z"/>
+      </svg>
+    </button>
+    @if (isPanelOpen()) {
+      <div class="os-dp-panel">
+        <div class="os-dp-panel-nav">
+          <button type="button" class="os-dp-nav-btn" (click)="prevYear()" aria-label="Année précédente">
+            <svg width="10" height="10" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7,1 1,7 7,13"/></svg>
+          </button>
+          <span class="os-dp-nav-label">{{ panelYear() }}</span>
+          <button type="button" class="os-dp-nav-btn" (click)="nextYear()" aria-label="Année suivante">
+            <svg width="10" height="10" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1,1 7,7 1,13"/></svg>
+          </button>
+        </div>
+        <div class="os-dp-grid os-dp-months-grid">
+          @for (m of months; track m.value) {
+            <button
+              type="button"
+              class="os-dp-cell"
+              [class.os-dp-cell--selected]="isMonthSelected(m.value)"
+              [class.os-dp-cell--today]="isCurrentMonth(m.value)"
+              (click)="selectMonth(m.value)"
+            >{{ m.label }}</button>
+          }
+        </div>
+        <div class="os-dp-footer">
+          <button type="button" class="os-dp-btn-today" (click)="selectCurrentMonth()">Ce mois</button>
+          <button type="button" class="os-dp-btn-clear" (click)="clearValue()">Effacer</button>
+        </div>
+      </div>
+    }
+  </div>
+}
+
+<!-- ── year mode ───────────────────────────────────────────────────────────── -->
+@if (mode === 'year') {
+  <div class="os-datepicker-wrapper">
+    <input
+      [id]="id"
+      type="text"
+      class="form-control os-dp-input"
+      readonly
+      [value]="displayValue()"
+      [placeholder]="computedPlaceholder"
+      (click)="togglePanel()"
+      (blur)="onBlur()"
+    />
+    <button
+      type="button"
+      class="os-dp-toggle"
+      (click)="togglePanel()"
+      tabindex="-1"
+      aria-label="Ouvrir le sélecteur d'année"
+      [disabled]="isDisabled()"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4z"/>
+      </svg>
+    </button>
+    @if (isPanelOpen()) {
+      <div class="os-dp-panel">
+        <div class="os-dp-panel-nav">
+          <button type="button" class="os-dp-nav-btn" (click)="prevYearRange()" aria-label="Plage d'années précédente">
+            <svg width="10" height="10" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7,1 1,7 7,13"/></svg>
+          </button>
+          <span class="os-dp-nav-label">{{ yearRangeLabel() }}</span>
+          <button type="button" class="os-dp-nav-btn" (click)="nextYearRange()" aria-label="Plage d'années suivante">
+            <svg width="10" height="10" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1,1 7,7 1,13"/></svg>
+          </button>
+        </div>
+        <div class="os-dp-grid os-dp-years-grid">
+          @for (year of visibleYears(); track year) {
+            <button
+              type="button"
+              class="os-dp-cell"
+              [class.os-dp-cell--selected]="isYearSelected(year)"
+              [class.os-dp-cell--today]="isCurrentYear(year)"
+              (click)="selectYear(year)"
+            >{{ year }}</button>
+          }
+        </div>
+        <div class="os-dp-footer">
+          <button type="button" class="os-dp-btn-today" (click)="selectCurrentYear()">Cette année</button>
+          <button type="button" class="os-dp-btn-clear" (click)="clearValue()">Effacer</button>
+        </div>
+      </div>
+    }
+  </div>
+}
+

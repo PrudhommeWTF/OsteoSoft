@@ -1,0 +1,26 @@
+.os-drp-wrapper {
+  .os-drp-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .os-drp-preset-btn {
+    padding: 3px 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border: 1px solid var(--app-card-border);
+    border-radius: 20px;
+    background: var(--app-card-bg);
+    color: var(--app-text);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+
+    &:hover {
+      border-color: var(--bs-primary);
+      color: var(--bs-primary);
+      background: rgba(77, 146, 209, 0.08);
+    }
+  }
+}
