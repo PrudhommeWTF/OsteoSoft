@@ -10153,7 +10153,9 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
     const tempPasswords = {};
     const userLoginToUsername = new Map(); // WebOsteo login -> OsteoSoft username
     const weoPatientIdToOsteoId = new Map(); // WebOsteo patient.id -> OsteoSoft patients.id
+    const weoPatientIdToFullName = new Map(); // WebOsteo patient.id -> full name (plain text)
     const weoConsultationIdToOsteoId = new Map(); // WebOsteo consultation.id -> OsteoSoft consultations.id
+    const weoPaymentIdToOsteoInvoicePaymentId = new Map(); // WebOsteo paiement.id -> OsteoSoft invoice_payments.id
 
     let importedUsers = 0;
     let importedPatients = 0;
@@ -10161,6 +10163,8 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
     let importedAppointments = 0;
     let importedInvoices = 0;
     let importedContacts = 0;
+    let importedDeposits = 0;
+    let updatedRelatedPeople = 0;
 
     // ---- Remplacement des données du cabinet cible ----
     // Delete existing office data before importing so Webosteo data fully replaces it.
@@ -10205,7 +10209,12 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         // Their access rights are scoped to the target office through office_user_delegations,
         // not through the application-level 'admin' role.
         const role = 'practitioner';
-        const isActive = str(wu.enabled).toLowerCase() !== 'non' ? 1 : 0;
+        // Support multiple WebOsteo field names for active status:
+        // - 'enabled': 'oui'/'non' or '1'/'0'
+        // - 'actif': '1'/'0' or 'true'/'false'
+        const rawActive = wu.actif ?? wu.enabled ?? wu.is_active ?? wu.statut ?? null;
+        const rawActiveStr = str(rawActive).toLowerCase();
+        const isActive = (rawActiveStr === '0' || rawActiveStr === 'non' || rawActiveStr === 'false' || rawActiveStr === 'inactif') ? 0 : 1;
         const retro = num(wu.retro_defaut);
 
         const inserted = db.prepare(
@@ -10277,6 +10286,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
             const existingName = decryptSensitiveField(er.cipher_full_name);
             if (existingName.trim().toLowerCase() === fullName.toLowerCase()) {
               weoPatientIdToOsteoId.set(pid, Number(er.id));
+              weoPatientIdToFullName.set(pid, existingName.trim());
               duplicate = true;
               break;
             }
@@ -10337,6 +10347,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
 
         const newOsteoId = Number(inserted.lastInsertRowid);
         weoPatientIdToOsteoId.set(pid, newOsteoId);
+        weoPatientIdToFullName.set(pid, fullName);
         importedPatients += 1;
       } catch (err) {
         errors.push({ entity: 'patient', message: `ID ${str(wp.id)}: ${err instanceof Error ? err.message : 'Erreur'}` });
@@ -10614,7 +10625,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
           if (!paiement) continue;
           try {
             const paidAt = parseWeoDate(paiement.date_paiement) ?? issuedAt;
-            db.prepare(
+            const ipInserted = db.prepare(
               `INSERT INTO invoice_payments (invoice_id, paid_at, amount_cents, currency, payment_method, bank_name_cipher, cheque_number, reference, notes)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
             ).run(
@@ -10628,6 +10639,10 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
               str(paiement.reference),
               str(paiement.commentaire) || str(paiement.libelle)
             );
+            const weoPaiementId = str(paiement.id);
+            if (weoPaiementId && !weoPaymentIdToOsteoInvoicePaymentId.has(weoPaiementId)) {
+              weoPaymentIdToOsteoInvoicePaymentId.set(weoPaiementId, Number(ipInserted.lastInsertRowid));
+            }
           } catch { /* ignore payment errors */ }
         }
 
@@ -10693,6 +10708,158 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
       }
     }
 
+    // ---- Liens de parenté ----
+    // Map WebOsteo family/kinship relationships to OsteoSoft relatedPeople field.
+    // Try common WebOsteo column name variations defensively.
+    let weoLiensParente = [];
+    try { weoLiensParente = weoDb.prepare('SELECT * FROM lien_parente').all(); } catch { /* table may not exist */ }
+
+    if (weoLiensParente.length > 0) {
+      // relatedPeopleByOsteoId: osteoPatientId -> Set of related full names
+      const relatedPeopleByOsteoId = new Map();
+      const addRelated = (osteoId, relatedName) => {
+        if (!relatedPeopleByOsteoId.has(osteoId)) relatedPeopleByOsteoId.set(osteoId, new Set());
+        relatedPeopleByOsteoId.get(osteoId).add(relatedName);
+      };
+
+      for (const lp of weoLiensParente) {
+        try {
+          // Support multiple possible column name conventions
+          const pid1 = str(lp.patient ?? lp.patient1 ?? lp.id_patient ?? lp.patient_id ?? '');
+          const pid2 = str(lp.patient_lie ?? lp.patient2 ?? lp.id_patient_lie ?? lp.patient_lie_id ?? '');
+          if (!pid1 || !pid2 || pid1 === pid2) continue;
+
+          const osteoId1 = weoPatientIdToOsteoId.get(pid1);
+          const osteoId2 = weoPatientIdToOsteoId.get(pid2);
+          const name1 = weoPatientIdToFullName.get(pid1);
+          const name2 = weoPatientIdToFullName.get(pid2);
+
+          if (osteoId1 && name2) addRelated(osteoId1, name2);
+          if (osteoId2 && name1) addRelated(osteoId2, name1);
+        } catch (err) {
+          errors.push({ entity: 'lien_parente', message: err instanceof Error ? err.message : 'Erreur' });
+        }
+      }
+
+      // Update cipher_medical_notes for each affected patient
+      for (const [osteoId, relatedNames] of relatedPeopleByOsteoId) {
+        try {
+          const row = db.prepare('SELECT cipher_medical_notes FROM patients WHERE id = ?').get(osteoId);
+          if (!row) continue;
+          const notes = JSON.parse(decryptSensitiveField(row.cipher_medical_notes));
+          notes.relatedPeople = formatRelatedPeople([...relatedNames]);
+          db.prepare('UPDATE patients SET cipher_medical_notes = ? WHERE id = ?')
+            .run(encryptSensitiveField(JSON.stringify(notes)), osteoId);
+          updatedRelatedPeople += 1;
+        } catch { /* ignore individual update errors */ }
+      }
+    }
+
+    // ---- Remises bancaires (comptabilité) ----
+    // WebOsteo may store bank deposit remittances (cheques, especes) in various table names.
+    // Try the most common ones and import into accounting_deposits + accounting_deposit_items.
+    let weoRemises = [];
+    let weoRemisePaiements = [];
+    let weoRemiseTableFound = false;
+
+    // Try known WebOsteo table names for bank deposit remittances
+    const remiseCandidates = ['encaissement', 'remise_bancaire', 'remise', 'depot_banque'];
+    const remisePaiementCandidates = ['encaissement_paiement', 'remise_bancaire_paiement', 'remise_paiement', 'depot_banque_paiement'];
+
+    for (let i = 0; i < remiseCandidates.length; i++) {
+      try {
+        const rows = weoDb.prepare(`SELECT * FROM ${remiseCandidates[i]}`).all();
+        weoRemises = rows;
+        // Try to find associated payments junction table
+        try {
+          weoRemisePaiements = weoDb.prepare(`SELECT * FROM ${remisePaiementCandidates[i]}`).all();
+        } catch { /* junction table may not exist for this variant */ }
+        weoRemiseTableFound = true;
+        break;
+      } catch { /* table not found, try next */ }
+    }
+
+    if (weoRemiseTableFound && weoRemises.length > 0) {
+      // Build map: weoRemiseId -> list of weo paiement ids
+      const paiementIdsByRemise = new Map();
+      for (const rp of weoRemisePaiements) {
+        // Support common column name variations
+        const remiseId = str(rp.id_encaissement ?? rp.id_remise ?? rp.id_depot ?? rp.encaissement_id ?? rp.remise_id ?? '');
+        const paiementId = str(rp.id_paiement ?? rp.paiement_id ?? '');
+        if (!remiseId || !paiementId) continue;
+        if (!paiementIdsByRemise.has(remiseId)) paiementIdsByRemise.set(remiseId, []);
+        paiementIdsByRemise.get(remiseId).push(paiementId);
+      }
+
+      const mapRemiseType = (raw) => {
+        const v = str(raw).toLowerCase();
+        if (v.includes('cheque') || v.includes('chèque') || v === 'ch') return 'cheque';
+        if (v.includes('espece') || v.includes('espèce') || v.includes('cash') || v === 'es') return 'especes';
+        return v || 'cheque';
+      };
+
+      for (const wr of weoRemises) {
+        try {
+          // Support common column name variations across WebOsteo versions
+          const weoRemiseId = str(wr.id ?? '');
+          const occurredRaw = wr.date_remise ?? wr.date_encaissement ?? wr.date_depot ?? wr.date ?? null;
+          const occurredAt = parseWeoDate(occurredRaw);
+          if (!occurredAt) continue;
+
+          const type = mapRemiseType(wr.type_remise ?? wr.type_encaissement ?? wr.type ?? wr.mode ?? '');
+          const rawBanque = str(wr.banque ?? wr.etablissement ?? wr.bank ?? '');
+          const amountCents = Math.round(num(wr.montant ?? wr.montant_total ?? wr.amount ?? 0) * 100);
+          const reference = str(wr.reference ?? wr.code ?? wr.ref ?? '');
+          const notes = str(wr.commentaire ?? wr.libelle ?? wr.notes ?? '');
+          const title = type === 'especes' ? 'Remise d\'especes' : 'Remise de cheques';
+
+          // Resolve owner user if createdby field is present
+          const createdByLogin = str(wr.createdby ?? wr.utilisateur ?? wr.login ?? '');
+          const ownerUser = createdByLogin
+            ? db.prepare('SELECT id FROM users WHERE username = ?').get(createdByLogin)
+            : null;
+          const ownerUserId = ownerUser ? ownerUser.id : null;
+
+          const depositResult = db.prepare(
+            `INSERT INTO accounting_deposits (occurred_at, office_id, owner_user_id, type, deposit_code, bank_name_cipher, account_label, title, amount_cents, currency, notes, retrocession_percent, retrocession_recipient, is_deleted, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ).run(
+            `${occurredAt}T10:00:00.000Z`,
+            officeId,
+            ownerUserId,
+            type,
+            reference || `WEO-${weoRemiseId}`,
+            rawBanque ? encryptSensitiveField(rawBanque) : '',
+            '',
+            title,
+            amountCents,
+            'EUR',
+            notes,
+            0,
+            '',
+            0,
+            ownerUserId
+          );
+          const depositId = Number(depositResult.lastInsertRowid);
+          importedDeposits += 1;
+
+          // Link associated payments as deposit items
+          const linkedPaiementIds = paiementIdsByRemise.get(weoRemiseId) ?? [];
+          for (const weoPaiementId of linkedPaiementIds) {
+            const osteoIpId = weoPaymentIdToOsteoInvoicePaymentId.get(weoPaiementId);
+            if (!osteoIpId) continue;
+            try {
+              db.prepare(
+                `INSERT OR IGNORE INTO accounting_deposit_items (deposit_id, source_type, source_id, created_at) VALUES (?, ?, ?, ?)`
+              ).run(depositId, 'invoice_payment', osteoIpId, new Date().toISOString());
+            } catch { /* ignore duplicate / FK errors */ }
+          }
+        } catch (err) {
+          errors.push({ entity: 'remise', message: `ID ${str(wr.id ?? '')}: ${err instanceof Error ? err.message : 'Erreur'}` });
+        }
+      }
+    }
+
     writeAuditLog(req.user.sub, 'IMPORT', 'data-management-webosteo', String(officeId), {
       importedUsers,
       importedPatients,
@@ -10700,6 +10867,8 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
       importedAppointments,
       importedInvoices,
       importedContacts,
+      importedDeposits,
+      updatedRelatedPeople,
       errorCount: errors.length
     });
 
@@ -10710,6 +10879,8 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
       importedAppointments,
       importedInvoices,
       importedContacts,
+      importedDeposits,
+      updatedRelatedPeople,
       errors: errors.slice(0, 100),
       tempPasswords
     });
