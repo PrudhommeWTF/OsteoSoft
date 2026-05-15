@@ -303,7 +303,7 @@
                   <p class="text-secondary small mb-0">Aucun détail disponible.</p>
                 } @else {
                   @for (section of entry.sections; track section.label) {
-                    <p class="fw-semibold small mb-1 mt-2">{{ section.label }}</p>
+                    <h5 class="fw-semibold small mb-1 mt-2">{{ section.label }}</h5>
                     <ul class="mb-0 ps-3">
                       @for (item of section.items; track item) {
                         <li class="small">{{ item }}</li>

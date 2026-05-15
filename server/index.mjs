@@ -7608,7 +7608,7 @@ app.get('/api/changelog', publicEndpointLimiter, (_req, res) => {
   for (const block of versionBlocks.slice(0, 10)) {
     const lines = block.split('\n');
     const headerLine = lines[0] ?? '';
-    const versionMatch = headerLine.match(/\[([^\]]+)\]/);
+    const versionMatch = headerLine.match(/\[([^\]]+)\]/) ?? headerLine.match(/^(\d[\d.]+)/);
     const dateMatch = headerLine.match(/\d{4}-\d{2}-\d{2}/);
 
     if (!versionMatch) {
@@ -7629,9 +7629,11 @@ app.get('/api/changelog', publicEndpointLimiter, (_req, res) => {
         continue;
       }
 
-      const itemMatch = line.match(/^- (.+)/);
+      const itemMatch = line.match(/^[*-] (.+)/);
       if (itemMatch && currentSection) {
-        currentSection.items.push(itemMatch[1]);
+        // Strip markdown link references like ([e935691](https://...)) and ([#9](https://...))
+        const text = itemMatch[1].replace(/\s*\(\[[^\]]*\]\(https?:\/\/[^)]+\)\)/g, '').trim();
+        currentSection.items.push(text);
       }
     }
 
