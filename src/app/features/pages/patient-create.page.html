@@ -634,22 +634,12 @@
 
           <div class="mb-3">
             <label class="form-label" for="antecedentDateInput">Date</label>
-            @if (antecedentDatePrecision() === 'date') {
-              <app-date-picker
-                id="antecedentDateInput"
-                [formControl]="antecedentDateCtrl"
-                [maxDate]="todayNgbDate"
-              />
-            } @else {
-              <input
-                id="antecedentDateInput"
-                type="text"
-                class="form-control"
-                [placeholder]="antecedentDatePrecision() === 'month' ? 'mm/aaaa' : 'aaaa'"
-                [value]="antecedentDateDisplay()"
-                (input)="setAntecedentDateDisplay($any($event.target).value)" />
-              <div class="form-text">Saisie manuelle au format indiqué dans le placeholder.</div>
-            }
+            <app-date-picker
+              id="antecedentDateInput"
+              [formControl]="antecedentDateCtrl"
+              [mode]="antecedentDatePrecision()"
+              [maxDate]="antecedentDatePrecision() === 'date' ? todayNgbDate : undefined"
+            />
           </div>
 
           <div class="mb-3">

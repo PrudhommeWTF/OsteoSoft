@@ -1,0 +1,19 @@
+<div class="os-drp-wrapper">
+  <div class="row g-2">
+    <div class="col-12 col-sm-6">
+      <label class="form-label mb-1 fw-semibold">Du</label>
+      <app-date-picker [formControl]="fromCtrl" />
+    </div>
+    <div class="col-12 col-sm-6">
+      <label class="form-label mb-1 fw-semibold">Au</label>
+      <app-date-picker [formControl]="toCtrl" />
+    </div>
+  </div>
+  <div class="os-drp-presets">
+    @for (preset of presets; track preset.id) {
+      <button type="button" class="os-drp-preset-btn" (click)="applyPreset(preset.id)">
+        {{ preset.label }}
+      </button>
+    }
+  </div>
+</div>

@@ -35,4 +35,93 @@
       opacity: 0.5;
     }
   }
+
+  /* ── Custom dropdown panel (month / year modes) ── */
+  .os-dp-panel {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 220px;
+    background: var(--app-card-bg);
+    border: 1px solid var(--app-card-border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    z-index: 1200;
+    overflow: hidden;
+
+    .os-dp-panel-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--app-card-border);
+      background: var(--app-card-bg);
+
+      .os-dp-nav-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--bs-primary);
+        padding: 4px 8px;
+        border-radius: 4px;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        transition: background 0.12s;
+
+        &:hover {
+          background: rgba(77, 146, 209, 0.12);
+        }
+      }
+
+      .os-dp-nav-label {
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: var(--app-text);
+      }
+    }
+
+    .os-dp-grid {
+      display: grid;
+      gap: 2px;
+      padding: 8px;
+
+      &.os-dp-months-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+
+      &.os-dp-years-grid {
+        grid-template-columns: repeat(4, 1fr);
+      }
+    }
+
+    .os-dp-cell {
+      padding: 6px 4px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      border-radius: 5px;
+      border: 1.5px solid transparent;
+      background: transparent;
+      color: var(--app-text);
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.12s, border-color 0.12s;
+
+      &:hover {
+        background: rgba(77, 146, 209, 0.15);
+      }
+
+      &.os-dp-cell--selected {
+        background: var(--bs-primary) !important;
+        color: #fff !important;
+        border-color: transparent;
+      }
+
+      &.os-dp-cell--today:not(.os-dp-cell--selected) {
+        border-color: var(--bs-primary);
+        color: var(--bs-primary);
+        font-weight: 700;
+      }
+    }
+  }
 }

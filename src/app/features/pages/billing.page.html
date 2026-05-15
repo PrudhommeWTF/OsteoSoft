@@ -548,16 +548,13 @@
 
 <section class="card mb-3">
   <div class="card-body">
-    <div class="row g-2 align-items-end">
-      <div class="col-12 col-md-3">
-        <label class="form-label mb-1">Du</label>
-        <input type="date" class="form-control" [value]="fromDate()" (change)="fromDate.set($any($event.target).value || ''); onDateRangeChange()" />
-      </div>
-      <div class="col-12 col-md-3">
-        <label class="form-label mb-1">Au</label>
-        <input type="date" class="form-control" [value]="toDate()" (change)="toDate.set($any($event.target).value || ''); onDateRangeChange()" />
-      </div>
-      <div class="col-12 col-md-3">
+    <app-date-range-picker
+      [from]="fromDate()"
+      [to]="toDate()"
+      (rangeChange)="onDateRangeChange($event)"
+    />
+    <div class="row g-2 align-items-end mt-2">
+      <div class="col-12 col-md-6">
         <label class="form-label mb-1">Cabinet</label>
         <select class="form-select" [value]="selectedOfficeId() ?? ''" (change)="onOfficeChange($any($event.target).value)">
           <option value="">Tous les cabinets</option>
@@ -566,7 +563,7 @@
           }
         </select>
       </div>
-      <div class="col-12 col-md-3">
+      <div class="col-12 col-md-6">
         <label class="form-label mb-1">Utilisateur</label>
         <select class="form-select" [value]="selectedUserId() ?? ''" (change)="onUserChange($any($event.target).value)">
           <option value="">Tous les utilisateurs</option>
@@ -575,15 +572,6 @@
           }
         </select>
       </div>
-    </div>
-
-    <div class="d-flex flex-wrap gap-2 mt-3">
-      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('today')" title="Filtrer par aujourd'hui" bsTooltip>Aujourd'hui</button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('yesterday')" title="Filtrer par hier" bsTooltip>Hier</button>
-      <button type="button" class="btn btn-outline-primary btn-sm" (click)="applyPreset('month')" title="Filtrer par aujourd'hui" bsTooltip>Ce mois-ci</button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('lastMonth')" title="Filtrer le mois dernier" bsTooltip>Le mois dernier</button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('year')" title="Filtrer par aujourd'hui" bsTooltip>Cette année</button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyPreset('lastYear')" title="Filtrer l'année dernière" bsTooltip>L'année dernière</button>
     </div>
   </div>
 </section>
