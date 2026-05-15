@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OsteoSoft — Cabinet Management Software</title>
+    <meta
+      name="description"
+      content="OsteoSoft is a practice management software for healthcare professionals: patients, scheduling, billing, security and GDPR compliance."
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
+      crossorigin="anonymous"
+    />
+    <style>
+      .hero {
+        background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+      }
+      [data-lang] {
+        display: none;
+      }
+      [data-lang].is-active {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="hero text-white py-4">
+      <div class="container py-4">
+        <div class="d-flex justify-content-end mb-3 gap-2">
+          <button id="lang-fr" type="button" class="btn btn-sm btn-light">FR</button>
+          <button id="lang-en" type="button" class="btn btn-sm btn-outline-light">EN</button>
+        </div>
+
+        <div data-lang="fr" class="is-active">
+          <span class="badge text-bg-light text-primary mb-3">OsteoSoft</span>
+          <h1 class="display-5 fw-bold">Le logiciel de gestion de cabinet pensé pour les praticiens.</h1>
+          <p class="lead col-lg-9">
+            Centralisez votre activité: suivi patient, agenda, facturation, statistiques, sécurité des données et conformité RGPD.
+          </p>
+          <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-light btn-lg" href="https://github.com/PrudhommeWTF/OsteoSoft">Voir le projet</a>
+            <a class="btn btn-outline-light btn-lg" href="https://github.com/PrudhommeWTF/OsteoSoft/blob/main/README.md"
+              >Documentation</a
+            >
+          </div>
+        </div>
+
+        <div data-lang="en">
+          <span class="badge text-bg-light text-primary mb-3">OsteoSoft</span>
+          <h1 class="display-5 fw-bold">Practice management software built for healthcare professionals.</h1>
+          <p class="lead col-lg-9">
+            Manage patients, scheduling, billing, analytics, and sensitive data protection in one secure web platform.
+          </p>
+          <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-light btn-lg" href="https://github.com/PrudhommeWTF/OsteoSoft">View project</a>
+            <a class="btn btn-outline-light btn-lg" href="https://github.com/PrudhommeWTF/OsteoSoft/blob/main/README.md"
+              >Documentation</a
+            >
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div data-lang="fr" class="is-active">
+        <section class="py-5">
+          <div class="container">
+            <div class="row g-4">
+              <div class="col-md-4">
+                <div class="card h-100 shadow-sm">
+                  <div class="card-body">
+                    <h2 class="h5">Gestion patient complète</h2>
+                    <p class="mb-0">
+                      Dossier patient, consultations, documents, consentement RGPD et anonymisation intégrée.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="card h-100 shadow-sm">
+                  <div class="card-body">
+                    <h2 class="h5">Agenda & facturation</h2>
+                    <p class="mb-0">
+                      Pilotage des rendez-vous, paiements, exports, dépôts comptables et suivi des impayés.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="card h-100 shadow-sm">
+                  <div class="card-body">
+                    <h2 class="h5">Sécurité de niveau pro</h2>
+                    <p class="mb-0">
+                      Contrôle d’accès granulaire, chiffrement des données sensibles et mécanismes anti-abus API.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-light py-5">
+          <div class="container">
+            <h2 class="h3 mb-4">Dernières évolutions</h2>
+            <ul class="list-group">
+              <li class="list-group-item">Import WebOsteo renforcé avec meilleure récupération des données.</li>
+              <li class="list-group-item">Améliorations RGPD: consentement, rétention et anonymisation automatiques.</li>
+              <li class="list-group-item">Refonte de la génération PDF et personnalisation des templates.</li>
+              <li class="list-group-item">Améliorations UX: date picker, dashboard, outil d’aide et interfaces modernisées.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="py-5">
+          <div class="container">
+            <div class="p-4 p-lg-5 bg-primary text-white rounded-3">
+              <h2 class="h3">Contact & demande de démo</h2>
+              <p class="mb-4">
+                Vous souhaitez une présentation du produit ou échanger sur un besoin métier ? Ouvrez une demande depuis le dépôt.
+              </p>
+              <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-light" href="https://github.com/PrudhommeWTF/OsteoSoft/issues/new"
+                  >Demander une démo</a
+                >
+                <a class="btn btn-outline-light" href="https://github.com/PrudhommeWTF/OsteoSoft/issues"
+                  >Contacter l'équipe</a
+                >
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div data-lang="en">
+        <section class="py-5">
+          <div class="container">
+            <div class="row g-4">
+              <div class="col-md-4">
+                <div class="card h-100 shadow-sm">
+                  <div class="card-body">
+                    <h2 class="h5">Complete patient records</h2>
+                    <p class="mb-0">
+                      Patient files, consultation tracking, documents, GDPR consent and anonymization workflow.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="card h-100 shadow-sm">
+                  <div class="card-body">
+                    <h2 class="h5">Scheduling & billing</h2>
+                    <p class="mb-0">
+                      Appointments, payments, exports, accounting deposits and overdue invoice follow-up.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="card h-100 shadow-sm">
+                  <div class="card-body">
+                    <h2 class="h5">Professional-grade security</h2>
+                    <p class="mb-0">
+                      Granular access control, sensitive data encryption and API abuse-protection mechanisms.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-light py-5">
+          <div class="container">
+            <h2 class="h3 mb-4">Latest updates</h2>
+            <ul class="list-group">
+              <li class="list-group-item">Enhanced WebOsteo import with stronger data recovery.</li>
+              <li class="list-group-item">Improved GDPR workflows: consent, retention and automatic anonymization.</li>
+              <li class="list-group-item">PDF generation refactor with customizable templates.</li>
+              <li class="list-group-item">UX updates: modern date picker, richer dashboard and help center enhancements.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="py-5">
+          <div class="container">
+            <div class="p-4 p-lg-5 bg-primary text-white rounded-3">
+              <h2 class="h3">Contact & demo request</h2>
+              <p class="mb-4">
+                Need a product walkthrough or want to discuss your practice requirements? Open a request from the repository.
+              </p>
+              <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-light" href="https://github.com/PrudhommeWTF/OsteoSoft/issues/new">Request a demo</a>
+                <a class="btn btn-outline-light" href="https://github.com/PrudhommeWTF/OsteoSoft/issues">Contact team</a>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <footer class="py-4 border-top">
+      <div class="container d-flex flex-wrap justify-content-between gap-2">
+        <span class="text-body-secondary">© OsteoSoft</span>
+        <a class="text-decoration-none" href="https://github.com/PrudhommeWTF/OsteoSoft">GitHub</a>
+      </div>
+    </footer>
+    <script>
+      (() => {
+        const frBtn = document.getElementById("lang-fr");
+        const enBtn = document.getElementById("lang-en");
+        const blocks = document.querySelectorAll("[data-lang]");
+        const setLang = (lang) => {
+          blocks.forEach((block) => {
+            block.classList.toggle("is-active", block.getAttribute("data-lang") === lang);
+          });
+          frBtn.classList.toggle("btn-light", lang === "fr");
+          frBtn.classList.toggle("btn-outline-light", lang !== "fr");
+          enBtn.classList.toggle("btn-light", lang === "en");
+          enBtn.classList.toggle("btn-outline-light", lang !== "en");
+          document.documentElement.lang = lang;
+        };
+        frBtn.addEventListener("click", () => setLang("fr"));
+        enBtn.addEventListener("click", () => setLang("en"));
+      })();
+    </script>
+  </body>
+</html>

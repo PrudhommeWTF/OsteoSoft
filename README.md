@@ -1,43 +1,54 @@
 # OsteoSoft
 
-OsteoSoft est une application web de gestion de cabinet (orientation ostéopathie et professions de soin) qui centralise le suivi patient, l'agenda, la facturation, les statistiques, le répertoire de contacts et l'administration du cabinet.
+OsteoSoft est une application web de gestion de cabinet (ostéopathie et professions de soin) qui centralise le suivi patient, l’agenda, la facturation, les statistiques, le répertoire de contacts et l’administration.
 
 Le projet est composé de:
 - un frontend Angular (SPA) dans `src/`
 - une API Node.js/Express dans `server/index.mjs`
 - une base SQLite locale (`server/data/osteo.db`)
 
+## Dernières mises à jour (v0.1.0)
+
+Basé sur le changelog du `2026-05-15`, les évolutions majeures récentes incluent:
+
+- Import WebOsteo amélioré (patients, consultations, paiements) + endpoint/API dédiés
+- Renforcement RGPD (consentement, anonymisation, rétention automatique)
+- Sécurité renforcée (chiffrement étendu des données sensibles, rate limiting, hardening API)
+- Refonte de la génération PDF via `PdfBuilderService` et personnalisation des templates
+- Améliorations UI/UX (date picker modernisé, tooltips Bootstrap, dashboard enrichi)
+- Remplacement de `xlsx` par `exceljs`
+- Versioning applicatif avec changelog et endpoint `/api/changelog`
+
+## Site vitrine statique (Bootstrap) hébergé sur GitHub Pages
+
+Un site vitrine commercial statique est disponible dans `docs/`:
+
+- Fichier principal: `docs/index.html`
+- Framework CSS: Bootstrap 5 (CDN)
+- Version bilingue: FR/EN avec bascule intégrée
+- Section commerciale: Contact / Demande de démo
+- URL de publication attendue: `https://prudhommewtf.github.io/OsteoSoft/`
+
+Le déploiement GitHub Pages est automatisé via workflow (`.github/workflows/deploy-pages.yml`).
+
 ## Fonctionnalités principales
 
 - Installation guidée au premier démarrage (création du cabinet ou restauration)
 - Authentification et gestion de session utilisateur
 - Gestion avancée des droits d'accès (profils, permissions fines par module)
-- Tableau de bord d'accueil
-- Agenda des rendez-vous
-- Gestion des patients (liste, création, fiche détaillée)
-- Dossier patient avec sections de consultation et documents
-- Facturation (suivi, paiements, opérations associées)
-- Statistiques et indicateurs d'activité
-- Répertoire (contacts professionnels, annuaire interne)
-- Espace aide intégré
+- Agenda des rendez-vous et gestion patient complète
+- Facturation, paiements, exports et indicateurs d’activité
+- Répertoire de contacts et espace aide intégré
 - Paramétrage global du cabinet et administration
-
-## Avantages concurrentiels
-
-- Confidentialité des données sensibles: chiffrement applicatif des champs critiques (ex: informations patients et notes), en plus des contrôles d'accès.
-- Contrôle d'accès granulaire: sécurisation par rôles et permissions par fonctionnalité (agenda, patients, facturation, statistiques, administration).
-- Sauvegarde/restauration robuste: format de sauvegarde structuré avec manifest, checksum d'intégrité, limites de volume et vérification de compatibilité de version.
-- Expérience de mise en route rapide: parcours d'installation intégré avec options de création initiale ou restauration des données.
-- Architecture full web simple à déployer: frontend Angular + API Node.js + SQLite, adaptée aux environnements légers et aux installations progressives.
 
 ## Stack technique
 
 - Frontend: Angular 21, Bootstrap 5, Chart.js
 - Backend: Node.js, Express
 - Base de données: SQLite (`better-sqlite3`)
-- Sécurité: JWT, Argon2 (hash mots de passe), Helmet, rate limiting
+- Sécurité: JWT, Argon2, Helmet, rate limiting
 
-## Prerequis
+## Prérequis
 
 - Node.js 20+
 - npm 10+
@@ -69,9 +80,9 @@ NODE_ENV=development
 ```
 
 Variables utiles:
-- `ALLOW_REMOTE_SETUP=false` (recommandé par défaut)
-- `MAX_PATIENT_DOCUMENT_BYTES` (limite upload documents patient)
-- `MAX_BACKUP_RESTORE_PAYLOAD_BYTES` (limite restauration)
+- `ALLOW_REMOTE_SETUP=false`
+- `MAX_PATIENT_DOCUMENT_BYTES`
+- `MAX_BACKUP_RESTORE_PAYLOAD_BYTES`
 
 ## Lancement de l'application
 
@@ -81,7 +92,7 @@ Variables utiles:
 npm run start:full
 ```
 
-Ensuite:
+Puis:
 - Frontend: http://localhost:4200
 - API: http://localhost:4199
 
@@ -101,83 +112,47 @@ npm start
 
 ### Option C - Docker Compose
 
-Prérequis: Docker Desktop (macOS/Windows) ou Docker Engine + Compose plugin (Linux).
-
 ```bash
 docker compose up -d --build
 ```
 
-- Frontend: http://localhost:4200
-- API: http://localhost:4199
-
-Les données SQLite sont conservées dans le volume Docker `osteosoft_data` entre les redémarrages.
-
-Arrêter les conteneurs:
+Arrêt:
 
 ```bash
 docker compose down
 ```
 
-Arrêter et supprimer les données persistantes:
+Arrêt + suppression des données persistantes:
 
 ```bash
 docker compose down -v
 ```
 
-> Pour les details complets (logs, rebuild, variables d'environnement), voir [docs/INSTALLATION.md](docs/INSTALLATION.md).
+Voir le guide complet: [INSTALLATION.md](INSTALLATION.md).
 
 ## Scripts utiles
 
-- `npm start`: lance Angular en développement
-- `npm run start:api`: lance l'API backend
-- `npm run start:full`: lance frontend + API en parallèle
-- `npm run build`: build de production
-- `npm test`: tests unitaires headless
-- `npm run test:watch`: tests unitaires en mode watch
-- `npm run e2e:backup`: scénario e2e sauvegarde/restauration
-- `npm run e2e:rights`: scénario e2e droits d'accès
-- `npm run seed:directory`: injection jeu de données répertoire
-- `npm run seed:fakename`: génération/import de patients de test
-
-## Installation en production (recommandations)
-
-- Définir un `JWT_SECRET` fort et unique
-- Positionner `NODE_ENV=production`
-- Garder `ALLOW_REMOTE_SETUP=false` sauf besoin explicite
-- Placer l'application derrière un reverse proxy HTTPS (Nginx/Caddy)
-- Mettre en place une stratégie de sauvegardes régulières et tests de restauration
-
-## Build de production
-
-```bash
-npm run build
-```
-
-Les artefacts frontend sont générés dans `dist/`.
-
-## Qualité et tests
-
-- Tests unitaires via Angular/Karma
-- Scénarios e2e scripts pour points critiques:
-	- droits d'accès
-	- sauvegarde/restauration
+- `npm start`
+- `npm run start:api`
+- `npm run start:full`
+- `npm run build`
+- `npm test`
+- `npm run test:watch`
+- `npm run e2e:backup`
+- `npm run e2e:rights`
+- `npm run seed:directory`
+- `npm run seed:fakename`
 
 ## Structure du projet
 
 - `src/`: application Angular
-- `server/`: API Express et scripts techniques
+- `server/`: API Express
 - `server/data/`: base SQLite et données locales
-- `public/help/`: contenus d'aide statiques
-
-## Roadmap documentaire possible
-
-- Guide utilisateur (secrétaire/praticien/admin)
-- Politique de sauvegarde et reprise d'activité
-- Procédure de migration de version
-
----
+- `public/help/`: contenus d’aide statiques
+- `docs/`: site vitrine commercial GitHub Pages
 
 ## Documentation complémentaire
 
 - Guide d'installation complet: `INSTALLATION.md`
 - Déploiement Docker: `docker-compose.yml`
+- Historique des versions: `CHANGELOG.md`
