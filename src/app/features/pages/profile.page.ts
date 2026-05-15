@@ -166,7 +166,7 @@ export class ProfilePage {
     try {
       const [profile, preferences] = await Promise.all([
         this.api.getMyUserProfile(),
-        this.api.getMyAgendaPreferences()
+        this.api.getMyAgendaPreferences().catch(() => null)
       ]);
 
       this.lockedRole.set(profile.role || 'Inconnu');
@@ -205,7 +205,9 @@ export class ProfilePage {
         showConsultationHour: profile.showConsultationHour ?? true
       });
 
-      this.preferencesForm.reset(preferences);
+      if (preferences) {
+        this.preferencesForm.reset(preferences);
+      }
     } catch {
       this.error.set('Impossible de charger votre profil.');
     } finally {
