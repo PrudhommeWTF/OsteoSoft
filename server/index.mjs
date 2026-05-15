@@ -131,10 +131,6 @@ try {
     db.exec("ALTER TABLE accounting_deposits ADD COLUMN deposit_code TEXT NOT NULL DEFAULT ''");
     console.log('✓ Added deposit_code column to accounting_deposits');
   }
-  if (cols.length > 0 && !cols.includes('bank_name')) {
-    db.exec("ALTER TABLE accounting_deposits ADD COLUMN bank_name TEXT NOT NULL DEFAULT ''");
-    console.log('✓ Added bank_name column to accounting_deposits');
-  }
   if (cols.length > 0 && !cols.includes('account_label')) {
     db.exec("ALTER TABLE accounting_deposits ADD COLUMN account_label TEXT NOT NULL DEFAULT ''");
     console.log('✓ Added account_label column to accounting_deposits');
@@ -195,8 +191,6 @@ db.exec(`
     letter_footer TEXT NOT NULL DEFAULT '',
     signature_text TEXT NOT NULL DEFAULT '',
     color_hex TEXT NOT NULL DEFAULT '#4d92d1',
-    bank_name TEXT NOT NULL DEFAULT '',
-    iban TEXT NOT NULL DEFAULT '',
     bank_name_cipher TEXT NOT NULL DEFAULT '',
     iban_cipher TEXT NOT NULL DEFAULT '',
     retrocession_percent REAL NOT NULL DEFAULT 0,
@@ -229,6 +223,7 @@ db.exec(`
     birth_date TEXT,
     marital_status TEXT NOT NULL DEFAULT 'Non renseigne',
     children_count INTEGER NOT NULL DEFAULT 0,
+    office_id INTEGER,
     last_visit TEXT,
     consent_signed INTEGER NOT NULL DEFAULT 1,
     consent_signed_at TEXT,
@@ -237,7 +232,8 @@ db.exec(`
     retention_until TEXT,
     is_deleted INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE SET NULL
   );
 
   CREATE TABLE IF NOT EXISTS appointments (
@@ -250,13 +246,15 @@ db.exec(`
     local_calendar_id INTEGER,
     consultation_id INTEGER,
     practitioner TEXT NOT NULL DEFAULT '',
+    user_id INTEGER,
     is_private INTEGER NOT NULL DEFAULT 0,
     private_label_cipher TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(patient_id) REFERENCES patients(id),
     FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE SET NULL,
     FOREIGN KEY(local_calendar_id) REFERENCES local_calendars(id) ON DELETE SET NULL,
-    FOREIGN KEY(consultation_id) REFERENCES consultations(id) ON DELETE SET NULL
+    FOREIGN KEY(consultation_id) REFERENCES consultations(id) ON DELETE SET NULL,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
   );
 
   CREATE TABLE IF NOT EXISTS invoices (
@@ -296,7 +294,6 @@ db.exec(`
     amount_cents INTEGER NOT NULL,
     currency TEXT NOT NULL DEFAULT 'EUR',
     payment_method TEXT NOT NULL DEFAULT '',
-    bank_name TEXT NOT NULL DEFAULT '',
     bank_name_cipher TEXT NOT NULL DEFAULT '',
     cheque_number TEXT NOT NULL DEFAULT '',
     reference TEXT NOT NULL DEFAULT '',
@@ -316,7 +313,6 @@ db.exec(`
     remaining_cents INTEGER NOT NULL,
     currency TEXT NOT NULL DEFAULT 'EUR',
     payment_method TEXT NOT NULL DEFAULT '',
-    bank_name TEXT NOT NULL DEFAULT '',
     bank_name_cipher TEXT NOT NULL DEFAULT '',
     cheque_number TEXT NOT NULL DEFAULT '',
     reference TEXT NOT NULL DEFAULT '',
@@ -368,7 +364,6 @@ db.exec(`
     owner_user_id INTEGER,
     type TEXT NOT NULL DEFAULT 'cheque',
     deposit_code TEXT NOT NULL DEFAULT '',
-    bank_name TEXT NOT NULL DEFAULT '',
     bank_name_cipher TEXT NOT NULL DEFAULT '',
     account_label TEXT NOT NULL DEFAULT '',
     title TEXT NOT NULL,
@@ -573,6 +568,7 @@ db.exec(`
     started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     office_id INTEGER,
     practitioner TEXT NOT NULL DEFAULT '',
+    user_id INTEGER,
     title TEXT NOT NULL DEFAULT '',
     important INTEGER NOT NULL DEFAULT 0,
     height_cm REAL,
@@ -582,7 +578,8 @@ db.exec(`
     profile TEXT NOT NULL DEFAULT 'Adulte',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(patient_id) REFERENCES patients(id),
-    FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE SET NULL
+    FOREIGN KEY(office_id) REFERENCES offices(id) ON DELETE SET NULL,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
   );
 
   CREATE TABLE IF NOT EXISTS consultation_reason_items (
@@ -657,16 +654,20 @@ db.exec(`
 
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_users_office_id ON users(office_id);
+  CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active);
 
   CREATE INDEX IF NOT EXISTS idx_patients_is_deleted_last_visit ON patients(is_deleted, last_visit);
+  CREATE INDEX IF NOT EXISTS idx_patients_office_id ON patients(office_id, is_deleted);
 
   CREATE INDEX IF NOT EXISTS idx_appointments_patient_id ON appointments(patient_id);
   CREATE INDEX IF NOT EXISTS idx_appointments_office_starts_at ON appointments(office_id, starts_at);
   CREATE INDEX IF NOT EXISTS idx_appointments_calendar_starts_at ON appointments(local_calendar_id, starts_at);
   CREATE INDEX IF NOT EXISTS idx_appointments_consultation_id ON appointments(consultation_id);
+  CREATE INDEX IF NOT EXISTS idx_appointments_user_id ON appointments(user_id);
 
   CREATE INDEX IF NOT EXISTS idx_consultations_patient_started_at ON consultations(patient_id, started_at);
   CREATE INDEX IF NOT EXISTS idx_consultations_office_started_at ON consultations(office_id, started_at);
+  CREATE INDEX IF NOT EXISTS idx_consultations_user_id ON consultations(user_id);
   CREATE INDEX IF NOT EXISTS idx_consultation_reason_items_consultation_order ON consultation_reason_items(consultation_id, display_order);
   CREATE INDEX IF NOT EXISTS idx_consultation_sections_consultation_key ON consultation_sections(consultation_id, section_key);
 
@@ -698,6 +699,7 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
   CREATE INDEX IF NOT EXISTS idx_audit_logs_user_created_at ON audit_logs(user_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_id ON audit_logs(entity, entity_id, created_at);
 `);
 
 const rawDataKey = process.env.OSTEOSOFT_DATA_KEY;
@@ -988,7 +990,7 @@ const anonymizePatientTx = db.transaction((patientId) => {
 
   db.prepare(
     `UPDATE patient_payment_credits
-     SET bank_name = '', bank_name_cipher = '', cheque_number = '', reference = '', notes = ''
+     SET bank_name_cipher = '', cheque_number = '', reference = '', notes = ''
      WHERE patient_id = ?`
   ).run(patientId);
 
@@ -2922,13 +2924,13 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
   );
   const insertConsultation = db.prepare(
     `INSERT INTO consultations
-      (patient_id, started_at, office_id, practitioner, title, important,
+      (patient_id, started_at, office_id, practitioner, user_id, title, important,
        height_cm, weight_kg, eva_before, eva_after, profile)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const insertAppointment = db.prepare(
-    `INSERT INTO appointments (patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO appointments (patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id, user_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const insertInvoice = db.prepare(
     `INSERT INTO invoices
@@ -3091,6 +3093,7 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
           startedAt,
           normalizedOfficeId,
           practitionerName,
+          normalizedCreatedByUserId,
           consultationTitle,
           0,
           null,
@@ -3117,7 +3120,8 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
           appointmentStatus,
           calendarId,
           consultationId,
-          normalizedOfficeId
+          normalizedOfficeId,
+          normalizedCreatedByUserId
         );
         appointmentCount += 1;
 
@@ -3200,7 +3204,8 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
           futureStatus,
           calendarId,
           null,
-          normalizedOfficeId
+          normalizedOfficeId,
+          normalizedCreatedByUserId
         );
         appointmentCount += 1;
       }
@@ -3918,7 +3923,7 @@ function buildDataBackupSnapshot(options = {}) {
     ).all(),
     appointments: db.prepare(
       `SELECT id, patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id,
-              practitioner, is_private, private_label_cipher, created_at
+              practitioner, user_id, is_private, private_label_cipher, created_at
        FROM appointments
        ORDER BY id ASC`
     ).all(),
@@ -3965,7 +3970,7 @@ function buildDataBackupSnapshot(options = {}) {
        ORDER BY source_type ASC, source_id ASC, id ASC`
     ).all(),
     consultations: db.prepare(
-      `SELECT id, patient_id, started_at, office_id, practitioner, title, important,
+      `SELECT id, patient_id, started_at, office_id, practitioner, user_id, title, important,
               height_cm, weight_kg, eva_before, eva_after, profile, created_at
        FROM consultations
        ORDER BY id ASC`
@@ -4125,9 +4130,9 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
     const insertAppointment = db.prepare(
       `INSERT INTO appointments (
         id, patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id,
-        practitioner, is_private, private_label_cipher, created_at
+        practitioner, user_id, is_private, private_label_cipher, created_at
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const insertInvoice = db.prepare(
       `INSERT INTO invoices (
@@ -4170,9 +4175,9 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
      );
     const insertConsultation = db.prepare(
       `INSERT INTO consultations (
-         id, patient_id, started_at, office_id, practitioner, title, important,
+         id, patient_id, started_at, office_id, practitioner, user_id, title, important,
          height_cm, weight_kg, eva_before, eva_after, profile, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
      const insertConsultationReasonItem = db.prepare(
       `INSERT INTO consultation_reason_items (id, consultation_id, label, value, important, display_order, created_at)
@@ -4289,8 +4294,8 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
         row.letter_footer ?? '',
         row.signature_text ?? '',
         row.color_hex ?? '#4d92d1',
-        restoreCipherField(row.bank_name_cipher ?? row.bank_name ?? ''),
-        restoreCipherField(row.iban_cipher ?? row.iban ?? ''),
+        restoreCipherField(row.bank_name_cipher ?? ''),
+        restoreCipherField(row.iban_cipher ?? ''),
         Number(row.retrocession_percent) || 0,
         row.retrocession_recipient ?? '',
         row.default_agenda_view ?? 'Semaine',
@@ -4441,6 +4446,7 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
         row.consultation_id != null ? Number(row.consultation_id) : null,
         row.office_id != null ? Number(row.office_id) : null,
         String(row.practitioner ?? ''),
+        row.user_id != null ? Number(row.user_id) : null,
         Number(row.is_private) ? 1 : 0,
         String(row.private_label_cipher ?? ''),
         row.created_at ?? new Date().toISOString()
@@ -4485,7 +4491,7 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
         Number(row.amount_cents) || 0,
         String(row.currency ?? 'EUR'),
         String(row.payment_method ?? ''),
-        restoreCipherField(row.bank_name_cipher ?? row.bank_name ?? ''),
+        restoreCipherField(row.bank_name_cipher ?? ''),
         String(row.cheque_number ?? ''),
         String(row.reference ?? ''),
         String(row.notes ?? ''),
@@ -4521,7 +4527,7 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
         row.owner_user_id != null ? Number(row.owner_user_id) : null,
         row.type === 'especes' ? 'especes' : 'cheque',
         String(row.deposit_code ?? ''),
-        restoreCipherField(row.bank_name_cipher ?? row.bank_name ?? ''),
+        restoreCipherField(row.bank_name_cipher ?? ''),
         String(row.account_label ?? ''),
         String(row.title ?? ''),
         Number(row.amount_cents) || 0,
@@ -4565,6 +4571,7 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
         row.started_at ?? new Date().toISOString(),
         row.office_id != null ? Number(row.office_id) : null,
         row.practitioner ?? '',
+        row.user_id != null ? Number(row.user_id) : null,
         row.title ?? '',
         Number(row.important) ? 1 : 0,
         row.height_cm ?? null,
@@ -4784,8 +4791,6 @@ function migrateUsersOfficeForeignKey() {
         letter_footer TEXT NOT NULL DEFAULT '',
         signature_text TEXT NOT NULL DEFAULT '',
         color_hex TEXT NOT NULL DEFAULT '#4d92d1',
-        bank_name TEXT NOT NULL DEFAULT '',
-        iban TEXT NOT NULL DEFAULT '',
         bank_name_cipher TEXT NOT NULL DEFAULT '',
         iban_cipher TEXT NOT NULL DEFAULT '',
         retrocession_percent REAL NOT NULL DEFAULT 0,
@@ -4808,7 +4813,7 @@ function migrateUsersOfficeForeignKey() {
         last_name, first_name, email, mobile_phone, country,
         siret, adeli_code, rpps_code, ape_naf_code, name_suffix_text,
         letter_header, letter_footer, signature_text, color_hex,
-        bank_name, iban, bank_name_cipher, iban_cipher, retrocession_percent, retrocession_recipient,
+        bank_name_cipher, iban_cipher, retrocession_percent, retrocession_recipient,
         default_agenda_view, visible_calendars, default_service, invoice_mentions,
         must_change_password, include_free_consultations, show_consultation_hour,
         created_at
@@ -4835,10 +4840,8 @@ function migrateUsersOfficeForeignKey() {
         coalesce(u.letter_footer, ''),
         coalesce(u.signature_text, ''),
         coalesce(nullif(trim(u.color_hex), ''), '#4d92d1'),
-        coalesce(u.bank_name, ''),
-        coalesce(u.iban, ''),
-        '', /* bank_name_cipher - will be populated by SEC-3 startup encryption migration */
-        '', /* iban_cipher - will be populated by SEC-3 startup encryption migration */
+        '', /* bank_name_cipher */
+        '', /* iban_cipher */
         coalesce(u.retrocession_percent, 0),
         coalesce(u.retrocession_recipient, ''),
         coalesce(nullif(trim(u.default_agenda_view), ''), 'Semaine'),
@@ -5074,8 +5077,6 @@ async function ensureSeedData() {
   ensureColumn('users', 'letter_footer', "letter_footer TEXT NOT NULL DEFAULT ''");
   ensureColumn('users', 'signature_text', "signature_text TEXT NOT NULL DEFAULT ''");
   ensureColumn('users', 'color_hex', "color_hex TEXT NOT NULL DEFAULT '#4d92d1'");
-  ensureColumn('users', 'bank_name', "bank_name TEXT NOT NULL DEFAULT ''");
-  ensureColumn('users', 'iban', "iban TEXT NOT NULL DEFAULT ''");
   ensureColumn('users', 'bank_name_cipher', "bank_name_cipher TEXT NOT NULL DEFAULT ''");
   ensureColumn('users', 'iban_cipher', "iban_cipher TEXT NOT NULL DEFAULT ''");
   ensureColumn('users', 'retrocession_percent', 'retrocession_percent REAL NOT NULL DEFAULT 0');
@@ -5092,6 +5093,7 @@ async function ensureSeedData() {
   ensureColumn('appointments', 'office_id', 'office_id INTEGER');
   ensureColumn('appointments', 'consultation_id', 'consultation_id INTEGER');
   ensureColumn('appointments', 'practitioner', "practitioner TEXT NOT NULL DEFAULT ''");
+  ensureColumn('appointments', 'user_id', 'user_id INTEGER REFERENCES users(id) ON DELETE SET NULL');
   ensureColumn('appointments', 'is_private', 'is_private INTEGER NOT NULL DEFAULT 0');
   ensureColumn('appointments', 'private_label_cipher', "private_label_cipher TEXT NOT NULL DEFAULT ''");
   ensureColumn('local_calendars', 'description', "description TEXT NOT NULL DEFAULT ''");
@@ -5118,12 +5120,12 @@ async function ensureSeedData() {
   ensureColumn('offices', 'rpps_code', "rpps_code TEXT NOT NULL DEFAULT ''");
   ensureColumn('offices', 'ape_naf_code', "ape_naf_code TEXT NOT NULL DEFAULT ''");
   ensureColumn('consultations', 'office_id', 'office_id INTEGER');
+  ensureColumn('consultations', 'user_id', 'user_id INTEGER REFERENCES users(id) ON DELETE SET NULL');
   ensureColumn('patients', 'office_id', 'office_id INTEGER');
   ensureColumn('patients', 'marital_status', "marital_status TEXT NOT NULL DEFAULT 'Non renseigne'");
   ensureColumn('patients', 'children_count', 'children_count INTEGER NOT NULL DEFAULT 0');
   ensureColumn('service_types', 'office_id', 'office_id INTEGER');
   ensureColumn('payment_methods', 'office_id', 'office_id INTEGER');
-  ensureColumn('invoice_payments', 'bank_name', "bank_name TEXT NOT NULL DEFAULT ''");
   ensureColumn('invoice_payments', 'bank_name_cipher', "bank_name_cipher TEXT NOT NULL DEFAULT ''");
   ensureColumn('invoice_payments', 'cheque_number', "cheque_number TEXT NOT NULL DEFAULT ''");
   ensureColumn('accounting_deposits', 'bank_name_cipher', "bank_name_cipher TEXT NOT NULL DEFAULT ''");
@@ -5131,34 +5133,6 @@ async function ensureSeedData() {
   ensureColumn('user_preference', 'slot_duration_minutes', 'slot_duration_minutes INTEGER NOT NULL DEFAULT 15');
   ensureColumn('user_preference', 'display_height', 'display_height INTEGER NOT NULL DEFAULT 14');
   ensureColumn('user_preference', 'theme_mode', "theme_mode TEXT NOT NULL DEFAULT 'system'");
-
-  // SEC-3: encrypt bank_name and iban fields at rest (one-time migration of existing plaintext data)
-  try {
-    const encryptExistingColumn = (table, cipherCol, plaintextCol, extraWhere = '') => {
-      const where = extraWhere ? ` AND (${extraWhere})` : '';
-      const rows = db.prepare(`SELECT id, ${plaintextCol} FROM ${table} WHERE ${cipherCol} = '' AND ${plaintextCol} != ''${where}`).all();
-      if (rows.length === 0) {
-        return;
-      }
-      const stmt = db.prepare(`UPDATE ${table} SET ${cipherCol} = ? WHERE id = ?`);
-      for (const row of rows) {
-        stmt.run(encryptSensitiveField(String(row[plaintextCol])), row.id);
-      }
-      console.log(`✓ SEC-3: encrypted ${rows.length} existing ${table}.${cipherCol} values`);
-    };
-    encryptExistingColumn('users', 'bank_name_cipher', 'bank_name');
-    encryptExistingColumn('users', 'iban_cipher', 'iban');
-    encryptExistingColumn('invoice_payments', 'bank_name_cipher', 'bank_name');
-    encryptExistingColumn('accounting_deposits', 'bank_name_cipher', 'bank_name');
-    encryptExistingColumn('patient_payment_credits', 'bank_name_cipher', 'bank_name');
-    // SEC-3: clear plaintext columns now that cipher columns are populated
-    db.prepare(`UPDATE users SET bank_name = '', iban = '' WHERE bank_name != '' OR iban != ''`).run();
-    db.prepare(`UPDATE invoice_payments SET bank_name = '' WHERE bank_name != ''`).run();
-    db.prepare(`UPDATE patient_payment_credits SET bank_name = '' WHERE bank_name != ''`).run();
-    // accounting_deposits has no plaintext bank_name column used by new writes; only bank_name_cipher
-  } catch (err) {
-    console.warn('SEC-3 encryption migration failed:', err.message);
-  }
 
   const fallbackOffice = db.prepare('SELECT id FROM offices ORDER BY display_order ASC, id ASC LIMIT 1').get();
   const defaultOfficeCountry = getConfigValue('settings_general_country', 'France');
@@ -5774,6 +5748,30 @@ function normalizePersonNameKey(name) {
     .toLowerCase();
 }
 
+function resolveUserIdFromPractitionerText(practitionerText) {
+  const key = normalizePersonNameKey(practitionerText);
+  if (!key) {
+    return null;
+  }
+
+  const users = db.prepare('SELECT id, username, first_name, last_name FROM users WHERE is_active = 1').all();
+  for (const user of users) {
+    const firstName = normalizePersonNameKey(user.first_name);
+    const lastName = normalizePersonNameKey(user.last_name);
+    const username = normalizePersonNameKey(user.username);
+    const candidates = [
+      username,
+      `${firstName} ${lastName}`.trim(),
+      `${lastName} ${firstName}`.trim()
+    ].filter(Boolean);
+    if (candidates.includes(key)) {
+      return Number(user.id);
+    }
+  }
+
+  return null;
+}
+
 function parseRelatedPeople(raw) {
   const seen = new Set();
   const names = [];
@@ -6236,14 +6234,15 @@ function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}
   try {
     const createdConsultation = db.prepare(`
       INSERT INTO consultations
-        (patient_id, started_at, office_id, practitioner, title, important, height_cm, weight_kg,
+        (patient_id, started_at, office_id, practitioner, user_id, title, important, height_cm, weight_kg,
          eva_before, eva_after, profile)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       patientId,
       alignedStartIso,
       consultationOfficeId,
       String(data.practitioner ?? '').trim(),
+      resolveUserIdFromPractitionerText(String(data.practitioner ?? '')),
       String(data.title ?? '').trim(),
       data.important ? 1 : 0,
       typeof data.heightCm === 'number' ? data.heightCm : null,
@@ -9654,14 +9653,15 @@ app.post('/api/data-management/import', heavyOperationLimiter, authMiddleware, r
 
         const inserted = db.prepare(
           `INSERT INTO consultations
-            (patient_id, started_at, office_id, practitioner, title, important,
+            (patient_id, started_at, office_id, practitioner, user_id, title, important,
              height_cm, weight_kg, eva_before, eva_after, profile)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).run(
           patientId,
           consultation.startedAt,
           payload.officeId,
           consultation.practitioner.trim(),
+          resolveUserIdFromPractitionerText(consultation.practitioner),
           consultation.title.trim(),
           consultation.important ? 1 : 0,
           consultation.heightCm,
@@ -10362,13 +10362,14 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         const title = str(wc.titre).slice(0, 200);
 
         const inserted = db.prepare(
-          `INSERT INTO consultations (patient_id, started_at, office_id, practitioner, title, important, height_cm, weight_kg, eva_before, eva_after, profile)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO consultations (patient_id, started_at, office_id, practitioner, user_id, title, important, height_cm, weight_kg, eva_before, eva_after, profile)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).run(
           patientId,
           startedAt,
           officeId,
           practitioner.slice(0, 100),
+          resolveUserIdFromPractitionerText(practitioner),
           title,
           important,
           heightCm,
@@ -10415,8 +10416,8 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         }
 
         db.prepare(
-          `INSERT INTO appointments (patient_id, starts_at, reason_cipher, status, office_id, local_calendar_id, consultation_id, practitioner, is_private)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO appointments (patient_id, starts_at, reason_cipher, status, office_id, local_calendar_id, consultation_id, practitioner, user_id, is_private)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).run(
           patientId,
           startsAt,
@@ -10426,6 +10427,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
           null,
           null,
           str(wa.createdby).slice(0, 100),
+          resolveUserIdFromPractitionerText(str(wa.createdby)),
           0
         );
 
@@ -10540,7 +10542,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
           try {
             const paidAt = parseWeoDate(paiement.date_paiement) ?? issuedAt;
             db.prepare(
-              `INSERT INTO invoice_payments (invoice_id, paid_at, amount_cents, currency, payment_method, bank_name, cheque_number, reference, notes)
+              `INSERT INTO invoice_payments (invoice_id, paid_at, amount_cents, currency, payment_method, bank_name_cipher, cheque_number, reference, notes)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
             ).run(
               invoiceId,
@@ -10548,7 +10550,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
               Math.round(num(paiement.montant) * 100),
               str(wf.devise) || 'EUR',
               str(paiement.moyen_paiement),
-              str(paiement.paiement_banque),
+              str(paiement.paiement_banque) ? encryptSensitiveField(str(paiement.paiement_banque)) : '',
               str(paiement.cheque_emetteur),
               str(paiement.reference),
               str(paiement.commentaire) || str(paiement.libelle)
@@ -13319,6 +13321,7 @@ app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-co
     `UPDATE consultations
      SET started_at = ?,
          practitioner = ?,
+         user_id = ?,
          title = ?,
          important = ?,
          height_cm = ?,
@@ -13330,6 +13333,7 @@ app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-co
   ).run(
     payload.startedAt,
     payload.practitioner.trim(),
+    resolveUserIdFromPractitionerText(payload.practitioner),
     payload.title.trim(),
     payload.important ? 1 : 0,
     payload.heightCm,
@@ -13412,14 +13416,15 @@ app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('c
 
   const inserted = db.prepare(
     `INSERT INTO consultations
-      (patient_id, started_at, office_id, practitioner, title, important,
+      (patient_id, started_at, office_id, practitioner, user_id, title, important,
        height_cm, weight_kg, eva_before, eva_after, profile)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     patientId,
     payload.startedAt,
     officeId,
     payload.practitioner.trim(),
+    resolveUserIdFromPractitionerText(payload.practitioner),
     payload.title.trim(),
     payload.important ? 1 : 0,
     payload.heightCm,
@@ -14588,9 +14593,9 @@ app.post('/api/appointments', authMiddleware, requirePermission('create-appointm
       .prepare(
         `INSERT INTO appointments (
            patient_id, starts_at, reason_cipher, status, local_calendar_id, consultation_id, office_id,
-           practitioner, is_private, private_label_cipher
+           practitioner, user_id, is_private, private_label_cipher
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         effectivePatientId,
@@ -14601,6 +14606,7 @@ app.post('/api/appointments', authMiddleware, requirePermission('create-appointm
         effectiveConsultationId,
         effectiveOfficeId,
         trimmedPractitioner,
+        resolveUserIdFromPractitionerText(trimmedPractitioner),
         isPrivateAppointment ? 1 : 0,
         isPrivateAppointment ? encryptSensitiveField(trimmedPrivateReason) : encryptSensitiveField('')
       );
@@ -15096,9 +15102,10 @@ app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePerm
   let linkedToExisting = false;
   if (existingConsultation && (appointment.consultation_id != null || linkStrategy !== 'create-new')) {
     consultationId = Number(existingConsultation.id);
-    db.prepare('UPDATE consultations SET title = ?, practitioner = ? WHERE id = ?').run(
+    db.prepare('UPDATE consultations SET title = ?, practitioner = ?, user_id = ? WHERE id = ?').run(
       title,
       practitioner,
+      resolveUserIdFromPractitionerText(practitioner),
       consultationId
     );
     linkedToExisting = true;
@@ -15106,11 +15113,11 @@ app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePerm
     const created = db
       .prepare(
         `INSERT INTO consultations (
-           patient_id, started_at, office_id, practitioner, title, important,
+           patient_id, started_at, office_id, practitioner, user_id, title, important,
            eva_before, eva_after, profile
-         ) VALUES (?, ?, ?, ?, ?, 0, 0, 0, 'Adulte')`
+         ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, 'Adulte')`
       )
-      .run(appointment.patient_id, appointment.starts_at, appointmentOfficeId, practitioner, title);
+      .run(appointment.patient_id, appointment.starts_at, appointmentOfficeId, practitioner, resolveUserIdFromPractitionerText(practitioner), title);
     consultationId = Number(created.lastInsertRowid);
   }
 
@@ -16049,7 +16056,7 @@ function buildStatisticsPayload({ requestingUserId, access, scopeMode, requested
     .all();
   const consultationRows = db
     .prepare(
-      `SELECT id, patient_id, started_at, office_id, practitioner, profile
+      `SELECT id, patient_id, started_at, office_id, practitioner, user_id, profile
        FROM consultations`
     )
     .all();
@@ -16215,7 +16222,9 @@ function buildStatisticsPayload({ requestingUserId, access, scopeMode, requested
       consultationTypeCounters.set('Suivi', Number(consultationTypeCounters.get('Suivi')) + 1);
     }
 
-    const matchedUser = matchStatisticsUser(row.practitioner, scopedUsers);
+    const matchedUser = row.user_id != null
+      ? (scopedUsers.find((u) => u.id === Number(row.user_id)) ?? matchStatisticsUser(row.practitioner, scopedUsers))
+      : matchStatisticsUser(row.practitioner, scopedUsers);
     const label = matchedUser?.displayName || normalizeStatisticsText(row.practitioner) || 'Non renseigne';
     consultationUserCounters.set(label, Number(consultationUserCounters.get(label) ?? 0) + 1);
   }
@@ -16240,10 +16249,20 @@ function buildStatisticsPayload({ requestingUserId, access, scopeMode, requested
     ? (scopedUsers.find((user) => user.id === selectedUserId) ?? null)
     : null;
   const userConsultationRows = selectedUser
-    ? consultationRowsInWindow.filter((row) => matchStatisticsUser(row.practitioner, [selectedUser])?.id === selectedUser.id)
+    ? consultationRowsInWindow.filter((row) => {
+        if (row.user_id != null) {
+          return Number(row.user_id) === selectedUser.id;
+        }
+        return matchStatisticsUser(row.practitioner, [selectedUser])?.id === selectedUser.id;
+      })
     : [];
   const userConsultationRowsAll = selectedUser
-    ? scopedConsultationRows.filter((row) => matchStatisticsUser(row.practitioner, [selectedUser])?.id === selectedUser.id)
+    ? scopedConsultationRows.filter((row) => {
+        if (row.user_id != null) {
+          return Number(row.user_id) === selectedUser.id;
+        }
+        return matchStatisticsUser(row.practitioner, [selectedUser])?.id === selectedUser.id;
+      })
     : [];
   const userBillingOperations = selectedUser
     ? getBillingOperationsData({
