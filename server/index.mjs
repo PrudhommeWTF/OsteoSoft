@@ -10364,7 +10364,10 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         const important = str(wc.important) === '1' ? 1 : 0;
         const profile = str(wc.nourrisson).toLowerCase() === 'oui' ? 'Nourrisson' : 'Adulte';
         // Use titre if present, otherwise derive a plain-text title from motif
-        const rawTitle = str(wc.titre) || str(wc.motif).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+        const rawTitle = str(wc.titre) || str(wc.motif)
+          .replace(/<[^>]*>/g, ' ')
+          .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
+          .replace(/\s+/g, ' ').trim();
         const title = rawTitle.slice(0, 200);
 
         const inserted = db.prepare(
