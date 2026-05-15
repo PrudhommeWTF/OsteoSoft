@@ -9596,6 +9596,9 @@ app.post('/api/data-management/import', heavyOperationLimiter, authMiddleware, r
       }
     }
 
+    const findExistingConsultationCsv = db.prepare(
+      'SELECT id FROM consultations WHERE patient_id = ? AND started_at = ? AND office_id = ?'
+    );
     for (let index = 0; index < consultationRows.length; index += 1) {
       const row = consultationRows[index];
       const rowLabel = `Consultations ligne ${index + 2}`;
@@ -9653,6 +9656,13 @@ app.post('/api/data-management/import', heavyOperationLimiter, authMiddleware, r
 
       try {
         const consultation = validatedConsultation.data;
+
+        // Idempotency: skip if this consultation was already imported
+        const existingConsult = findExistingConsultationCsv.get(patientId, consultation.startedAt, payload.officeId);
+        if (existingConsult) {
+          continue;
+        }
+
         const normalizedReasonItems = normalizeConsultationReasonItems(consultation.reasonItems);
 
         const inserted = db.prepare(
@@ -9685,6 +9695,7 @@ app.post('/api/data-management/import', heavyOperationLimiter, authMiddleware, r
           remarksHtml: consultation.remarksHtml
         });
 
+        updatePatientRetentionFields(patientId, consultation.startedAt);
         importedConsultations += 1;
       } catch (error) {
         errors.push({ row: rowLabel, message: error instanceof Error ? error.message : 'Echec insertion consultation' });
@@ -10351,6 +10362,9 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
     let weoConsultations = [];
     try { weoConsultations = weoDb.prepare('SELECT * FROM consultation').all(); } catch { /* ignore */ }
 
+    const findExistingConsultation = db.prepare(
+      'SELECT id FROM consultations WHERE patient_id = ? AND started_at = ? AND office_id = ?'
+    );
     for (const wc of weoConsultations) {
       try {
         const patientId = weoPatientIdToOsteoId.get(str(wc.patient));
@@ -10359,12 +10373,18 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         const startedAt = parseWeoDateTime(wc.date_consult);
         if (!startedAt) continue;
 
+        // Idempotency: skip if this consultation was already imported
+        const existingConsult = findExistingConsultation.get(patientId, startedAt, officeId);
+        if (existingConsult) {
+          weoConsultationIdToOsteoId.set(str(wc.id), Number(existingConsult.id));
+          continue;
+        }
+
         const practitioner = str(wc.createdby);
-        const taille = str(wc.taille);
-        const poids = str(wc.poids);
-        const heightCm = taille ? (parseFloat(taille) || null) : null;
-        const weightKg = poids ? (parseFloat(poids) || null) : null;
+        const heightCm = parseImportedNullableNumber(wc.taille);
+        const weightKg = parseImportedNullableNumber(wc.poids);
         const evaBefore = Math.min(10, Math.max(0, num(wc.douleur)));
+        const evaAfter = Math.min(10, Math.max(0, num(wc.douleur_apres)));
         const important = str(wc.important) === '1' ? 1 : 0;
         const profile = str(wc.nourrisson).toLowerCase() === 'oui' ? 'Nourrisson' : 'Adulte';
         // Use titre if present, otherwise derive a plain-text title from motif
@@ -10388,7 +10408,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
           heightCm,
           weightKg,
           evaBefore,
-          0,
+          evaAfter,
           profile
         );
 
@@ -10403,6 +10423,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
           remarksHtml: str(wc.remarques)
         });
 
+        updatePatientRetentionFields(patientId, startedAt);
         importedConsultations += 1;
       } catch (err) {
         errors.push({ entity: 'consultation', message: `ID ${str(wc.id)}: ${err instanceof Error ? err.message : 'Erreur'}` });
@@ -10413,6 +10434,9 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
     let weoAgenda = [];
     try { weoAgenda = weoDb.prepare('SELECT * FROM agenda').all(); } catch { /* ignore */ }
 
+    const findExistingAppointment = db.prepare(
+      'SELECT id FROM appointments WHERE patient_id = ? AND starts_at = ? AND office_id = ?'
+    );
     for (const wa of weoAgenda) {
       try {
         const patientId = weoPatientIdToOsteoId.get(str(wa.patient));
@@ -10420,6 +10444,10 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
 
         const startsAt = parseWeoDateTime(wa.start_rdv);
         if (!startsAt) continue;
+
+        // Idempotency: skip if this appointment was already imported
+        const existingAppt = findExistingAppointment.get(patientId, startsAt, officeId);
+        if (existingAppt) continue;
 
         const libelle = str(wa.libelle);
         const statut = str(wa.statut).toLowerCase();
