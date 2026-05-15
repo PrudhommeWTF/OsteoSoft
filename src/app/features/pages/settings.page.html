@@ -433,8 +433,8 @@
                       id="webosteo-import-office"
                       class="form-select"
                       [disabled]="isImportingWebosteo() || isOfficesLoading()"
-                      [value]="dataImportTargetOfficeId() ?? ''"
-                      (change)="onDataImportOfficeChange($any($event.target).value || '')"
+                      [value]="webosteoTargetOfficeId() ?? ''"
+                      (change)="onWebosteoOfficeChange($any($event.target).value || '')"
                     >
                       <option value="">Sélectionner un cabinet</option>
                       @for (office of offices(); track office.id) {
@@ -461,9 +461,9 @@
                   <div class="col-12 d-flex align-items-end">
                     <button
                       type="button"
-                      class="btn btn-primary"
-                      [disabled]="isImportingWebosteo() || !selectedWebosteoFileBase64() || !dataImportTargetOfficeId()"
-                      (click)="runWebosteoImport()"
+                      class="btn btn-warning"
+                      [disabled]="isImportingWebosteo() || !selectedWebosteoFileBase64() || !webosteoTargetOfficeId()"
+                      (click)="openWebosteoImportConfirm()"
                       title="Lancer l'import WebOsteo" bsTooltip
                     >
                       @if (isImportingWebosteo()) {
@@ -504,6 +504,50 @@
                 }
               </article>
             </div>
+
+            @if (webosteoImportConfirmOpen()) {
+              <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="webosteo-confirm-modal-title">
+                <div class="modal-dialog modal-dialog-centered">
+                  <div class="modal-content">
+                    <div class="modal-header border-0 pb-0">
+                      <h3 id="webosteo-confirm-modal-title" class="modal-title h5 mb-0">
+                        <i class="fa-solid fa-triangle-exclamation text-warning me-2"></i>Confirmer le remplacement des données
+                      </h3>
+                      <button type="button" class="btn-close" aria-label="Annuler" [disabled]="isImportingWebosteo()" (click)="closeWebosteoImportConfirm()" title="Annuler" bsTooltip></button>
+                    </div>
+                    <div class="modal-body">
+                      <div class="alert alert-warning d-flex gap-2 mb-3" role="alert">
+                        <i class="fa-solid fa-circle-exclamation flex-shrink-0 mt-1"></i>
+                        <div>
+                          <strong>Cette action est irréversible.</strong><br>
+                          Toutes les données existantes du cabinet
+                          <strong>
+                            @for (office of offices(); track office.id) {
+                              @if (office.id === webosteoTargetOfficeId()) { {{ office.name }} }
+                            }
+                          </strong>
+                          (patients, consultations, rendez-vous, factures et contacts du répertoire) seront
+                          <strong>définitivement supprimées</strong> et remplacées par les données du fichier WebOsteo
+                          <em>{{ selectedWebosteoFileName() }}</em>.
+                        </div>
+                      </div>
+                      <p class="mb-0 small text-secondary">
+                        Les utilisateurs importés depuis WebOsteo recevront des droits au niveau du cabinet uniquement (sans accès administrateur applicatif). Un mot de passe temporaire sera généré pour chaque nouvel utilisateur.
+                      </p>
+                    </div>
+                    <div class="modal-footer">
+                      <button type="button" class="btn btn-outline-secondary" [disabled]="isImportingWebosteo()" (click)="closeWebosteoImportConfirm()">
+                        Annuler
+                      </button>
+                      <button type="button" class="btn btn-warning" [disabled]="isImportingWebosteo()" (click)="runWebosteoImport()">
+                        <i class="fa-solid fa-database me-1"></i>Confirmer et importer
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="modal-backdrop fade show" (click)="closeWebosteoImportConfirm()"></div>
+            }
 
           </section>
         } @else {

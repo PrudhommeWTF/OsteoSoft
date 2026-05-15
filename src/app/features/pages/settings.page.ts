@@ -442,6 +442,8 @@ export class SettingsPage implements OnDestroy {
   readonly selectedWebosteoFileName = signal('');
   readonly selectedWebosteoFileBase64 = signal('');
   readonly webosteoImportResult = signal<WebosteoImportResult | null>(null);
+  readonly webosteoTargetOfficeId = signal<number | null>(null);
+  readonly webosteoImportConfirmOpen = signal(false);
   readonly activeCleanupTabId = signal<DataCleanupKind>('cities');
   readonly cleanupRows = signal<DataCleanupRow[]>([]);
   readonly cleanupDoctorSuggestions = signal<string[]>([]);
@@ -4931,6 +4933,33 @@ export class SettingsPage implements OnDestroy {
     return defaults;
   }
 
+  onWebosteoOfficeChange(value: string): void {
+    const id = Number(value);
+    this.webosteoTargetOfficeId.set(Number.isInteger(id) && id > 0 ? id : null);
+    this.webosteoImportResult.set(null);
+    this.dataManagementError.set('');
+    this.dataManagementSuccess.set('');
+  }
+
+  openWebosteoImportConfirm(): void {
+    const officeId = this.webosteoTargetOfficeId();
+    if (!officeId) {
+      this.dataManagementError.set('Sélectionnez un cabinet cible pour l\'import.');
+      return;
+    }
+    if (!this.selectedWebosteoFileBase64()) {
+      this.dataManagementError.set('Sélectionnez un fichier WebOsteo à importer.');
+      return;
+    }
+    this.dataManagementError.set('');
+    this.dataManagementSuccess.set('');
+    this.webosteoImportConfirmOpen.set(true);
+  }
+
+  closeWebosteoImportConfirm(): void {
+    this.webosteoImportConfirmOpen.set(false);
+  }
+
   async onWebosteoFileSelected(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement | null;
     const file = input?.files?.item(0) ?? null;
@@ -4976,7 +5005,9 @@ export class SettingsPage implements OnDestroy {
   }
 
   async runWebosteoImport(): Promise<void> {
-    const officeId = this.dataImportTargetOfficeId();
+    this.webosteoImportConfirmOpen.set(false);
+
+    const officeId = this.webosteoTargetOfficeId();
     if (!officeId) {
       this.dataManagementError.set('Sélectionnez un cabinet cible pour l\'import.');
       return;
