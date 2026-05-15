@@ -10215,10 +10215,10 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         const pid = str(wp.id);
         if (!pid) continue;
 
-        // Recover name from agenda if possible
+        // Recover name from agenda if possible, fall back to patient table fields
         const recovered = nameRecovery.get(pid);
-        const lastName = recovered ? recovered.nom : '[Non dechiffre]';
-        const firstName = recovered ? recovered.prenom : str(wp.prenom) || '[Non dechiffre]';
+        const lastName = recovered ? recovered.nom : (str(wp.nom) || '[Non dechiffre]');
+        const firstName = recovered ? recovered.prenom : (str(wp.prenom) || '[Non dechiffre]');
         const fullName = `${lastName} ${firstName}`.trim();
         const birthDate = parseWeoDate(wp.date_naissance);
 
@@ -10243,18 +10243,21 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         const maritalStatus = mapMaritalStatus(wp.statut_marital);
         const childrenCount = Math.max(0, num(wp.nombre_enfant));
 
+        const mobilePhone = str(wp.telephone1) || str(wp.portable) || '';
+        const landlinePhone = str(wp.telephone2) || '';
+
         const medicalRecord = {
           generalRemarks: [str(wp.remarques_antecedents), str(wp.remarques)].filter(Boolean).join('\n').trim(),
           medicalHistory: '',
           consultationNote: '',
           relatedPeople: '',
-          mobilePhone: '',
-          landlinePhone: '',
-          email: '',
-          address1: '',
-          address2: '',
-          postalCode: '',
-          city: '',
+          mobilePhone,
+          landlinePhone,
+          email: str(wp.email),
+          address1: str(wp.adresse1),
+          address2: str(wp.adresse2),
+          postalCode: str(wp.code_postal),
+          city: str(wp.ville),
           country: str(wp.pays) || 'France',
           maritalStatus,
           childrenCount,
@@ -10273,7 +10276,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).run(
           encryptSensitiveField(fullName),
-          encryptSensitiveField('Non renseigne'),
+          encryptSensitiveField(mobilePhone || landlinePhone || 'Non renseigne'),
           encryptSensitiveField(JSON.stringify(medicalRecord)),
           sex,
           birthDate,
@@ -10319,6 +10322,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         const description = str(ap.comment) || str(antecedent.nom) || '';
         const important = Number(ap.important) === 1 ? 1 : 0;
         const sortKey = Number(antecedent.ordre) || 99;
+        const dateDisplay = parseWeoDate(str(ap.date_debut)) || '';
 
         storeAntecedentTypes([category]);
 
@@ -10328,7 +10332,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         ).run(
           patientId,
           'date',
-          encryptSensitiveField(''),
+          encryptSensitiveField(dateDisplay),
           category,
           encryptSensitiveField(description),
           important,
@@ -10359,7 +10363,9 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         const evaBefore = Math.min(10, Math.max(0, num(wc.douleur)));
         const important = str(wc.important) === '1' ? 1 : 0;
         const profile = str(wc.nourrisson).toLowerCase() === 'oui' ? 'Nourrisson' : 'Adulte';
-        const title = str(wc.titre).slice(0, 200);
+        // Use titre if present, otherwise derive a plain-text title from motif
+        const rawTitle = str(wc.titre) || str(wc.motif).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+        const title = rawTitle.slice(0, 200);
 
         const inserted = db.prepare(
           `INSERT INTO consultations (patient_id, started_at, office_id, practitioner, user_id, title, important, height_cm, weight_kg, eva_before, eva_after, profile)
@@ -10383,7 +10389,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         weoConsultationIdToOsteoId.set(str(wc.id), consultationId);
 
         replaceConsultationSections(consultationId, {
-          motifMainHtml: '',
+          motifMainHtml: str(wc.motif),
           testsHtml: str(wc.tests),
           schemaHtml: str(wc.schemadysfonctionnel),
           treatmentsHtml: str(wc.traitement),
@@ -10496,13 +10502,15 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         else if (etat === 'annulee') invoiceStatus = 'Annulee';
 
         const consultationId = weoConsultationIdToOsteoId.get(str(wf.id_consultation)) ?? null;
+        // Use formatted number if available, otherwise raw number, otherwise generate unique fallback
+        const invoiceNumber = str(wf.numero_formatte) || str(wf.numero) || `WEO-${str(wf.id)}`;
 
         const inserted = db.prepare(
           `INSERT INTO invoices (patient_id, invoice_number, amount_cents, status, issued_at, due_at, notes_cipher, office_id, consultation_id, payment_method)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).run(
           patientId,
-          str(wf.numero_formatte) || str(wf.numero) || '',
+          invoiceNumber,
           amountCents,
           invoiceStatus,
           issuedAt,
@@ -10510,7 +10518,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
           encryptSensitiveField(str(wf.commentaire)),
           officeId,
           consultationId,
-          ''
+          str(wf.mode_paiement)
         );
 
         const invoiceId = Number(inserted.lastInsertRowid);
@@ -10556,6 +10564,28 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
               str(paiement.commentaire) || str(paiement.libelle)
             );
           } catch { /* ignore payment errors */ }
+        }
+
+        // Fallback: if no paiement_facture rows exist for this paid invoice, synthesize
+        // a payment from invoice-level payment fields (for older Webosteo versions)
+        if (paiementFactures.length === 0 && invoiceStatus === 'Payee') {
+          try {
+            const paidAt = parseWeoDate(str(wf.date_paiement)) ?? issuedAt;
+            db.prepare(
+              `INSERT INTO invoice_payments (invoice_id, paid_at, amount_cents, currency, payment_method, bank_name_cipher, cheque_number, reference, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            ).run(
+              invoiceId,
+              paidAt,
+              amountCents,
+              str(wf.devise) || 'EUR',
+              str(wf.mode_paiement),
+              '',
+              '',
+              '',
+              ''
+            );
+          } catch { /* ignore */ }
         }
 
         importedInvoices += 1;
