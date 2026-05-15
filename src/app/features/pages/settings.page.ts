@@ -5033,7 +5033,7 @@ export class SettingsPage implements OnDestroy {
       const result = await this.api.importWebosteoData({ officeId, fileName, contentBase64 });
       this.webosteoImportResult.set(result);
       this.dataManagementSuccess.set(
-        `Import WebOsteo terminé: ${result.importedPatients} patient(s), ${result.importedConsultations} consultation(s), ${result.importedAppointments} rendez-vous, ${result.importedInvoices} facture(s), ${result.importedContacts} contact(s).`
+        `Import WebOsteo terminé: ${result.importedPatients} patient(s), ${result.importedConsultations} consultation(s), ${result.importedAppointments} rendez-vous, ${result.importedInvoices} facture(s), ${result.importedContacts} contact(s), ${result.importedDeposits} remise(s), ${result.updatedRelatedPeople} lien(s) de parenté.`
       );
     } catch (error) {
       if (error instanceof HttpErrorResponse) {

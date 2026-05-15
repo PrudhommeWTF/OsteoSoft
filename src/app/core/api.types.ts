@@ -1228,6 +1228,8 @@ export type WebosteoImportResult = {
   importedAppointments: number;
   importedInvoices: number;
   importedContacts: number;
+  importedDeposits: number;
+  updatedRelatedPeople: number;
   errors: Array<{ entity: string; message: string }>;
   tempPasswords: Record<string, string>;
 };
