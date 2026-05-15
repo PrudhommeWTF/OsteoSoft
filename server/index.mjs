@@ -10160,6 +10160,23 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
     let importedInvoices = 0;
     let importedContacts = 0;
 
+    // ---- Remplacement des données du cabinet cible ----
+    // Delete existing office data before importing so Webosteo data fully replaces it.
+    // Deletion order respects FK constraints (foreign_keys = ON):
+    //   appointments and consultations reference patient_id without ON DELETE CASCADE,
+    //   so they must be deleted before patients.
+    //   invoice_line_items, invoice_payments and patient_payment_credit_allocations
+    //   cascade from invoices/credits respectively.
+    //   patient_antecedents, patient_documents and patient_payment_credits cascade from patients.
+    db.transaction(() => {
+      db.prepare('DELETE FROM appointments WHERE office_id = ?').run(officeId);
+      db.prepare('DELETE FROM invoices WHERE office_id = ?').run(officeId);
+      db.prepare('DELETE FROM patient_payment_credits WHERE office_id = ?').run(officeId);
+      db.prepare('DELETE FROM consultations WHERE office_id = ?').run(officeId);
+      db.prepare('DELETE FROM patients WHERE office_id = ?').run(officeId);
+      db.prepare('DELETE FROM directory_contacts WHERE office_id = ?').run(officeId);
+    })();
+
     // ---- Utilisateurs ----
     let weoUsers = [];
     try { weoUsers = weoDb.prepare('SELECT * FROM utilisateur').all(); } catch { /* table may not exist */ }
@@ -10182,13 +10199,16 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
           parallelism: 1
         });
 
-        const role = str(wu.admin) === '1' ? 'admin' : 'user';
+        // Webosteo users always receive a practitioner role at the application level.
+        // Their access rights are scoped to the target office through office_user_delegations,
+        // not through the application-level 'admin' role.
+        const role = 'practitioner';
         const isActive = str(wu.enabled).toLowerCase() !== 'non' ? 1 : 0;
         const retro = num(wu.retro_defaut);
 
         const inserted = db.prepare(
-          `INSERT INTO users (username, password_hash, role, is_active, office_id, last_name, first_name, email, mobile_phone, country, siret, adeli_code, rpps_code, ape_naf_code, color_hex, retrocession_percent, must_change_password)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`
+          `INSERT INTO users (username, password_hash, role, is_active, profile_id, office_id, last_name, first_name, email, mobile_phone, country, siret, adeli_code, rpps_code, ape_naf_code, color_hex, retrocession_percent, must_change_password)
+           VALUES (?, ?, ?, ?, 'cabinet-member', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`
         ).run(
           username,
           hash,
@@ -10207,6 +10227,14 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
           str(wu.couleur) || '#4d92d1',
           retro
         );
+
+        const newUserId = Number(inserted.lastInsertRowid);
+
+        // Grant the user access to the target office at cabinet level only.
+        syncUserOffices(newUserId, [officeId]);
+        db.prepare(
+          `INSERT OR REPLACE INTO office_user_delegations (office_id, user_id, profile_id) VALUES (?, ?, 'cabinet-member')`
+        ).run(officeId, newUserId);
 
         tempPasswords[username] = tempPassword;
         userLoginToUsername.set(username, username);
