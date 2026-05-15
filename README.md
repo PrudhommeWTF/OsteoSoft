@@ -25,6 +25,8 @@ Un site vitrine commercial statique est disponible dans `docs/`:
 
 - Fichier principal: `docs/index.html`
 - Framework CSS: Bootstrap 5 (CDN)
+- Version bilingue: FR/EN avec bascule intégrée
+- Section commerciale: Contact / Demande de démo
 - URL de publication attendue: `https://prudhommewtf.github.io/OsteoSoft/`
 
 Le déploiement GitHub Pages est automatisé via workflow (`.github/workflows/deploy-pages.yml`).
