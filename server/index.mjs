@@ -9685,6 +9685,7 @@ app.post('/api/data-management/import', heavyOperationLimiter, authMiddleware, r
           remarksHtml: consultation.remarksHtml
         });
 
+        updatePatientRetentionFields(patientId, consultation.startedAt);
         importedConsultations += 1;
       } catch (error) {
         errors.push({ row: rowLabel, message: error instanceof Error ? error.message : 'Echec insertion consultation' });
@@ -10365,6 +10366,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         const heightCm = taille ? (parseFloat(taille) || null) : null;
         const weightKg = poids ? (parseFloat(poids) || null) : null;
         const evaBefore = Math.min(10, Math.max(0, num(wc.douleur)));
+        const evaAfter = Math.min(10, Math.max(0, num(wc.douleur_apres)));
         const important = str(wc.important) === '1' ? 1 : 0;
         const profile = str(wc.nourrisson).toLowerCase() === 'oui' ? 'Nourrisson' : 'Adulte';
         // Use titre if present, otherwise derive a plain-text title from motif
@@ -10388,7 +10390,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
           heightCm,
           weightKg,
           evaBefore,
-          0,
+          evaAfter,
           profile
         );
 
@@ -10403,6 +10405,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
           remarksHtml: str(wc.remarques)
         });
 
+        updatePatientRetentionFields(patientId, startedAt);
         importedConsultations += 1;
       } catch (err) {
         errors.push({ entity: 'consultation', message: `ID ${str(wc.id)}: ${err instanceof Error ? err.message : 'Erreur'}` });
