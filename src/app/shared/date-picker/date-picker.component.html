@@ -1,32 +1,21 @@
-<ng-template #footerTpl>
-  <div class="os-dp-footer">
-    <button type="button" class="os-dp-btn-today" (click)="selectToday()">Aujourd'hui</button>
-    <button type="button" class="os-dp-btn-clear" (click)="clearValue()">Effacer</button>
-  </div>
-</ng-template>
-
-<!-- ── date mode (NgbInputDatepicker) ──────────────────────────────────────── -->
+<!-- ── date mode (fully custom drill-down panel) ──────────────────────────── -->
 @if (mode === 'date') {
   <div class="os-datepicker-wrapper">
     <input
       [id]="id"
       type="text"
       class="form-control os-dp-input"
-      [formControl]="internalControl"
+      readonly
+      [value]="displayValue()"
       [placeholder]="computedPlaceholder"
       [autocomplete]="autocomplete"
-      [maxDate]="maxDate!"
-      [minDate]="minDate!"
-      [startDate]="today"
-      [footerTemplate]="footerTpl"
-      ngbDatepicker
-      #dpRef="ngbDatepicker"
+      (click)="togglePanel()"
       (blur)="onBlur()"
     />
     <button
       type="button"
       class="os-dp-toggle"
-      (click)="dpRef.toggle()"
+      (click)="togglePanel()"
       tabindex="-1"
       aria-label="Ouvrir le calendrier"
       [disabled]="isDisabled()"
@@ -35,6 +24,113 @@
         <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4z"/>
       </svg>
     </button>
+    @if (isPanelOpen()) {
+      <div class="os-dp-panel os-dp-panel--date" role="dialog" aria-modal="true" aria-label="Sélecteur de date">
+
+        <!-- ── Day view ──────────────────────────────────────────────────── -->
+        @if (calendarView() === 'days') {
+          <div class="os-dp-panel-nav">
+            <button type="button" class="os-dp-nav-btn" (click)="prevCalendarMonth()" aria-label="Mois précédent">
+              <svg width="10" height="10" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7,1 1,7 7,13"/></svg>
+            </button>
+            <div class="os-dp-nav-label os-dp-nav-label--drilldown">
+              <button type="button" class="os-dp-nav-drill" (click)="drillDownToMonths()" [title]="'Choisir un mois'">{{ calendarMonthLabel() }}</button>
+              <button type="button" class="os-dp-nav-drill" (click)="drillDownToYears()" [title]="'Choisir une année'">{{ calendarYear() }}</button>
+            </div>
+            <button type="button" class="os-dp-nav-btn" (click)="nextCalendarMonth()" aria-label="Mois suivant">
+              <svg width="10" height="10" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1,1 7,7 1,13"/></svg>
+            </button>
+          </div>
+          <div class="os-dp-days-grid">
+            <div class="os-dp-weekdays">
+              @for (d of weekDays; track d) {
+                <span class="os-dp-weekday">{{ d }}</span>
+              }
+            </div>
+            @for (week of calendarGrid(); track $index) {
+              <div class="os-dp-week">
+                @for (day of week; track $index) {
+                  @if (day !== null) {
+                    <button
+                      type="button"
+                      class="os-dp-cell os-dp-day-cell"
+                      [class.os-dp-cell--selected]="isDaySelected(day)"
+                      [class.os-dp-cell--today]="isToday(day)"
+                      [class.os-dp-cell--disabled]="isDayDisabled(day)"
+                      [disabled]="isDayDisabled(day)"
+                      (click)="selectDay(day)"
+                    >{{ day }}</button>
+                  } @else {
+                    <span class="os-dp-day-cell os-dp-cell--empty"></span>
+                  }
+                }
+              </div>
+            }
+          </div>
+          <div class="os-dp-footer">
+            <button type="button" class="os-dp-btn-today" (click)="selectToday()">Aujourd'hui</button>
+            <button type="button" class="os-dp-btn-clear" (click)="clearValue()">Effacer</button>
+          </div>
+        }
+
+        <!-- ── Month drill-down view (inside date mode) ──────────────────── -->
+        @if (calendarView() === 'months') {
+          <div class="os-dp-panel-nav">
+            <button type="button" class="os-dp-nav-btn" (click)="prevYear()" aria-label="Année précédente">
+              <svg width="10" height="10" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7,1 1,7 7,13"/></svg>
+            </button>
+            <div class="os-dp-nav-label os-dp-nav-label--drilldown">
+              <button type="button" class="os-dp-nav-drill" (click)="drillDownToYears()" [title]="'Choisir une année'">{{ panelYear() }}</button>
+            </div>
+            <button type="button" class="os-dp-nav-btn" (click)="nextYear()" aria-label="Année suivante">
+              <svg width="10" height="10" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1,1 7,7 1,13"/></svg>
+            </button>
+          </div>
+          <div class="os-dp-grid os-dp-months-grid">
+            @for (m of months; track m.value) {
+              <button
+                type="button"
+                class="os-dp-cell"
+                [class.os-dp-cell--selected]="isMonthSelectedInDate(m.value)"
+                [class.os-dp-cell--today]="isCurrentMonthInDate(m.value)"
+                (click)="selectMonthInDate(m.value)"
+              >{{ m.label }}</button>
+            }
+          </div>
+          <div class="os-dp-footer">
+            <button type="button" class="os-dp-btn-clear" (click)="clearValue()">Effacer</button>
+          </div>
+        }
+
+        <!-- ── Year drill-down view (inside date mode) ───────────────────── -->
+        @if (calendarView() === 'years') {
+          <div class="os-dp-panel-nav">
+            <button type="button" class="os-dp-nav-btn" (click)="prevYearRange()" aria-label="Plage d'années précédente">
+              <svg width="10" height="10" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7,1 1,7 7,13"/></svg>
+            </button>
+            <span class="os-dp-nav-label">{{ yearRangeLabel() }}</span>
+            <button type="button" class="os-dp-nav-btn" (click)="nextYearRange()" aria-label="Plage d'années suivante">
+              <svg width="10" height="10" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1,1 7,7 1,13"/></svg>
+            </button>
+          </div>
+          <div class="os-dp-grid os-dp-years-grid">
+            @for (year of visibleYears(); track year) {
+              <button
+                type="button"
+                class="os-dp-cell"
+                [class.os-dp-cell--selected]="isYearSelectedInDate(year)"
+                [class.os-dp-cell--today]="isCurrentYearInDate(year)"
+                (click)="selectYearInDate(year)"
+              >{{ year }}</button>
+            }
+          </div>
+          <div class="os-dp-footer">
+            <button type="button" class="os-dp-btn-clear" (click)="clearValue()">Effacer</button>
+          </div>
+        }
+
+      </div>
+    }
   </div>
 }
 
@@ -149,4 +245,3 @@
     }
   </div>
 }
-

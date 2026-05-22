@@ -36,7 +36,7 @@
     }
   }
 
-  /* ── Custom dropdown panel (month / year modes) ── */
+  /* ── Custom dropdown panel ── */
   .os-dp-panel {
     position: absolute;
     top: calc(100% + 4px);
@@ -48,6 +48,11 @@
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
     z-index: 1200;
     overflow: hidden;
+
+    /* Wider panel for day grid */
+    &.os-dp-panel--date {
+      min-width: 260px;
+    }
 
     .os-dp-panel-nav {
       display: flex;
@@ -68,6 +73,7 @@
         display: flex;
         align-items: center;
         transition: background 0.12s;
+        flex-shrink: 0;
 
         &:hover {
           background: rgba(77, 146, 209, 0.12);
@@ -78,9 +84,35 @@
         font-weight: 700;
         font-size: 0.9rem;
         color: var(--app-text);
+
+        /* Drill-down label: contains clickable month/year buttons */
+        &.os-dp-nav-label--drilldown {
+          display: flex;
+          gap: 4px;
+          align-items: center;
+        }
+      }
+
+      /* Clickable month / year in the header (drill-down) */
+      .os-dp-nav-drill {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: var(--bs-primary);
+        padding: 2px 6px;
+        border-radius: 4px;
+        transition: background 0.12s;
+        line-height: 1.2;
+
+        &:hover {
+          background: rgba(77, 146, 209, 0.12);
+        }
       }
     }
 
+    /* ── Month / year grid ── */
     .os-dp-grid {
       display: grid;
       gap: 2px;
@@ -95,6 +127,43 @@
       }
     }
 
+    /* ── Day grid ── */
+    .os-dp-days-grid {
+      padding: 8px;
+
+      .os-dp-weekdays {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        margin-bottom: 2px;
+      }
+
+      .os-dp-weekday {
+        text-align: center;
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--bs-secondary-color, #6c757d);
+        padding: 3px 0;
+      }
+
+      .os-dp-week {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 1px;
+      }
+
+      .os-dp-day-cell {
+        min-width: 0;
+        padding: 5px 2px;
+        font-size: 0.82rem;
+
+        &.os-dp-cell--empty {
+          display: block;
+          background: transparent;
+        }
+      }
+    }
+
+    /* ── Shared cell style ── */
     .os-dp-cell {
       padding: 6px 4px;
       font-size: 0.82rem;
@@ -107,7 +176,7 @@
       text-align: center;
       transition: background 0.12s, border-color 0.12s;
 
-      &:hover {
+      &:hover:not(:disabled) {
         background: rgba(77, 146, 209, 0.15);
       }
 
@@ -121,6 +190,47 @@
         border-color: var(--bs-primary);
         color: var(--bs-primary);
         font-weight: 700;
+      }
+
+      &.os-dp-cell--disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+      }
+    }
+  }
+
+  /* ── Footer (shared by all modes) ── */
+  .os-dp-footer {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 8px;
+    border-top: 1px solid var(--app-card-border);
+
+    .os-dp-btn-today,
+    .os-dp-btn-clear {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 500;
+      border-radius: 4px;
+      padding: 3px 8px;
+      transition: background 0.12s;
+    }
+
+    .os-dp-btn-today {
+      color: var(--bs-primary);
+
+      &:hover {
+        background: rgba(77, 146, 209, 0.12);
+      }
+    }
+
+    .os-dp-btn-clear {
+      color: var(--bs-danger, #dc3545);
+
+      &:hover {
+        background: rgba(220, 53, 69, 0.08);
       }
     }
   }
