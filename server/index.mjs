@@ -225,7 +225,7 @@ db.exec(`
     children_count INTEGER NOT NULL DEFAULT 0,
     office_id INTEGER,
     last_visit TEXT,
-    consent_signed INTEGER NOT NULL DEFAULT 1,
+    consent_signed INTEGER NOT NULL DEFAULT 0,
     consent_signed_at TEXT,
     consent_form_version TEXT NOT NULL DEFAULT '1.0',
     consent_withdrawn_at TEXT,
@@ -14394,7 +14394,7 @@ function findOrCreateQuickPatientForAppointment(lastName, firstName, officeId) {
       'Non renseigne',
       0,
       null,
-      1,
+      0,
       computePatientRetentionDateIso(),
       normalizedOfficeId
     );
