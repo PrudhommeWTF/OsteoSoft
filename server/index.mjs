@@ -10574,9 +10574,9 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         const amountCents = Math.round(num(wf.montant_ttc) * 100);
         const etatPaiement = str(wf.etat_paiement).toLowerCase();
         const etat = str(wf.etat).toLowerCase();
-        let invoiceStatus = 'En attente';
-        if (etatPaiement === 'paye') invoiceStatus = 'Payee';
-        else if (etat === 'annulee') invoiceStatus = 'Annulee';
+        let invoiceStatus = 'impayee';
+        if (etatPaiement === 'paye') invoiceStatus = 'payee';
+        else if (etat === 'annulee') invoiceStatus = 'annulee';
 
         const consultationId = weoConsultationIdToOsteoId.get(str(wf.id_consultation)) ?? null;
         // Use formatted number if available, otherwise raw number, otherwise generate unique fallback
@@ -10649,7 +10649,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
 
         // Fallback: if no paiement_facture rows exist for this paid invoice, synthesize
         // a payment from invoice-level payment fields (for older Webosteo versions)
-        if (paiementFactures.length === 0 && invoiceStatus === 'Payee') {
+        if (paiementFactures.length === 0 && invoiceStatus === 'payee') {
           try {
             const paidAt = parseWeoDate(str(wf.date_paiement)) ?? issuedAt;
             db.prepare(
@@ -17309,7 +17309,7 @@ app.get('/api/billing/alerts', authMiddleware, requirePermission('read-billing-k
            FROM invoice_payments
            GROUP BY invoice_id
          ) pay ON pay.invoice_id = i.id
-         WHERE i.status <> 'payee'
+         WHERE i.status NOT IN ('payee', 'annulee')
          ORDER BY datetime(COALESCE(i.due_at, i.issued_at)) ASC, i.id ASC`
       )
       .all()
@@ -17483,7 +17483,7 @@ app.get('/api/billing/alerts/export', authMiddleware, requirePermission('export-
            FROM invoice_payments
            GROUP BY invoice_id
          ) pay ON pay.invoice_id = i.id
-         WHERE i.status <> 'payee'
+         WHERE i.status NOT IN ('payee', 'annulee')
          ORDER BY datetime(COALESCE(i.due_at, i.issued_at)) ASC, i.id ASC`
       )
       .all()
