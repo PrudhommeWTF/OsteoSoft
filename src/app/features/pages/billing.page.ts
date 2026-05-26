@@ -2280,7 +2280,7 @@ export class BillingPage implements OnDestroy {
   private applyPayload(payload: BillingOperationsPayload): void {
     this.closeActionMenus();
     this.tiles.set(payload.summary ?? []);
-    this.operations.set((payload.operations ?? []).filter((op) => op.sourceType === 'invoice'));
+    this.operations.set(payload.operations ?? []);
     this.offices.set(payload.offices ?? []);
     this.users.set(payload.users ?? []);
 
