@@ -1918,7 +1918,13 @@ export class PatientCreatePage implements OnInit, OnDestroy {
           : undefined
       );
       const created = await this.api.createPatient(payload);
-      await this.persistConsultationBillingInvoice(created);
+      try {
+        await this.persistConsultationBillingInvoice(created);
+      } catch {
+        this.isSaving.set(false);
+        this.errorMessage.set("Le patient et la consultation ont été enregistrés, mais la création de la facture a échoué. Veuillez créer la facture manuellement depuis la page de facturation.");
+        return;
+      }
       this.pendingConsultationLinkStrategy = null;
       this.consultationLinkConflict.set(null);
       this.isConsultationLinkStrategyModalOpen.set(false);
@@ -2549,8 +2555,6 @@ export class PatientCreatePage implements OnInit, OnDestroy {
           paymentMethod: payment.method
         }))
       });
-    } catch {
-      // Non-blocking: the patient and PDF were created successfully.
     }
   }
 

@@ -395,12 +395,12 @@ export class AgendaPage implements OnDestroy {
 
       this.createAppointmentSuccess.set('Rendez-vous créé avec succès.');
       setTimeout(() => {
+        this.isCreatingAppointment.set(false);
         this.closeCreateModal();
         void this.load();
       }, 800);
     } catch (error) {
       this.createAppointmentError.set('Erreur lors de la création du rendez-vous.');
-    } finally {
       this.isCreatingAppointment.set(false);
     }
   }
