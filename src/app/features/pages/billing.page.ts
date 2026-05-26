@@ -574,7 +574,7 @@ export class BillingPage implements OnDestroy {
     const stats = this.exportHistoryStats();
     const dominantFormat = stats.excelCount === stats.jsonCount
       ? 'Mixte'
-      : (stats.excelCount > stats.jsonCount ? 'CSV' : 'JSON');
+      : (stats.excelCount > stats.jsonCount ? 'Excel' : 'JSON');
 
     return {
       todayCount,
@@ -1240,8 +1240,9 @@ export class BillingPage implements OnDestroy {
       return;
     }
 
+    const rawAmountStr = String(this.depositAmount() ?? '').replace(',', '.');
     const amount = isEditing
-      ? Number(this.depositAmount())
+      ? Number(rawAmountStr)
       : Number((this.selectedDepositCandidateAmountCents() / 100).toFixed(2));
 
     if (!Number.isFinite(amount) || amount <= 0) {
