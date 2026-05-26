@@ -1005,10 +1005,27 @@ const anonymizePatientTx = db.transaction((patientId) => {
   ).run(patientId);
 
   db.prepare(
+    `UPDATE invoice_payments
+     SET bank_name_cipher = ?,
+         cheque_number = '',
+         reference = '',
+         notes = ''
+     WHERE invoice_id IN (
+       SELECT id FROM invoices WHERE patient_id = ?
+     )`
+  ).run(anonymizedValue, patientId);
+
+  db.prepare(
     `UPDATE patients
      SET cipher_full_name = ?,
          cipher_phone = ?,
          cipher_medical_notes = ?,
+         sex = 'Non renseigne',
+         birth_date = NULL,
+         marital_status = 'Non renseigne',
+         children_count = 0,
+         consent_signed_at = NULL,
+         consent_form_version = '',
          is_deleted = 1,
          updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`
