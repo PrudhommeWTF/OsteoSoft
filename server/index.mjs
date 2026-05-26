@@ -12025,7 +12025,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
               p.label AS profile_label
        FROM users u
        LEFT JOIN access_profiles p ON p.id = u.profile_id
-       WHERE u.username = ?`
+       WHERE lower(u.username) = lower(?)`
     )
     .get(parsed.data.username);
 
@@ -14172,6 +14172,40 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
     createdAt: credit.created_at
   }));
 
+  const invoiceRows = db
+    .prepare('SELECT * FROM invoices WHERE patient_id = ? AND is_deleted = 0')
+    .all(id);
+
+  const invoices = invoiceRows.map((invoice) => {
+    const lineItems = db
+      .prepare('SELECT * FROM invoice_line_items WHERE invoice_id = ?')
+      .all(invoice.id);
+    const payments = db
+      .prepare('SELECT * FROM invoice_payments WHERE invoice_id = ?')
+      .all(invoice.id);
+    let invoiceNotes = '';
+    try {
+      invoiceNotes = invoice.notes_cipher ? safeDecryptField(invoice.notes_cipher) : '';
+    } catch {
+      invoiceNotes = '';
+    }
+    const { notes_cipher: _nc, ...invoiceWithoutCipher } = invoice;
+    return {
+      ...invoiceWithoutCipher,
+      notes: invoiceNotes,
+      lineItems,
+      payments
+    };
+  });
+
+  const documentRows = db
+    .prepare(
+      `SELECT id, title, document_type, comment, created_at
+       FROM patient_documents
+       WHERE patient_id = ? AND is_deleted = 0`
+    )
+    .all(id);
+
   const rgpdPayload = {
     meta: {
       kind: 'rgpd-patient-export',
@@ -14210,6 +14244,8 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
     antecedents,
     consultations,
     paymentCredits,
+    invoices,
+    documents: documentRows,
     auditTrail
   };
 
@@ -17769,7 +17805,7 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('invoice-con
 
   const existing = db.prepare('SELECT id FROM invoices WHERE invoice_number = ?').get(invoiceNumber);
   if (existing) {
-    return res.status(200).json({ invoiceId: Number(existing.id) });
+    return res.status(409).json({ invoiceId: Number(existing.id) });
   }
 
   const requestedOfficeId = Number.isInteger(officeId) && officeId > 0 ? officeId : null;
