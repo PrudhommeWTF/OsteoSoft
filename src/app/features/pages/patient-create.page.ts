@@ -369,10 +369,16 @@ export class PatientCreatePage implements OnInit, OnDestroy {
     paidAtLocal: ['']
   });
 
+  private readonly billingFormValues = toSignal(
+    this.consultationBillingForm.valueChanges,
+    { initialValue: this.consultationBillingForm.getRawValue() }
+  );
+
   readonly consultationBillingTotalTtc = computed(() => {
-    const quantity = Math.max(0, Number(this.consultationBillingForm.controls.quantity.value) || 0);
-    const amountHt = Math.max(0, Number(this.consultationBillingForm.controls.amountHt.value) || 0);
-    const tvaRate = Math.max(0, Number(this.consultationBillingForm.controls.tvaRate.value) || 0);
+    const v = this.billingFormValues();
+    const quantity = Math.max(0, Number(v?.quantity) || 0);
+    const amountHt = Math.max(0, Number(v?.amountHt) || 0);
+    const tvaRate = Math.max(0, Number(v?.tvaRate) || 0);
     const total = quantity * amountHt * (1 + (tvaRate / 100));
     return Number.isFinite(total) ? Number(total.toFixed(2)) : 0;
   });
