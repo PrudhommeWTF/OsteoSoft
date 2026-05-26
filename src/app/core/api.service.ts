@@ -2,6 +2,8 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
+import { environment } from '../../environments/environment';
+
 import {
   AccessManagedUser,
   AgendaSettingsPayload,
@@ -96,7 +98,7 @@ import {
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = 'http://localhost:4199/api';
+  private readonly baseUrl = environment.apiUrl;
 
   async login(username: string, password: string, remember: boolean): Promise<AuthUser> {
     const response = await firstValueFrom(
