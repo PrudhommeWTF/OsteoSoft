@@ -130,6 +130,10 @@ export class AuthService {
     }
   }
 
+  invalidateSession(): void {
+    this.clearSession();
+  }
+
   private setSessionFromUser(user: AuthUser): void {
     const permissions = new Set<string>();
     const rights = user.rights ?? {};

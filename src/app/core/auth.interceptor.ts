@@ -2,6 +2,7 @@ import { HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, throwError } from 'rxjs';
+import { AuthService } from './auth.service';
 
 const SAFE_METHODS_CSRF = new Set(['GET', 'HEAD', 'OPTIONS']);
 const CSRF_COOKIE_NAME = 'os_csrf';
@@ -13,6 +14,7 @@ function getCsrfToken(): string {
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const router = inject(Router);
+  const auth = inject(AuthService);
 
   let clonedReq = req.clone({ withCredentials: true });
 
@@ -26,6 +28,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   return next(clonedReq).pipe(
     catchError((error) => {
       if (error?.status === 401) {
+        auth.invalidateSession();
         void router.navigate(['/login']);
       }
       return throwError(() => error);

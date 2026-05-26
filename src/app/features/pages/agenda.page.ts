@@ -386,7 +386,7 @@ export class AgendaPage implements OnDestroy {
         isPrivate,
         privateReason: raw.privateReason.trim(),
         practitioner: raw.practitioner.trim(),
-        startsAt: raw.startsAt,
+        startsAt: raw.startsAt ? new Date(raw.startsAt).toISOString() : raw.startsAt,
         reason: raw.reason,
         status: raw.status,
         localCalendarId: calendarForOffice?.id ?? null,
