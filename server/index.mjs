@@ -158,6 +158,17 @@ try {
   console.warn('patients consent columns migration failed:', err.message);
 }
 
+// Migration: add processing_restricted column to patients table (RGPD Art. 18)
+try {
+  const cols = db.prepare(`PRAGMA table_info(patients)`).all().map((c) => c.name);
+  if (cols.length > 0 && !cols.includes('processing_restricted')) {
+    db.exec('ALTER TABLE patients ADD COLUMN processing_restricted INTEGER NOT NULL DEFAULT 0');
+    console.log('✓ Added processing_restricted column to patients');
+  }
+} catch (err) {
+  console.warn('patients processing_restricted migration failed:', err.message);
+}
+
 // Migration: add must_change_password column to users table
 try {
   const cols = db.prepare(`PRAGMA table_info(users)`).all().map((c) => c.name);
@@ -229,6 +240,7 @@ db.exec(`
     consent_signed_at TEXT,
     consent_form_version TEXT NOT NULL DEFAULT '1.0',
     consent_withdrawn_at TEXT,
+    processing_restricted INTEGER NOT NULL DEFAULT 0,
     retention_until TEXT,
     is_deleted INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1009,17 +1021,19 @@ const anonymizePatientTx = db.transaction((patientId) => {
 function processExpiredPatients() {
   const today = new Date().toISOString().slice(0, 10);
 
+  // Anonymise patients whose retention period has expired, including those
+  // whose processing was restricted following consent withdrawal (RGPD Art. 18).
   const expired = db.prepare(
-    `SELECT id, retention_until FROM patients
+    `SELECT id, retention_until, processing_restricted FROM patients
      WHERE is_deleted = 0
        AND retention_until IS NOT NULL
        AND retention_until < ?`
   ).all(today);
 
-  for (const { id, retention_until: retentionUntil } of expired) {
+  for (const { id, retention_until: retentionUntil, processing_restricted: processingRestricted } of expired) {
     anonymizePatientTx(id);
     writeAuditLog(null, 'AUTO_ANONYMIZE', 'patients', String(id), {
-      reason: 'retention_expired',
+      reason: processingRestricted ? 'processing_restricted_retention_expired' : 'retention_expired',
       retentionUntil
     });
   }
@@ -14229,17 +14243,23 @@ app.post('/api/patients/:id/withdraw-consent', authMiddleware, requirePermission
   }
 
   const withdrawnAt = new Date().toISOString();
-  // Record consent withdrawal timestamp first, then immediately anonymize the patient
-  // (RGPD Article 17: erasure without undue delay upon consent withdrawal)
+  // RGPD Art. 17.3.c & Code de la santé publique: le droit à l'effacement ne
+  // s'applique pas lorsque le traitement est nécessaire au respect d'une
+  // obligation légale (conservation des dossiers médicaux, 10 ans minimum).
+  // La bonne réponse est une restriction de traitement (RGPD Art. 18): les
+  // données sont conservées mais leur traitement est limité jusqu'à
+  // l'expiration de la période de rétention légale.
   db.prepare(
-    'UPDATE patients SET consent_withdrawn_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    'UPDATE patients SET consent_withdrawn_at = ?, processing_restricted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
   ).run(withdrawnAt, id);
-
-  anonymizePatientTx(id);
 
   writeAuditLog(req.user.sub, 'WITHDRAW_CONSENT', 'patients', String(id));
 
-  return res.status(200).json({ consentWithdrawnAt: withdrawnAt });
+  return res.status(200).json({
+    consentWithdrawnAt: withdrawnAt,
+    processingRestricted: true,
+    message: "Le traitement des données a été restreint conformément à l'Art. 18 RGPD. Les données seront anonymisées à l'expiration de la période de conservation légale."
+  });
 });
 
 app.post('/api/patients/:id/update-consent', authMiddleware, requirePermission('read-patient-record'), (req, res) => {
