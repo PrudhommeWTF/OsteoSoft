@@ -580,7 +580,7 @@ export class PdfBuilderService {
 
     writeLine('5. Durée de conservation', 11, true, 3);
     writeLine(
-      'Vos données sont conservées pour une durée de 5 ans à compter de votre dernière consultation, ' +
+      'Vos données sont conservées pour une durée de 10 ans à compter de votre dernière consultation, ' +
       'conformément aux recommandations de la CNIL pour les professionnels de santé. ' +
       'Passé ce délai, vos données sont anonymisées ou supprimées.',
       10, false, 4
