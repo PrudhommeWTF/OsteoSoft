@@ -7432,6 +7432,21 @@ const userAgendaPreferencesSchema = z.object({
   appointmentColorMode: z.enum(['calendar', 'user'])
 });
 
+const createAppointmentSchema = z.object({
+  patientId: z.number().int().positive().optional().nullable(),
+  patientFirstName: z.string().max(100).optional().nullable(),
+  patientLastName: z.string().max(100).optional().nullable(),
+  isPrivate: z.union([z.boolean(), z.literal(0), z.literal(1), z.literal('1'), z.literal('0')]).optional().default(false),
+  privateReason: z.string().max(300).optional().nullable(),
+  practitioner: z.string().max(120).optional().nullable(),
+  startsAt: z.string().datetime({ offset: true }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)),
+  reason: z.string().min(1).max(500),
+  status: z.enum(['A confirmer', 'En attente', 'Termine']),
+  localCalendarId: z.union([z.number().int().positive(), z.string()]).optional().nullable(),
+  consultationId: z.number().int().positive().optional().nullable(),
+  officeId: z.number().int().positive().optional().nullable()
+});
+
 if (trustedProxies !== false) {
   app.set('trust proxy', trustedProxies);
 }
@@ -13574,6 +13589,10 @@ app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-co
     return res.status(404).json({ message: 'Consultation introuvable' });
   }
 
+  if (!canUserAccessPatient(Number(consultation.patient_id), req.userAccess)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
   const payload = parsed.data;
   const normalizedReasonItems = normalizeConsultationReasonItems(payload.reasonItems);
 
@@ -14741,6 +14760,11 @@ app.get('/api/appointments', authMiddleware, requirePermission('read-agenda'), (
 });
 
 app.post('/api/appointments', authMiddleware, requirePermission('create-appointment'), (req, res) => {
+  const parsed = createAppointmentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid payload', details: parsed.error.flatten() });
+  }
+
   const {
     patientId,
     patientFirstName,
@@ -14754,21 +14778,7 @@ app.post('/api/appointments', authMiddleware, requirePermission('create-appointm
     localCalendarId,
     consultationId,
     officeId
-  } = req.body;
-
-  // Validate required fields
-  if (typeof startsAt !== 'string' || !startsAt.trim()) {
-    return res.status(400).json({ error: 'Invalid startsAt' });
-  }
-
-  if (typeof reason !== 'string' || !reason.trim()) {
-    return res.status(400).json({ error: 'Invalid reason' });
-  }
-
-  const validStatuses = ['A confirmer', 'En attente', 'Termine'];
-  if (!validStatuses.includes(status)) {
-    return res.status(400).json({ error: 'Invalid status' });
-  }
+  } = parsed.data;
 
   const isPrivateAppointment = isPrivate === true || isPrivate === 1 || isPrivate === '1';
   const trimmedPrivateReason = String(privateReason ?? '').trim();
