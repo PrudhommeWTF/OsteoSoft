@@ -8065,7 +8065,7 @@ app.post('/api/offices', authMiddleware, requirePermission('create-office'), (re
        WHERE user_id = ? AND flow_key = 'new_office'`
     ).run(req.user.sub);
 
-    writeAuditLog(req.user.id, 'CREATE', 'office', result.lastInsertRowid, {
+    writeAuditLog(req.user.sub, 'CREATE', 'office', result.lastInsertRowid, {
       name, city, defaultSessionDurationMinutes: normalizedDefaultSessionDurationMinutes
     });
 
@@ -8196,7 +8196,7 @@ app.put('/api/offices/:id', authMiddleware, requirePermission('update-office-set
     replaceOfficeBusinessSettings(officeId, serviceTypes, paymentMethods);
     replaceOfficeUserDelegations(officeId, officeUserDelegations);
 
-    writeAuditLog(req.user.id, 'UPDATE', 'office', officeId, { name, city, defaultSessionDurationMinutes: normalizedDefaultSessionDurationMinutes });
+    writeAuditLog(req.user.sub, 'UPDATE', 'office', officeId, { name, city, defaultSessionDurationMinutes: normalizedDefaultSessionDurationMinutes });
 
     const office = db.prepare(`
           SELECT id, name, default_session_duration_minutes as defaultSessionDurationMinutes, country, devise,
@@ -8267,7 +8267,7 @@ app.patch('/api/offices/:id/invoice-template', publicEndpointLimiter, authMiddle
     db.prepare('UPDATE offices SET invoice_template_layout_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
       .run(normalizedJson, officeId);
 
-    writeAuditLog(req.user.id, 'UPDATE', 'office_invoice_template', officeId, {});
+    writeAuditLog(req.user.sub, 'UPDATE', 'office_invoice_template', officeId, {});
 
     const row = db.prepare('SELECT invoice_template_layout_json as invoiceTemplateLayoutJson FROM offices WHERE id = ?').get(officeId);
     if (!row) {
@@ -8325,7 +8325,7 @@ app.delete('/api/offices/:id', authMiddleware, requirePermission('delete-office'
     db.prepare('DELETE FROM service_types WHERE office_id = ?').run(officeId);
     db.prepare('DELETE FROM payment_methods WHERE office_id = ?').run(officeId);
     db.prepare(`DELETE FROM offices WHERE id = ?`).run(officeId);
-    writeAuditLog(req.user.id, 'DELETE', 'office', officeId, {});
+    writeAuditLog(req.user.sub, 'DELETE', 'office', officeId, {});
 
     return res.json({ message: 'Cabinet supprimé' });
   } catch (err) {
@@ -8356,7 +8356,7 @@ app.post('/api/offices/reorder', authMiddleware, requirePermission('reorder-offi
       updateOrder.run(index, id);
     });
 
-    writeAuditLog(req.user.id, 'UPDATE', 'office-order', 0, { count: officeIds.length });
+    writeAuditLog(req.user.sub, 'UPDATE', 'office-order', 0, { count: officeIds.length });
 
     const offices = db.prepare(`
           SELECT id, name, default_session_duration_minutes as defaultSessionDurationMinutes, country, devise,
