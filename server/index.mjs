@@ -6923,21 +6923,14 @@ function authMiddleware(req, res, next) {
 }
 
 function adminOnlyMiddleware(req, res, next) {
-  if (req.user.role === 'admin') {
-    return next();
-  }
-
   const access = getUserAccessContext(req.user.sub);
-  if (access?.profileId === SUPER_ADMIN_PROFILE_ID) {
+
+  if (req.user.role === 'admin' || access?.profileId === SUPER_ADMIN_PROFILE_ID) {
     req.userAccess = access;
     return next();
   }
 
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ message: 'Acces refuse' });
-  }
-
-  return next();
+  return res.status(403).json({ message: 'Acces refuse' });
 }
 
 function isLoopbackAddress(address) {
@@ -13806,7 +13799,7 @@ app.get('/api/patients/:id/audit-logs', authMiddleware, requirePermission('read-
   return res.json({ logs });
 });
 
-app.put('/api/patients/:id', authMiddleware, requirePermission('read-patient-record'), (req, res) => {
+app.put('/api/patients/:id', authMiddleware, requirePermission('create-patient-record'), (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: 'ID invalide' });
 
