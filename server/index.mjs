@@ -10861,7 +10861,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
             try {
               db.prepare(
                 `INSERT OR IGNORE INTO accounting_deposit_items (deposit_id, source_type, source_id, created_at) VALUES (?, ?, ?, ?)`
-              ).run(depositId, 'invoice_payment', osteoIpId, new Date().toISOString());
+              ).run(depositId, 'invoice', osteoIpId, new Date().toISOString());
             } catch { /* ignore duplicate / FK errors */ }
           }
         } catch (err) {
@@ -12990,6 +12990,14 @@ app.post('/api/patients/:id/documents', authMiddleware, requirePermission('creat
     return res.status(415).json({ message: err.message || 'Type de fichier non autorisé' });
   }
 
+  const isAdmin = req.user.role === 'admin' || req.userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
+  if (requestedOfficeId !== null) {
+    const scopedOffices = getScopedOfficeOptions(req.userAccess, isAdmin);
+    const allowedOfficeIds = scopedOffices.map((o) => Number(o.id));
+    if (!allowedOfficeIds.includes(requestedOfficeId)) {
+      return res.status(403).json({ message: 'Cabinet inaccessible' });
+    }
+  }
   const officeId = requestedOfficeId;
 
   if (consultationId !== null) {
@@ -18187,7 +18195,7 @@ app.post('/api/billing/deposits', authMiddleware, requirePermission('mark-paymen
     if (invoiceIds.length > 0) {
       const placeholders = invoiceIds.map(() => '?').join(', ');
       const invoiceRows = db
-        .prepare(`SELECT id, amount_cents, office_id FROM invoices WHERE id IN (${placeholders})`)
+        .prepare(`SELECT id, amount_cents, office_id FROM invoices WHERE id IN (${placeholders}) AND status = 'payee'`)
         .all(...invoiceIds);
       if (invoiceRows.length !== invoiceIds.length) {
         return res.status(400).json({ message: 'Operations de remise invalides' });
