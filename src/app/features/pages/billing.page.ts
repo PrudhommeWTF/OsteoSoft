@@ -611,6 +611,7 @@ export class BillingPage implements OnDestroy {
       clearTimeout(this.exportToastTimeout);
       this.exportToastTimeout = null;
     }
+    this.activeOfficeSyncEffect.destroy();
   }
 
   async onDateRangeChange(range?: DateRangeValue): Promise<void> {

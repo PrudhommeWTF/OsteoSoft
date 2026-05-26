@@ -502,6 +502,7 @@ export class AgendaPage implements OnDestroy {
       clearTimeout(this.createPatientSearchDebounceId);
       this.createPatientSearchDebounceId = null;
     }
+    this.activeOfficeSyncEffect.destroy();
   }
 
   private downloadBlob(blob: Blob, fileName: string): void {
