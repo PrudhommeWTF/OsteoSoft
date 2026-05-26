@@ -47,8 +47,8 @@ const SESSION_DEFAULT_MAX_AGE_MS = Number(process.env.SESSION_DEFAULT_MAX_AGE_MS
 const SESSION_REMEMBER_TTL = process.env.SESSION_REMEMBER_TTL ?? '12h';
 const SESSION_DEFAULT_TTL = process.env.SESSION_DEFAULT_TTL ?? '2h';
 const CURRENT_CONSENT_FORM_VERSION = '1.0';
-// Audit log retention: default 3 years (1095 days). Set to 0 to disable automatic purge.
-const AUDIT_LOG_RETENTION_DAYS = Number(process.env.AUDIT_LOG_RETENTION_DAYS ?? 1095);
+// Audit log retention: default 10 years (3650 days) to match patient data retention. Set to 0 to disable automatic purge.
+const AUDIT_LOG_RETENTION_DAYS = Number(process.env.AUDIT_LOG_RETENTION_DAYS ?? 3650);
 // Draft retention: drafts not updated in 7 days are considered orphaned and purged.
 const DRAFT_RETENTION_DAYS = Number(process.env.DRAFT_RETENTION_DAYS ?? 7);
 
@@ -2969,9 +2969,6 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
-  const retentionDate = new Date();
-  retentionDate.setFullYear(retentionDate.getFullYear() + 10);
-  const retentionUntil = retentionDate.toISOString().slice(0, 10);
   const now = new Date();
   const adminUserId = Number(db.prepare("SELECT id FROM users WHERE lower(username) = 'admin' LIMIT 1").get()?.id ?? 0) || null;
 
@@ -3024,6 +3021,7 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
 
       const consentSigned = seededUnit(patientSeedBase + 31) < 0.14 ? 0 : 1;
       const consentSignedAt = consentSigned ? new Date(now.getTime() - ((365 + patientIndex * 30) * 24 * 60 * 60 * 1000)).toISOString() : null;
+      const retentionUntil = computePatientRetentionDateIso(patient.birthDate || null);
 
       const patientResult = insertPatient.run(
         encryptSensitiveField(fullName),
@@ -6166,12 +6164,20 @@ function findOverlappingAppointmentForOffice(officeId, localCalendarId, startsAt
 }
 
 function updatePatientRetentionFields(patientId, consultationDateIso) {
+  // Compute candidate retention date: consultation + 10 years
+  // Also compute birth_date + 28 years (French law: minor records kept until age 28)
+  // and use whichever is later.
   db.prepare(
     `UPDATE patients SET
        last_visit = CASE WHEN last_visit IS NULL OR date(?) > last_visit THEN date(?) ELSE last_visit END,
-       retention_until = CASE WHEN retention_until IS NULL OR date(?, '+10 years') > retention_until THEN date(?, '+10 years') ELSE retention_until END
+       retention_until = CASE
+         WHEN birth_date IS NOT NULL AND date(birth_date, '+28 years') > date(?, '+10 years')
+           THEN CASE WHEN retention_until IS NULL OR date(birth_date, '+28 years') > retention_until THEN date(birth_date, '+28 years') ELSE retention_until END
+         ELSE
+           CASE WHEN retention_until IS NULL OR date(?, '+10 years') > retention_until THEN date(?, '+10 years') ELSE retention_until END
+       END
      WHERE id = ?`
-  ).run(consultationDateIso, consultationDateIso, consultationDateIso, consultationDateIso, patientId);
+  ).run(consultationDateIso, consultationDateIso, consultationDateIso, consultationDateIso, consultationDateIso, patientId);
 }
 
 function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}) {
@@ -9513,9 +9519,6 @@ app.post('/api/data-management/import', heavyOperationLimiter, authMiddleware, r
         const landlinePhone = patient.landlinePhone.trim();
         const mainPhone = mobilePhone || landlinePhone || 'Non renseigne';
 
-        const retentionDate = new Date();
-        retentionDate.setFullYear(retentionDate.getFullYear() + 10);
-        const retentionUntil = retentionDate.toISOString().slice(0, 10);
         const normalizedRelatedPeople = formatRelatedPeople(parseRelatedPeople(patient.relatedPeople));
 
         const medicalRecord = {
@@ -9543,6 +9546,7 @@ app.post('/api/data-management/import', heavyOperationLimiter, authMiddleware, r
         };
 
         const birthDate = patient.birthDate.trim();
+        const retentionUntil = computePatientRetentionDateIso(birthDate || null);
         const inserted = db
           .prepare(
             `INSERT INTO patients
@@ -10267,9 +10271,6 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
     let weoPatients = [];
     try { weoPatients = weoDb.prepare('SELECT * FROM patient').all(); } catch { /* ignore */ }
 
-    const retentionDate = new Date();
-    retentionDate.setFullYear(retentionDate.getFullYear() + 10);
-    const retentionUntil = retentionDate.toISOString().slice(0, 10);
     const now = new Date().toISOString();
 
     for (const wp of weoPatients) {
@@ -10283,6 +10284,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         const firstName = recovered ? recovered.prenom : (str(wp.prenom) || '[Non dechiffre]');
         const fullName = `${lastName} ${firstName}`.trim();
         const birthDate = parseWeoDate(wp.date_naissance);
+        const retentionUntil = computePatientRetentionDateIso(birthDate || null);
 
         // Idempotency: skip if same name+birthdate already exists in this office
         const existingRows = db.prepare(
@@ -12737,10 +12739,6 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
   const landlinePhone = payload.landlinePhone.trim();
   const mainPhone = mobilePhone || landlinePhone || 'Non renseigne';
 
-  const retentionDate = new Date();
-  retentionDate.setFullYear(retentionDate.getFullYear() + 10);
-  const retentionUntil = retentionDate.toISOString().slice(0, 10);
-
   const normalizedRelatedPeople = formatRelatedPeople(parseRelatedPeople(payload.relatedPeople));
 
   const medicalRecord = {
@@ -12770,6 +12768,7 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
   const antecedentCategories = extractAntecedentCategories(payload.medicalHistory);
 
   const birthDate = payload.birthDate.trim();
+  const retentionUntil = computePatientRetentionDateIso(birthDate || null);
   const consentSignedAt = new Date().toISOString();
   const inserted = db
     .prepare(
@@ -14331,10 +14330,22 @@ function parsePatientNotesFromCipher(cipherMedicalNotes) {
   }
 }
 
-function computePatientRetentionDateIso() {
-  const retentionDate = new Date();
-  retentionDate.setFullYear(retentionDate.getFullYear() + 10);
-  return retentionDate.toISOString().slice(0, 10);
+function computePatientRetentionDateIso(birthDateIso) {
+  // Base rule: 10 years from today (used when no consultation date is known)
+  const tenYearsFromNow = new Date();
+  tenYearsFromNow.setFullYear(tenYearsFromNow.getFullYear() + 10);
+
+  // GDPR / Code de la santé publique: medical records for minors must be kept
+  // until at least the patient's 28th birthday (10 years after majority at 18).
+  if (birthDateIso) {
+    const minorThreshold = new Date(birthDateIso);
+    minorThreshold.setFullYear(minorThreshold.getFullYear() + 28);
+    if (minorThreshold > tenYearsFromNow) {
+      return minorThreshold.toISOString().slice(0, 10);
+    }
+  }
+
+  return tenYearsFromNow.toISOString().slice(0, 10);
 }
 
 function buildDefaultPatientNotes() {
