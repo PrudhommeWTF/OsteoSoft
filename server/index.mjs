@@ -10178,8 +10178,41 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
     let importedDeposits = 0;
     let updatedRelatedPeople = 0;
 
-    // ---- Remplacement des données du cabinet cible ----
-    // Delete existing office data before importing so Webosteo data fully replaces it.
+    // ---- Pré-calcul des mots de passe utilisateurs (async, avant la transaction) ----
+    // argon2.hash is async and cannot run inside a synchronous better-sqlite3 transaction,
+    // so we compute all password hashes up-front before entering the transaction.
+    let weoUsers = [];
+    try { weoUsers = weoDb.prepare('SELECT * FROM utilisateur').all(); } catch { /* table may not exist */ }
+
+    // userPreparedData: Map<login, { hash, tempPassword, isActive, retro }>
+    const userPreparedData = new Map();
+    for (const wu of weoUsers) {
+      const username = str(wu.login);
+      if (!username) continue;
+      try {
+        const tempPassword = crypto.randomBytes(8).toString('hex');
+        const hash = await argon2.hash(tempPassword, {
+          type: argon2.argon2id,
+          memoryCost: 2 ** 16,
+          timeCost: 3,
+          parallelism: 1
+        });
+        // Support multiple WebOsteo field names for active status:
+        // - 'enabled': 'oui'/'non' or '1'/'0'
+        // - 'actif': '1'/'0' or 'true'/'false'
+        const rawActive = wu.actif ?? wu.enabled ?? wu.is_active ?? wu.statut ?? null;
+        const rawActiveStr = str(rawActive).toLowerCase();
+        const isActive = (rawActiveStr === '0' || rawActiveStr === 'non' || rawActiveStr === 'false' || rawActiveStr === 'inactif') ? 0 : 1;
+        const retro = num(wu.retro_defaut);
+        userPreparedData.set(username, { hash, tempPassword, isActive, retro });
+      } catch (err) {
+        errors.push({ entity: 'utilisateur', message: `Login ${username}: ${err instanceof Error ? err.message : 'Erreur'}` });
+      }
+    }
+
+    // ---- Import principal dans une transaction atomique ----
+    // All deletions and ALL insertions are wrapped in a single transaction so that
+    // a crash or error mid-import never leaves the office in a partially-empty state.
     // Deletion order respects FK constraints (foreign_keys = ON):
     //   appointments and consultations reference patient_id without ON DELETE CASCADE,
     //   so they must be deleted before patients.
@@ -10187,18 +10220,15 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
     //   cascade from invoices/credits respectively.
     //   patient_antecedents, patient_documents and patient_payment_credits cascade from patients.
     db.transaction(() => {
+      // ---- Remplacement des données du cabinet cible ----
       db.prepare('DELETE FROM appointments WHERE office_id = ?').run(officeId);
       db.prepare('DELETE FROM invoices WHERE office_id = ?').run(officeId);
       db.prepare('DELETE FROM patient_payment_credits WHERE office_id = ?').run(officeId);
       db.prepare('DELETE FROM consultations WHERE office_id = ?').run(officeId);
       db.prepare('DELETE FROM patients WHERE office_id = ?').run(officeId);
       db.prepare('DELETE FROM directory_contacts WHERE office_id = ?').run(officeId);
-    })();
 
     // ---- Utilisateurs ----
-    let weoUsers = [];
-    try { weoUsers = weoDb.prepare('SELECT * FROM utilisateur').all(); } catch { /* table may not exist */ }
-
     for (const wu of weoUsers) {
       try {
         const username = str(wu.login);
@@ -10209,34 +10239,22 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
           continue;
         }
 
-        const tempPassword = crypto.randomBytes(8).toString('hex');
-        const hash = await argon2.hash(tempPassword, {
-          type: argon2.argon2id,
-          memoryCost: 2 ** 16,
-          timeCost: 3,
-          parallelism: 1
-        });
+        const prepared = userPreparedData.get(username);
+        if (!prepared) continue; // hash failed earlier, already recorded in errors
 
         // Webosteo users always receive a practitioner role at the application level.
         // Their access rights are scoped to the target office through office_user_delegations,
         // not through the application-level 'admin' role.
         const role = 'practitioner';
-        // Support multiple WebOsteo field names for active status:
-        // - 'enabled': 'oui'/'non' or '1'/'0'
-        // - 'actif': '1'/'0' or 'true'/'false'
-        const rawActive = wu.actif ?? wu.enabled ?? wu.is_active ?? wu.statut ?? null;
-        const rawActiveStr = str(rawActive).toLowerCase();
-        const isActive = (rawActiveStr === '0' || rawActiveStr === 'non' || rawActiveStr === 'false' || rawActiveStr === 'inactif') ? 0 : 1;
-        const retro = num(wu.retro_defaut);
 
         const inserted = db.prepare(
           `INSERT INTO users (username, password_hash, role, is_active, profile_id, office_id, last_name, first_name, email, mobile_phone, country, siret, adeli_code, rpps_code, ape_naf_code, color_hex, retrocession_percent, must_change_password)
            VALUES (?, ?, ?, ?, 'cabinet-member', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`
         ).run(
           username,
-          hash,
+          prepared.hash,
           role,
-          isActive,
+          prepared.isActive,
           officeId,
           str(wu.nom).slice(0, 100),
           str(wu.prenom).slice(0, 100),
@@ -10248,7 +10266,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
           str(wu.rpps).slice(0, 40),
           str(wu.ape).slice(0, 40),
           str(wu.couleur) || '#4d92d1',
-          retro
+          prepared.retro
         );
 
         const newUserId = Number(inserted.lastInsertRowid);
@@ -10259,7 +10277,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
           `INSERT OR REPLACE INTO office_user_delegations (office_id, user_id, profile_id) VALUES (?, ?, 'cabinet-member')`
         ).run(officeId, newUserId);
 
-        tempPasswords[username] = tempPassword;
+        tempPasswords[username] = prepared.tempPassword;
         userLoginToUsername.set(username, username);
         importedUsers += 1;
       } catch (err) {
@@ -10869,6 +10887,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         }
       }
     }
+    })(); // end of atomic import transaction
 
     writeAuditLog(req.user.sub, 'IMPORT', 'data-management-webosteo', String(officeId), {
       importedUsers,
@@ -12015,7 +12034,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
               p.label AS profile_label
        FROM users u
        LEFT JOIN access_profiles p ON p.id = u.profile_id
-       WHERE u.username = ?`
+       WHERE lower(u.username) = lower(?)`
     )
     .get(parsed.data.username);
 
@@ -14167,6 +14186,40 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
     createdAt: credit.created_at
   }));
 
+  const invoiceRows = db
+    .prepare('SELECT * FROM invoices WHERE patient_id = ? AND is_deleted = 0')
+    .all(id);
+
+  const invoices = invoiceRows.map((invoice) => {
+    const lineItems = db
+      .prepare('SELECT * FROM invoice_line_items WHERE invoice_id = ?')
+      .all(invoice.id);
+    const payments = db
+      .prepare('SELECT * FROM invoice_payments WHERE invoice_id = ?')
+      .all(invoice.id);
+    let invoiceNotes = '';
+    try {
+      invoiceNotes = invoice.notes_cipher ? safeDecryptField(invoice.notes_cipher) : '';
+    } catch {
+      invoiceNotes = '';
+    }
+    const { notes_cipher: _nc, ...invoiceWithoutCipher } = invoice;
+    return {
+      ...invoiceWithoutCipher,
+      notes: invoiceNotes,
+      lineItems,
+      payments
+    };
+  });
+
+  const documentRows = db
+    .prepare(
+      `SELECT id, title, document_type, comment, created_at
+       FROM patient_documents
+       WHERE patient_id = ? AND is_deleted = 0`
+    )
+    .all(id);
+
   const rgpdPayload = {
     meta: {
       kind: 'rgpd-patient-export',
@@ -14205,6 +14258,8 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
     antecedents,
     consultations,
     paymentCredits,
+    invoices,
+    documents: documentRows,
     auditTrail
   };
 
@@ -17776,7 +17831,7 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('invoice-con
 
   const existing = db.prepare('SELECT id FROM invoices WHERE invoice_number = ?').get(invoiceNumber);
   if (existing) {
-    return res.status(200).json({ invoiceId: Number(existing.id) });
+    return res.status(409).json({ invoiceId: Number(existing.id) });
   }
 
   const requestedOfficeId = Number.isInteger(officeId) && officeId > 0 ? officeId : null;
