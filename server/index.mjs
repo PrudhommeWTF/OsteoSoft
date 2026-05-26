@@ -8367,9 +8367,11 @@ app.delete('/api/offices/:id', authMiddleware, requirePermission('delete-office'
       return res.status(404).json({ message: 'Cabinet introuvable' });
     }
 
-    db.prepare('DELETE FROM service_types WHERE office_id = ?').run(officeId);
-    db.prepare('DELETE FROM payment_methods WHERE office_id = ?').run(officeId);
-    db.prepare(`DELETE FROM offices WHERE id = ?`).run(officeId);
+    db.transaction(() => {
+      db.prepare('DELETE FROM service_types WHERE office_id = ?').run(officeId);
+      db.prepare('DELETE FROM payment_methods WHERE office_id = ?').run(officeId);
+      db.prepare(`DELETE FROM offices WHERE id = ?`).run(officeId);
+    })();
     writeAuditLog(req.user.sub, 'DELETE', 'office', officeId, {});
 
     return res.json({ message: 'Cabinet supprimé' });
@@ -11130,6 +11132,10 @@ app.get('/api/patients/:id/consultation-drafts/new-consultation', authMiddleware
     return res.status(404).json({ message: 'Patient introuvable' });
   }
 
+  if (!canUserAccessPatient(patient.id, req.userAccess)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
   const flowKey = `new_consultation_patient_${patientId}`;
   const row = db
     .prepare(
@@ -11174,6 +11180,10 @@ app.put('/api/patients/:id/consultation-drafts/new-consultation', authMiddleware
     return res.status(404).json({ message: 'Patient introuvable' });
   }
 
+  if (!canUserAccessPatient(patient.id, req.userAccess)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
   const parsed = newConsultationDraftSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: 'Payload invalide' });
@@ -11196,6 +11206,15 @@ app.delete('/api/patients/:id/consultation-drafts/new-consultation', authMiddlew
   const patientId = Number(req.params.id);
   if (!Number.isInteger(patientId) || patientId <= 0) {
     return res.status(400).json({ message: 'ID patient invalide' });
+  }
+
+  const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
+  if (!patient) {
+    return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  if (!canUserAccessPatient(patient.id, req.userAccess)) {
+    return res.status(403).json({ error: 'Access denied' });
   }
 
   const flowKey = `new_consultation_patient_${patientId}`;
