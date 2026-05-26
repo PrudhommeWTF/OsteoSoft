@@ -2538,33 +2538,31 @@ export class PatientCreatePage implements OnInit, OnDestroy {
       ? String(billing.payments[0]?.method ?? '').trim()
       : (billing.payments.length > 1 ? 'multiple' : '');
 
-    try {
-      await this.api.createBillingInvoice({
-        patientId: created.patient.id,
-        consultationId,
-        officeId: billing.officeId ?? created.consultation?.officeId ?? null,
-        invoiceNumber: billing.invoiceNumber,
-        amountCents: Math.round(billing.totalAmount * 100),
-        status: billingStatus,
-        paymentMethod: billingPaymentMethod,
-        issuedAt: billing.issuedAt,
-        currency: billing.currency,
-        notes: billing.internalComment,
-        lineItems: [{
-          label: serviceLabel,
-          quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
-          unitAmountHtCents: Math.max(0, Math.round(amountHt * 100)),
-          vatRate: Number.isFinite(tvaRate) ? tvaRate : 0,
-          displayOrder: 0
-        }],
-        payments: billing.payments.map((payment) => ({
-          paidAt: payment.paidAt,
-          amountCents: Math.max(0, Math.round(payment.amount * 100)),
-          currency: payment.currency,
-          paymentMethod: payment.method
-        }))
-      });
-    }
+    await this.api.createBillingInvoice({
+      patientId: created.patient.id,
+      consultationId,
+      officeId: billing.officeId ?? created.consultation?.officeId ?? null,
+      invoiceNumber: billing.invoiceNumber,
+      amountCents: Math.round(billing.totalAmount * 100),
+      status: billingStatus,
+      paymentMethod: billingPaymentMethod,
+      issuedAt: billing.issuedAt,
+      currency: billing.currency,
+      notes: billing.internalComment,
+      lineItems: [{
+        label: serviceLabel,
+        quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+        unitAmountHtCents: Math.max(0, Math.round(amountHt * 100)),
+        vatRate: Number.isFinite(tvaRate) ? tvaRate : 0,
+        displayOrder: 0
+      }],
+      payments: billing.payments.map((payment) => ({
+        paidAt: payment.paidAt,
+        amountCents: Math.max(0, Math.round(payment.amount * 100)),
+        currency: payment.currency,
+        paymentMethod: payment.method
+      }))
+    });
   }
 
   private computeConsultationPaymentStatus(totalAmount: number, payments: ConsultationPaymentEntry[]): ConsultationPaymentStatus {
