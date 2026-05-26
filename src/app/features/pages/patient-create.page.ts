@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, OnDestroy, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { jsPDF } from 'jspdf';
 import { NgbDateStruct } from '@ng-bootstrap/ng-bootstrap';
 
@@ -133,6 +133,7 @@ const parentContactFields: ParentContactField[] = [
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PatientCreatePage implements OnInit, OnDestroy {
+  private readonly destroyRef = inject(DestroyRef);
   private readonly formBuilder = inject(FormBuilder);
   private readonly api = inject(ApiService);
   private readonly authService = inject(AuthService);
@@ -1187,7 +1188,9 @@ export class PatientCreatePage implements OnInit, OnDestroy {
       void this.persistDraft({ isAutoSave: true });
     }, 3 * 60 * 1000);
 
-    this.antecedentDateCtrl.valueChanges.subscribe((val) => {
+    this.antecedentDateCtrl.valueChanges.pipe(
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe((val) => {
       const precision = this.antecedentDatePrecision();
       if (!val) {
         this.antecedentDateDisplay.set('');
