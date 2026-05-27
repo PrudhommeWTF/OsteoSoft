@@ -844,7 +844,7 @@
                 <div class="consultation-main-panel border rounded-3 p-3 bg-body">
                   <div class="mb-3">
                     <label class="form-label" for="consultation-started-at">Début de consultation</label>
-                    <input id="consultation-started-at" type="datetime-local" class="form-control" formControlName="startedAtLocal" />
+                    <app-date-picker id="consultation-started-at" mode="datetime" formControlName="startedAtLocal" />
                   </div>
 
                   <div class="mb-3">
@@ -1617,7 +1617,7 @@
             <div class="row g-3">
               <div class="col-12 col-lg-4">
                 <label class="form-label" for="patient-letter-date">Date</label>
-                <input id="patient-letter-date" type="date" class="form-control" formControlName="date" />
+                <app-date-picker id="patient-letter-date" mode="date" formControlName="date" />
               </div>
               <div class="col-12 col-lg-8">
                 <label class="form-label" for="patient-letter-template">Lettre type</label>
@@ -1727,7 +1727,7 @@
               </div>
               <div class="col-12">
                 <label class="form-label">Date et heure</label>
-                <input type="datetime-local" class="form-control" formControlName="paidAtLocal" />
+                <app-date-picker mode="datetime" formControlName="paidAtLocal" />
               </div>
             </div>
 

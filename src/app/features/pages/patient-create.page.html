@@ -790,12 +790,11 @@
             <div class="consultation-main-panel border rounded-3 p-3 bg-body">
               <div class="mb-3">
                 <label class="form-label" for="consultationStartedAt">Debut de consultation</label>
-                <input
+                <app-date-picker
                   id="consultationStartedAt"
-                  type="datetime-local"
-                  class="form-control"
-                  [value]="consultationStartedAtInput()"
-                  (input)="setConsultationStartedAt($any($event.target).value)"
+                  mode="datetime"
+                  [ngModel]="consultationStartedAtInput()"
+                  (ngModelChange)="setConsultationStartedAt($event)"
                 />
               </div>
 
@@ -1294,7 +1293,7 @@
             </div>
             <div class="mb-3">
               <label class="form-label fw-semibold">Date et heure du paiement</label>
-              <input type="datetime-local" class="form-control" formControlName="paidAtLocal" />
+              <app-date-picker mode="datetime" formControlName="paidAtLocal" />
             </div>
 
             @if (getConsultationPaymentValidationError()) {
