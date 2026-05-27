@@ -15,11 +15,12 @@ import { AgendaSettings, Appointment, DashboardEvent, LocalAgendaCalendar, Offic
 import { WeekCalendar } from './week-calendar';
 import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 import { sanitizeCellValue } from '../../core/xlsx-export.utils';
+import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 
 @Component({
   selector: 'app-agenda-page',
   standalone: true,
-  imports: [ReactiveFormsModule, WeekCalendar, BsTooltipDirective],
+  imports: [ReactiveFormsModule, WeekCalendar, BsTooltipDirective, DatePickerComponent],
   templateUrl: './agenda.page.html',
   styleUrl: './agenda.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush

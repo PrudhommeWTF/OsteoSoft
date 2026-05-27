@@ -903,7 +903,11 @@
             <div class="row g-3">
               <div class="col-12 col-md-4">
                 <label class="form-label mb-1">Date/heure</label>
-                <input type="datetime-local" class="form-control" [value]="prototypePaymentOccurredAt()" (input)="prototypePaymentOccurredAt.set($any($event.target).value || '')" />
+                <app-date-picker
+                  mode="datetime"
+                  [ngModel]="prototypePaymentOccurredAt()"
+                  (ngModelChange)="prototypePaymentOccurredAt.set($event ?? '')"
+                />
               </div>
               <div class="col-12 col-md-4">
                 <label class="form-label mb-1">Montant (EUR)</label>
@@ -973,7 +977,11 @@
         <div class="modal-body">
           <div class="mb-2">
             <label class="form-label">Date et heure</label>
-            <input type="datetime-local" class="form-control" [value]="expenseOccurredAt()" (input)="expenseOccurredAt.set($any($event.target).value || '')" />
+            <app-date-picker
+              mode="datetime"
+              [ngModel]="expenseOccurredAt()"
+              (ngModelChange)="expenseOccurredAt.set($event ?? '')"
+            />
           </div>
           <div class="mb-2">
             <label class="form-label">Titre</label>
@@ -1094,11 +1102,11 @@
             </div>
             <div class="col-12 col-lg-2">
               <label class="form-label">Date</label>
-              <input
-                type="datetime-local"
-                class="form-control"
-                [value]="depositOccurredAt()"
-                (input)="onDepositOccurredAtInput($any($event.target).value || '')" />
+              <app-date-picker
+                mode="datetime"
+                [ngModel]="depositOccurredAt()"
+                (ngModelChange)="onDepositOccurredAtInput($event ?? '')"
+              />
             </div>
             <div class="col-12 col-lg-3">
               <label class="form-label">Banque</label>

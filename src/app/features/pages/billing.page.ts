@@ -26,6 +26,7 @@ import { AuthService } from '../../core/auth.service';
 import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 import { PdfBuilderService } from '../../core/pdf-builder.service';
 import { DateRangePickerComponent, DateRangeValue } from '../../shared/date-range-picker/date-range-picker.component';
+import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 
 type ExportHistoryItem = {
   id: string;
@@ -52,7 +53,7 @@ type DepositCandidateGroup = {
 
 @Component({
   selector: 'app-billing-page',
-  imports: [DatePipe, RouterLink, BsTooltipDirective, DateRangePickerComponent],
+  imports: [DatePipe, RouterLink, BsTooltipDirective, DateRangePickerComponent, DatePickerComponent],
   templateUrl: './billing.page.html',
   styleUrl: './billing.page.scss',
   host: {
