@@ -94,6 +94,62 @@
   </div>
 }
 
+<!-- ── datetime mode (NgbInputDatepicker + time select) ────────────────────── -->
+@if (mode === 'datetime') {
+  <div class="os-datepicker-wrapper os-datetimepicker-wrapper">
+    <div class="os-datetime-row">
+      <div class="os-datetime-date-col">
+        <div class="os-datepicker-wrapper">
+          <input
+            [id]="id"
+            type="text"
+            class="form-control os-dp-input"
+            [formControl]="internalControl"
+            placeholder="jj/mm/aaaa"
+            [autocomplete]="autocomplete"
+            [maxDate]="maxDate!"
+            [minDate]="minDate!"
+            [startDate]="today"
+            ngbDatepicker
+            #dpRef="ngbDatepicker"
+            (blur)="onBlur()"
+          />
+          <button
+            type="button"
+            class="os-dp-toggle"
+            (click)="dpRef.toggle()"
+            tabindex="-1"
+            aria-label="Ouvrir le calendrier"
+            [disabled]="isDisabled()"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="os-datetime-time-col">
+        <select
+          class="form-select os-dp-time-select"
+          [value]="timeValue()"
+          (change)="setTime($any($event.target).value)"
+          [disabled]="isDisabled()"
+          aria-label="Heure"
+        >
+          <option value="" disabled>--:--</option>
+          @for (slot of timeSlots(); track slot) {
+            <option [value]="slot" [selected]="slot === timeValue()">{{ slot }}</option>
+          }
+        </select>
+      </div>
+    </div>
+    <div class="os-dp-footer os-datetime-actions">
+      <button type="button" class="os-dp-btn-today" (click)="setNow()" [disabled]="isDisabled()">Maintenant</button>
+      <button type="button" class="os-dp-btn-clear" (click)="clearDateTimeValue()" [disabled]="isDisabled()">Effacer</button>
+    </div>
+  </div>
+}
+
 <!-- ── year mode ───────────────────────────────────────────────────────────── -->
 @if (mode === 'year') {
   <div class="os-datepicker-wrapper">

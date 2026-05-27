@@ -36,6 +36,34 @@
     }
   }
 
+  /* ── datetime mode ── */
+  &.os-datetimepicker-wrapper {
+    .os-datetime-row {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+
+      .os-datetime-date-col {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+
+      .os-datetime-time-col {
+        flex: 0 0 auto;
+        width: 90px;
+      }
+    }
+
+    .os-dp-time-select {
+      height: 100%;
+      padding-right: 1.5rem;
+    }
+
+    .os-datetime-actions {
+      margin-top: 6px;
+    }
+  }
+
   /* ── Custom dropdown panel (month / year modes) ── */
   .os-dp-panel {
     position: absolute;

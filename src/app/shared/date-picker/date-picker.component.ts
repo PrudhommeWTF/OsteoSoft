@@ -21,7 +21,7 @@ import { NgbDateIsoAdapter } from '../../core/ngb-date-iso-adapter';
 import { NgbDateFrParserFormatter } from '../../core/ngb-date-fr-parser-formatter';
 
 /** Supported picker modes. */
-export type DatePickerMode = 'date' | 'month' | 'year';
+export type DatePickerMode = 'date' | 'month' | 'year' | 'datetime';
 
 const MONTHS = [
   { value: 1, label: 'Jan' },
@@ -72,6 +72,7 @@ export class DatePickerComponent implements ControlValueAccessor, OnInit, OnDest
   @Input() minDate?: NgbDateStruct;
   @Input() autocomplete = 'off';
   @Input() mode: DatePickerMode = 'date';
+  @Input() timeStep: number = 15;
 
   @ViewChild('dpRef') dpRef?: NgbInputDatepicker;
   @ViewChild('footerTpl', { static: true }) footerTpl!: TemplateRef<unknown>;
@@ -82,6 +83,7 @@ export class DatePickerComponent implements ControlValueAccessor, OnInit, OnDest
   readonly isDisabled = signal(false);
   readonly isPanelOpen = signal(false);
   readonly displayValue = signal('');
+  readonly timeValue = signal<string>('');
 
   // Month-mode navigation
   readonly panelYear = signal(new Date().getFullYear());
@@ -105,6 +107,17 @@ export class DatePickerComponent implements ControlValueAccessor, OnInit, OnDest
     return `${s} – ${s + YEAR_PAGE - 1}`;
   });
 
+  readonly timeSlots = computed(() => {
+    const slots: string[] = [];
+    const step = Math.max(1, Math.min(60, this.timeStep));
+    for (let h = 0; h < 24; h++) {
+      for (let m = 0; m < 60; m += step) {
+        slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+      }
+    }
+    return slots;
+  });
+
   get computedPlaceholder(): string {
     if (this.placeholder != null) return this.placeholder;
     if (this.mode === 'month') return 'mm/aaaa';
@@ -118,6 +131,10 @@ export class DatePickerComponent implements ControlValueAccessor, OnInit, OnDest
 
   ngOnInit(): void {
     this.sub = this.internalControl.valueChanges.subscribe((v) => {
+      if (this.mode === 'datetime') {
+        this.emitDateTimeValue();
+        return;
+      }
       this.onChange(v ?? null);
       this.syncDisplayValue(v ?? null);
     });
@@ -135,6 +152,14 @@ export class DatePickerComponent implements ControlValueAccessor, OnInit, OnDest
   }
 
   writeValue(value: string | null): void {
+    if (this.mode === 'datetime' && value) {
+      const tIdx = value.indexOf('T');
+      const datePart = tIdx >= 0 ? value.substring(0, tIdx) : value;
+      const timePart = tIdx >= 0 ? value.substring(tIdx + 1, tIdx + 6) : '';
+      this.internalControl.setValue(datePart || null, { emitEvent: false });
+      this.timeValue.set(timePart);
+      return;
+    }
     this.internalControl.setValue(value ?? null, { emitEvent: false });
     this.syncDisplayValue(value ?? null);
     if (value) {
@@ -184,6 +209,44 @@ export class DatePickerComponent implements ControlValueAccessor, OnInit, OnDest
 
   onBlur(): void {
     this.onTouched();
+  }
+
+  // ── datetime mode ──────────────────────────────────────────────────────────
+
+  setTime(time: string): void {
+    this.timeValue.set(time);
+    this.emitDateTimeValue();
+    this.onTouched();
+  }
+
+  setNow(): void {
+    const now = new Date();
+    const step = Math.max(1, Math.min(60, this.timeStep));
+    const roundedMinutes = Math.floor(now.getMinutes() / step) * step;
+    const datePart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const timePart = `${String(now.getHours()).padStart(2, '0')}:${String(roundedMinutes).padStart(2, '0')}`;
+    this.internalControl.setValue(datePart, { emitEvent: false });
+    this.timeValue.set(timePart);
+    this.emitDateTimeValue();
+    this.onTouched();
+  }
+
+  clearDateTimeValue(): void {
+    this.internalControl.setValue(null, { emitEvent: false });
+    this.timeValue.set('');
+    this.onChange(null);
+    this.dpRef?.close();
+    this.onTouched();
+  }
+
+  private emitDateTimeValue(): void {
+    const date = this.internalControl.value;
+    const time = this.timeValue();
+    if (date && time) {
+      this.onChange(`${date}T${time}`);
+    } else {
+      this.onChange(null);
+    }
   }
 
   // ── month / year panel ────────────────────────────────────────────────────
