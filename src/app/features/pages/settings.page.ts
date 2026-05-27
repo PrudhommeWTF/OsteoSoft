@@ -4456,6 +4456,11 @@ export class SettingsPage implements OnDestroy {
     this.officeForm.patchValue({ openingHoursJson: JSON.stringify(next) });
   }
 
+  isOpeningRangeInvalid(start: string, end: string): boolean {
+    if (!start || !end) return false;
+    return end <= start;
+  }
+
   insertOfficeLetterVariable(controlName: OfficeLetterControlName, token: string, elementId: string): void {
     const control = this.officeForm.controls[controlName];
     const currentValue = String(control.value ?? '');

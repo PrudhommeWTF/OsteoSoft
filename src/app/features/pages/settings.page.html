@@ -2047,13 +2047,23 @@
                                       <td>
                                         <div class="d-flex flex-column gap-2">
                                           @for (range of officeOpeningHoursDraft()[day]; track $index; let rangeIndex = $index) {
-                                            <div class="d-flex align-items-center gap-2">
-                                              <input type="time" class="form-control form-control-sm" [value]="range.start" (input)="updateOfficeOpeningRange(day, rangeIndex, 'start', $any($event.target).value || '')" />
-                                              <span class="text-secondary">a</span>
-                                              <input type="time" class="form-control form-control-sm" [value]="range.end" (input)="updateOfficeOpeningRange(day, rangeIndex, 'end', $any($event.target).value || '')" />
-                                              <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeOfficeOpeningRange(day, rangeIndex)" title="Supprimer" bsTooltip>
-                                                <i class="fa-solid fa-trash"></i>
-                                              </button>
+                                            <div class="d-flex flex-column">
+                                              <div class="d-flex align-items-center gap-2">
+                                                <input type="time" step="900" class="form-control form-control-sm" [value]="range.start" aria-label="Heure d'ouverture" (input)="updateOfficeOpeningRange(day, rangeIndex, 'start', $any($event.target).value || '')" />
+                                                <span class="mx-2 text-muted align-self-center">à</span>
+                                                <input type="time" step="900" class="form-control form-control-sm" [value]="range.end" aria-label="Heure de fermeture" (input)="updateOfficeOpeningRange(day, rangeIndex, 'end', $any($event.target).value || '')" />
+                                                <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeOfficeOpeningRange(day, rangeIndex)" title="Supprimer" bsTooltip>
+                                                  <i class="fa-solid fa-trash"></i>
+                                                </button>
+                                              </div>
+                                              @if (isOpeningRangeInvalid(range.start, range.end)) {
+                                                <div class="text-danger small mt-1">
+                                                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true" class="me-1">
+                                                    <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"/>
+                                                  </svg>
+                                                  L'heure de fin doit être après l'heure de début
+                                                </div>
+                                              }
                                             </div>
                                           }
                                           @if (officeOpeningHoursDraft()[day].length === 0) {
@@ -2741,28 +2751,42 @@
                                       <td>
                                         <div class="d-flex flex-column gap-2">
                                           @for (range of officeOpeningHoursDraft()[day]; track $index; let rangeIndex = $index) {
-                                            <div class="d-flex align-items-center gap-2">
-                                              <input
-                                                type="time"
-                                                class="form-control form-control-sm"
-                                                [value]="range.start"
-                                                (input)="updateOfficeOpeningRange(day, rangeIndex, 'start', $any($event.target).value || '')"
-                                              />
-                                              <span class="text-secondary">à</span>
-                                              <input
-                                                type="time"
-                                                class="form-control form-control-sm"
-                                                [value]="range.end"
-                                                (input)="updateOfficeOpeningRange(day, rangeIndex, 'end', $any($event.target).value || '')"
-                                              />
-                                              <button
-                                                type="button"
-                                                class="btn btn-sm btn-outline-danger"
-                                                (click)="removeOfficeOpeningRange(day, rangeIndex)"
-                                                aria-label="Supprimer cette plage"
-                                               title="Supprimer cette plage" bsTooltip>
-                                                <i class="fa-solid fa-trash"></i>
-                                              </button>
+                                            <div class="d-flex flex-column">
+                                              <div class="d-flex align-items-center gap-2">
+                                                <input
+                                                  type="time"
+                                                  step="900"
+                                                  class="form-control form-control-sm"
+                                                  [value]="range.start"
+                                                  aria-label="Heure d'ouverture"
+                                                  (input)="updateOfficeOpeningRange(day, rangeIndex, 'start', $any($event.target).value || '')"
+                                                />
+                                                <span class="mx-2 text-muted align-self-center">à</span>
+                                                <input
+                                                  type="time"
+                                                  step="900"
+                                                  class="form-control form-control-sm"
+                                                  [value]="range.end"
+                                                  aria-label="Heure de fermeture"
+                                                  (input)="updateOfficeOpeningRange(day, rangeIndex, 'end', $any($event.target).value || '')"
+                                                />
+                                                <button
+                                                  type="button"
+                                                  class="btn btn-sm btn-outline-danger"
+                                                  (click)="removeOfficeOpeningRange(day, rangeIndex)"
+                                                  aria-label="Supprimer cette plage"
+                                                  title="Supprimer cette plage" bsTooltip>
+                                                  <i class="fa-solid fa-trash"></i>
+                                                </button>
+                                              </div>
+                                              @if (isOpeningRangeInvalid(range.start, range.end)) {
+                                                <div class="text-danger small mt-1">
+                                                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true" class="me-1">
+                                                    <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"/>
+                                                  </svg>
+                                                  L'heure de fin doit être après l'heure de début
+                                                </div>
+                                              }
                                             </div>
                                           }
                                           @if (officeOpeningHoursDraft()[day].length === 0) {
