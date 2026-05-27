@@ -1,0 +1,36 @@
+.os-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+
+  .os-slot-btn {
+    padding: 4px 2px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    border: 1.5px solid var(--bs-border-color, #dee2e6);
+    border-radius: 5px;
+    background: transparent;
+    color: var(--app-text, inherit);
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.1s, border-color 0.1s;
+
+    &:hover:not(:disabled):not(.os-slot-btn--occupied) {
+      background: rgba(77, 146, 209, 0.15);
+      border-color: var(--bs-primary);
+    }
+
+    &.os-slot-btn--selected {
+      background: var(--bs-primary) !important;
+      color: #fff !important;
+      border-color: var(--bs-primary);
+    }
+
+    &.os-slot-btn--occupied,
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      text-decoration: line-through;
+    }
+  }
+}

@@ -74,6 +74,36 @@ export class AgendaPage implements OnDestroy {
   readonly createAppointmentError = signal('');
   readonly createAppointmentSuccess = signal('');
 
+  readonly selectedSlotDate = signal<string>('');
+  readonly selectedSlotTime = signal<string>('');
+  readonly showManualTime = signal(false);
+
+  private readonly SLOT_STEP_MINUTES = 30;
+
+  readonly availableTimeSlots = computed((): Array<{ time: string; label: string; occupied: boolean }> => {
+    const date = this.selectedSlotDate();
+    if (!date) return [];
+
+    const slots: Array<{ time: string; label: string; occupied: boolean }> = [];
+    for (let h = 8; h < 19; h++) {
+      for (let m = 0; m < 60; m += this.SLOT_STEP_MINUTES) {
+        const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        const slotStart = new Date(`${date}T${time}`);
+        const slotEnd = new Date(slotStart.getTime() + this.SLOT_STEP_MINUTES * 60_000);
+
+        const occupied = (this.appointments() ?? []).some((appt) => {
+          if (!appt.startsAt) return false;
+          const apptStart = new Date(appt.startsAt);
+          const apptEnd = new Date(apptStart.getTime() + 30 * 60_000);
+          return apptStart < slotEnd && apptEnd > slotStart;
+        });
+
+        slots.push({ time, label: time, occupied });
+      }
+    }
+    return slots;
+  });
+
   private createPatientSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
   private createPatientSearchRequestId = 0;
   private readonly activeOfficeSyncEffect = effect(() => {
@@ -218,6 +248,9 @@ export class AgendaPage implements OnDestroy {
     this.createPatientSearch.set('');
     this.createPatientResults.set([]);
     this.selectedCreatePatient.set(null);
+    this.selectedSlotDate.set('');
+    this.selectedSlotTime.set('');
+    this.showManualTime.set(false);
     this.createAppointmentForm.reset({
       patientId: 0,
       patientFirstName: '',
@@ -240,6 +273,9 @@ export class AgendaPage implements OnDestroy {
     this.createPatientSearch.set('');
     this.createPatientResults.set([]);
     this.selectedCreatePatient.set(null);
+    this.selectedSlotDate.set('');
+    this.selectedSlotTime.set('');
+    this.showManualTime.set(false);
 
     if (this.createPatientSearchDebounceId !== null) {
       clearTimeout(this.createPatientSearchDebounceId);
@@ -298,6 +334,20 @@ export class AgendaPage implements OnDestroy {
       this.createAppointmentForm.controls.patientLastName.setValue('');
     } else {
       this.createAppointmentForm.controls.privateReason.setValue('');
+    }
+  }
+
+  onSlotDateChange(date: string): void {
+    this.selectedSlotDate.set(date);
+    this.selectedSlotTime.set('');
+    this.createAppointmentForm.controls.startsAt.setValue(date ? `${date}T00:00` : '');
+  }
+
+  selectTimeSlot(time: string): void {
+    this.selectedSlotTime.set(time);
+    const date = this.selectedSlotDate();
+    if (date && time) {
+      this.createAppointmentForm.controls.startsAt.setValue(`${date}T${time}`);
     }
   }
 
