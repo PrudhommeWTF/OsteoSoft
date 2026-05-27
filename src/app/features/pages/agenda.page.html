@@ -233,15 +233,57 @@
             }
 
             <div class="mb-3">
-              <label class="form-label fw-semibold" for="create-start">Date et heure</label>
+              <label class="form-label fw-semibold" for="create-slot-date">Date</label>
               <input
-                id="create-start"
-                type="datetime-local"
+                id="create-slot-date"
+                type="date"
                 class="form-control"
-                formControlName="startsAt"
+                [value]="selectedSlotDate()"
+                (input)="onSlotDateChange($any($event.target).value)"
                 [disabled]="isCreatingAppointment()"
               />
             </div>
+
+            @if (selectedSlotDate() && availableTimeSlots().length > 0) {
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Heure</label>
+                <div class="os-slot-grid">
+                  @for (slot of availableTimeSlots(); track slot.time) {
+                    <button
+                      type="button"
+                      class="os-slot-btn"
+                      [class.os-slot-btn--selected]="slot.time === selectedSlotTime()"
+                      [class.os-slot-btn--occupied]="slot.occupied"
+                      [disabled]="isCreatingAppointment() || slot.occupied"
+                      (click)="selectTimeSlot(slot.time)"
+                    >
+                      {{ slot.label }}
+                    </button>
+                  }
+                </div>
+                @if (!selectedSlotTime()) {
+                  <div class="form-text text-muted">Sélectionnez un créneau</div>
+                }
+              </div>
+            }
+
+            @if (selectedSlotDate()) {
+              <div class="mb-3">
+                <button type="button" class="btn btn-link btn-sm p-0 text-muted" (click)="showManualTime.set(!showManualTime())">
+                  + Saisir une heure personnalisée
+                </button>
+                @if (showManualTime()) {
+                  <input
+                    type="time"
+                    class="form-control mt-1"
+                    step="900"
+                    [value]="selectedSlotTime()"
+                    (input)="selectTimeSlot($any($event.target).value)"
+                    [disabled]="isCreatingAppointment()"
+                  />
+                }
+              </div>
+            }
 
             <div class="mb-3">
               <label class="form-label fw-semibold" for="create-reason">Motif de la consultation</label>
