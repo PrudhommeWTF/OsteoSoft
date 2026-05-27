@@ -14640,6 +14640,7 @@ app.get('/api/appointments', authMiddleware, requirePermission('read-agenda'), (
         minute: '2-digit',
         hour12: false
       }).format(new Date(row.starts_at)),
+      startsAt: String(row.starts_at),
       patient: Number(row.is_private) === 1 ? 'Prive' : decryptSensitiveField(row.cipher_full_name),
       reason: decryptSensitiveField(row.reason_cipher),
       status: row.status
