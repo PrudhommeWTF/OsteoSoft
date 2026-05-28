@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, OnDestroy, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
-import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormControl, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
@@ -127,7 +127,7 @@ const parentContactFields: ParentContactField[] = [
 
 @Component({
   selector: 'app-patient-create-page',
-  imports: [ReactiveFormsModule, BsTooltipDirective, ConsultationCanvasComponent, DatePickerComponent],
+  imports: [ReactiveFormsModule, FormsModule, BsTooltipDirective, ConsultationCanvasComponent, DatePickerComponent],
   templateUrl: './patient-create.page.html',
   styleUrl: './patient-create.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

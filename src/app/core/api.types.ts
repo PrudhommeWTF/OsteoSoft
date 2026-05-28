@@ -136,6 +136,7 @@ export type ConsultationContextPayload = {
 export type Appointment = {
   id: number;
   time: string;
+  startsAt?: string;
   patient: string;
   reason: string;
   status: 'A confirmer' | 'En attente' | 'Termine';
