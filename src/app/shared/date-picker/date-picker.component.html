@@ -206,3 +206,160 @@
   </div>
 }
 
+<!-- ── flexible mode (drill-down: années → mois → jours) ───────────────────── -->
+@if (mode === 'flexible') {
+  <div class="os-datepicker-wrapper">
+    <input
+      [id]="id"
+      type="text"
+      class="form-control os-dp-input"
+      readonly
+      [value]="displayValue()"
+      [placeholder]="computedPlaceholder"
+      (click)="togglePanel()"
+      (blur)="onBlur()"
+    />
+    <button
+      type="button"
+      class="os-dp-toggle"
+      (click)="togglePanel()"
+      tabindex="-1"
+      aria-label="Ouvrir le sélecteur de date"
+      [disabled]="isDisabled()"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4z"/>
+      </svg>
+    </button>
+
+    @if (isPanelOpen()) {
+      <div class="os-dp-panel os-dp-panel--flexible">
+
+        <!-- ── hint breadcrumb ── -->
+        <div class="os-flex-breadcrumb" aria-live="polite">
+          @if (flexLevel() === 'years') {
+            <span>Sélectionnez une année</span>
+          } @else if (flexLevel() === 'months') {
+            <button type="button" class="os-flex-bc-step os-flex-bc-step--done" (click)="flexBackToYears()">{{ flexYear() }}</button>
+            <span class="os-flex-bc-sep">›</span>
+            <span class="os-flex-bc-step os-flex-bc-step--active">Mois</span>
+          } @else {
+            <button type="button" class="os-flex-bc-step os-flex-bc-step--done" (click)="flexBackToYears()">{{ flexYear() }}</button>
+            <span class="os-flex-bc-sep">›</span>
+            <button type="button" class="os-flex-bc-step os-flex-bc-step--done" (click)="flexBackToMonths()">{{ months[flexMonth() - 1].label }}</button>
+            <span class="os-flex-bc-sep">›</span>
+            <span class="os-flex-bc-step os-flex-bc-step--active">Jour</span>
+          }
+        </div>
+
+        <!-- ─── YEARS VIEW ─────────────────────────────────────────────────── -->
+        @if (flexLevel() === 'years') {
+          <div class="os-dp-panel-nav">
+            <button type="button" class="os-dp-nav-btn" (click)="prevYearRange()" aria-label="Plage d'années précédente">
+              <svg width="10" height="10" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7,1 1,7 7,13"/></svg>
+            </button>
+            <span class="os-dp-nav-label">{{ yearRangeLabel() }}</span>
+            <button type="button" class="os-dp-nav-btn" (click)="nextYearRange()" aria-label="Plage d'années suivante">
+              <svg width="10" height="10" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1,1 7,7 1,13"/></svg>
+            </button>
+          </div>
+          <div class="os-dp-grid os-dp-years-grid">
+            @for (year of visibleYears(); track year) {
+              <button
+                type="button"
+                class="os-dp-cell"
+                [class.os-dp-cell--selected]="isFlexYearSelected(year)"
+                [class.os-dp-cell--today]="isFlexCurrentYear(year)"
+                [class.os-dp-cell--disabled]="isFlexYearDisabled(year)"
+                [disabled]="isFlexYearDisabled(year)"
+                (click)="flexSelectYear(year)"
+                [title]="'Afficher ' + year"
+              >{{ year }}</button>
+            }
+          </div>
+          <div class="os-dp-footer">
+            <button type="button" class="os-dp-btn-clear" (click)="clearValue()">Effacer</button>
+          </div>
+        }
+
+        <!-- ─── MONTHS VIEW ────────────────────────────────────────────────── -->
+        @if (flexLevel() === 'months') {
+          <div class="os-dp-panel-nav">
+            <button type="button" class="os-dp-nav-btn" (click)="flexPrevYear()" aria-label="Année précédente">
+              <svg width="10" height="10" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7,1 1,7 7,13"/></svg>
+            </button>
+            <span class="os-dp-nav-label">{{ flexYear() }}</span>
+            <button type="button" class="os-dp-nav-btn" (click)="flexNextYear()" aria-label="Année suivante"
+              [disabled]="!!maxDate && flexYear() >= maxDate.year">
+              <svg width="10" height="10" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1,1 7,7 1,13"/></svg>
+            </button>
+          </div>
+          <div class="os-dp-grid os-dp-months-grid">
+            @for (m of months; track m.value) {
+              <button
+                type="button"
+                class="os-dp-cell"
+                [class.os-dp-cell--selected]="isFlexMonthSelected(m.value)"
+                [class.os-dp-cell--today]="isFlexCurrentMonth(m.value)"
+                [class.os-dp-cell--disabled]="isFlexMonthDisabled(m.value)"
+                [disabled]="isFlexMonthDisabled(m.value)"
+                (click)="flexSelectMonth(m.value)"
+                [title]="'Afficher ' + m.label + ' ' + flexYear()"
+              >{{ m.label }}</button>
+            }
+          </div>
+          <div class="os-dp-footer os-dp-footer--confirm">
+            <button type="button" class="os-dp-btn-confirm" (click)="flexConfirmYear()">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+              Confirmer {{ flexYear() }}
+            </button>
+            <button type="button" class="os-dp-btn-clear" (click)="clearValue()">Effacer</button>
+          </div>
+        }
+
+        <!-- ─── DAYS VIEW ──────────────────────────────────────────────────── -->
+        @if (flexLevel() === 'days') {
+          <div class="os-dp-panel-nav">
+            <button type="button" class="os-dp-nav-btn" (click)="flexPrevMonth()" aria-label="Mois précédent">
+              <svg width="10" height="10" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7,1 1,7 7,13"/></svg>
+            </button>
+            <span class="os-dp-nav-label">{{ flexMonthLabel() }}</span>
+            <button type="button" class="os-dp-nav-btn" (click)="flexNextMonth()" aria-label="Mois suivant">
+              <svg width="10" height="10" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1,1 7,7 1,13"/></svg>
+            </button>
+          </div>
+          <!-- Day-of-week header (Mon–Sun) -->
+          <div class="os-dp-days-header">
+            @for (d of ['L','M','M','J','V','S','D']; track $index) {
+              <span class="os-dp-day-name">{{ d }}</span>
+            }
+          </div>
+          <div class="os-dp-grid os-dp-days-grid">
+            @for (cell of flexDays(); track $index) {
+              <button
+                type="button"
+                class="os-dp-cell os-dp-cell--day"
+                [class.os-dp-cell--other-month]="cell.isOtherMonth"
+                [class.os-dp-cell--selected]="isFlexDaySelected(cell)"
+                [class.os-dp-cell--today]="isFlexToday(cell)"
+                [class.os-dp-cell--disabled]="isFlexDayDisabled(cell)"
+                [disabled]="isFlexDayDisabled(cell)"
+                (click)="flexSelectDay(cell)"
+                [attr.aria-label]="cell.day + '/' + cell.month + '/' + cell.year"
+              >{{ cell.day }}</button>
+            }
+          </div>
+          <div class="os-dp-footer os-dp-footer--confirm">
+            <button type="button" class="os-dp-btn-confirm" (click)="flexConfirmMonth()">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+              Confirmer {{ flexMonthShortLabel() }}
+            </button>
+            <button type="button" class="os-dp-btn-clear" (click)="clearValue()">Effacer</button>
+          </div>
+        }
+
+      </div>
+    }
+  </div>
+}
+

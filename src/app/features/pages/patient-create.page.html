@@ -619,31 +619,25 @@
         aria-labelledby="antecedentModalTitle"
         (click)="$event.stopPropagation()">
         <div class="antecedent-modal-header">
-          <h3 id="antecedentModalTitle" class="mb-0">Ajouter un antecedent</h3>
+          <h3 id="antecedentModalTitle" class="mb-0">Ajouter un antécédent</h3>
           <button type="button" class="btn-close" aria-label="Fermer" (click)="closeAntecedentModal()" title="Fermer" bsTooltip></button>
         </div>
         <div class="antecedent-modal-body">
           <div class="mb-3">
-            <label class="form-label">Precision de date</label>
-            <div class="btn-group w-100" role="group">
-              <button type="button" class="btn" [class.btn-primary]="antecedentDatePrecision() === 'date'" [class.btn-outline-primary]="antecedentDatePrecision() !== 'date'" (click)="setAntecedentPrecision('date')" title="Précision : date exacte" bsTooltip>Date precise</button>
-              <button type="button" class="btn" [class.btn-primary]="antecedentDatePrecision() === 'month'" [class.btn-outline-primary]="antecedentDatePrecision() !== 'month'" (click)="setAntecedentPrecision('month')" title="Précision : mois / année" bsTooltip>Mois / annee</button>
-              <button type="button" class="btn" [class.btn-primary]="antecedentDatePrecision() === 'year'" [class.btn-outline-primary]="antecedentDatePrecision() !== 'year'" (click)="setAntecedentPrecision('year')" title="Précision : année" bsTooltip>Annee</button>
-            </div>
-          </div>
-
-          <div class="mb-3">
             <label class="form-label" for="antecedentDateInput">Date</label>
+            <div class="form-text text-secondary mb-1" style="font-size:0.78rem">
+              Sélectionnez une année, un mois ou une date précise selon votre niveau de connaissance.
+            </div>
             <app-date-picker
               id="antecedentDateInput"
               [formControl]="antecedentDateCtrl"
-              [mode]="antecedentDatePrecision()"
-              [maxDate]="antecedentDatePrecision() === 'date' ? todayNgbDate : undefined"
+              mode="flexible"
+              [maxDate]="todayNgbDate"
             />
           </div>
 
           <div class="mb-3">
-            <label class="form-label" for="antecedentCategory">Type d'antecedent</label>
+            <label class="form-label" for="antecedentCategory">Type d'antécédent</label>
             <input
               id="antecedentCategory"
               type="text"

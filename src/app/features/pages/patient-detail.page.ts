@@ -826,22 +826,25 @@ export class PatientDetailPage implements OnInit, OnDestroy {
     void this.load(id);
 
     this.antecedentDateCtrl.valueChanges.subscribe((val) => {
-      const precision = this.antecedentDatePrecision();
       if (!val) {
         this.antecedentDateDisplay.set('');
         return;
       }
-      if (precision === 'month') {
-        // val = 'YYYY-MM' → store as 'mm/yyyy'
-        const [y, m] = val.split('-');
-        this.antecedentDateDisplay.set(y && m ? `${m.padStart(2, '0')}/${y}` : val);
-      } else if (precision === 'year') {
-        // val = 'YYYY' → store as-is
+      // Derive precision from value format
+      const parts = val.split('-');
+      if (parts.length === 1 && parts[0].length === 4) {
+        // val = 'YYYY' → year precision
+        this.antecedentDatePrecision.set('year');
         this.antecedentDateDisplay.set(val);
-      } else {
-        // precision === 'date': val = 'YYYY-MM-DD' → store as 'dd/mm/yyyy'
-        const parts = val.split('-');
-        this.antecedentDateDisplay.set(parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : val);
+      } else if (parts.length === 2) {
+        // val = 'YYYY-MM' → month precision
+        this.antecedentDatePrecision.set('month');
+        const [y, m] = parts;
+        this.antecedentDateDisplay.set(y && m ? `${m.padStart(2, '0')}/${y}` : val);
+      } else if (parts.length === 3) {
+        // val = 'YYYY-MM-DD' → date precision
+        this.antecedentDatePrecision.set('date');
+        this.antecedentDateDisplay.set(`${parts[2]}/${parts[1]}/${parts[0]}`);
       }
     });
   }
@@ -932,16 +935,14 @@ export class PatientDetailPage implements OnInit, OnDestroy {
     this.editingAntecedentId.set(current.id);
     this.antecedentDatePrecision.set(current.precision);
     this.antecedentDateDisplay.set(current.dateDisplay);
+    // Restore ctrl value as ISO string so flexible picker can restore its state
     if (current.precision === 'date' && current.dateDisplay) {
       const parts = current.dateDisplay.split('/');
-      const iso = `${parts[2]}-${parts[1]}-${parts[0]}`;
-      this.antecedentDateCtrl.setValue(iso, { emitEvent: false });
+      this.antecedentDateCtrl.setValue(`${parts[2]}-${parts[1]}-${parts[0]}`, { emitEvent: false });
     } else if (current.precision === 'month' && current.dateDisplay) {
-      // dateDisplay = 'mm/yyyy' → ctrl value = 'YYYY-MM'
       const [mm, yyyy] = current.dateDisplay.split('/');
       this.antecedentDateCtrl.setValue(yyyy && mm ? `${yyyy}-${mm.padStart(2, '0')}` : null, { emitEvent: false });
     } else if (current.precision === 'year' && current.dateDisplay) {
-      // dateDisplay = 'yyyy' → ctrl value = 'YYYY'
       this.antecedentDateCtrl.setValue(current.dateDisplay, { emitEvent: false });
     } else {
       this.antecedentDateCtrl.setValue(null, { emitEvent: false });
@@ -955,12 +956,6 @@ export class PatientDetailPage implements OnInit, OnDestroy {
     this.isAntecedentModalOpen.set(false);
     this.antecedentError.set('');
     this.editingAntecedentId.set(null);
-  }
-
-  setAntecedentPrecision(precision: AntecedentPrecision): void {
-    this.antecedentDatePrecision.set(precision);
-    this.antecedentDateDisplay.set('');
-    this.antecedentDateCtrl.setValue(null, { emitEvent: false });
   }
 
   setAntecedentCategory(value: string): void {
