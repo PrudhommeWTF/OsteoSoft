@@ -820,12 +820,6 @@ export class PatientCreatePage implements OnInit, OnDestroy {
     this.antecedentError.set('');
   }
 
-  setAntecedentPrecision(precision: AntecedentPrecision): void {
-    this.antecedentDatePrecision.set(precision);
-    this.antecedentDateDisplay.set('');
-    this.antecedentDateCtrl.setValue(null, { emitEvent: false });
-  }
-
   setAntecedentDateDisplay(value: string): void {
     this.antecedentDateDisplay.set(value);
   }
@@ -1197,22 +1191,25 @@ export class PatientCreatePage implements OnInit, OnDestroy {
     this.antecedentDateCtrl.valueChanges.pipe(
       takeUntilDestroyed(this.destroyRef)
     ).subscribe((val) => {
-      const precision = this.antecedentDatePrecision();
       if (!val) {
         this.antecedentDateDisplay.set('');
         return;
       }
-      if (precision === 'month') {
-        // val = 'YYYY-MM' → store as 'mm/yyyy'
-        const [y, m] = val.split('-');
-        this.antecedentDateDisplay.set(y && m ? `${m.padStart(2, '0')}/${y}` : val);
-      } else if (precision === 'year') {
-        // val = 'YYYY' → store as-is
+      // Derive precision from value format
+      const parts = val.split('-');
+      if (parts.length === 1 && parts[0].length === 4) {
+        // val = 'YYYY' → year precision
+        this.antecedentDatePrecision.set('year');
         this.antecedentDateDisplay.set(val);
-      } else {
-        // precision === 'date': val = 'YYYY-MM-DD' → store as 'dd/mm/yyyy'
-        const parts = val.split('-');
-        this.antecedentDateDisplay.set(parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : val);
+      } else if (parts.length === 2) {
+        // val = 'YYYY-MM' → month precision
+        this.antecedentDatePrecision.set('month');
+        const [y, m] = parts;
+        this.antecedentDateDisplay.set(y && m ? `${m.padStart(2, '0')}/${y}` : val);
+      } else if (parts.length === 3) {
+        // val = 'YYYY-MM-DD' → date precision
+        this.antecedentDatePrecision.set('date');
+        this.antecedentDateDisplay.set(`${parts[2]}/${parts[1]}/${parts[0]}`);
       }
     });
   }
