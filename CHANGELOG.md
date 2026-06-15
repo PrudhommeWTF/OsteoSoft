@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.2.0](https://github.com/PrudhommeWTF/OsteoSoft/compare/v0.1.0...v0.2.0) (2026-06-15)
+
+
+### Corrections de bugs
+
+* 409 for duplicate invoice, complete GDPR export with invoices+documents, case-insensitive login ([95144df](https://github.com/PrudhommeWTF/OsteoSoft/commit/95144df547a39bb3b15337c406e60850781ee345))
+* add Zod validation to appointment creation and access control to consultation update ([a84b5a9](https://github.com/PrudhommeWTF/OsteoSoft/commit/a84b5a90b78451f041bee56e59fe1a8fdccf987d))
+* allow profile/agenda-preferences route when must_change_password=1 ([1fdd335](https://github.com/PrudhommeWTF/OsteoSoft/commit/1fdd335f22a0b3ff52fe7244bb38f6c9d4bc26fe))
+* changelog modal always shows latest version and clean content ([f64ba02](https://github.com/PrudhommeWTF/OsteoSoft/commit/f64ba02d6ada07924e4efb97aa05e9a02a0fbb35))
+* convert appointment startsAt to ISO, clear session on 401, use environment apiUrl ([2b2c597](https://github.com/PrudhommeWTF/OsteoSoft/commit/2b2c5977e6491675ea2ec7f15855ae18edb7b36f))
+* correct Excel label, live billing TTC calculation, and comma-decimal deposit amount ([7108a9f](https://github.com/PrudhommeWTF/OsteoSoft/commit/7108a9f41addac2c7252028d7a201cd5ee1fbfa6))
+* **docker:** copy CHANGELOG.md into API image for changelog modal ([4d1b8a4](https://github.com/PrudhommeWTF/OsteoSoft/commit/4d1b8a43937d67795b430dbd6d1b9730cbba626f))
+* exclude cancelled invoices from billing alerts and normalize WebOsteo invoice statuses ([0a292a5](https://github.com/PrudhommeWTF/OsteoSoft/commit/0a292a596fd59dacf91068efd60376e691200245))
+* **gdpr:** align consent form retention period from 5 to 10 years ([35dab9e](https://github.com/PrudhommeWTF/OsteoSoft/commit/35dab9e19c36c9a26bd65681a67a343afe7d7800))
+* **gdpr:** complete anonymization - clear sex, birth_date, and invoice_payments PII ([0f7a007](https://github.com/PrudhommeWTF/OsteoSoft/commit/0f7a0079e5a231bb1a387bfb0bb696e9515f5736))
+* **gdpr:** correct minor patient retention to age 28 and extend audit log retention to 10 years ([914533c](https://github.com/PrudhommeWTF/OsteoSoft/commit/914533c16f5373fff92072b8de5e133d6bcc67b8))
+* **gdpr:** replace immediate anonymization on consent withdrawal with processing restriction ([0bf2a13](https://github.com/PrudhommeWTF/OsteoSoft/commit/0bf2a13e7879195b1dc81ba3ece9b3544c42b411))
+* **gdpr:** set consent_signed default to 0 and fix quick patient creation ([8d8b6e1](https://github.com/PrudhommeWTF/OsteoSoft/commit/8d8b6e1bc9739a415f49855b5763285d00c79152))
+* remove orphan try block in persistConsultationBillingInvoice ([a7eb968](https://github.com/PrudhommeWTF/OsteoSoft/commit/a7eb968d458f6f3b4cfe41fad817403e33e6e5ad))
+* repair adminOnlyMiddleware dead code and require write permission on patient update ([3c89113](https://github.com/PrudhommeWTF/OsteoSoft/commit/3c8911334fe8f6428d07b872eb478d54732c391d))
+* resolve build errors after last merge ([cc32eef](https://github.com/PrudhommeWTF/OsteoSoft/commit/cc32eef4ba9ec6edbb8191b1f10dcf3c8c1712e9))
+* surface invoice creation failure, show all operation types, prevent double-submit in agenda ([a272970](https://github.com/PrudhommeWTF/OsteoSoft/commit/a272970bb48ea8af14375b4a526fb6f7d3b67298))
+* unsubscribe antecedentDateCtrl subscription and destroy effects in ngOnDestroy ([5a61bab](https://github.com/PrudhommeWTF/OsteoSoft/commit/5a61bab5dfc20b12e146248924e7a80a24008165))
+* use req.user.sub instead of req.user.id in all audit log calls ([23064b4](https://github.com/PrudhommeWTF/OsteoSoft/commit/23064b4cdbf12e145a77b6f85926069526724773))
+* validate paid status for deposit invoices, normalize source_type, validate document officeId ([c1039eb](https://github.com/PrudhommeWTF/OsteoSoft/commit/c1039eb895c8682ce22f39069d65a850d16c8c32))
+* **webosteo-import:** replace office data and restrict users to cabinet-level rights ([b4e0689](https://github.com/PrudhommeWTF/OsteoSoft/commit/b4e0689ef8840dd1484e105431c1251dc599712b))
+* wrap office deletion in transaction and add access control to consultation drafts ([f220165](https://github.com/PrudhommeWTF/OsteoSoft/commit/f220165da476bcbfa802113c03822f5080c613c3))
+* wrap WebOsteo import in transaction and add try/finally to backup restore ([3bed32c](https://github.com/PrudhommeWTF/OsteoSoft/commit/3bed32c4236cd68a59c966364586d04d2cba4ef5))
+* wrap WebOsteo import in transaction and add try/finally to backup restore ([bf14e2c](https://github.com/PrudhommeWTF/OsteoSoft/commit/bf14e2c8715db2f6a59b5c853f93340946bce114))
+
+
+### Nouvelles fonctionnalités
+
+* add flexible datepicker mode with drill-down UX for antécédents ([2d0988c](https://github.com/PrudhommeWTF/OsteoSoft/commit/2d0988c293154a02449799fea52491ef6563a8a9))
+* improve WebOsteo import — liens de parenté, remises bancaires, statut utilisateur ([71dee5a](https://github.com/PrudhommeWTF/OsteoSoft/commit/71dee5abf143cac9e8531582e0910bb1696f4cd0))
+* refactor datepicker to support date/month/year modes and date range picker ([c8948db](https://github.com/PrudhommeWTF/OsteoSoft/commit/c8948db4345398385900aafa212f49ad92441846))
+* **ui:** add datetime mode to app-date-picker with 15-min time slots and Maintenant button ([4393988](https://github.com/PrudhommeWTF/OsteoSoft/commit/439398825893bc39de3ed31d4259ab37debaddf7))
+* use flexible datepicker for all standard date fields ([f5d9509](https://github.com/PrudhommeWTF/OsteoSoft/commit/f5d95093f037982d2e500e7d6d13b67585a2e41b))
+* **ux:** office opening hours - 15-min time steps and end > start validation ([9e00526](https://github.com/PrudhommeWTF/OsteoSoft/commit/9e00526d13107c909b0e0d77c35dfa260a4a9805))
+* **ux:** replace datetime-local in appointment modal with interactive slot picker ([f58e7b6](https://github.com/PrudhommeWTF/OsteoSoft/commit/f58e7b6862286053d19dabbe212ce6c1a9f34335))
+* **ux:** replace native date/datetime inputs with app-date-picker across all pages ([6b8acec](https://github.com/PrudhommeWTF/OsteoSoft/commit/6b8acec060b0562eb44870fca3f3dc52abec69ab))
+
 ## 0.1.0 (2026-05-15)
 
 
