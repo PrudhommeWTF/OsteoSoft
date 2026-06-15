@@ -101,6 +101,7 @@
             <label class="form-label fw-semibold" for="birthDate">Date de naissance <span class="text-danger">*</span></label>
             <app-date-picker
               id="birthDate"
+              mode="flexible"
               formControlName="birthDate"
               autocomplete="bday"
               [maxDate]="todayNgbDate"
