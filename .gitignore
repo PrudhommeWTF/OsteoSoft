@@ -46,3 +46,7 @@ __screenshots__/
 .DS_Store
 Thumbs.db
 .claude/
+
+# Materiel de travail import WebOsteo (backup + code source) - NE JAMAIS COMMITER
+# Contient des donnees de sante reelles (RGPD). Tout le dossier est ignore.
+/_webosteo_import/
