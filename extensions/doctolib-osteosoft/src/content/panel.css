@@ -1,0 +1,11 @@
+/*
+ * Styles du conteneur (light DOM) hébergeant le Shadow DOM de l'extension.
+ * L'essentiel de la mise en forme vit dans le Shadow DOM (voir panel.js) afin
+ * d'éviter toute collision avec les styles de Doctolib. Ici on ne fait que
+ * neutraliser l'héritage sur l'élément hôte.
+ */
+#osteosoft-doctolib-root {
+  all: initial;
+  position: fixed;
+  z-index: 2147483647;
+}

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OsteoSoft — Options de l'import Doctolib</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="card">
+      <header class="head">
+        <div class="logo">+</div>
+        <div>
+          <h1>Import Doctolib → OsteoSoft</h1>
+          <p class="sub">Paramètres de connexion à votre installation OsteoSoft</p>
+        </div>
+      </header>
+
+      <label class="field-label" for="baseUrl">Adresse de l'API OsteoSoft</label>
+      <input id="baseUrl" class="input" type="url" placeholder="http://localhost:4199" spellcheck="false" />
+      <p class="hint">
+        Adresse où répond l'API OsteoSoft (le serveur Node/Express). En développement
+        il s'agit généralement de <code>http://localhost:4199</code>. Pour une
+        installation hébergée, saisissez l'URL complète (ex.
+        <code>https://osteosoft.mon-cabinet.fr</code>).
+      </p>
+
+      <div class="actions">
+        <button id="grantBtn" class="btn btn-secondary" type="button">Autoriser l'accès à OsteoSoft</button>
+        <button id="testBtn" class="btn btn-secondary" type="button">Tester la connexion</button>
+        <button id="saveBtn" class="btn btn-primary" type="button">Enregistrer</button>
+      </div>
+
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+
+      <section class="help">
+        <h2>Comment ça marche&nbsp;?</h2>
+        <ol>
+          <li>Connectez-vous à OsteoSoft dans ce navigateur (onglet ouvert ou récent).</li>
+          <li>Ouvrez la fiche d'un rendez-vous sur <code>pro.doctolib.fr</code>.</li>
+          <li>Cliquez sur le bouton <strong>« Ajouter à OsteoSoft »</strong> en bas à droite.</li>
+          <li>Vérifiez les informations, choisissez le patient, puis confirmez l'import.</li>
+        </ol>
+      </section>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

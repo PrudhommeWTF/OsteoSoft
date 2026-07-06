@@ -1,0 +1,40 @@
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 28px 16px; background: #f3f4f6;
+  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #1f2937;
+}
+.card {
+  max-width: 560px; margin: 0 auto; background: #fff; border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.08); padding: 24px 26px;
+}
+.head { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+.logo {
+  width: 40px; height: 40px; border-radius: 10px; background: #108a6a; color: #fff;
+  font-size: 24px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
+h1 { font-size: 17px; margin: 0; }
+.sub { margin: 2px 0 0; font-size: 13px; color: #6b7280; }
+.field-label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.input {
+  width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px;
+  font-size: 14px; color: #111827;
+}
+.input:focus { outline: 2px solid #10a06a55; border-color: #108a6a; }
+.hint { font-size: 12px; color: #6b7280; line-height: 1.5; margin: 8px 0 0; }
+code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+.actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+.btn { padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+.btn-secondary { background: #fff; border-color: #d1d5db; color: #374151; }
+.btn-secondary:hover { background: #f9fafb; }
+.btn-primary { background: #108a6a; color: #fff; }
+.btn-primary:hover { background: #0d7458; }
+.status { margin-top: 16px; font-size: 13px; padding: 10px 12px; border-radius: 8px; display: none; }
+.status.show { display: block; }
+.status.ok { background: #ecfdf5; color: #065f46; }
+.status.warn { background: #fffbeb; color: #92400e; }
+.status.err { background: #fef2f2; color: #991b1b; }
+.help { margin-top: 26px; border-top: 1px solid #e5e7eb; padding-top: 18px; }
+.help h2 { font-size: 14px; margin: 0 0 10px; }
+.help ol { margin: 0; padding-left: 20px; font-size: 13px; color: #374151; line-height: 1.7; }
