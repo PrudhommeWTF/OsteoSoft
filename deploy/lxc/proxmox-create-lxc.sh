@@ -33,7 +33,8 @@ BRIDGE="${BRIDGE:-vmbr0}"
 IP="${IP:-dhcp}"
 GATEWAY="${GATEWAY:-}"
 DNS="${DNS:-}"
-DOMAIN="${DOMAIN:-_}"
+DOMAIN="${DOMAIN:-}"
+API_PORT="${API_PORT:-4199}"
 REPO_URL="${REPO_URL:-}"
 BRANCH="${BRANCH:-main}"
 TEMPLATE_NAME="${TEMPLATE_NAME:-debian-12-standard_12.7-1_amd64.tar.zst}"
@@ -112,7 +113,7 @@ if [ -z "$REPO_URL" ] && [ -f "$REPO_ROOT/package.json" ]; then
   pct exec "$CTID" -- tar -C /opt/osteosoft -xzf /root/osteosoft-src.tgz
   pct exec "$CTID" -- rm -f /root/osteosoft-src.tgz
   rm -f "$TARBALL"
-  INSTALL_ENV="DOMAIN=${DOMAIN}"
+  INSTALL_ENV="DOMAIN=${DOMAIN} API_PORT=${API_PORT}"
 else
   # Le source sera cloné par install.sh dans le conteneur.
   [ -n "$REPO_URL" ] || REPO_URL="https://github.com/PrudhommeWTF/OsteoSoft.git"
@@ -122,7 +123,7 @@ else
   for f in install.sh osteosoft-api.service nginx.conf; do
     pct push "$CTID" "$SCRIPT_DIR/$f" "/opt/osteosoft/deploy/lxc/$f"
   done
-  INSTALL_ENV="DOMAIN=${DOMAIN} REPO_URL=${REPO_URL} BRANCH=${BRANCH}"
+  INSTALL_ENV="DOMAIN=${DOMAIN} API_PORT=${API_PORT} REPO_URL=${REPO_URL} BRANCH=${BRANCH}"
 fi
 
 log "Lancement de l'installation dans le conteneur…"
@@ -132,7 +133,7 @@ pct exec "$CTID" -- env $INSTALL_ENV bash /opt/osteosoft/deploy/lxc/install.sh
 # ── Résumé ───────────────────────────────────────────────────────────────────
 CT_IP="$(pct exec "$CTID" -- hostname -I 2>/dev/null | awk '{print $1}')"
 log "Terminé. Conteneur $CTID prêt."
-echo "  • Accès       : http://${CT_IP:-<ip>}/"
+echo "  • Accès       : http://${CT_IP:-<ip>}:${API_PORT}/"
 echo "  • Shell       : pct enter ${CTID}"
 echo "  • Logs API    : pct exec ${CTID} -- journalctl -u osteosoft-api -f"
 echo "  • Secrets/.env: /opt/osteosoft/.env (dans le conteneur) — sauvegardez OSTEOSOFT_DATA_KEY !"

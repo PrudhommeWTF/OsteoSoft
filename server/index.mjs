@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
+import { fileURLToPath } from 'node:url';
 
 import argon2 from 'argon2';
 import Database from 'better-sqlite3';
@@ -19291,6 +19292,25 @@ app.get('/api/invoices/summary', authMiddleware, requirePermission('read-billing
 });
 
 await ensureSeedData();
+
+// ── Frontend statique (déploiement mono-service) ─────────────────────────────
+// Si le build Angular est présent, l'API le sert directement : plus besoin d'un
+// serveur web séparé (nginx) ni de `ng serve`. En dev (build absent), ce bloc est
+// inactif et le frontend reste servi par `ng serve` comme avant.
+const staticDir = process.env.OSTEOSOFT_STATIC_DIR
+  || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'OsteoSoft', 'browser');
+if (fs.existsSync(path.join(staticDir, 'index.html'))) {
+  app.use(express.static(staticDir));
+  // Fallback SPA : toute route GET hors /api renvoie index.html (routing Angular).
+  // NB: on utilise app.use (et non app.get('*')) car Express 5 rejette le motif '*'.
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    if (req.path.startsWith('/api')) return next();
+    return res.sendFile(path.join(staticDir, 'index.html'));
+  });
+  // eslint-disable-next-line no-console
+  console.log(`Serving frontend from ${staticDir}`);
+}
 
 app.use((err, req, res, _next) => {
   if (err?.type === 'entity.too.large') {
