@@ -142,7 +142,7 @@
           <div class="wc-day-now-dot"></div>
         </div>
       }
-      @for (slot of dayViewSlots(); track slot.time) {
+      @for (slot of dayViewSlots(); track $index) {
         <div class="wc-day-slot-row">
           <div class="wc-day-slot-time" aria-hidden="true">{{ slot.time }}</div>
           <div class="wc-day-slot-body">

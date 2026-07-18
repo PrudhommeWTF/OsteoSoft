@@ -32,9 +32,15 @@ export class AgendaPage implements OnDestroy {
   private readonly fb = inject(FormBuilder);
   private readonly topbarService = inject(TopbarService);
 
+  // Baseline of the monotonic "Nouveau RDV" counter captured at page creation, so a
+  // stale (already-incremented) value doesn't spuriously open the modal on every visit.
+  private lastCreateAppointmentRequest = this.topbarService.openCreateAppointmentRequest();
   private readonly openCreateFromTopbarEffect = effect(() => {
     const req = this.topbarService.openCreateAppointmentRequest();
-    if (req > 0) this.openCreateModal();
+    if (req > this.lastCreateAppointmentRequest) {
+      this.lastCreateAppointmentRequest = req;
+      this.openCreateModal();
+    }
   });
 
   readonly stats = signal([
