@@ -1144,7 +1144,7 @@ export class WeekCalendar {
       'Annule': { label: 'Annulé', cls: 'wc-pill wc-pill--danger' }
     };
 
-    const slots: Array<{
+    type DaySlot = {
       time: string;
       isFree: boolean;
       event?: DashboardEvent;
@@ -1155,43 +1155,79 @@ export class WeekCalendar {
       statusClass: string;
       borderColor: string;
       bgColor: string;
-    }> = [];
+      sortMin: number;
+    };
 
+    // Local start minute for every event of the day, sorted chronologically.
+    const dayEvents = events
+      .map((ev) => {
+        const d = new Date(ev.start);
+        return { ev, evMin: d.getHours() * 60 + d.getMinutes() };
+      })
+      .sort((a, b) => a.evMin - b.evMin);
+
+    const buildEventRow = (ev: DashboardEvent, evMin: number): DaySlot => {
+      const { borderColor, bgColor } = this.resolveEventColors(ev, s, selectedCals);
+      const statusInfo = statusMap[ev.status] ?? { label: ev.status, cls: 'wc-pill wc-pill--neutral' };
+      const h = Math.floor(evMin / 60);
+      const min = ((evMin % 60) + 60) % 60;
+      return {
+        time: `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`,
+        isFree: false,
+        event: ev,
+        patientName: ev.isPrivate ? (ev.privateReason || 'Privé') : ev.patient,
+        motif: ev.reason,
+        duration: `${sessionMin} min`,
+        statusLabel: statusInfo.label,
+        statusClass: statusInfo.cls,
+        borderColor,
+        bgColor,
+        sortMin: evMin
+      };
+    };
+
+    const consumed = new Set<number>();
+    const rows: DaySlot[] = [];
+
+    // Walk the open-hour grid: an empty grid slot renders a free row; a slot that
+    // contains one or more appointments renders one booked row per appointment
+    // (so double-booked or sub-session-length appointments are never merged away).
     for (const interval of intervals) {
       for (let m = interval.start; m < interval.end; m += sessionMin) {
-        const h = Math.floor(m / 60);
-        const min = m % 60;
-        const time = `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
         const slotEndMin = m + sessionMin;
-
-        const matched = events.find((ev) => {
-          const evDate = new Date(ev.start);
-          const evMin = evDate.getHours() * 60 + evDate.getMinutes();
-          return evMin >= m && evMin < slotEndMin;
+        const inSlot: number[] = [];
+        dayEvents.forEach((de, idx) => {
+          if (!consumed.has(idx) && de.evMin >= m && de.evMin < slotEndMin) inSlot.push(idx);
         });
 
-        if (matched) {
-          const { borderColor, bgColor } = this.resolveEventColors(matched, s, selectedCals);
-          const statusInfo = statusMap[matched.status] ?? { label: matched.status, cls: 'wc-pill wc-pill--neutral' };
-          slots.push({
-            time,
-            isFree: false,
-            event: matched,
-            patientName: matched.isPrivate ? (matched.privateReason || 'Privé') : matched.patient,
-            motif: matched.reason,
-            duration: `${sessionMin} min`,
-            statusLabel: statusInfo.label,
-            statusClass: statusInfo.cls,
-            borderColor,
-            bgColor
+        if (inSlot.length === 0) {
+          const h = Math.floor(m / 60);
+          const min = m % 60;
+          rows.push({
+            time: `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`,
+            isFree: true, patientName: '', motif: '', duration: '',
+            statusLabel: '', statusClass: '', borderColor: '', bgColor: '', sortMin: m
           });
         } else {
-          slots.push({ time, isFree: true, patientName: '', motif: '', duration: '', statusLabel: '', statusClass: '', borderColor: '', bgColor: '' });
+          for (const idx of inSlot) {
+            consumed.add(idx);
+            rows.push(buildEventRow(dayEvents[idx].ev, dayEvents[idx].evMin));
+          }
         }
       }
     }
 
-    return slots;
+    // Appointments falling outside every open interval (before/after hours or in a
+    // closed gap) must still be shown — append them, then order the whole list by time.
+    dayEvents.forEach((de, idx) => {
+      if (!consumed.has(idx)) {
+        consumed.add(idx);
+        rows.push(buildEventRow(de.ev, de.evMin));
+      }
+    });
+
+    rows.sort((a, b) => a.sortMin - b.sortMin);
+    return rows;
   });
 
   // ── Day view: summary sidebar ─────────────────────────────────────────────────

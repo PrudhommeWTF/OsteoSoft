@@ -11024,10 +11024,38 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
       const remiseEspeces = weoDb.prepare('SELECT * FROM remise_especes').all();
       usedTwoTableApproach = true;
 
+      // In the two-table schema, each paiement references its remittance directly (no junction
+      // table). Column names vary across versions, so resolve them defensively: prefer a typed
+      // foreign key (id_remise_cheque / id_remise_especes), then fall back to a generic
+      // id_remise/remise column disambiguated by the payment method.
+      const chequeRemiseToPaiementIds = new Map();
+      const especesRemiseToPaiementIds = new Map();
+      const pushPaiement = (map, remiseKey, paiementId) => {
+        if (!remiseKey || !paiementId) return;
+        if (!map.has(remiseKey)) map.set(remiseKey, []);
+        map.get(remiseKey).push(paiementId);
+      };
+      for (const p of weoPaiements) {
+        const pid = str(p.id);
+        if (!pid) continue;
+        const chequeRef = str(p.id_remise_cheque ?? p.remise_cheque ?? '');
+        if (chequeRef) { pushPaiement(chequeRemiseToPaiementIds, chequeRef, pid); continue; }
+        const especesRef = str(p.id_remise_especes ?? p.remise_especes ?? '');
+        if (especesRef) { pushPaiement(especesRemiseToPaiementIds, especesRef, pid); continue; }
+        const genericRef = str(p.id_remise ?? p.remise ?? '');
+        if (!genericRef) continue;
+        const method = str(p.moyen_paiement ?? p.mode_paiement ?? '').toLowerCase();
+        if (method.includes('espece') || method.includes('cash')) {
+          pushPaiement(especesRemiseToPaiementIds, genericRef, pid);
+        } else if (method.includes('cheque') || method.includes('chèque')) {
+          pushPaiement(chequeRemiseToPaiementIds, genericRef, pid);
+        }
+      }
+
       for (const wr of remiseCheques) {
         try {
           const amountCents = Math.round(num(wr.montant_cheques ?? wr.montant ?? 0) * 100);
-          insertDeposit(wr, 'cheque', amountCents, new Map());
+          insertDeposit(wr, 'cheque', amountCents, chequeRemiseToPaiementIds);
         } catch (err) {
           errors.push({ entity: 'remise_cheque', message: `ID ${str(wr.id ?? '')}: ${err instanceof Error ? err.message : 'Erreur'}` });
         }
@@ -11035,7 +11063,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
       for (const wr of remiseEspeces) {
         try {
           const amountCents = Math.round(num(wr.montant ?? 0) * 100);
-          insertDeposit(wr, 'especes', amountCents, new Map());
+          insertDeposit(wr, 'especes', amountCents, especesRemiseToPaiementIds);
         } catch (err) {
           errors.push({ entity: 'remise_especes', message: `ID ${str(wr.id ?? '')}: ${err instanceof Error ? err.message : 'Erreur'}` });
         }
