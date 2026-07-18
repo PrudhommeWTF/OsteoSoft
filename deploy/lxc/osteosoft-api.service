@@ -1,0 +1,30 @@
+[Unit]
+Description=OsteoSoft API (Node.js/Express)
+Documentation=https://github.com/PrudhommeWTF/OsteoSoft
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__APP_USER__
+Group=__APP_USER__
+WorkingDirectory=__APP_DIR__
+EnvironmentFile=__APP_DIR__/.env
+ExecStart=/usr/bin/node server/index.mjs
+Restart=on-failure
+RestartSec=5
+
+# Durcissement
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+# Seul le répertoire des données SQLite doit rester accessible en écriture.
+ReadWritePaths=__APP_DIR__/server/data
+
+[Install]
+WantedBy=multi-user.target

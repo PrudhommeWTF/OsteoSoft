@@ -80,6 +80,25 @@ Attention: supprime la base SQLite et les données du volume Docker.
 docker compose down -v
 ```
 
+## Option C - Déploiement LXC Proxmox (natif, sans Docker)
+
+Un kit de déploiement natif est fourni dans `deploy/lxc/` : conteneur LXC
+Debian 12, frontend Angular compilé + API servis par **nginx**, API en service
+**systemd**.
+
+Depuis l'hôte Proxmox VE (en root) :
+
+```bash
+git clone https://github.com/PrudhommeWTF/OsteoSoft.git
+cd OsteoSoft/deploy/lxc
+DOMAIN=osteosoft.example.com ./proxmox-create-lxc.sh
+```
+
+Le script crée le conteneur, y transfère le code (fonctionne aussi pour un
+dépôt privé) puis lance l'installation (Node 20, build, secrets générés,
+services systemd/nginx). Détails, options réseau, TLS, exploitation et
+sauvegarde : voir [`deploy/lxc/README.md`](deploy/lxc/README.md).
+
 ## Données persistantes
 
 En mode Docker, les données SQLite sont conservées dans le volume nommé:
