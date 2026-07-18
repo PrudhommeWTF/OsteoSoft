@@ -1,27 +1,21 @@
+# OsteoSoft — auto-hébergement, conteneur unique (l'API sert le frontend + /api).
+# Usage :  cp .env.example .env  &&  docker compose up -d --build  →  http://localhost:4199
 services:
-  api:
+  osteosoft:
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: Dockerfile
+    container_name: osteosoft
     env_file:
       - .env
     environment:
       API_PORT: 4199
-      CLIENT_ORIGIN: http://localhost:4200
+      # Même origine → CORS peu sollicité ; adaptez au domaine public si besoin.
+      CLIENT_ORIGIN: http://localhost:4199
     ports:
       - "4199:4199"
     volumes:
       - osteosoft_data:/app/server/data
-    restart: unless-stopped
-
-  web:
-    build:
-      context: .
-      dockerfile: Dockerfile.web
-    ports:
-      - "4200:4200"
-    depends_on:
-      - api
     restart: unless-stopped
 
 volumes:
