@@ -6441,15 +6441,17 @@ async function validateDocumentMimeType(contentBase64) {
   const detected = await fileTypeFromBuffer(buffer);
   const actualMime = detected?.mime ?? null;
 
-  if (actualMime !== null && !ALLOWED_DOCUMENT_MIME_TYPES.has(actualMime)) {
-    throw Object.assign(new Error(`Type de fichier non autorisé: ${actualMime}`), { statusCode: 415 });
+  // Strict allowlist: reject both a detected-but-forbidden type AND an undetected
+  // type. file-type returns null for text-based formats (HTML, SVG, XML, CSV…),
+  // so accepting null would let a booby-trapped document through as octet-stream.
+  if (actualMime === null || !ALLOWED_DOCUMENT_MIME_TYPES.has(actualMime)) {
+    throw Object.assign(
+      new Error(`Type de fichier non autorisé${actualMime ? `: ${actualMime}` : ' (format non reconnu)'}`),
+      { statusCode: 415 }
+    );
   }
 
-  if (actualMime !== null) {
-    return actualMime;
-  }
-
-  return 'application/octet-stream';
+  return actualMime;
 }
 
 async function normalizeConsultationDocumentsPayload(rawDocuments) {
@@ -6990,7 +6992,7 @@ function authMiddleware(req, res, next) {
   }
 
   try {
-    const payload = jwt.verify(token, jwtSecret);
+    const payload = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] });
     req.user = payload;
 
     // Enforce must_change_password: fast-path from JWT flag (mcp=true) or fallback DB
@@ -7033,9 +7035,12 @@ function authMiddleware(req, res, next) {
 }
 
 function adminOnlyMiddleware(req, res, next) {
+  // Resolve the role from the database (fresh), not from the JWT payload: a token
+  // signed before a demotion still carries role:'admin', so trusting req.user.role
+  // would let a demoted (or deactivated) account keep admin access until expiry.
   const access = getUserAccessContext(req.user.sub);
 
-  if (req.user.role === 'admin' || access?.profileId === SUPER_ADMIN_PROFILE_ID) {
+  if (access && (access.role === 'admin' || access.profileId === SUPER_ADMIN_PROFILE_ID)) {
     req.userAccess = access;
     return next();
   }
@@ -11141,8 +11146,10 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
       tempPasswords
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Echec de l\'import WebOsteo';
-    return res.status(400).json({ message });
+    // Log the detail server-side; return a generic message so internal/SQLite
+    // error text is never surfaced to the client.
+    logger.error('WebOsteo import failed:', error);
+    return res.status(400).json({ message: 'Echec de l\'import WebOsteo. Vérifiez le fichier fourni.' });
   } finally {
     if (weoDb) {
       try { weoDb.close(); } catch { /* ignore */ }
@@ -15645,7 +15652,7 @@ app.get('/api/appointments/:id/patient', authMiddleware, requirePermission('read
   return res.json({ patientId: Number(row.patient_id) });
 });
 
-app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePermission('read-dashboard'), (req, res) => {
+app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePermission('create-consultation'), (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
     return res.status(400).json({ message: 'ID de rendez-vous invalide' });
