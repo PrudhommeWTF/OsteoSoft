@@ -53,13 +53,20 @@ export class AuthService {
 
   setActiveOfficeId(value: number | null): void {
     const session = this.session();
-    const parsedValue = value == null ? null : Number(value);
-    const normalized = Number.isInteger(parsedValue) && (parsedValue as number) > 0
-      ? (parsedValue as number)
-      : null;
-    const next = normalized !== null && session.officeIds.includes(normalized)
-      ? normalized
-      : (session.officeIds[0] ?? null);
+
+    // null = consolidated "all offices" view
+    if (value === null) {
+      this.session.update((current) => ({ ...current, activeOfficeId: null }));
+      this.persistActiveOfficeId(null);
+      return;
+    }
+
+    const parsed = Number(value);
+    const normalized = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+    const next =
+      normalized !== null && session.officeIds.includes(normalized)
+        ? normalized
+        : (session.officeIds[0] ?? null);
 
     this.session.update((current) => ({
       ...current,

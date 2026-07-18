@@ -14,6 +14,10 @@ export type TopbarAction = {
 @Injectable({ providedIn: 'root' })
 export class TopbarService {
   readonly actions = signal<TopbarAction[]>([]);
+  readonly pageTitle = signal<string>('');
+  readonly pageSubtitle = signal<string>('');
+  /** Incremented each time the topbar "Nouveau RDV" is clicked. Pages listen via effect. */
+  readonly openCreateAppointmentRequest = signal<number>(0);
 
   set(actions: TopbarAction[]): void {
     this.actions.set(actions);
@@ -21,5 +25,15 @@ export class TopbarService {
 
   clear(): void {
     this.actions.set([]);
+  }
+
+  setPage(title: string, subtitle?: string): void {
+    this.pageTitle.set(title);
+    this.pageSubtitle.set(subtitle ?? '');
+  }
+
+  clearPage(): void {
+    this.pageTitle.set('');
+    this.pageSubtitle.set('');
   }
 }

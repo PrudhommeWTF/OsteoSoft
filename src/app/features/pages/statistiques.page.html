@@ -1,9 +1,7 @@
-<section class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
-  <div>
-    <h1 class="h3 mb-1"><i class="fa-solid fa-chart-column text-primary me-2"></i>Statistiques</h1>
-    <p class="text-secondary mb-0">Vue analytique des patients, consultations, paiements et utilisateurs selon le perimetre autorise.</p>
-  </div>
-</section>
+<div class="stats-page-header">
+  <h1 class="stats-page-title">Statistiques</h1>
+  <p class="stats-page-subtitle">Vue analytique des patients, consultations, paiements et utilisateurs selon le périmètre autorisé.</p>
+</div>
 
 <section class="card mb-3">
   <div class="card-header">
@@ -63,33 +61,22 @@
   </div>
 </section>
 
-<section class="card mb-3">
-  <div class="card-header">
-    <h2 class="h6 mb-0">Sections statistiques</h2>
-  </div>
-  <div class="card-body pt-2">
-    <ul class="nav nav-pills nav-fill stats-nav-pills" role="tablist" aria-label="Navigation des sections statistiques">
-      @for (tab of sectionTabs(); track tab.section) {
-        <li class="nav-item" role="presentation">
-          <button
-            type="button"
-            class="nav-link"
-            role="tab"
-            [class.active]="isSectionActive(tab.section)"
-            [attr.aria-selected]="isSectionActive(tab.section)"
-            [attr.aria-controls]="'stats-section-' + tab.section"
-            [title]="'Afficher la section ' + tab.section"
-            title="Ouvrir" bsTooltip
-            (click)="showSection(tab.section)">
-            <i [class]="tab.icon + ' me-2'" aria-hidden="true"></i>
-            {{ tab.section }}
-            <span class="badge rounded-pill text-bg-light ms-2">{{ tab.count }}</span>
-          </button>
-        </li>
-      }
-    </ul>
-  </div>
-</section>
+<div class="stats-tabs" role="tablist" aria-label="Navigation des sections statistiques">
+  @for (tab of sectionTabs(); track tab.section) {
+    <button
+      type="button"
+      class="stats-tab"
+      role="tab"
+      [class.active]="isSectionActive(tab.section)"
+      [attr.aria-selected]="isSectionActive(tab.section)"
+      [attr.aria-controls]="'stats-section-' + tab.section"
+      (click)="showSection(tab.section)">
+      <i [class]="tab.icon" aria-hidden="true"></i>
+      {{ tab.section }}
+      <span class="stats-tab-count">{{ tab.count }}</span>
+    </button>
+  }
+</div>
 
 @if (isLoading()) {
   <section class="card">

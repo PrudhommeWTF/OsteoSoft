@@ -42,26 +42,26 @@
 
 		&.active {
 			.step-circle {
-				border-color: #2f7cb8;
-				background: #2f7cb8;
-				color: #fff;
+				border-color: var(--accent);
+				background: var(--accent-soft);
+				color: var(--accent);
 			}
 
 			.step-label {
-				color: #2f7cb8;
+				color: var(--accent);
 				font-weight: 600;
 			}
 		}
 
 		&.done {
 			.step-circle {
-				border-color: #198754;
-				background: #198754;
-				color: #fff;
+				border-color: var(--accent);
+				background: var(--accent);
+				color: var(--accent-contrast);
 			}
 
 			.step-label {
-				color: #198754;
+				color: var(--accent);
 			}
 		}
 	}
@@ -74,7 +74,7 @@
 		transition: background 0.25s ease;
 
 		&.done {
-			background: #198754;
+			background: var(--accent);
 		}
 	}
 }
@@ -179,7 +179,7 @@
 		}
 
 		&.active-homme {
-			border-color: #2f7cb8;
+			border-color: var(--accent);
 			background: var(--bs-primary-bg-subtle);
 			color: var(--bs-primary-text-emphasis);
 		}
@@ -209,7 +209,7 @@
 		transform 0.15s ease;
 
 	&:hover {
-		border-color: #2f7cb8;
+		border-color: var(--accent);
 		background: #f7fbff;
 		transform: translateY(-1px);
 		box-shadow: 0 0.35rem 0.75rem rgb(47 124 184 / 12%);
@@ -217,7 +217,7 @@
 
 	&:focus-visible {
 		outline: 0;
-		border-color: #2f7cb8;
+		border-color: var(--accent);
 		box-shadow: 0 0 0 0.2rem rgb(47 124 184 / 20%);
 	}
 }
@@ -230,7 +230,7 @@
 	color: var(--bs-emphasis-color);
 
 	i {
-		color: #2f7cb8;
+		color: var(--accent);
 	}
 }
 
@@ -259,7 +259,7 @@
 .contact-prefill-card-cta {
 	font-size: 0.8rem;
 	font-weight: 600;
-	color: #2f7cb8;
+	color: var(--accent);
 }
 
 .consultation-split {
@@ -426,7 +426,7 @@
 	width: 0.7rem;
 	height: 0.7rem;
 	border-radius: 50%;
-	background: #2f7cb8;
+	background: var(--accent);
 	box-shadow: 0 0 0 3px #fff;
 }
 

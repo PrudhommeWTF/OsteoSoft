@@ -4,7 +4,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { jsPDF } from 'jspdf';
-import { NgbDateStruct } from '@ng-bootstrap/ng-bootstrap';
+import { DateBound } from '../../shared/date-picker/date-picker.component';
 
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
@@ -169,7 +169,7 @@ export class PatientCreatePage implements OnInit, OnDestroy {
   readonly antecedentDatePrecision = signal<AntecedentPrecision>('date');
   readonly antecedentDateDisplay = signal('');
   readonly antecedentDateCtrl = new FormControl<string | null>(null);
-  readonly todayNgbDate: NgbDateStruct = (() => {
+  readonly todayNgbDate: DateBound = (() => {
     const d = new Date();
     return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() };
   })();

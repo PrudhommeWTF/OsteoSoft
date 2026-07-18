@@ -1,10 +1,12 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, output, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
 
 import { ApiService } from '../../core/api.service';
 import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
-import { AgendaSettings, DashboardEvent, LocalAgendaCalendar, OfficeOpeningHours, OfficeWeekDay, Practitioner } from '../../core/api.types';
+import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
+import { AgendaSettings, CancelAppointmentPayload, DashboardEvent, LocalAgendaCalendar, OfficeOpeningHours, OfficeWeekDay, Practitioner, RescheduleAppointmentPayload } from '../../core/api.types';
 
 type ConsultationConflictCandidate = {
   id: number;
@@ -64,7 +66,7 @@ interface MonthDayCell extends CalendarDay {
 @Component({
   selector: 'app-week-calendar',
   standalone: true,
-  imports: [BsTooltipDirective],
+  imports: [BsTooltipDirective, ReactiveFormsModule, DatePickerComponent],
   templateUrl: './week-calendar.html',
   styleUrl: './week-calendar.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -78,11 +80,13 @@ export class WeekCalendar {
   readonly settings = input.required<AgendaSettings>();
   readonly selectedCalendars = input<LocalAgendaCalendar[]>([]);
   readonly officeOpeningHoursById = input<Record<number, OfficeOpeningHours>>({});
-  readonly initialView = input<string>('Semaine');
+  readonly initialView = input<string>('Jour');
   readonly visibleEventsChange = output<DashboardEvent[]>();
+  readonly freeSlotClick = output<{ date: string; time: string | null }>();
+  readonly appointmentChanged = output<void>();
   readonly now = signal(new Date());
 
-  readonly viewMode = signal<'month' | 'week' | 'three-days' | 'day'>('week');
+  readonly viewMode = signal<'month' | 'week' | 'three-days' | 'day'>('day');
   readonly referenceDate = signal<Date>(new Date());
   readonly selectedEvent = signal<DashboardEvent | null>(null);
   readonly selectedEventColor = signal<string>('#4d92d1');
@@ -96,6 +100,25 @@ export class WeekCalendar {
   readonly consultationPractitionerDraft = signal('');
   readonly isConsultationConflictModalOpen = signal(false);
   readonly consultationConflictCandidate = signal<ConsultationConflictCandidate | null>(null);
+
+  readonly isRescheduleModalOpen = signal(false);
+  readonly rescheduleDateTimeControl = new FormControl<string | null>(null);
+  readonly rescheduleNote = signal('');
+  readonly isReschedulingAppointment = signal(false);
+  readonly rescheduleError = signal('');
+
+  readonly isCancelModalOpen = signal(false);
+  readonly cancelReason = signal<string>('patient');
+  readonly notifyPatient = signal(false);
+  readonly isCancellingAppointment = signal(false);
+  readonly cancelError = signal('');
+
+  readonly cancelReasonOptions = [
+    { value: 'patient', label: 'Annulé par le patient' },
+    { value: 'absence', label: 'Absence (sans prévenir)' },
+    { value: 'reporte', label: 'Reporté' },
+    { value: 'autre', label: 'Autre' }
+  ] as const;
 
   private mapInitialAgendaView(view: string): 'week' | 'day' | 'three-days' | 'month' {
     const normalized = String(view ?? '').trim().toLowerCase();
@@ -334,7 +357,126 @@ export class WeekCalendar {
     this.selectedEvent.set(null);
     this.consultationMetaError.set('');
     this.consultationMetaSuccess.set('');
+    this.isRescheduleModalOpen.set(false);
+    this.isCancelModalOpen.set(false);
     this.closeConsultationConflictModal();
+  }
+
+  getEventInitials(name: string): string {
+    const parts = String(name ?? '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return '?';
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  }
+
+  getStatusLabel(status: string): string {
+    const s = String(status ?? '');
+    if (s === 'A confirmer') return 'À confirmer';
+    if (s === 'En attente') return 'En attente';
+    if (s === 'Termine' || s === 'Terminé') return 'Terminé';
+    if (s === 'Annule' || s === 'Annulé') return 'Annulé';
+    return s;
+  }
+
+  getStatusClass(status: string): string {
+    const s = String(status ?? '');
+    if (s === 'Termine' || s === 'Terminé') return 'wc-status-badge wc-status-badge--ok';
+    if (s === 'Annule' || s === 'Annulé') return 'wc-status-badge wc-status-badge--danger';
+    return 'wc-status-badge wc-status-badge--warn';
+  }
+
+  openRescheduleModal(): void {
+    this.rescheduleDateTimeControl.setValue(null);
+    this.rescheduleNote.set('');
+    this.rescheduleError.set('');
+    this.isRescheduleModalOpen.set(true);
+  }
+
+  closeRescheduleModal(): void {
+    this.isRescheduleModalOpen.set(false);
+  }
+
+  async confirmReschedule(): Promise<void> {
+    const event = this.selectedEvent();
+    if (!event || this.isReschedulingAppointment()) return;
+
+    const startsAt = this.rescheduleDateTimeControl.value;
+    if (!startsAt) {
+      this.rescheduleError.set('Veuillez sélectionner une nouvelle date et heure.');
+      return;
+    }
+
+    this.isReschedulingAppointment.set(true);
+    this.rescheduleError.set('');
+    try {
+      const payload: RescheduleAppointmentPayload = { startsAt };
+      const note = this.rescheduleNote().trim();
+      if (note) payload.note = note;
+      await this.api.rescheduleAppointment(event.id, payload);
+      this.closeRescheduleModal();
+      this.closeAppointmentModal();
+      this.appointmentChanged.emit();
+    } catch {
+      this.rescheduleError.set('Impossible de reprogrammer le rendez-vous.');
+    } finally {
+      this.isReschedulingAppointment.set(false);
+    }
+  }
+
+  openCancelModal(): void {
+    this.cancelReason.set('patient');
+    this.notifyPatient.set(false);
+    this.cancelError.set('');
+    this.isCancelModalOpen.set(true);
+  }
+
+  closeCancelModal(): void {
+    this.isCancelModalOpen.set(false);
+  }
+
+  async confirmCancel(): Promise<void> {
+    const event = this.selectedEvent();
+    if (!event || this.isCancellingAppointment()) return;
+
+    this.isCancellingAppointment.set(true);
+    this.cancelError.set('');
+    try {
+      const payload: CancelAppointmentPayload = {
+        reason: this.cancelReason(),
+        notify: this.notifyPatient()
+      };
+      await this.api.cancelAppointment(event.id, payload);
+      this.closeCancelModal();
+      this.closeAppointmentModal();
+      this.appointmentChanged.emit();
+    } catch {
+      this.cancelError.set('Impossible d\'annuler le rendez-vous.');
+    } finally {
+      this.isCancellingAppointment.set(false);
+    }
+  }
+
+  async convertToConsultation(): Promise<void> {
+    const event = this.selectedEvent();
+    if (!event) return;
+
+    if (event.consultationId) {
+      await this.openConsultationRecord();
+      return;
+    }
+
+    let patientId = Number(event.patientId);
+    if (!Number.isInteger(patientId) || patientId <= 0) {
+      try {
+        patientId = await this.api.getPatientIdByAppointment(event.id);
+      } catch {
+        this.consultationMetaError.set('Impossible de récupérer le patient lié à ce rendez-vous.');
+        return;
+      }
+    }
+
+    this.closeAppointmentModal();
+    await this.router.navigate(['/patients', patientId, 'consultations', 'nouvelle']);
   }
 
   getMonthDayModalTitle(day: MonthDayCell): string {
@@ -752,80 +894,82 @@ export class WeekCalendar {
     return e.patient;
   }
 
-  private getClosedIntervals(day: CalendarDay, s: AgendaSettings, totalHeight: number): Array<{ top: number; height: number }> {
+  /**
+   * Returns the merged open time intervals (in minutes) for a given date according
+   * to the currently selected calendars' office opening hours.
+   *
+   * - Returns `null`  → no office context known; caller should fall back to settings bounds.
+   * - Returns `[]`    → office is definitely closed on this day.
+   * - Returns ranges  → open intervals clamped to [dayStartHour, dayEndHour].
+   */
+  private getOpenIntervalsForDay(
+    date: Date,
+    s: AgendaSettings
+  ): Array<{ start: number; end: number }> | null {
     const startMin = (s.dayStartHour ?? 8) * 60;
     const endMin = (s.dayEndHour ?? 20) * 60;
-    const daySpan = Math.max(1, endMin - startMin);
-    const dayKey = this.getOfficeWeekDay(day.date);
+    const dayKey = this.getOfficeWeekDay(date);
     const officeHoursById = this.officeOpeningHoursById();
 
     const officeIds = Array.from(
       new Set(
         this.selectedCalendars()
-          .map((calendar) => (calendar?.officeId != null ? Number(calendar.officeId) : null))
-          .filter((officeId): officeId is number => typeof officeId === 'number' && Number.isInteger(officeId) && officeId > 0)
+          .map((c) => (c?.officeId != null ? Number(c.officeId) : null))
+          .filter((id): id is number => typeof id === 'number' && Number.isInteger(id) && id > 0)
       )
     );
 
-    if (officeIds.length === 0) {
-      return [];
-    }
+    if (officeIds.length === 0) return null; // no office context
 
-    const openIntervals: Array<{ start: number; end: number }> = [];
+    const open: Array<{ start: number; end: number }> = [];
     for (const officeId of officeIds) {
-      const dayRanges = officeHoursById?.[officeId]?.[dayKey] ?? [];
-      for (const range of dayRanges) {
+      for (const range of (officeHoursById?.[officeId]?.[dayKey] ?? [])) {
         const start = this.timeStringToMinutes(range.start);
         const end = this.timeStringToMinutes(range.end);
-        if (start === null || end === null || end <= start) {
-          continue;
-        }
-
-        const clampedStart = Math.max(startMin, start);
-        const clampedEnd = Math.min(endMin, end);
-        if (clampedEnd <= clampedStart) {
-          continue;
-        }
-        openIntervals.push({ start: clampedStart, end: clampedEnd });
+        if (start === null || end === null || end <= start) continue;
+        const cs = Math.max(startMin, start);
+        const ce = Math.min(endMin, end);
+        if (ce > cs) open.push({ start: cs, end: ce });
       }
     }
 
-    if (openIntervals.length === 0) {
-      return [{ top: 0, height: totalHeight }];
-    }
+    if (open.length === 0) return []; // office closed today
 
-    openIntervals.sort((a, b) => a.start - b.start || a.end - b.end);
+    open.sort((a, b) => a.start - b.start);
     const merged: Array<{ start: number; end: number }> = [];
-    for (const interval of openIntervals) {
+    for (const iv of open) {
       const last = merged[merged.length - 1];
-      if (!last || interval.start > last.end) {
-        merged.push({ ...interval });
-      } else {
-        last.end = Math.max(last.end, interval.end);
-      }
+      if (!last || iv.start > last.end) merged.push({ ...iv });
+      else last.end = Math.max(last.end, iv.end);
     }
+    return merged;
+  }
+
+  private getClosedIntervals(day: CalendarDay, s: AgendaSettings, totalHeight: number): Array<{ top: number; height: number }> {
+    const startMin = (s.dayStartHour ?? 8) * 60;
+    const endMin = (s.dayEndHour ?? 20) * 60;
+    const daySpan = Math.max(1, endMin - startMin);
+
+    const merged = this.getOpenIntervalsForDay(day.date, s);
+
+    if (merged === null) return []; // no office context → nothing to gray
+    if (merged.length === 0) return [{ top: 0, height: totalHeight }]; // fully closed
 
     const closed: Array<{ top: number; height: number }> = [];
     let cursor = startMin;
-    for (const interval of merged) {
-      if (interval.start > cursor) {
+    for (const iv of merged) {
+      if (iv.start > cursor) {
         const top = ((cursor - startMin) / daySpan) * totalHeight;
-        const height = ((interval.start - cursor) / daySpan) * totalHeight;
-        if (height > 0) {
-          closed.push({ top, height });
-        }
+        const height = ((iv.start - cursor) / daySpan) * totalHeight;
+        if (height > 0) closed.push({ top, height });
       }
-      cursor = Math.max(cursor, interval.end);
+      cursor = Math.max(cursor, iv.end);
     }
-
     if (cursor < endMin) {
       const top = ((cursor - startMin) / daySpan) * totalHeight;
       const height = ((endMin - cursor) / daySpan) * totalHeight;
-      if (height > 0) {
-        closed.push({ top, height });
-      }
+      if (height > 0) closed.push({ top, height });
     }
-
     return closed;
   }
 
@@ -892,6 +1036,178 @@ export class WeekCalendar {
     } finally {
       this.isPractitionersLoading.set(false);
     }
+  }
+
+  // ── Day view: 7-pill strip centred on selected day (-1 … +5) ────────────────
+
+  readonly dayViewWeekPills = computed((): Array<{
+    date: Date;
+    dateStr: string;
+    dow: string;
+    dayNum: number;
+    count: number;
+    isSelected: boolean;
+    isToday: boolean;
+  }> => {
+    if (this.viewMode() !== 'day') return [];
+
+    const ref = this.referenceDate();
+    const todayStr = this.toDateStr(new Date());
+    const refStr = this.toDateStr(ref);
+    const events = this.events();
+    const dowLabels = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+
+    // -1 day before, selected day, +5 days after = 7 pills total
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(ref);
+      d.setDate(ref.getDate() + (i - 1));
+      const dStr = this.toDateStr(d);
+      const count = events.filter((e) => e.start.slice(0, 10) === dStr).length;
+      return {
+        date: d,
+        dateStr: dStr,
+        dow: dowLabels[d.getDay()],
+        dayNum: d.getDate(),
+        count,
+        isSelected: dStr === refStr,
+        isToday: dStr === todayStr
+      };
+    });
+  });
+
+  // ── Day view: now indicator (% of slot-list height) ─────────────────────────
+
+  readonly dayNowIndicatorPercent = computed((): string | null => {
+    if (this.viewMode() !== 'day') return null;
+    const todayStr = this.toDateStr(new Date());
+    if (this.toDateStr(this.referenceDate()) !== todayStr) return null;
+
+    const s = this.settings();
+    const officeIntervals = this.getOpenIntervalsForDay(this.referenceDate(), s);
+    const intervals: Array<{ start: number; end: number }> =
+      officeIntervals ?? [{ start: (s.dayStartHour ?? 8) * 60, end: (s.dayEndHour ?? 19) * 60 }];
+    if (!intervals.length) return null;
+
+    const now = this.now();
+    const nowMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+    const minStart = intervals[0].start;
+    const maxEnd = intervals[intervals.length - 1].end;
+    if (nowMin < minStart || nowMin > maxEnd) return null;
+
+    const span = Math.max(1, maxEnd - minStart);
+    return `${((nowMin - minStart) / span) * 100}%`;
+  });
+
+  // ── Day view: hourly slot list ────────────────────────────────────────────────
+
+  readonly dayViewSlots = computed((): Array<{
+    time: string;
+    isFree: boolean;
+    event?: DashboardEvent;
+    patientName: string;
+    motif: string;
+    duration: string;
+    statusLabel: string;
+    statusClass: string;
+    borderColor: string;
+    bgColor: string;
+  }> => {
+    if (this.viewMode() !== 'day') return [];
+
+    const s = this.settings();
+    const refStr = this.toDateStr(this.referenceDate());
+    const events = this.events().filter((e) => e.start.slice(0, 10) === refStr);
+    const selectedCals = this.selectedCalendars();
+
+    const sessionMin = s.defaultSessionDurationMinutes || 60;
+
+    // Resolve open intervals from office hours, fall back to settings bounds
+    const officeIntervals = this.getOpenIntervalsForDay(this.referenceDate(), s);
+    const intervals: Array<{ start: number; end: number }> =
+      officeIntervals ??
+      [{ start: (s.dayStartHour ?? 8) * 60, end: (s.dayEndHour ?? 19) * 60 }];
+
+    const statusMap: Record<string, { label: string; cls: string }> = {
+      'Terminé': { label: 'Terminé', cls: 'wc-pill wc-pill--ok' },
+      'Termine': { label: 'Terminé', cls: 'wc-pill wc-pill--ok' },
+      'A confirmer': { label: 'À confirmer', cls: 'wc-pill wc-pill--warn' },
+      'En attente': { label: 'En attente', cls: 'wc-pill wc-pill--warn' },
+      'Annulé': { label: 'Annulé', cls: 'wc-pill wc-pill--danger' },
+      'Annule': { label: 'Annulé', cls: 'wc-pill wc-pill--danger' }
+    };
+
+    const slots: Array<{
+      time: string;
+      isFree: boolean;
+      event?: DashboardEvent;
+      patientName: string;
+      motif: string;
+      duration: string;
+      statusLabel: string;
+      statusClass: string;
+      borderColor: string;
+      bgColor: string;
+    }> = [];
+
+    for (const interval of intervals) {
+      for (let m = interval.start; m < interval.end; m += sessionMin) {
+        const h = Math.floor(m / 60);
+        const min = m % 60;
+        const time = `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+        const slotEndMin = m + sessionMin;
+
+        const matched = events.find((ev) => {
+          const evDate = new Date(ev.start);
+          const evMin = evDate.getHours() * 60 + evDate.getMinutes();
+          return evMin >= m && evMin < slotEndMin;
+        });
+
+        if (matched) {
+          const { borderColor, bgColor } = this.resolveEventColors(matched, s, selectedCals);
+          const statusInfo = statusMap[matched.status] ?? { label: matched.status, cls: 'wc-pill wc-pill--neutral' };
+          slots.push({
+            time,
+            isFree: false,
+            event: matched,
+            patientName: matched.isPrivate ? (matched.privateReason || 'Privé') : matched.patient,
+            motif: matched.reason,
+            duration: `${sessionMin} min`,
+            statusLabel: statusInfo.label,
+            statusClass: statusInfo.cls,
+            borderColor,
+            bgColor
+          });
+        } else {
+          slots.push({ time, isFree: true, patientName: '', motif: '', duration: '', statusLabel: '', statusClass: '', borderColor: '', bgColor: '' });
+        }
+      }
+    }
+
+    return slots;
+  });
+
+  // ── Day view: summary sidebar ─────────────────────────────────────────────────
+
+  readonly dayViewSummary = computed((): { consultations: number; freeSlots: number; fillRate: number; fillWidth: string } | null => {
+    if (this.viewMode() !== 'day') return null;
+
+    const slots = this.dayViewSlots();
+    if (slots.length === 0) return null;
+
+    const consultations = slots.filter((s) => !s.isFree).length;
+    const freeSlots = slots.filter((s) => s.isFree).length;
+    const fillRate = Math.round((consultations / slots.length) * 100);
+
+    return { consultations, freeSlots, fillRate, fillWidth: `${fillRate}%` };
+  });
+
+  selectDayViewDate(date: Date): void {
+    this.referenceDate.set(date);
+  }
+
+  emitFreeSlotClick(dateOrStr: Date | string, time: string | null): void {
+    const date = typeof dateOrStr === 'string' ? dateOrStr : this.toDateStr(dateOrStr);
+    this.freeSlotClick.emit({ date, time });
   }
 
   private toDateStr(date: Date): string {

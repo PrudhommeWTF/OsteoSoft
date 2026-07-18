@@ -4,12 +4,11 @@ import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { OfficeOption, Patient } from '../../core/api.types';
-import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 import { sanitizeCellValue } from '../../core/xlsx-export.utils';
 
 @Component({
   selector: 'app-patients-page',
-  imports: [RouterLink, BsTooltipDirective],
+  imports: [RouterLink],
   templateUrl: './patients.page.html',
   styleUrl: './patients.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -134,6 +133,12 @@ export class PatientsPage {
     this.authService.setActiveOfficeId(nextOfficeId);
   }
 
+  getPatientInitials(fullName: string): string {
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return fullName.slice(0, 2).toUpperCase();
+  }
+
   sexIcon(sex: Patient['sex']): string | null {
     if (sex === 'Femme') return 'fa-solid fa-venus';
     if (sex === 'Homme') return 'fa-solid fa-mars';
@@ -224,6 +229,21 @@ export class PatientsPage {
     } finally {
       this.isExportingPatients.set(false);
     }
+  }
+
+  private readonly DAY_NAMES = ['Dim.', 'Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.'];
+  private readonly MONTH_NAMES = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+
+  formatNextAppointment(isoDate: string): string {
+    const [y, m, d] = isoDate.split('-').map(Number);
+    const appt = new Date(y, m - 1, d);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    if (appt.getTime() === today.getTime()) return "Aujourd'hui";
+    if (appt.getTime() === tomorrow.getTime()) return 'Demain';
+    return `${this.DAY_NAMES[appt.getDay()]} ${appt.getDate()} ${this.MONTH_NAMES[appt.getMonth()]}`;
   }
 
   private downloadBlob(blob: Blob, fileName: string): void {

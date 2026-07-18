@@ -1,5 +1,17 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  HostListener,
+  OnDestroy,
+  OnInit,
+  computed,
+  inject,
+  signal
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { filter } from 'rxjs';
 
 import { ApiService } from '../core/api.service';
 import { ChangelogEntry, Patient } from '../core/api.types';
@@ -18,19 +30,12 @@ type NavItem = {
   disabled?: boolean;
   requiredPermission?: string;
   adminOnly?: boolean;
+  group: 'pilotage' | 'cabinet';
 };
 
-type UtilityItem = {
-  label: string;
-  icon: string;
-  path?: string;
-};
-
-type DependencyCredit = {
-  name: string;
-  version: string;
-  website: string;
-  scope: 'runtime' | 'dev';
+const PAGE_TITLE_MAP: Record<string, string> = {
+  Accueil: 'Tableau de bord',
+  Facturation: 'Facturation & comptabilité',
 };
 
 @Component({
@@ -44,211 +49,221 @@ export class ShellPage implements OnInit, OnDestroy {
   private readonly authService = inject(AuthService);
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
   readonly configService = inject(ConfigService);
   readonly topbar = inject(TopbarService);
   readonly themeService = inject(ThemeService);
 
   readonly isMenuOpen = signal(false);
+  readonly isOfficeDropdownOpen = signal(false);
   readonly isCreditsModalOpen = signal(false);
   readonly isChangelogModalOpen = signal(false);
   readonly changelogEntries = signal<ChangelogEntry[]>([]);
+
   readonly username = this.authService.username;
   readonly role = this.authService.role;
   readonly profileLabel = this.authService.profileLabel;
   readonly offices = this.authService.offices;
   readonly activeOfficeId = this.authService.activeOfficeId;
+
   readonly now = signal(new Date());
-  readonly sidebarSearch = signal('');
-  readonly sidebarSearchResults = signal<Patient[]>([]);
-  readonly isSearchingSidebarPatients = signal(false);
-  readonly quickThemeToggleChecked = computed(() => this.themeService.effectiveTheme() === 'dark');
+
+  readonly topbarSearch = signal('');
+  readonly topbarSearchResults = signal<Patient[]>([]);
+  readonly isSearchingPatients = signal(false);
 
   private clockTimer: ReturnType<typeof setInterval> | null = null;
-  private sidebarSearchDebounceId: ReturnType<typeof setTimeout> | null = null;
-  private sidebarSearchRequestId = 0;
+  private searchDebounceId: ReturnType<typeof setTimeout> | null = null;
+  private searchRequestId = 0;
 
-  readonly currentDateTime = computed(() =>
-    new Intl.DateTimeFormat('fr-FR', {
+  readonly currentPageTitle = signal<string>('Tableau de bord');
+  readonly currentUrl = signal<string>(this.router.url);
+
+  readonly topbarSubtitle = computed(() => {
+    const date = new Intl.DateTimeFormat('fr-FR', {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    }).format(this.now())
-  );
+      year: 'numeric'
+    }).format(this.now());
+
+    const officeId = this.activeOfficeId();
+    const officeName = this.offices().find((o) => o.id === officeId)?.name;
+    const context = officeId === null ? 'vue globale' : (officeName ?? '');
+
+    return context ? `${date} · ${context}` : date;
+  });
+
+  readonly initials = computed(() => {
+    const label = this.profileLabel() || this.username() || '';
+    const clean = label.replace(/^(Dr\.?\s+|Pr\.?\s+|M\.?\s+|Mme\.?\s+)/i, '');
+    const parts = clean.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return ((parts[0][0] ?? '') + (parts[parts.length - 1][0] ?? '')).toUpperCase();
+    }
+    return clean.slice(0, 2).toUpperCase() || '??';
+  });
+
+  readonly activeOfficeName = computed(() => {
+    const id = this.activeOfficeId();
+    if (id === null) return 'Tous mes cabinets';
+    return this.offices().find((o) => o.id === id)?.name ?? 'Cabinet';
+  });
+
+  readonly activeOfficeSubLabel = computed(() => {
+    const id = this.activeOfficeId();
+    if (id === null) return `${this.offices().length} cabinets`;
+    return '';
+  });
+
+  readonly isDark = computed(() => this.themeService.effectiveTheme() === 'dark');
 
   readonly navItems = signal<NavItem[]>([
-    { path: '/accueil', label: 'Accueil', icon: 'fa-solid fa-house', exact: true, requiredPermission: 'read-dashboard' },
-    { path: '/patients/nouveau', label: 'Nouveau patient', icon: 'fa-solid fa-user-plus', exact: true, requiredPermission: 'create-patient-record' },
-    { path: '/agenda', label: 'Agenda', icon: 'fa-solid fa-calendar-days', exact: true, requiredPermission: 'read-agenda' },
-    { path: '/patients', label: 'Listing patients', icon: 'fa-solid fa-list-ul', badge: '...', exact: true, requiredPermission: 'read-patient-list' },
-    { path: '/repertoire', label: 'Répertoire', icon: 'fa-solid fa-address-book', badge: '...', exact: true, requiredPermission: 'read-directory' },
-    { path: '/facturation', label: 'Comptabilité', icon: 'fa-solid fa-file-invoice-dollar', badge: '...', requiredPermission: 'read-billing-kpis' },
-    { path: '/statistiques', label: 'Statistiques', icon: 'fa-solid fa-chart-column', requiredPermission: 'read-advanced-statistics' },
-    { path: '/administration-cabinet', label: 'Administration cabinet', icon: 'fa-solid fa-building', exact: true, requiredPermission: 'read-office-settings' },
-    { path: '/parametres', label: 'Paramètres', icon: 'fa-solid fa-gear', exact: true, adminOnly: true }
+    { path: '/accueil', label: 'Accueil', icon: 'fa-solid fa-house', exact: true, requiredPermission: 'read-dashboard', group: 'pilotage' },
+    { path: '/agenda', label: 'Agenda', icon: 'fa-solid fa-calendar-days', exact: true, requiredPermission: 'read-agenda', badge: '...', group: 'pilotage' },
+    { path: '/patients', label: 'Listing patients', icon: 'fa-solid fa-list-ul', exact: false, requiredPermission: 'read-patient-list', badge: '...', group: 'pilotage' },
+    { path: '/facturation', label: 'Facturation', icon: 'fa-solid fa-file-invoice-dollar', requiredPermission: 'read-billing-kpis', group: 'pilotage' },
+    { path: '/statistiques', label: 'Statistiques', icon: 'fa-solid fa-chart-column', requiredPermission: 'read-advanced-statistics', group: 'pilotage' },
+    { path: '/repertoire', label: 'Répertoire', icon: 'fa-solid fa-address-book', exact: true, requiredPermission: 'read-directory', group: 'cabinet' },
+    { path: '/parametres', label: 'Paramètres', icon: 'fa-solid fa-gear', exact: true, adminOnly: true, group: 'cabinet' },
+    { path: '/administration-cabinet', label: 'Administration', icon: 'fa-solid fa-building', exact: true, requiredPermission: 'read-office-settings', group: 'cabinet' },
   ]);
 
   readonly visibleNavItems = computed(() => {
     const isAdmin = this.role() === 'admin' || this.authService.isSuperAdmin();
 
     return this.navItems().filter((item) => {
-      if (isAdmin && item.path === '/administration-cabinet') {
-        return false;
-      }
-
-      if (item.adminOnly && !isAdmin) {
-        return false;
-      }
-
-      if (!item.requiredPermission) {
-        return true;
-      }
-
+      if (isAdmin && item.path === '/administration-cabinet') return false;
+      if (item.adminOnly && !isAdmin) return false;
+      if (!item.requiredPermission) return true;
       return this.authService.hasPermission(item.requiredPermission);
     });
   });
 
+  readonly pilotageNavItems = computed(() => this.visibleNavItems().filter((i) => i.group === 'pilotage'));
+  readonly cabinetNavItems = computed(() => this.visibleNavItems().filter((i) => i.group === 'cabinet'));
+
   ngOnInit(): void {
-    this.clockTimer = setInterval(() => {
-      this.now.set(new Date());
-    }, 1000);
+    this.clockTimer = setInterval(() => this.now.set(new Date()), 1000);
 
-    this.api.getChangelog().then((entries) => {
-      this.changelogEntries.set(entries);
-    }).catch(() => {
-      this.changelogEntries.set([]);
-    });
+    // Track page title from router
+    this.router.events
+      .pipe(
+        filter((e) => e instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe((e) => {
+        this.currentUrl.set((e as NavigationEnd).urlAfterRedirects);
+        let route = this.router.routerState.root;
+        while (route.firstChild) route = route.firstChild;
+        const routeTitle = route.snapshot.title ?? '';
+        this.currentPageTitle.set(PAGE_TITLE_MAP[routeTitle] ?? routeTitle);
+      });
 
-    this.api.getPatientCount().then((count) => {
-      this.navItems.update((items) =>
-        items.map((item) =>
-          item.label === 'Listing patients' ? { ...item, badge: String(count) } : item
-        )
-      );
-    }).catch(() => {
-      this.navItems.update((items) =>
-        items.map((item) =>
-          item.label === 'Listing patients' ? { ...item, badge: '?' } : item
-        )
-      );
-    });
+    // Set initial page title
+    let route = this.router.routerState.root;
+    while (route.firstChild) route = route.firstChild;
+    const routeTitle = route.snapshot.title ?? '';
+    this.currentPageTitle.set(PAGE_TITLE_MAP[routeTitle] ?? routeTitle);
 
+    // Load badges
+    this.api.getChangelog().then((entries) => this.changelogEntries.set(entries)).catch(() => this.changelogEntries.set([]));
     void this.refreshAgendaBadge();
-
-    this.api.getDirectoryContactCount().then((count) => {
-      this.navItems.update((items) =>
-        items.map((item) =>
-          item.label === 'Répertoire' ? { ...item, badge: String(count) } : item
-        )
-      );
-    }).catch(async () => {
-      try {
-        // Fallback for older API instances not yet exposing /count.
-        const payload = await this.api.getDirectoryContacts();
-        const count = Number(payload?.contacts?.length ?? 0);
-        this.navItems.update((items) =>
-          items.map((item) =>
-            item.label === 'Répertoire' ? { ...item, badge: String(count) } : item
-          )
-        );
-      } catch {
-        this.navItems.update((items) =>
-          items.map((item) =>
-            item.label === 'Répertoire' ? { ...item, badge: '?' } : item
-          )
-        );
-      }
-    });
-
+    void this.refreshPatientsBadge();
     void this.refreshBillingBadge();
   }
 
   ngOnDestroy(): void {
-    if (this.clockTimer !== null) {
-      clearInterval(this.clockTimer);
-      this.clockTimer = null;
-    }
-
-    if (this.sidebarSearchDebounceId !== null) {
-      clearTimeout(this.sidebarSearchDebounceId);
-      this.sidebarSearchDebounceId = null;
-    }
+    if (this.clockTimer !== null) clearInterval(this.clockTimer);
+    if (this.searchDebounceId !== null) clearTimeout(this.searchDebounceId);
   }
 
-  readonly utilityItems = signal<UtilityItem[]>([
-    { label: 'Editer mon profil', icon: 'fa-solid fa-user-pen', path: '/mon-profil' },
-    { label: 'Afficher l\'aide', icon: 'fa-solid fa-circle-question', path: '/aide' }
-  ]);
-
-  readonly dependencyCredits = signal<DependencyCredit[]>([
-    { name: '@angular/common', version: '^21.2.0', website: 'https://www.npmjs.com/package/@angular/common', scope: 'runtime' },
-    { name: '@angular/compiler', version: '^21.2.0', website: 'https://www.npmjs.com/package/@angular/compiler', scope: 'runtime' },
-    { name: '@angular/core', version: '^21.2.0', website: 'https://www.npmjs.com/package/@angular/core', scope: 'runtime' },
-    { name: '@angular/forms', version: '^21.2.0', website: 'https://www.npmjs.com/package/@angular/forms', scope: 'runtime' },
-    { name: '@angular/platform-browser', version: '^21.2.0', website: 'https://www.npmjs.com/package/@angular/platform-browser', scope: 'runtime' },
-    { name: '@angular/router', version: '^21.2.0', website: 'https://www.npmjs.com/package/@angular/router', scope: 'runtime' },
-    { name: '@fortawesome/fontawesome-free', version: '^7.2.0', website: 'https://fontawesome.com', scope: 'runtime' },
-    { name: 'argon2', version: '^0.44.0', website: 'https://www.npmjs.com/package/argon2', scope: 'runtime' },
-    { name: 'better-sqlite3', version: '^12.9.0', website: 'https://www.npmjs.com/package/better-sqlite3', scope: 'runtime' },
-    { name: 'bootstrap', version: '^5.3.8', website: 'https://getbootstrap.com', scope: 'runtime' },
-    { name: 'bootstrap-datepicker', version: '^1.10.1', website: 'https://www.npmjs.com/package/bootstrap-datepicker', scope: 'runtime' },
-    { name: 'chart.js', version: '^4.5.1', website: 'https://www.chartjs.org', scope: 'runtime' },
-    { name: 'cookie-parser', version: '^1.4.7', website: 'https://www.npmjs.com/package/cookie-parser', scope: 'runtime' },
-    { name: 'cors', version: '^2.8.6', website: 'https://www.npmjs.com/package/cors', scope: 'runtime' },
-    { name: 'dotenv', version: '^17.4.2', website: 'https://www.npmjs.com/package/dotenv', scope: 'runtime' },
-    { name: 'express', version: '^5.2.1', website: 'https://expressjs.com', scope: 'runtime' },
-    { name: 'express-rate-limit', version: '^8.3.2', website: 'https://www.npmjs.com/package/express-rate-limit', scope: 'runtime' },
-    { name: 'helmet', version: '^8.1.0', website: 'https://helmetjs.github.io', scope: 'runtime' },
-    { name: 'jquery', version: '^3.7.1', website: 'https://jquery.com', scope: 'runtime' },
-    { name: 'jsonwebtoken', version: '^9.0.3', website: 'https://www.npmjs.com/package/jsonwebtoken', scope: 'runtime' },
-    { name: 'jspdf', version: '^4.2.1', website: 'https://www.npmjs.com/package/jspdf', scope: 'runtime' },
-    { name: 'moment', version: '^2.29.4', website: 'https://momentjs.com', scope: 'runtime' },
-    { name: 'rxjs', version: '~7.8.0', website: 'https://rxjs.dev', scope: 'runtime' },
-    { name: 'tslib', version: '^2.3.0', website: 'https://www.npmjs.com/package/tslib', scope: 'runtime' },
-    { name: 'exceljs', version: '^4.4.0', website: 'https://www.npmjs.com/package/exceljs', scope: 'runtime' },
-    { name: 'zod', version: '^4.3.6', website: 'https://zod.dev', scope: 'runtime' },
-    { name: '@angular/build', version: '^21.2.7', website: 'https://www.npmjs.com/package/@angular/build', scope: 'dev' },
-    { name: '@angular/cli', version: '^21.2.7', website: 'https://www.npmjs.com/package/@angular/cli', scope: 'dev' },
-    { name: '@angular/compiler-cli', version: '^21.2.0', website: 'https://www.npmjs.com/package/@angular/compiler-cli', scope: 'dev' },
-    { name: 'concurrently', version: '^9.2.1', website: 'https://www.npmjs.com/package/concurrently', scope: 'dev' },
-    { name: 'prettier', version: '^3.8.1', website: 'https://prettier.io', scope: 'dev' },
-    { name: 'typescript', version: '~5.9.2', website: 'https://www.typescriptlang.org', scope: 'dev' }
-  ]);
-
-  readonly quickThemeAriaLabel = computed(() => {
-    const effective = this.themeService.effectiveTheme();
-    const mode = this.themeService.themeMode();
-    if (mode === 'system') {
-      return `Thème système actif (${effective}). Basculer vers ${effective === 'dark' ? 'clair' : 'sombre'}.`;
-    }
-
-    return `Thème ${effective}. Basculer vers ${effective === 'dark' ? 'clair' : 'sombre'}.`;
-  });
-
-  toggleMenu(): void {
-    this.isMenuOpen.update((value) => !value);
+  @HostListener('document:click')
+  onDocumentClick(): void {
+    this.isOfficeDropdownOpen.set(false);
   }
 
-  onActiveOfficeChange(value: string): void {
-    const parsed = Number(value);
-    const nextOfficeId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-    this.authService.setActiveOfficeId(nextOfficeId);
+  toggleOfficeDropdown(event: Event): void {
+    event.stopPropagation();
+    this.isOfficeDropdownOpen.update((v) => !v);
+  }
+
+  selectOffice(officeId: number | null, event: Event): void {
+    event.stopPropagation();
+    this.isOfficeDropdownOpen.set(false);
+    this.authService.setActiveOfficeId(officeId);
     void this.refreshAgendaBadge();
     void this.refreshBillingBadge();
+  }
+
+  toggleMenu(): void {
+    this.isMenuOpen.update((v) => !v);
   }
 
   closeMenu(): void {
     this.isMenuOpen.set(false);
   }
 
-  openCreditsModal(): void {
-    this.isCreditsModalOpen.set(true);
+  toggleQuickTheme(): void {
+    this.themeService.toggleQuickTheme();
   }
 
-  closeCreditsModal(): void {
-    this.isCreditsModalOpen.set(false);
+  async navigateToNewPatient(): Promise<void> {
+    await this.router.navigate(['/patients/nouveau']);
+  }
+
+  async navigateToNewAppointment(): Promise<void> {
+    await this.router.navigate(['/agenda']);
+    this.topbar.openCreateAppointmentRequest.update((n) => n + 1);
+  }
+
+  onTopbarSearchChange(value: string): void {
+    this.topbarSearch.set(value);
+    const term = value.trim();
+
+    if (this.searchDebounceId !== null) {
+      clearTimeout(this.searchDebounceId);
+      this.searchDebounceId = null;
+    }
+
+    if (term.length < 2) {
+      this.topbarSearchResults.set([]);
+      this.isSearchingPatients.set(false);
+      return;
+    }
+
+    this.isSearchingPatients.set(true);
+    this.searchDebounceId = setTimeout(() => void this.searchPatients(term), 220);
+  }
+
+  clearSearchResults(): void {
+    this.topbarSearchResults.set([]);
+  }
+
+  async openPatientFromSearch(patientId: number): Promise<void> {
+    this.topbarSearch.set('');
+    this.topbarSearchResults.set([]);
+    this.isSearchingPatients.set(false);
+    await this.router.navigate(['/patients', patientId]);
+    this.closeMenu();
+  }
+
+  formatPatientName(fullName: string): string {
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length <= 1) return fullName;
+    const [lastName, ...firstNameParts] = parts;
+    return `${lastName.toUpperCase()} ${firstNameParts.join(' ')}`;
+  }
+
+  getPatientInitials(fullName: string): string {
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return fullName.slice(0, 2).toUpperCase();
+  }
+
+  async logout(): Promise<void> {
+    await this.authService.logout();
+    await this.router.navigateByUrl('/login');
   }
 
   openChangelogModal(): void {
@@ -259,144 +274,57 @@ export class ShellPage implements OnInit, OnDestroy {
     this.isChangelogModalOpen.set(false);
   }
 
-  toggleQuickTheme(): void {
-    this.themeService.toggleQuickTheme();
+  openCreditsModal(): void {
+    this.isCreditsModalOpen.set(true);
   }
 
-  navigateToProfile(event: Event): void {
-    event.preventDefault();
-    event.stopPropagation();
-    this.closeMenu();
-    void this.router.navigate(['/mon-profil']);
+  closeCreditsModal(): void {
+    this.isCreditsModalOpen.set(false);
   }
 
-  onSidebarSearchChange(value: string): void {
-    this.sidebarSearch.set(value);
-    const term = value.trim();
-
-    if (this.sidebarSearchDebounceId !== null) {
-      clearTimeout(this.sidebarSearchDebounceId);
-      this.sidebarSearchDebounceId = null;
-    }
-
-    if (term.length < 2) {
-      this.sidebarSearchResults.set([]);
-      this.isSearchingSidebarPatients.set(false);
-      return;
-    }
-
-    this.isSearchingSidebarPatients.set(true);
-    this.sidebarSearchDebounceId = setTimeout(() => {
-      void this.searchSidebarPatients(term);
-    }, 220);
-  }
-
-  clearSidebarSearchResults(): void {
-    this.sidebarSearchResults.set([]);
-  }
-
-  async openPatientFromSidebar(patientId: number): Promise<void> {
-    this.sidebarSearch.set('');
-    this.sidebarSearchResults.set([]);
-    this.isSearchingSidebarPatients.set(false);
-    await this.router.navigate(['/patients', patientId]);
-    this.closeMenu();
-  }
-
-  getSidebarPatientSexIcon(sex: Patient['sex']): string {
-    if (sex === 'Homme') {
-      return 'fa-solid fa-mars';
-    }
-
-    if (sex === 'Femme') {
-      return 'fa-solid fa-venus';
-    }
-
-    return 'fa-solid fa-user';
-  }
-
-  getSidebarPatientSexClass(sex: Patient['sex']): string {
-    if (sex === 'Homme') {
-      return 'sex-male';
-    }
-
-    if (sex === 'Femme') {
-      return 'sex-female';
-    }
-
-    return 'sex-unknown';
-  }
-
-  formatSidebarPatientName(fullName: string): string {
-    const parts = fullName.trim().split(/\s+/);
-    if (parts.length <= 1) {
-      return fullName;
-    }
-
-    const [lastName, ...firstNameParts] = parts;
-    return `${lastName.toUpperCase()} ${firstNameParts.join(' ')}`;
-  }
-
-  formatSidebarPatientConsultationCount(value: number): string {
-    return value <= 1 ? `${value} consultation` : `${value} consultations`;
-  }
-
-  formatSidebarPatientAge(age: number | null): string {
-    if (age === null || age < 0) {
-      return 'Âge non renseigné';
-    }
-
-    return `${age} ans`;
-  }
-
-  private async searchSidebarPatients(term: string): Promise<void> {
-    const requestId = ++this.sidebarSearchRequestId;
-
+  private async searchPatients(term: string): Promise<void> {
+    const requestId = ++this.searchRequestId;
     try {
       const patients = await this.api.getPatients(term);
-      if (requestId !== this.sidebarSearchRequestId) {
-        return;
-      }
-
-      this.sidebarSearchResults.set(patients.slice(0, 8));
+      if (requestId !== this.searchRequestId) return;
+      this.topbarSearchResults.set(patients.slice(0, 8));
     } catch {
-      if (requestId === this.sidebarSearchRequestId) {
-        this.sidebarSearchResults.set([]);
-      }
+      if (requestId === this.searchRequestId) this.topbarSearchResults.set([]);
     } finally {
-      if (requestId === this.sidebarSearchRequestId) {
-        this.isSearchingSidebarPatients.set(false);
-      }
+      if (requestId === this.searchRequestId) this.isSearchingPatients.set(false);
     }
-  }
-
-  async logout(): Promise<void> {
-    await this.authService.logout();
-    await this.router.navigateByUrl('/login');
   }
 
   private updateNavBadge(label: string, badge: string): void {
     this.navItems.update((items) => items.map((item) => (item.label === label ? { ...item, badge } : item)));
   }
 
-  private async refreshBillingBadge(): Promise<void> {
-    try {
-      const revenue = await this.api.getBillingMonthlyRevenue(this.activeOfficeId());
-      const roundedAmount = Math.round(Number(revenue.amountCents ?? 0) / 100);
-      this.updateNavBadge('Comptabilité', String(roundedAmount));
-    } catch {
-      this.updateNavBadge('Comptabilité', '?');
-    }
-  }
-
   private async refreshAgendaBadge(): Promise<void> {
     try {
       const payload = await this.api.getAppointments(this.activeOfficeId());
-      const value = Number(payload?.stats?.consultationsToday ?? 0);
-      const safeValue = Number.isFinite(value) && value >= 0 ? Math.trunc(value) : 0;
-      this.updateNavBadge('Agenda', String(safeValue));
+      const value = Math.max(0, Math.trunc(Number(payload?.stats?.consultationsToday ?? 0)));
+      this.updateNavBadge('Agenda', value > 0 ? String(value) : '');
     } catch {
-      this.updateNavBadge('Agenda', '?');
+      this.updateNavBadge('Agenda', '');
+    }
+  }
+
+  private async refreshPatientsBadge(): Promise<void> {
+    try {
+      const count = await this.api.getPatientCount();
+      this.updateNavBadge('Listing patients',String(count));
+    } catch {
+      this.updateNavBadge('Listing patients','');
+    }
+  }
+
+  private async refreshBillingBadge(): Promise<void> {
+    try {
+      const revenue = await this.api.getBillingMonthlyRevenue(this.activeOfficeId());
+      const amount = Math.round(Number(revenue.amountCents ?? 0) / 100);
+      this.updateNavBadge('Facturation', amount > 0 ? `${amount} €` : '');
+    } catch {
+      this.updateNavBadge('Facturation', '');
     }
   }
 }

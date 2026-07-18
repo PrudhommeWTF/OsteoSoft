@@ -1,11 +1,7 @@
 <div class="container-fluid px-0">
-  <!-- Header -->
-  <div class="card border-0 shadow-sm mb-4">
-    <div class="card-body p-4">
-      <p class="text-uppercase text-secondary small fw-semibold mb-2">Paramètres utilisateur</p>
-      <h1 class="h3 mb-1">Editer mon profil</h1>
-      <p class="text-secondary mb-0">Mettez à jour vos informations personnelles et vos préférences d'agenda.</p>
-    </div>
+  <div class="prof-header mb-4">
+    <h1 class="prof-title">Mon profil</h1>
+    <p class="prof-subtitle">Mettez à jour vos informations personnelles et vos préférences d'agenda.</p>
   </div>
 
   @if (authService.mustChangePassword()) {
@@ -23,100 +19,16 @@
       </div>
     </div>
   } @else {
-    <div class="card border-0 shadow-sm mb-4">
-      <div class="card-body p-3">
-        <nav class="nav nav-pills flex-row flex-wrap gap-2 profile-tabs-nav" role="tablist" aria-label="Sections du profil">
-            <button
-              type="button"
-              class="nav-link"
-              [class.active]="isTabActive('identite')"
-              title="Modifier mon identité et mes coordonnées"
-              bsTooltip
-              (click)="toggleTab('identite')"
-              role="tab"
-            >
-              Identité
-            </button>
-            <button
-              type="button"
-              class="nav-link"
-              [class.active]="isTabActive('pro')"
-              title="Informations professionnelles et de facturation"
-              bsTooltip
-              (click)="toggleTab('pro')"
-              role="tab"
-            >
-              Infos pro & factu
-            </button>
-            <button
-              type="button"
-              class="nav-link"
-              [class.active]="isTabActive('documents')"
-              title="Modèles de documents et entêtes"
-              bsTooltip
-              (click)="toggleTab('documents')"
-              role="tab"
-            >
-              Documents
-            </button>
-            <button
-              type="button"
-              class="nav-link"
-              [class.active]="isTabActive('compta')"
-              title="Préférences comptables et statistiques"
-              bsTooltip
-              (click)="toggleTab('compta')"
-              role="tab"
-            >
-              Compta & Stats
-            </button>
-            <button
-              type="button"
-              class="nav-link"
-              [class.active]="isTabActive('agenda')"
-              title="Paramètres de l'agenda et des rendez-vous"
-              bsTooltip
-              (click)="toggleTab('agenda')"
-              role="tab"
-            >
-              Agenda
-            </button>
-            <button
-              type="button"
-              class="nav-link"
-              [class.active]="isTabActive('consultation')"
-              title="Paramètres d'affichage des consultations"
-              bsTooltip
-              (click)="toggleTab('consultation')"
-              role="tab"
-            >
-              Consultation
-            </button>
-            <button
-              type="button"
-              class="nav-link"
-              [class.active]="isTabActive('interface')"
-              title="Préférences d'interface et de thème"
-              bsTooltip
-              (click)="toggleTab('interface')"
-              role="tab"
-            >
-              Interface
-            </button>
-            <button
-              type="button"
-              class="nav-link"
-              [class.active]="isTabActive('securite')"
-              title="Modifier mon mot de passe et les paramètres de sécurité"
-              bsTooltip
-              (click)="toggleTab('securite')"
-              role="tab"
-            >
-              Sécurité
-            </button>
-        </nav>
-      </div>
-    </div>
+    <nav class="prof-section-nav mb-4" role="tablist" aria-label="Sections du profil">
+      <button type="button" class="prof-section-pill" [class.active]="isTabActive('identite')" (click)="toggleTab('identite')" role="tab">Identité</button>
+      <button type="button" class="prof-section-pill" [class.active]="isTabActive('pro')" (click)="toggleTab('pro')" role="tab">Infos pro &amp; factu</button>
+      <button type="button" class="prof-section-pill" [class.active]="isTabActive('documents')" (click)="toggleTab('documents')" role="tab">Documents</button>
+      <button type="button" class="prof-section-pill" [class.active]="isTabActive('compta')" (click)="toggleTab('compta')" role="tab">Compta &amp; Stats</button>
+      <button type="button" class="prof-section-pill" [class.active]="isTabActive('agenda')" (click)="toggleTab('agenda')" role="tab">Agenda</button>
+      <button type="button" class="prof-section-pill" [class.active]="isTabActive('consultation')" (click)="toggleTab('consultation')" role="tab">Consultation</button>
+      <button type="button" class="prof-section-pill" [class.active]="isTabActive('interface')" (click)="toggleTab('interface')" role="tab">Interface</button>
+      <button type="button" class="prof-section-pill" [class.active]="isTabActive('securite')" (click)="toggleTab('securite')" role="tab">Sécurité</button>
+    </nav>
 
       <!-- Main Content -->
       <div>

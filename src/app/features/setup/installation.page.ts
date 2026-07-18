@@ -14,7 +14,7 @@ import {
 } from '../../core/api.types';
 
 type OfficeCreateStep = 1 | 2 | 3 | 4 | 5 | 6;
-type SetupFlowMode = 'welcome' | 'create';
+type SetupFlowMode = 'welcome' | 'create' | 'restore';
 
 type EditableServiceType = ServiceTypeSetting & { tempKey: string };
 type EditablePaymentMethod = PaymentMethodSetting & { tempKey: string };
@@ -124,6 +124,15 @@ export class InstallationPage {
   backToWelcome(): void {
     this.error.set('');
     this.flowMode.set('welcome');
+  }
+
+  startRestore(): void {
+    this.error.set('');
+    this.flowMode.set('restore');
+  }
+
+  backToLogin(): void {
+    this.router.navigateByUrl('/login');
   }
 
   async installDemoInstance(): Promise<void> {

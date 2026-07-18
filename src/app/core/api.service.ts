@@ -92,7 +92,9 @@ import {
   UserAgendaPreferences,
   UpdateMyUserProfilePayload,
   UpdatePatientPayload,
-  BackupRestoreResult
+  BackupRestoreResult,
+  RescheduleAppointmentPayload,
+  CancelAppointmentPayload
 } from './api.types';
 
 @Injectable({ providedIn: 'root' })
@@ -1069,6 +1071,18 @@ export class ApiService {
       this.http.get(`${this.baseUrl}/patients/${patientId}/export`, {
         responseType: 'blob'
       })
+    );
+  }
+
+  async rescheduleAppointment(id: number, payload: RescheduleAppointmentPayload): Promise<void> {
+    await firstValueFrom(
+      this.http.patch<void>(`${this.baseUrl}/appointments/${id}/reschedule`, payload)
+    );
+  }
+
+  async cancelAppointment(id: number, payload: CancelAppointmentPayload): Promise<void> {
+    await firstValueFrom(
+      this.http.patch<void>(`${this.baseUrl}/appointments/${id}/cancel`, payload)
     );
   }
 }

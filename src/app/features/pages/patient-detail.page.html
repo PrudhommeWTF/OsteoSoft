@@ -24,608 +24,768 @@
     </div>
   }
 
-  <section class="page-head d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
-    <div>
-      <h1 class="h3 mb-1 d-flex flex-wrap align-items-center gap-2">
-        <i [class]="sexIcon() + ' ' + sexColorClass()"></i>
-        <span>{{ patient()!.fullName }}</span>
-        @if (patient()!.isDeceased) {
-          <span class="badge text-bg-dark">Décédé(e)</span>
-        }
-      </h1>
-      <p class="text-secondary mb-0 patient-hero-meta">
-        @if (patient()!.age !== null) {
-          <span><i class="fa-regular fa-calendar me-1"></i>{{ patient()!.age }} ans</span>
-          <span class="meta-sep">·</span>
-        }
-        @if (birthDateLabel()) {
-          <span>Né(e) le {{ birthDateLabel() }}</span>
-          <span class="meta-sep">·</span>
-        }
-        <span>
-          <i class="fa-solid fa-stethoscope me-1"></i>
-          {{ totalConsultationCount() }} consultation{{ totalConsultationCount() > 1 ? 's' : '' }}
-        </span>
-        @if (patient()!.lastVisit) {
-          <span class="meta-sep">·</span>
-          <span>Dernière visite : {{ formatShortDate(patient()!.lastVisit) }}</span>
-        }
-      </p>
-    </div>
+  <!-- ── Back button ── -->
+  <div class="pd-topbar">
+    <button type="button" class="pd-back-btn" (click)="goBack()">
+      <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+      Listing patients
+    </button>
+  </div>
 
-    <div class="d-flex align-items-center gap-2 flex-wrap">
-      <button type="button" class="btn btn-outline-primary" (click)="openPatientLetterComposeModal()" title="Ouvrir" bsTooltip>
-        <i class="fa-solid fa-pen-fancy me-2"></i>Rédiger un courier patient
-      </button>
-      <button type="button" class="btn btn-outline-secondary" (click)="openAuditModal()" title="Ouvrir" bsTooltip>
-        <i class="fa-solid fa-clock-rotate-left me-2"></i>Historique
-      </button>
-      @if (canCreateConsultation()) {
-        <button type="button" class="btn btn-primary" (click)="openNewConsultationModal()" title="Créer une nouvelle consultation" bsTooltip>
-          <i class="fa-solid fa-plus me-2"></i>Nouvelle consultation
+  <!-- ── Summary card ── -->
+  <div class="pd-summary-card">
+    <div class="pd-summary-hero">
+      <div class="pd-avatar-lg" aria-hidden="true">{{ patientInitials() }}</div>
+      <div class="pd-summary-info">
+        <h1 class="pd-patient-name">
+          <i [class]="sexIcon() + ' pd-sex-icon ' + sexColorClass()" aria-hidden="true"></i>
+          {{ patient()!.fullName }}
+          @if (patient()!.isDeceased) {
+            <span class="pd-deceased-badge">Décédé(e)</span>
+          }
+        </h1>
+        <p class="pd-summary-meta">
+          @if (patient()!.age !== null) {
+            <span>{{ patient()!.age }} ans</span>
+          }
+          @if (birthDateLabel()) {
+            <span class="pd-meta-sep">·</span>
+            <span>{{ birthDateLabel() }}</span>
+          }
+          @if (patient()!.city) {
+            <span class="pd-meta-sep">·</span>
+            <span>{{ patient()!.city }}</span>
+          }
+        </p>
+        @if (patient()!.occupationOrSchool) {
+          <span class="pd-tag">{{ patient()!.occupationOrSchool }}</span>
+        }
+      </div>
+      <div class="pd-summary-actions">
+        @if (canCreateConsultation()) {
+          <a [routerLink]="['/patients', patient()?.id, 'consultations', 'nouvelle']" class="pd-btn-primary">
+            <i class="fa-solid fa-stethoscope" aria-hidden="true"></i>
+            Consultation
+          </a>
+        }
+        <button type="button" class="pd-btn-outline" (click)="openPatientLetterComposeModal()">
+          <i class="fa-solid fa-pen-fancy" aria-hidden="true"></i>
+          Courrier
         </button>
-      }
-    </div>
-  </section>
-
-  <div class="accordion patient-accordion" id="patientDetailAccordion">
-    <div class="accordion-item">
-      <h2 class="accordion-header" id="headingIdentity">
-        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-identity" aria-expanded="true" aria-controls="patient-accordion-identity" title="Déplier / replier cette section" bsTooltip>
-          <i class="fa-solid fa-id-card text-primary me-2"></i>État civil
+        <button type="button" class="pd-btn-outline" (click)="openAuditModal()">
+          <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>
+          Historique
         </button>
-      </h2>
-      <div id="patient-accordion-identity" class="accordion-collapse collapse show" aria-labelledby="headingIdentity" data-bs-parent="#patientDetailAccordion">
-        <div class="accordion-body bg-body">
-          <form [formGroup]="editForm">
-            <div class="row g-4">
-              <div class="col-12 col-xl-8">
-                <div class="row g-3">
-                  <div class="col-12">
-                    <label class="form-label fw-semibold">Sexe</label>
-                    <div class="sex-cards">
-                      <button type="button" class="sex-card" [class.active]="editSexValue() === 'Non renseigne'" (click)="setEditSex('Non renseigne')" title="Modifier" bsTooltip>
-                        <i class="fa-solid fa-circle-question"></i>
-                        <span>Indéterminé</span>
-                      </button>
-                      <button type="button" class="sex-card" [class.active]="editSexValue() === 'Femme'" (click)="setEditSex('Femme')" title="Modifier" bsTooltip>
-                        <i class="fa-solid fa-venus"></i>
-                        <span>Femme</span>
-                      </button>
-                      <button type="button" class="sex-card" [class.active]="editSexValue() === 'Homme'" (click)="setEditSex('Homme')" title="Modifier" bsTooltip>
-                        <i class="fa-solid fa-mars"></i>
-                        <span>Homme</span>
-                      </button>
-                    </div>
-                  </div>
+        @if (canEditPatient()) {
+          <button
+            type="button"
+            class="pd-btn-icon"
+            [class.active]="isEditPanelOpen()"
+            (click)="isEditPanelOpen.set(!isEditPanelOpen())"
+            aria-label="Modifier la fiche patient">
+            <i class="fa-solid fa-pen" aria-hidden="true"></i>
+          </button>
+        }
+      </div>
+    </div>
+    <div class="pd-summary-stats">
+      <div class="pd-stat">
+        <span class="pd-stat-value">{{ totalConsultationCount() }}</span>
+        <span class="pd-stat-label">Consultation{{ totalConsultationCount() !== 1 ? 's' : '' }}</span>
+      </div>
+      <div class="pd-stat">
+        <span class="pd-stat-value">{{ patient()!.lastVisit ? formatShortDate(patient()!.lastVisit) : '—' }}</span>
+        <span class="pd-stat-label">Dernière visite</span>
+      </div>
+      <div class="pd-stat">
+        <span class="pd-stat-value">{{ patientTotalPaidLabel() }}</span>
+        <span class="pd-stat-label">Total réglé</span>
+      </div>
+      <div class="pd-stat">
+        <span class="pd-stat-value">{{ patientTotalDueLabel() }}</span>
+        <span class="pd-stat-label">Solde dû</span>
+      </div>
+    </div>
+  </div>
 
-                  <div class="col-12 col-md-6">
-                    <label class="form-label fw-semibold" for="edit-lastname">Nom</label>
-                    <input id="edit-lastname" type="text" class="form-control" formControlName="lastName" />
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label class="form-label fw-semibold" for="edit-firstname">Prénom</label>
-                    <input id="edit-firstname" type="text" class="form-control" formControlName="firstName" />
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label class="form-label fw-semibold" for="edit-birthdate">Date de naissance</label>
-                    <app-date-picker
-                      id="edit-birthdate"
-                      mode="flexible"
-                      formControlName="birthDate"
-                      autocomplete="bday"
-                      [maxDate]="todayNgbDate"
-                    />
-                  </div>
-                  <div class="col-12 col-md-6 d-flex align-items-end">
-                    <div class="d-flex flex-wrap align-items-center gap-3">
-                      @if (editAgeText()) {
-                        <span class="age-badge">{{ editAgeText() }}</span>
-                      }
-                      <div class="form-check form-switch">
-                        <input id="patient-is-deceased" class="form-check-input" type="checkbox" formControlName="isDeceased" />
-                        <label class="form-check-label" for="patient-is-deceased">Patient décédé</label>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="col-12 col-md-6">
-                    <label class="form-label" for="edit-mobile-phone">Téléphone portable</label>
-                    <input id="edit-mobile-phone" type="text" class="form-control" formControlName="mobilePhone" />
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label class="form-label" for="edit-landline-phone">Téléphone fixe</label>
-                    <input id="edit-landline-phone" type="text" class="form-control" formControlName="landlinePhone" />
-                  </div>
-                  <div class="col-12">
-                    <label class="form-label" for="edit-email">Email</label>
-                    <input id="edit-email" type="email" class="form-control" formControlName="email" />
-                  </div>
-
-                  <div class="col-12">
-                    <label class="form-label" for="edit-address1">Adresse</label>
-                    <input id="edit-address1" type="text" class="form-control mb-2" formControlName="address1" placeholder="Numéro et rue" />
-                    <input id="edit-address2" type="text" class="form-control" formControlName="address2" placeholder="Complément" />
-                  </div>
-
-                  <div class="col-12 col-md-3 position-relative">
-                    <label class="form-label" for="edit-postalcode">Code postal</label>
-                    <input id="edit-postalcode" type="text" class="form-control" formControlName="postalCode" (input)="onPostalCodeInput($any($event.target).value)" (focus)="onPostalCodeFocus()" (blur)="onPostalCodeBlur()" />
-                    @if (showPostalCodeSuggestions()) {
-                      <ul class="autocomplete-list list-group shadow-sm">
-                        @for (postalCode of postalCodeSuggestions(); track postalCode) {
-                          <li class="list-group-item list-group-item-action" (mousedown)="applyPostalCodeSuggestion(postalCode)">{{ postalCode }}</li>
-                        }
-                      </ul>
-                    }
-                  </div>
-                  <div class="col-12 col-md-5 position-relative">
-                    <label class="form-label" for="edit-city">Ville</label>
-                    <input id="edit-city" type="text" class="form-control" formControlName="city" (input)="onCityInput($any($event.target).value)" (focus)="onCityFocus()" (blur)="onCityBlur()" />
-                    @if (showCitySuggestions()) {
-                      <ul class="autocomplete-list list-group shadow-sm">
-                        @for (city of citySuggestions(); track city) {
-                          <li class="list-group-item list-group-item-action" (mousedown)="applyCitySuggestion(city)">{{ city }}</li>
-                        }
-                      </ul>
-                    }
-                  </div>
-                  <div class="col-12 col-md-4">
-                    <label class="form-label" for="edit-country">Pays</label>
-                    <input id="edit-country" type="text" class="form-control" formControlName="country" />
-                  </div>
-
-                  <div class="col-12">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                      <label class="form-label fw-semibold mb-0">Liens de parenté avec d'autres patients</label>
-                      <button type="button" class="btn btn-outline-primary btn-sm" (click)="toggleRelatedPicker()" title="Lier un patient existant" bsTooltip>
-                        <i class="fa-solid fa-user-plus me-1"></i>{{ showRelatedPicker() ? 'Fermer' : 'Ajouter' }}
-                      </button>
-                    </div>
-
-                    @if (selectedRelatedPatients().length > 0) {
-                      <div class="d-flex flex-wrap gap-2 mb-2">
-                        @for (person of selectedRelatedPatients(); track person.id) {
-                          <span class="badge bg-body-tertiary text-body border d-flex align-items-center gap-1 related-pill p-2">
-                            <i [class]="getRelatedPatientIcon(person.sex) + ' me-1'"></i>
-                            @if (person.id > 0) {
-                              <button
-                                type="button"
-                                class="btn btn-link btn-sm p-0 text-decoration-none related-pill-link"
-                                (click)="openRelatedPatient(person.id)" title="Ouvrir" bsTooltip>
-                                {{ formatRelatedPatientLabel(person) }}
-                              </button>
-                            } @else {
-                              <span>{{ formatRelatedPatientLabel(person) }}</span>
-                            }
-                            <button type="button" class="btn-close btn-close-xs ms-1" aria-label="Retirer" (click)="removeRelatedPatient(person.id)" title="Retirer" bsTooltip></button>
-                          </span>
-                        }
-                      </div>
-                    }
-
-                    @if (showRelatedPicker()) {
-                      <div class="border rounded p-2 bg-light-subtle">
-                        <label class="form-label small mb-1" for="relatedPatientSearch">Rechercher un patient existant</label>
-                        <input id="relatedPatientSearch" type="search" class="form-control form-control-sm" placeholder="Nom ou prénom (2 caractères min.)" [value]="relatedSearch()" (input)="onRelatedSearchChange($any($event.target).value)" />
-                        @if (isSearchingRelated()) {
-                          <div class="small text-muted mt-2">Recherche en cours...</div>
-                        } @else if (relatedSearch().trim().length >= 2 && relatedSearchResults().length === 0) {
-                          <div class="small text-muted mt-2">Aucun patient trouvé.</div>
-                        }
-                        @if (relatedSearchResults().length > 0) {
-                          <ul class="list-group list-group-flush mt-2">
-                            @for (result of relatedSearchResults(); track result.id) {
-                              <li class="list-group-item list-group-item-action cursor-pointer py-2 px-2" (click)="addRelatedPatient(result)">
-                                <div class="d-flex align-items-center gap-2">
-                                  <i [class]="getRelatedPatientIcon(result.sex) + ' text-secondary'"></i>
-                                  <span class="fw-semibold">{{ result.fullName }}</span>
-                                  <span class="text-muted small ms-auto">{{ getRelatedPatientMeta(result) }}</span>
-                                </div>
-                              </li>
-                            }
-                          </ul>
-                        }
-                      </div>
-                    }
-                  </div>
-                </div>
-              </div>
-
-              <div class="col-12 col-xl-4">
-                <label class="form-label fw-semibold" for="edit-remarks">Remarques générales</label>
-                <textarea id="edit-remarks" rows="25" class="form-control" formControlName="generalRemarks"></textarea>
+  <!-- ── Edit panel ── -->
+  @if (isEditPanelOpen()) {
+    <div class="pd-edit-panel">
+      <div class="pd-edit-panel-header">
+        <h2 class="pd-edit-panel-title">
+          <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i>
+          Modifier la fiche patient
+        </h2>
+        <div class="pd-edit-panel-actions">
+          @if (saveError()) {
+            <span class="pd-edit-error">{{ saveError() }}</span>
+          }
+          <button type="button" class="pd-btn-outline" (click)="isEditPanelOpen.set(false)">Annuler</button>
+          @if (canEditPatient()) {
+            <button type="button" class="pd-btn-primary" [disabled]="isSaving() || editForm.invalid" (click)="saveEdit()">
+              @if (isSaving()) {
+                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                Enregistrement...
+              } @else {
+                <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>
+                Enregistrer
+              }
+            </button>
+          }
+        </div>
+      </div>
+      <div class="pd-edit-panel-body">
+        <form [formGroup]="editForm">
+          <div class="row g-3 mb-4">
+            <!-- État civil -->
+            <div class="col-12">
+              <p class="pd-edit-section-title"><i class="fa-solid fa-id-card me-2"></i>État civil</p>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Sexe</label>
+              <div class="sex-cards">
+                <button type="button" class="sex-card" [class.active]="editSexValue() === 'Non renseigne'" (click)="setEditSex('Non renseigne')">
+                  <i class="fa-solid fa-circle-question"></i><span>Indéterminé</span>
+                </button>
+                <button type="button" class="sex-card" [class.active]="editSexValue() === 'Femme'" (click)="setEditSex('Femme')">
+                  <i class="fa-solid fa-venus"></i><span>Femme</span>
+                </button>
+                <button type="button" class="sex-card" [class.active]="editSexValue() === 'Homme'" (click)="setEditSex('Homme')">
+                  <i class="fa-solid fa-mars"></i><span>Homme</span>
+                </button>
               </div>
             </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="edit-lastname">Nom</label>
+              <input id="edit-lastname" type="text" class="form-control" formControlName="lastName" />
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="edit-firstname">Prénom</label>
+              <input id="edit-firstname" type="text" class="form-control" formControlName="firstName" />
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="edit-birthdate">Date de naissance</label>
+              <app-date-picker id="edit-birthdate" mode="flexible" formControlName="birthDate" autocomplete="bday" [maxDate]="todayNgbDate" />
+            </div>
+            <div class="col-12 col-md-6 d-flex align-items-end">
+              <div class="d-flex flex-wrap align-items-center gap-3">
+                @if (editAgeText()) {
+                  <span class="age-badge">{{ editAgeText() }}</span>
+                }
+                <div class="form-check form-switch">
+                  <input id="patient-is-deceased" class="form-check-input" type="checkbox" formControlName="isDeceased" />
+                  <label class="form-check-label" for="patient-is-deceased">Patient décédé</label>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="edit-mobile-phone">Téléphone portable</label>
+              <input id="edit-mobile-phone" type="text" class="form-control" formControlName="mobilePhone" />
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="edit-landline-phone">Téléphone fixe</label>
+              <input id="edit-landline-phone" type="text" class="form-control" formControlName="landlinePhone" />
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="edit-email">Email</label>
+              <input id="edit-email" type="email" class="form-control" formControlName="email" />
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="edit-address1">Adresse</label>
+              <input id="edit-address1" type="text" class="form-control mb-2" formControlName="address1" placeholder="Numéro et rue" />
+              <input id="edit-address2" type="text" class="form-control" formControlName="address2" placeholder="Complément" />
+            </div>
+            <div class="col-12 col-md-3 position-relative">
+              <label class="form-label" for="edit-postalcode">Code postal</label>
+              <input id="edit-postalcode" type="text" class="form-control" formControlName="postalCode" (input)="onPostalCodeInput($any($event.target).value)" (focus)="onPostalCodeFocus()" (blur)="onPostalCodeBlur()" />
+              @if (showPostalCodeSuggestions()) {
+                <ul class="autocomplete-list list-group shadow-sm">
+                  @for (postalCode of postalCodeSuggestions(); track postalCode) {
+                    <li class="list-group-item list-group-item-action" (mousedown)="applyPostalCodeSuggestion(postalCode)">{{ postalCode }}</li>
+                  }
+                </ul>
+              }
+            </div>
+            <div class="col-12 col-md-5 position-relative">
+              <label class="form-label" for="edit-city">Ville</label>
+              <input id="edit-city" type="text" class="form-control" formControlName="city" (input)="onCityInput($any($event.target).value)" (focus)="onCityFocus()" (blur)="onCityBlur()" />
+              @if (showCitySuggestions()) {
+                <ul class="autocomplete-list list-group shadow-sm">
+                  @for (city of citySuggestions(); track city) {
+                    <li class="list-group-item list-group-item-action" (mousedown)="applyCitySuggestion(city)">{{ city }}</li>
+                  }
+                </ul>
+              }
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label" for="edit-country">Pays</label>
+              <input id="edit-country" type="text" class="form-control" formControlName="country" />
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="edit-remarks">Remarques générales</label>
+              <textarea id="edit-remarks" rows="4" class="form-control" formControlName="generalRemarks"></textarea>
+            </div>
+          </div>
 
-            @if (saveError()) {
-              <div class="alert alert-danger mt-3 mb-0">{{ saveError() }}</div>
-            }
-
-            <div class="mt-3 pt-3 border-top">
-              <h6 class="fw-semibold mb-3"><i class="fa-solid fa-file-signature text-primary me-2"></i>Consentement RGPD</h6>
-              <div class="row g-3">
-                <div class="col-12 col-md-4 fw-semibold">Statut :</div>
-                <div class="col-12 col-md-8">
-                  @if (patient()!.consentWithdrawnAt) {
-                    <span class="badge text-bg-danger">Consentement retiré</span>
-                  } @else if (patient()!.consentSigned) {
-                    <span class="badge text-bg-success">Consentement signé</span>
-                  } @else {
-                    <span class="badge text-bg-warning">Consentement non signé</span>
+          <div class="row g-3 mb-4">
+            <!-- Informations patient -->
+            <div class="col-12">
+              <p class="pd-edit-section-title"><i class="fa-solid fa-user-pen me-2"></i>Informations complémentaires</p>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="edit-marital-status">Statut marital</label>
+              <select id="edit-marital-status" class="form-select" formControlName="maritalStatus">
+                <option value="Non renseigne">Non renseigné</option>
+                <option value="Celibataire">Célibataire</option>
+                <option value="Marie(e)">Marié(e)</option>
+                <option value="Pacse(e)">Pacsé(e)</option>
+                <option value="Divorce(e)">Divorcé(e)</option>
+                <option value="Veuf(ve)">Veuf(ve)</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="edit-children-count">Nombre d'enfant(s)</label>
+              <input id="edit-children-count" type="number" min="0" max="50" class="form-control" formControlName="childrenCount" />
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="edit-occupation">Profession / Scolarité</label>
+              <input id="edit-occupation" type="text" class="form-control" formControlName="occupationOrSchool" />
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="edit-hobbies">Loisirs / Activité physique</label>
+              <input id="edit-hobbies" type="text" class="form-control" formControlName="hobbies" />
+            </div>
+            <div class="col-12 col-md-6 position-relative">
+              <label class="form-label" for="edit-primary-doctor">Médecin traitant</label>
+              <input
+                id="edit-primary-doctor"
+                type="search"
+                class="form-control"
+                placeholder="Rechercher une personne par nom..."
+                [value]="primaryDoctorSearch()"
+                (input)="onPrimaryDoctorSearchChange($any($event.target).value)"
+                (blur)="primaryDoctorSuggestions.set([])" />
+              @if (isSearchingPrimaryDoctor()) {
+                <div class="form-text" aria-live="polite">
+                  <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                  Recherche en cours...
+                </div>
+              }
+              @if (primaryDoctorSuggestions().length > 0) {
+                <ul class="autocomplete-list list-group shadow-sm">
+                  @for (contact of primaryDoctorSuggestions(); track contact.id) {
+                    <li
+                      class="list-group-item list-group-item-action"
+                      (mousedown)="$event.preventDefault()"
+                      (click)="applyPrimaryDoctorSuggestion(contact)">
+                      <strong>{{ contact.fullName }}</strong>
+                      <span class="small text-muted ms-2">{{ contact.role }}</span>
+                      @if ((contact.city ?? '').trim()) {
+                        <span class="small text-muted ms-2">{{ contact.city }}</span>
+                      }
+                    </li>
+                  }
+                </ul>
+              }
+              <input type="hidden" formControlName="primaryDoctor" />
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="edit-social-security">Numéro de sécurité sociale</label>
+              <input id="edit-social-security" type="text" class="form-control" formControlName="socialSecurityNumber" />
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="edit-referred-by">Envoyé par</label>
+              <input id="edit-referred-by" type="text" class="form-control" formControlName="referredBy" />
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="edit-manual-preference">Préférence manuelle</label>
+              <select id="edit-manual-preference" class="form-select" formControlName="manualPreference">
+                <option value="Non renseigne">Non renseigné</option>
+                <option value="Droitier">Droitier</option>
+                <option value="Gaucher">Gaucher</option>
+              </select>
+            </div>
+            <!-- Related people -->
+            <div class="col-12">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <label class="form-label fw-semibold mb-0">Liens de parenté avec d'autres patients</label>
+                <button type="button" class="btn btn-outline-primary btn-sm" (click)="toggleRelatedPicker()">
+                  <i class="fa-solid fa-user-plus me-1"></i>{{ showRelatedPicker() ? 'Fermer' : 'Ajouter' }}
+                </button>
+              </div>
+              @if (selectedRelatedPatients().length > 0) {
+                <div class="d-flex flex-wrap gap-2 mb-2">
+                  @for (person of selectedRelatedPatients(); track person.id) {
+                    <span class="badge bg-body-tertiary text-body border d-flex align-items-center gap-1 related-pill p-2">
+                      <i [class]="getRelatedPatientIcon(person.sex) + ' me-1'"></i>
+                      @if (person.id > 0) {
+                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none related-pill-link" (click)="openRelatedPatient(person.id)">
+                          {{ formatRelatedPatientLabel(person) }}
+                        </button>
+                      } @else {
+                        <span>{{ formatRelatedPatientLabel(person) }}</span>
+                      }
+                      <button type="button" class="btn-close btn-close-xs ms-1" aria-label="Retirer" (click)="removeRelatedPatient(person.id)"></button>
+                    </span>
                   }
                 </div>
-                @if (patient()!.consentSignedAt) {
-                  <div class="col-12 col-md-4 fw-semibold">Date de signature :</div>
-                  <div class="col-12 col-md-8">{{ formatShortDate(patient()!.consentSignedAt!) }}</div>
-                }
-                <div class="col-12 col-md-4 fw-semibold">Version du formulaire :</div>
-                <div class="col-12 col-md-8">{{ patient()!.consentFormVersion }}</div>
-                @if (patient()!.consentWithdrawnAt) {
-                  <div class="col-12 col-md-4 fw-semibold">Date de retrait :</div>
-                  <div class="col-12 col-md-8">{{ formatShortDate(patient()!.consentWithdrawnAt!) }}</div>
-                }
-              </div>
+              }
+              @if (showRelatedPicker()) {
+                <div class="border rounded p-2 bg-light-subtle">
+                  <label class="form-label small mb-1" for="relatedPatientSearch">Rechercher un patient existant</label>
+                  <input id="relatedPatientSearch" type="search" class="form-control form-control-sm" placeholder="Nom ou prénom (2 caractères min.)" [value]="relatedSearch()" (input)="onRelatedSearchChange($any($event.target).value)" />
+                  @if (isSearchingRelated()) {
+                    <div class="small text-muted mt-2">Recherche en cours...</div>
+                  } @else if (relatedSearch().trim().length >= 2 && relatedSearchResults().length === 0) {
+                    <div class="small text-muted mt-2">Aucun patient trouvé.</div>
+                  }
+                  @if (relatedSearchResults().length > 0) {
+                    <ul class="list-group list-group-flush mt-2">
+                      @for (result of relatedSearchResults(); track result.id) {
+                        <li class="list-group-item list-group-item-action cursor-pointer py-2 px-2" (click)="addRelatedPatient(result)">
+                          <div class="d-flex align-items-center gap-2">
+                            <i [class]="getRelatedPatientIcon(result.sex) + ' text-secondary'"></i>
+                            <span class="fw-semibold">{{ result.fullName }}</span>
+                            <span class="text-muted small ms-auto">{{ getRelatedPatientMeta(result) }}</span>
+                          </div>
+                        </li>
+                      }
+                    </ul>
+                  }
+                </div>
+              }
+            </div>
+          </div>
 
+          <!-- RGPD -->
+          <div class="row g-3">
+            <div class="col-12">
+              <p class="pd-edit-section-title"><i class="fa-solid fa-file-signature me-2"></i>Consentement RGPD</p>
+            </div>
+            <div class="col-12">
+              @if (patient()!.consentWithdrawnAt) {
+                <span class="badge text-bg-danger">Consentement retiré</span>
+              } @else if (patient()!.consentSigned) {
+                <span class="badge text-bg-success">Consentement signé</span>
+              } @else {
+                <span class="badge text-bg-warning">Consentement non signé</span>
+              }
+              @if (patient()!.consentSignedAt) {
+                <span class="ms-2 small text-muted">le {{ formatShortDate(patient()!.consentSignedAt!) }}</span>
+              }
+            </div>
+            <div class="col-12 d-flex flex-wrap gap-2">
               @if (canEditPatient() && !patient()!.consentWithdrawnAt) {
-                <div class="mt-3 d-flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    class="btn btn-outline-danger btn-sm"
-                    [disabled]="isWithdrawingConsent()"
-                    (click)="withdrawConsent()"
-                    title="Enregistrer le retrait du consentement RGPD du patient"
-                    bsTooltip>
-                    @if (isWithdrawingConsent()) {
-                      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                    } @else {
-                      <i class="fa-solid fa-ban me-2"></i>
-                    }
-                    Retirer le consentement
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-outline-secondary btn-sm"
-                    [disabled]="isDownloadingConsentPdf()"
-                    (click)="downloadConsentForm()"
-                    title="Télécharger le formulaire de consentement RGPD à imprimer et faire signer"
-                    bsTooltip>
-                    @if (isDownloadingConsentPdf()) {
-                      <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                    } @else {
-                      <i class="fa-solid fa-file-pdf me-1"></i>
-                    }
-                    Télécharger le formulaire
-                  </button>
-                </div>
+                <button type="button" class="btn btn-outline-danger btn-sm" [disabled]="isWithdrawingConsent()" (click)="withdrawConsent()">
+                  @if (isWithdrawingConsent()) {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  } @else {
+                    <i class="fa-solid fa-ban me-2"></i>
+                  }
+                  Retirer le consentement
+                </button>
               }
-
-              @if (!canEditPatient() || patient()!.consentWithdrawnAt) {
-                <div class="mt-3">
-                  <button
-                    type="button"
-                    class="btn btn-outline-secondary btn-sm"
-                    [disabled]="isDownloadingConsentPdf()"
-                    (click)="downloadConsentForm()"
-                    title="Télécharger le formulaire de consentement RGPD à imprimer et faire signer"
-                    bsTooltip>
-                    @if (isDownloadingConsentPdf()) {
-                      <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                    } @else {
-                      <i class="fa-solid fa-file-pdf me-1"></i>
-                    }
-                    Télécharger le formulaire
-                  </button>
-                </div>
-              }
-
-              @if (withdrawConsentError()) {
-                <div class="alert alert-danger mt-3 mb-0">{{ withdrawConsentError() }}</div>
-              }
-              @if (withdrawConsentSuccess()) {
-                <div class="alert alert-success mt-3 mb-0">{{ withdrawConsentSuccess() }}</div>
-              }
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-
-    <div class="accordion-item">
-      <h2 class="accordion-header" id="headingPatientInfo">
-        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-patient-info" aria-expanded="false" aria-controls="patient-accordion-patient-info" title="Déplier / replier cette section" bsTooltip>
-          <i class="fa-solid fa-user-pen text-primary me-2"></i>Informations sur le patient
-        </button>
-      </h2>
-      <div id="patient-accordion-patient-info" class="accordion-collapse collapse" aria-labelledby="headingPatientInfo" data-bs-parent="#patientDetailAccordion">
-        <div class="accordion-body bg-body">
-          <form [formGroup]="editForm">
-            <div class="row g-3 mb-3">
-              <div class="col-12 col-md-6">
-                <label class="form-label" for="edit-marital-status">Statut marital</label>
-                <select id="edit-marital-status" class="form-select" formControlName="maritalStatus">
-                  <option value="Non renseigne">Non renseigné</option>
-                  <option value="Celibataire">Célibataire</option>
-                  <option value="Marie(e)">Marié(e)</option>
-                  <option value="Pacse(e)">Pacsé(e)</option>
-                  <option value="Divorce(e)">Divorcé(e)</option>
-                  <option value="Veuf(ve)">Veuf(ve)</option>
-                </select>
-              </div>
-              <div class="col-12 col-md-6">
-                <label class="form-label" for="edit-children-count">Nombre d'enfant(s)</label>
-                <input id="edit-children-count" type="number" min="0" max="50" class="form-control" formControlName="childrenCount" />
-              </div>
-              <div class="col-12 col-md-6">
-                <label class="form-label" for="edit-occupation">Profession / Scolarité</label>
-                <input id="edit-occupation" type="text" class="form-control" formControlName="occupationOrSchool" />
-              </div>
-              <div class="col-12 col-md-6">
-                <label class="form-label" for="edit-hobbies">Loisirs</label>
-                <input id="edit-hobbies" type="text" class="form-control" formControlName="hobbies" />
-              </div>
-              <div class="col-12 col-md-6 position-relative">
-                <label class="form-label" for="edit-primary-doctor">Médecin traitant</label>
-                <input
-                  id="edit-primary-doctor"
-                  type="search"
-                  class="form-control"
-                  placeholder="Rechercher une personne par nom..."
-                  [value]="primaryDoctorSearch()"
-                  (input)="onPrimaryDoctorSearchChange($any($event.target).value)"
-                  (blur)="primaryDoctorSuggestions.set([])" />
-                @if (isSearchingPrimaryDoctor()) {
-                  <div class="form-text" aria-live="polite">
-                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                    Recherche en cours...
-                  </div>
+              <button type="button" class="btn btn-outline-secondary btn-sm" [disabled]="isDownloadingConsentPdf()" (click)="downloadConsentForm()">
+                @if (isDownloadingConsentPdf()) {
+                  <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                } @else {
+                  <i class="fa-solid fa-file-pdf me-1"></i>
                 }
-                @if (primaryDoctorSuggestions().length > 0) {
-                  <ul class="autocomplete-list list-group shadow-sm">
-                    @for (contact of primaryDoctorSuggestions(); track contact.id) {
-                      <li
-                        class="list-group-item list-group-item-action"
-                        (mousedown)="$event.preventDefault()"
-                        (click)="applyPrimaryDoctorSuggestion(contact)">
-                        <strong>{{ contact.fullName }}</strong>
-                        <span class="small text-muted ms-2">{{ contact.role }}</span>
-                        @if ((contact.city ?? '').trim()) {
-                          <span class="small text-muted ms-2">{{ contact.city }}</span>
-                        }
-                      </li>
-                    }
-                  </ul>
-                }
-                <input type="hidden" formControlName="primaryDoctor" />
-              </div>
-              <div class="col-12 col-md-6">
-                <label class="form-label" for="edit-social-security">Numéro de sécurité sociale</label>
-                <input id="edit-social-security" type="text" class="form-control" formControlName="socialSecurityNumber" />
-              </div>
-              <div class="col-12 col-md-6">
-                <label class="form-label" for="edit-referred-by">Envoyé par</label>
-                <input id="edit-referred-by" type="text" class="form-control" formControlName="referredBy" />
-              </div>
-              <div class="col-12 col-md-6">
-                <label class="form-label" for="edit-manual-preference">Préférence manuelle</label>
-                <select id="edit-manual-preference" class="form-select" formControlName="manualPreference">
-                  <option value="Non renseigne">Non renseigné</option>
-                  <option value="Droitier">Droitier</option>
-                  <option value="Gaucher">Gaucher</option>
-                </select>
-              </div>
-            </div>
-
-            @if (saveError()) {
-              <div class="alert alert-danger mt-3 mb-0">{{ saveError() }}</div>
-            }
-          </form>
-        </div>
-      </div>
-    </div>
-
-    <div class="accordion-item">
-      <h2 class="accordion-header" id="headingAntecedents">
-        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-antecedents" aria-expanded="false" aria-controls="patient-accordion-antecedents" title="Déplier / replier cette section" bsTooltip>
-          <i class="fa-solid fa-heart-pulse text-primary me-2"></i>Antécédents
-          @if (antecedents().length) {
-            <span class="badge text-bg-secondary ms-2">{{ antecedents().length }}</span>
-          }
-        </button>
-      </h2>
-      <div id="patient-accordion-antecedents" class="accordion-collapse collapse" aria-labelledby="headingAntecedents" data-bs-parent="#patientDetailAccordion">
-        <div class="accordion-body bg-body">
-          <div class="d-flex justify-content-end mb-3">
-            @if (canEditPatient()) {
-              <button type="button" class="btn btn-primary btn-sm" (click)="openAntecedentModal()" title="Ajouter un antécédent médical" bsTooltip>
-                <i class="fa-solid fa-plus me-1"></i>Ajouter un antécédent
+                Télécharger le formulaire
               </button>
+            </div>
+            @if (withdrawConsentError()) {
+              <div class="col-12"><div class="alert alert-danger mb-0">{{ withdrawConsentError() }}</div></div>
+            }
+            @if (withdrawConsentSuccess()) {
+              <div class="col-12"><div class="alert alert-success mb-0">{{ withdrawConsentSuccess() }}</div></div>
             }
           </div>
+        </form>
+      </div>
+    </div>
+  }
 
-          @if (antecedents().length === 0) {
-            <div class="empty-state">
-              <i class="fa-solid fa-heart-pulse fa-2x text-secondary mb-3"></i>
-              <p class="mb-0 text-secondary">Aucun antécédent enregistré.</p>
+  <!-- ── Main layout ── -->
+  <div class="pd-layout">
+
+    <!-- ── Left sidebar ── -->
+    <aside class="pd-sidebar">
+
+      <!-- Coordonnées -->
+      <div class="pd-card">
+        <div class="pd-card-header">
+          <i class="fa-solid fa-address-card" aria-hidden="true"></i>
+          Coordonnées
+        </div>
+        <div class="pd-card-body">
+          @if (patient()!.mobilePhone) {
+            <div class="pd-info-row">
+              <i class="fa-solid fa-mobile-screen pd-info-icon" aria-hidden="true"></i>
+              <div class="pd-info-content">
+                <a [href]="'tel:' + patient()!.mobilePhone" class="pd-info-link">{{ patient()!.mobilePhone }}</a>
+                <span class="pd-info-label">Mobile</span>
+              </div>
             </div>
-          } @else {
-            <div class="antecedent-timeline">
-              @for (item of antecedents(); track item.id) {
-                <article class="timeline-item" [class.important]="item.important">
-                  <div class="timeline-marker"></div>
-                  <div class="timeline-content">
-                    <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
-                      <div class="d-flex flex-wrap align-items-center gap-2">
-                        <span class="badge text-bg-primary-subtle text-primary-emphasis rounded-pill">{{ item.category }}</span>
-                        @if (item.important) {
-                          <span class="badge text-bg-danger-subtle text-danger-emphasis rounded-pill">Important</span>
-                        }
-                      </div>
-                      <div class="d-flex align-items-start gap-2">
-                        @if (item.dateDisplay) {
-                          <span class="small text-muted">{{ getAntecedentDateLabel(item) }}</span>
-                        }
-                        <button type="button" class="btn btn-link text-primary p-0" (click)="openAntecedentEditModal(item.id)" aria-label="Modifier cet antécédent" title="Modifier cet antécédent" bsTooltip>
-                          <i class="fa-solid fa-pen-to-square"></i>
-                        </button>
-                        @if (canEditPatient()) {
-                          <button type="button" class="btn btn-link text-danger p-0" (click)="removeAntecedent(item.id)" aria-label="Supprimer cet antécédent" title="Supprimer cet antécédent" bsTooltip>
-                            <i class="fa-solid fa-trash"></i>
-                          </button>
-                        }
-                      </div>
-                    </div>
-                    <p class="mb-0">{{ item.description }}</p>
-                  </div>
-                </article>
-              }
+          }
+          @if (patient()!.landlinePhone) {
+            <div class="pd-info-row">
+              <i class="fa-solid fa-phone pd-info-icon" aria-hidden="true"></i>
+              <div class="pd-info-content">
+                <a [href]="'tel:' + patient()!.landlinePhone" class="pd-info-link">{{ patient()!.landlinePhone }}</a>
+                <span class="pd-info-label">Fixe</span>
+              </div>
             </div>
+          }
+          @if (!patient()!.mobilePhone && !patient()!.landlinePhone && patient()!.phone) {
+            <div class="pd-info-row">
+              <i class="fa-solid fa-phone pd-info-icon" aria-hidden="true"></i>
+              <div class="pd-info-content">
+                <a [href]="'tel:' + patient()!.phone" class="pd-info-link">{{ patient()!.phone }}</a>
+              </div>
+            </div>
+          }
+          @if (patient()!.email) {
+            <div class="pd-info-row">
+              <i class="fa-solid fa-envelope pd-info-icon" aria-hidden="true"></i>
+              <div class="pd-info-content">
+                <a [href]="'mailto:' + patient()!.email" class="pd-info-link">{{ patient()!.email }}</a>
+              </div>
+            </div>
+          }
+          @if (fullAddress()) {
+            <div class="pd-info-row">
+              <i class="fa-solid fa-location-dot pd-info-icon" aria-hidden="true"></i>
+              <div class="pd-info-content">
+                <span>{{ fullAddress() }}</span>
+              </div>
+            </div>
+          }
+          @if (!patient()!.mobilePhone && !patient()!.landlinePhone && !patient()!.phone && !patient()!.email && !fullAddress()) {
+            <span class="pd-info-empty">Aucune coordonnée renseignée</span>
           }
         </div>
       </div>
-    </div>
 
-    <div class="accordion-item">
-      <h2 class="accordion-header" id="headingDocuments">
-        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-documents" aria-expanded="false" aria-controls="patient-accordion-documents" title="Déplier / replier cette section" bsTooltip>
-          <i class="fa-regular fa-folder-open text-primary me-2"></i>Documents du patient
-          @if (patientDocuments().length) {
-            <span class="badge text-bg-secondary ms-2">{{ patientDocuments().length }}</span>
+      <!-- Informations médicales -->
+      <div class="pd-card">
+        <div class="pd-card-header">
+          <i class="fa-solid fa-heart-pulse" aria-hidden="true"></i>
+          Informations médicales
+        </div>
+        <div class="pd-card-body">
+          @if (patient()!.primaryDoctor) {
+            <div class="pd-info-row">
+              <i class="fa-solid fa-user-doctor pd-info-icon" aria-hidden="true"></i>
+              <div class="pd-info-content">
+                <span>{{ patient()!.primaryDoctor }}</span>
+                <span class="pd-info-label">Médecin traitant</span>
+              </div>
+            </div>
           }
-        </button>
-      </h2>
-      <div id="patient-accordion-documents" class="accordion-collapse collapse" aria-labelledby="headingDocuments" data-bs-parent="#patientDetailAccordion">
-        <div class="accordion-body bg-body">
-          @if (documentActionError()) {
-            <div class="alert alert-danger">{{ documentActionError() }}</div>
+          @if (patient()!.generalRemarks) {
+            <div class="pd-info-row">
+              <i class="fa-solid fa-notes-medical pd-info-icon" aria-hidden="true"></i>
+              <div class="pd-info-content">
+                <span class="pd-info-remark">{{ patient()!.generalRemarks }}</span>
+              </div>
+            </div>
           }
 
-          <div class="mb-4">
-            <div
-              class="border rounded-3 p-4 text-center"
-              [class.bg-body-tertiary]="!isPatientDocumentDragOver()"
-              [class.bg-primary-subtle]="isPatientDocumentDragOver()"
-              (dragover)="onPatientDocumentDragOver($event)"
-              (dragleave)="onPatientDocumentDragLeave($event)"
-              (drop)="onPatientDocumentDrop($event)">
-              <i class="fa-regular fa-file-lines fs-2 text-secondary d-block mb-2"></i>
-              <p class="mb-2">Glissez-déposez vos documents ici</p>
-              <label class="btn btn-outline-primary btn-sm mb-0" for="patient-document-upload-input">
-                Ou cliquez pour choisir un fichier
-              </label>
-              <input
-                id="patient-document-upload-input"
-                type="file"
-                class="d-none"
-                multiple
-                (change)="onPatientDocumentFileSelected($event)" />
-              <p class="text-muted small mb-0 mt-2">Les documents sont chiffrés et liés uniquement au dossier patient.</p>
-              @if (isUploadingPatientDocuments()) {
-                <p class="small text-muted mt-2 mb-0">Téléversement en cours...</p>
+          <!-- Antecedents -->
+          <div class="pd-antecedents">
+            <div class="pd-antecedents-header">
+              <span class="pd-antecedents-title">Antécédents</span>
+              @if (canEditPatient()) {
+                <button type="button" class="pd-btn-xs" (click)="openAntecedentModal()" aria-label="Ajouter un antécédent">
+                  <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                  Ajouter
+                </button>
               }
             </div>
-          </div>
-
-          @if (isLoadingDocuments()) {
-            <div class="d-flex flex-column align-items-center justify-content-center py-4 gap-3">
-              <div class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></div>
-              <span class="small text-muted">Chargement des documents...</span>
-              <div class="placeholder-glow w-100">
-                <span class="placeholder col-12 mb-2"></span>
-                <span class="placeholder col-9"></span>
+            @if (antecedents().length === 0) {
+              <span class="pd-info-empty">Aucun antécédent enregistré</span>
+            } @else {
+              <div class="pd-antecedent-list">
+                @for (item of antecedents(); track item.id) {
+                  <div class="pd-antecedent-item" [class.important]="item.important">
+                    <div class="pd-antecedent-top">
+                      <span class="pd-antecedent-cat">{{ item.category }}</span>
+                      @if (item.important) {
+                        <span class="pd-antecedent-important-badge" aria-label="Important">!</span>
+                      }
+                      @if (item.dateDisplay) {
+                        <span class="pd-antecedent-date">{{ getAntecedentDateLabel(item) }}</span>
+                      }
+                      @if (canEditPatient()) {
+                        <button type="button" class="pd-btn-xs pd-btn-icon-only ms-auto" (click)="openAntecedentEditModal(item.id)" aria-label="Modifier">
+                          <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i>
+                        </button>
+                        <button type="button" class="pd-btn-xs pd-btn-icon-only pd-btn-danger" (click)="removeAntecedent(item.id)" aria-label="Supprimer">
+                          <i class="fa-solid fa-trash" aria-hidden="true"></i>
+                        </button>
+                      }
+                    </div>
+                    <p class="pd-antecedent-desc">{{ item.description }}</p>
+                  </div>
+                }
               </div>
+            }
+          </div>
+        </div>
+      </div>
+
+      <!-- Documents -->
+      <div class="pd-card">
+        <div class="pd-card-header">
+          <i class="fa-solid fa-paperclip" aria-hidden="true"></i>
+          Documents
+          @if (patientDocuments().length) {
+            <span class="pd-count-chip">{{ patientDocuments().length }}</span>
+          }
+        </div>
+        <div class="pd-card-body">
+          @if (documentActionError()) {
+            <div class="alert alert-danger mb-3">{{ documentActionError() }}</div>
+          }
+          <div
+            class="pd-upload-zone"
+            [class.drag-over]="isPatientDocumentDragOver()"
+            (dragover)="onPatientDocumentDragOver($event)"
+            (dragleave)="onPatientDocumentDragLeave($event)"
+            (drop)="onPatientDocumentDrop($event)">
+            <i class="fa-regular fa-file-lines" aria-hidden="true"></i>
+            <span>Glisser-déposer ou</span>
+            <label class="pd-upload-label" for="patient-document-upload-input">choisir un fichier</label>
+            <input id="patient-document-upload-input" type="file" class="pd-upload-input" multiple (change)="onPatientDocumentFileSelected($event)" />
+            @if (isUploadingPatientDocuments()) {
+              <span class="pd-upload-progress">Téléversement en cours...</span>
+            }
+          </div>
+          @if (isLoadingDocuments()) {
+            <div class="pd-loading-sm">
+              <div class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></div>
             </div>
           } @else if (patientDocuments().length === 0) {
-            <div class="empty-state">
-              <i class="fa-regular fa-folder-open fa-2x text-secondary mb-3"></i>
-              <p class="mb-0 text-secondary">Aucun document enregistré pour ce patient.</p>
-            </div>
+            <span class="pd-info-empty">Aucun document</span>
           } @else {
-            <div class="list-group list-group-flush document-list">
+            <div class="pd-doc-list">
               @for (document of patientDocuments(); track document.documentRef) {
-                <article class="list-group-item px-0 py-3 border-bottom">
-                  <div class="d-flex flex-wrap justify-content-between gap-3 align-items-start">
-                    <div class="document-meta">
-                      <div class="fw-semibold">{{ document.title || document.fileName }}</div>
-                      <div class="small text-muted">{{ formatShortDate(document.createdAt) }} · {{ formatFileSize(document.sizeBytes) }} · {{ document.mimeType }}</div>
-                      @if (document.comment) {
-                        <p class="small text-secondary mb-0 mt-2">{{ document.comment }}</p>
-                      }
-                    </div>
-                    <div class="d-flex flex-wrap gap-2">
-                      <button type="button" class="btn btn-outline-primary btn-sm" (click)="openPatientDocument(document)" title="Ouvrir" bsTooltip>
-                        <i class="fa-solid fa-up-right-from-square me-1"></i>Ouvrir
-                      </button>
-                      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="openPatientDocument(document, true)" title="Ouvrir" bsTooltip>
-                        <i class="fa-solid fa-download me-1"></i>Télécharger
-                      </button>
-                    </div>
+                <div class="pd-doc-item">
+                  <div class="pd-doc-info">
+                    <span class="pd-doc-name">{{ document.title || document.fileName }}</span>
+                    <span class="pd-doc-meta">{{ formatShortDate(document.createdAt) }} · {{ formatFileSize(document.sizeBytes) }}</span>
                   </div>
-                </article>
+                  <div class="pd-doc-actions">
+                    <button type="button" class="pd-btn-xs" (click)="openPatientDocument(document)" aria-label="Ouvrir">
+                      <i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i>
+                    </button>
+                    <button type="button" class="pd-btn-xs" (click)="openPatientDocument(document, true)" aria-label="Télécharger">
+                      <i class="fa-solid fa-download" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                </div>
               }
             </div>
           }
         </div>
       </div>
-    </div>
+    </aside>
 
-    <div class="accordion-item">
-      <h2 class="accordion-header" id="headingConsultations">
-        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#patient-accordion-consultations" aria-expanded="false" aria-controls="patient-accordion-consultations" title="Déplier / replier cette section" bsTooltip>
-          <i class="fa-solid fa-stethoscope text-primary me-2"></i>Consultations
+    <!-- ── Right main area ── -->
+    <div class="pd-main">
+      <div class="pd-tabs" role="tablist">
+        <button type="button" class="pd-tab" role="tab"
+          [class.active]="activePatientTab() === 'consultations'"
+          [attr.aria-selected]="activePatientTab() === 'consultations'"
+          (click)="activePatientTab.set('consultations')">
+          <i class="fa-solid fa-stethoscope" aria-hidden="true"></i>
+          Consultations
           @if (totalConsultationCount()) {
-            <span class="badge text-bg-primary ms-2">{{ totalConsultationCount() }}</span>
+            <span class="pd-tab-badge">{{ totalConsultationCount() }}</span>
           }
         </button>
-      </h2>
-      <div id="patient-accordion-consultations" class="accordion-collapse collapse" aria-labelledby="headingConsultations" data-bs-parent="#patientDetailAccordion">
-        <div class="accordion-body bg-body">
+        <button type="button" class="pd-tab" role="tab"
+          [class.active]="activePatientTab() === 'corps'"
+          [attr.aria-selected]="activePatientTab() === 'corps'"
+          (click)="activePatientTab.set('corps')">
+          <i class="fa-solid fa-person" aria-hidden="true"></i>
+          Suivi corporel
+        </button>
+        <button type="button" class="pd-tab" role="tab"
+          [class.active]="activePatientTab() === 'facturation'"
+          [attr.aria-selected]="activePatientTab() === 'facturation'"
+          (click)="activePatientTab.set('facturation')">
+          <i class="fa-solid fa-file-invoice-dollar" aria-hidden="true"></i>
+          Facturation
+        </button>
+      </div>
+
+      @if (activePatientTab() === 'consultations') {
+        <div class="pd-tab-content pd-tab-content--consultations" role="tabpanel">
+          @if (canCreateConsultation()) {
+            <div class="pd-tab-actions">
+              <a [routerLink]="['/patients', patient()?.id, 'consultations', 'nouvelle']" class="pd-btn-primary">
+                <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                Nouvelle consultation
+              </a>
+            </div>
+          }
           @if (consultationTimelineGroups().length === 0) {
-            <div class="empty-state">
-              <i class="fa-solid fa-stethoscope fa-2x text-secondary mb-3"></i>
-              <p class="mb-0 text-secondary">Aucune consultation enregistrée.</p>
+            <div class="pd-empty">
+              <i class="fa-solid fa-stethoscope" aria-hidden="true"></i>
+              <span>Aucune consultation enregistrée</span>
             </div>
           } @else {
-            <div class="timeline-groups">
+            <div class="pd-consult-list">
               @for (group of consultationTimelineGroups(); track group.key) {
-                <section class="timeline-group mb-3">
-                  @if (!group.isRecent) {
-                    <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
-                      <button class="btn btn-light border btn-sm timeline-year-toggle" type="button" data-bs-toggle="collapse" [attr.data-bs-target]="'#' + group.collapseId" [attr.aria-expanded]="group.initiallyOpen ? 'true' : 'false'" [attr.aria-controls]="group.collapseId" title="Déplier / replier" bsTooltip>
-                        <i class="fa-solid fa-calendar-days me-2"></i>{{ group.label }}
-                        <span class="badge text-bg-secondary ms-2">{{ group.consultations.length }}</span>
-                      </button>
-                    </div>
-
-                    <div [id]="group.collapseId" class="collapse" [class.show]="group.initiallyOpen">
-                      <div class="consultation-timeline">
-                        @for (consultation of group.consultations; track consultation.id) {
-                            <button type="button" class="consultation-timeline-item" [class.bg-warning]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'" (click)="openConsultationModal(consultation)" title="Ouvrir la consultation" bsTooltip>
-                              <span class="consultation-timeline-date" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'">{{ formatConsultationDate(consultation.startedAt) }}</span>
-                              <span class="consultation-timeline-title" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'">{{ consultation.title || 'Consultation sans titre' }}</span>
-                          </button>
+                @if (!group.isRecent) {
+                  <button
+                    type="button"
+                    class="pd-year-header"
+                    [attr.aria-expanded]="isGroupExpanded(group.key, group.initiallyOpen)"
+                    (click)="toggleGroupExpand(group.key, group.initiallyOpen)">
+                    <i class="fa-solid fa-calendar-days" aria-hidden="true"></i>
+                    {{ group.label }}
+                    <span class="pd-year-count">{{ group.consultations.length }}</span>
+                    <i class="fa-solid fa-chevron-down pd-group-chevron" aria-hidden="true"></i>
+                  </button>
+                }
+                @if (group.isRecent || isGroupExpanded(group.key, group.initiallyOpen)) {
+                  @for (consultation of group.consultations; track consultation.id) {
+                    <div class="pd-consult-card" [class.pd-consult-card--expanded]="isConsultationExpanded(consultation.id)">
+                      <button
+                        type="button"
+                        class="pd-consult-card-header"
+                        (click)="toggleConsultationExpand(consultation.id)">
+                        <!-- Date block -->
+                        <span class="pd-consult-date-block">
+                          <span class="pd-consult-day">{{ getConsultationDateParts(consultation.startedAt).day }}</span>
+                          <span class="pd-consult-mon">{{ getConsultationDateParts(consultation.startedAt).mon }}</span>
+                        </span>
+                        <!-- Title + meta -->
+                        <span class="pd-consult-info">
+                          <span class="pd-consult-title">
+                            {{ consultation.title || 'Consultation sans titre' }}
+                            @if (consultation.important) {
+                              <i class="fa-solid fa-star pd-consult-star" aria-hidden="true"></i>
+                            }
+                          </span>
+                          <span class="pd-consult-meta">
+                            @if (consultation.practitioner) { {{ consultation.practitioner }} · }
+                            {{ getConsultationDateParts(consultation.startedAt).time }}
+                          </span>
+                        </span>
+                        <!-- Billing -->
+                        @if (consultationBillingStates()[consultation.id]; as billing) {
+                          <span class="pd-consult-amount">{{ formatAmount(billing.totalAmount) }} €</span>
+                          <span class="pd-billing-pill pd-billing-pill--{{ billing.paymentStatus }}">
+                            {{ billing.paymentStatus === 'paid' ? 'Réglé' : billing.paymentStatus === 'partial' ? 'Partiel' : 'En attente' }}
+                          </span>
                         }
-                      </div>
-                    </div>
-                  } @else {
-                    <div class="consultation-timeline">
-                      @for (consultation of group.consultations; track consultation.id) {
-                            <button type="button" class="consultation-timeline-item" [class.bg-warning]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'" (click)="openConsultationModal(consultation)" title="Ouvrir la consultation" bsTooltip>
-                              <span class="consultation-timeline-date" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'">{{ formatConsultationDate(consultation.startedAt) }}</span>
-                              <span class="consultation-timeline-title" [class.text-dark]="consultationBillingStates()[consultation.id]?.paymentStatus === 'pending' || consultationBillingStates()[consultation.id]?.paymentStatus === 'partial'">{{ consultation.title || 'Consultation sans titre' }}</span>
-                        </button>
+                        <i class="fa-solid fa-chevron-down pd-consult-chevron" aria-hidden="true"></i>
+                      </button>
+
+                      @if (isConsultationExpanded(consultation.id)) {
+                        <div class="pd-consult-card-body">
+                          @if (consultation.motifMainHtml) {
+                            <div class="pd-consult-section">
+                              <div class="pd-consult-section-title">Anamnèse</div>
+                              <div class="pd-consult-section-content" [innerHTML]="sanitizeHtml(consultation.motifMainHtml)"></div>
+                            </div>
+                          }
+                          @if (consultation.testsHtml) {
+                            <div class="pd-consult-section">
+                              <div class="pd-consult-section-title">Examen clinique</div>
+                              <div class="pd-consult-section-content" [innerHTML]="sanitizeHtml(consultation.testsHtml)"></div>
+                            </div>
+                          }
+                          @if (consultation.treatmentsHtml) {
+                            <div class="pd-consult-section">
+                              <div class="pd-consult-section-title">Techniques réalisées</div>
+                              <div class="pd-consult-section-content" [innerHTML]="sanitizeHtml(consultation.treatmentsHtml)"></div>
+                            </div>
+                          }
+                          @if (consultation.reasonItems.length) {
+                            <div class="pd-consult-section">
+                              <div class="pd-consult-section-title">Motifs</div>
+                              <div class="pd-technique-pills">
+                                @for (r of consultation.reasonItems; track r.label) {
+                                  <span class="pd-technique-pill">{{ r.label }}</span>
+                                }
+                              </div>
+                            </div>
+                          }
+                          @if (consultation.remarksHtml) {
+                            <div class="pd-consult-section">
+                              <div class="pd-consult-section-title">Remarques</div>
+                              <div class="pd-consult-section-content" [innerHTML]="sanitizeHtml(consultation.remarksHtml)"></div>
+                            </div>
+                          }
+                          <div class="pd-consult-card-footer">
+                            <a [routerLink]="['/patients', patient()?.id, 'consultations', consultation.id]" class="pd-btn-outline">
+                              <i class="fa-solid fa-pen" aria-hidden="true"></i>
+                              Modifier la consultation
+                            </a>
+                          </div>
+                        </div>
                       }
                     </div>
                   }
-                </section>
+                }
               }
             </div>
           }
         </div>
-      </div>
-    </div>
+      }
 
+      @if (activePatientTab() === 'corps') {
+        <div class="pd-tab-content pd-placeholder" role="tabpanel">
+          <i class="fa-solid fa-person" aria-hidden="true"></i>
+          <p>Suivi corporel à venir</p>
+        </div>
+      }
+
+      @if (activePatientTab() === 'facturation') {
+        <div class="pd-tab-content" role="tabpanel">
+          <div class="pd-fact-kpis">
+            <div class="pd-fact-kpi">
+              <span class="pd-fact-kpi-value">{{ patientTotalPaidLabel() }}</span>
+              <span class="pd-fact-kpi-label">Total réglé</span>
+            </div>
+            <div class="pd-fact-kpi pd-fact-kpi--due">
+              <span class="pd-fact-kpi-value">{{ patientTotalDueLabel() }}</span>
+              <span class="pd-fact-kpi-label">Solde dû</span>
+            </div>
+          </div>
+          @if (invoiceRows().length === 0) {
+            <div class="pd-empty">
+              <i class="fa-solid fa-file-invoice-dollar" aria-hidden="true"></i>
+              <span>Aucune facture émise</span>
+            </div>
+          } @else {
+            <div class="pd-invoice-table">
+              <div class="pd-invoice-head">
+                <span>N° Facture</span>
+                <span>Date</span>
+                <span>Montant</span>
+                <span>Statut</span>
+              </div>
+              @for (row of invoiceRows(); track row.consultationId) {
+                <a class="pd-invoice-row" [routerLink]="['/patients', patient()?.id, 'consultations', row.consultationId]">
+                  <span class="pd-invoice-num">{{ row.invoiceNumber }}</span>
+                  <span>{{ row.issuedAt }}</span>
+                  <span class="pd-invoice-amount">{{ row.amount }}</span>
+                  <span class="pd-invoice-status pd-invoice-status--{{ row.statusCls }}">{{ row.statusLabel }}</span>
+                </a>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
   </div>
+
 
   @if (isAntecedentModalOpen()) {
     <div class="antecedent-modal-backdrop" (click)="closeAntecedentModal()"></div>
@@ -769,983 +929,5 @@
     </div>
     <div class="modal-backdrop fade show"></div>
   }
-
-  <div #consultationModal class="modal fade" tabindex="-1" aria-hidden="true" data-bs-focus="false">
-    <div class="modal-dialog modal-fullscreen modal-dialog-scrollable">
-      <div class="modal-content">
-        <div class="modal-header">
-          <div>
-            <h5 class="modal-title">{{ consultationModalTitle() }}</h5>
-            @if (consultationModalMode() === 'create') {
-              <div class="small text-muted mt-1">Consultation du {{ consultationStartedAtLabel() }}.</div>
-            } @else if (activeConsultation(); as consultation) {
-              <div class="small text-muted mt-1">{{ formatConsultationDate(consultation.startedAt) }}</div>
-            }
-            <div class="small mt-2">
-              <span class="badge" [class]="consultationAutosaveBadgeClass()">{{ consultationAutosaveStatusText() }}</span>
-            </div>
-          </div>
-          <button type="button" class="btn-close" aria-label="Fermer" (click)="closeConsultationModal()" title="Fermer" bsTooltip></button>
-        </div>
-
-        <div class="modal-body">
-          <nav class="nav nav-tabs nav-justified mb-4" role="tablist" aria-label="Sections de la consultation">
-            <button
-              type="button"
-              class="nav-link"
-              [class.active]="consultationActiveTab() === 'consultation'"
-              role="tab"
-              [attr.aria-selected]="consultationActiveTab() === 'consultation'"
-              (click)="setConsultationTab('consultation')"
-             title="Action" bsTooltip>
-              Consultation
-            </button>
-            <button
-              type="button"
-              class="nav-link"
-              [class.active]="consultationActiveTab() === 'documents'"
-              role="tab"
-              [attr.aria-selected]="consultationActiveTab() === 'documents'"
-              (click)="setConsultationTab('documents')"
-             title="Action" bsTooltip>
-              Documents patient
-            </button>
-            <button
-              type="button"
-              class="nav-link"
-              [class.active]="consultationActiveTab() === 'courriers'"
-              role="tab"
-              [attr.aria-selected]="consultationActiveTab() === 'courriers'"
-              (click)="setConsultationTab('courriers')"
-             title="Action" bsTooltip>
-              Courriers sortants
-            </button>
-            <button
-              type="button"
-              class="nav-link"
-              [class.active]="consultationActiveTab() === 'paiement'"
-              [class.text-warning]="isConsultationPaymentPending()"
-              role="tab"
-              [attr.aria-selected]="consultationActiveTab() === 'paiement'"
-              (click)="setConsultationTab('paiement')"
-             title="Action" bsTooltip>
-              Paiement
-            </button>
-          </nav>
-
-          @if (consultationActiveTab() === 'consultation') {
-            <form [formGroup]="consultationEditForm" class="consultation-edit-grid">
-              <div class="consultation-split mb-4">
-                <div class="consultation-main-panel border rounded-3 p-3 bg-body">
-                  <div class="mb-3">
-                    <label class="form-label" for="consultation-started-at">Début de consultation</label>
-                    <app-date-picker id="consultation-started-at" mode="datetime" formControlName="startedAtLocal" />
-                  </div>
-
-                  <div class="mb-3">
-                    <label class="form-label" for="consultation-practitioner">Praticien</label>
-                    <input
-                      id="consultation-practitioner"
-                      type="text"
-                      class="form-control"
-                      list="consultation-practitioner-options"
-                      formControlName="practitioner"
-                      placeholder="Sélectionner un praticien" />
-                    <datalist id="consultation-practitioner-options">
-                      @for (practitioner of practitionerPickerOptions(); track practitioner.username) {
-                        <option [value]="practitioner.displayName">{{ practitioner.label }}</option>
-                      }
-                    </datalist>
-                    <div class="form-text">Utilisateurs rattachés au cabinet actif et autorisés à créer des patients.</div>
-                  </div>
-
-                  <div class="mb-3 form-check">
-                    <input id="consultation-important" class="form-check-input" type="checkbox" formControlName="important" />
-                    <label class="form-check-label" for="consultation-important">Consultation importante</label>
-                  </div>
-
-                  <div class="mb-3">
-                    <label class="form-label" for="consultation-title">Titre de la consultation</label>
-                    <input id="consultation-title" type="text" class="form-control" formControlName="title" />
-                  </div>
-
-                  <div class="mb-3">
-                    <label class="form-label" for="consultation-height">Taille (cm)</label>
-                    <input id="consultation-height" type="number" class="form-control" formControlName="heightCm" min="0" step="1" />
-                  </div>
-
-                  <div class="mb-3">
-                    <label class="form-label" for="consultation-weight">Poids (kg)</label>
-                    <input id="consultation-weight" type="text" inputmode="decimal" class="form-control" placeholder="ex: 70 ou 3,5" formControlName="weightKg" />
-                  </div>
-
-                  <div class="mb-3">
-                    <label class="form-label">IMC</label>
-                    <div class="consultation-kpi">{{ consultationFormBmi() || '-' }}</div>
-                  </div>
-
-                  <div class="mb-3">
-                    <label class="form-label" for="consultation-profile">Profil</label>
-                    <select
-                      id="consultation-profile"
-                      class="form-select"
-                      formControlName="profile"
-                      [disabled]="consultationProfileOptions().length === 0"
-                      (change)="setConsultationProfile($any($event.target).value)">
-                      @if (consultationProfileOptions().length === 0) {
-                        <option value="">Aucun profil configuré pour ce cabinet</option>
-                      } @else {
-                        @for (option of consultationProfileOptions(); track option) {
-                          <option [value]="option">{{ option }}</option>
-                        }
-                      }
-                    </select>
-                  </div>
-
-                  <div class="mb-3">
-                    <label class="form-label" for="consultation-eva-before">EVA au debut: {{ consultationEditForm.controls.evaBefore.value }}/10</label>
-                    <input
-                      id="consultation-eva-before"
-                      type="range"
-                      class="form-range eva-range"
-                      min="0"
-                      max="10"
-                      step="1"
-                      formControlName="evaBefore"
-                      [style.--eva-range-background]="getEvaRangeBackground(consultationEditForm.controls.evaBefore.value)"
-                    />
-                  </div>
-
-                  <div class="mb-0">
-                    <label class="form-label" for="consultation-eva-after">EVA en fin de consultation: {{ consultationEditForm.controls.evaAfter.value }}/10</label>
-                    <input
-                      id="consultation-eva-after"
-                      type="range"
-                      class="form-range eva-range"
-                      min="0"
-                      max="10"
-                      step="1"
-                      formControlName="evaAfter"
-                      [style.--eva-range-background]="getEvaRangeBackground(consultationEditForm.controls.evaAfter.value)"
-                    />
-                  </div>
-                </div>
-
-                <aside class="consultation-reasons-panel border rounded-3 p-3 bg-light-subtle">
-                  <div class="mb-2">
-                    <h3 class="mb-1">Motifs du profil</h3>
-                    <p class="mb-0">
-                      @if (consultationOfficeName()) {
-                        Cabinet: {{ consultationOfficeName() }}
-                      } @else {
-                        Cabinet non déterminé
-                      }
-                    </p>
-                  </div>
-
-                  @if (consultationEditForm.controls.profile.value.trim().length === 0) {
-                    <div class="alert alert-light border mb-0">Sélectionnez d'abord un profil pour afficher les motifs.</div>
-                  } @else if (consultationProfileReasons().length === 0) {
-                    <div class="alert alert-light border mb-0">Aucun motif configuré pour ce profil.</div>
-                  } @else {
-                    <div class="reason-list d-flex flex-column gap-1" role="list" aria-label="Motifs disponibles pour le profil sélectionné">
-                      @for (item of consultationReasonItems(); track item.reason) {
-                        <div class="reason-item" [class.active]="item.checked">
-                          <div class="reason-item-check">
-                            <input
-                              class="form-check-input"
-                              type="checkbox"
-                              [id]="'detail-reason-check-' + $index"
-                              [checked]="item.checked"
-                              (change)="setConsultationReasonChecked(item.reason, $any($event.target).checked)"
-                            />
-                          </div>
-                          <div class="reason-item-body">
-                            <label class="reason-item-label" [attr.for]="'detail-reason-check-' + $index">{{ item.reason }}</label>
-                            <input
-                              type="text"
-                              class="form-control form-control-sm"
-                              [value]="item.value"
-                              placeholder="Saisir une valeur"
-                              (input)="setConsultationReasonValue(item.reason, $any($event.target).value || '')"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            class="btn btn-sm"
-                            [class.btn-outline-warning]="!item.important"
-                            [class.btn-warning]="item.important"
-                            [attr.aria-label]="'Marquer le motif ' + item.reason + ' comme important'"
-                            (click)="setConsultationReasonImportant(item.reason, !item.important)" title="Importer" bsTooltip>
-                            <i class="fa-solid fa-triangle-exclamation"></i>
-                          </button>
-                        </div>
-                      }
-                    </div>
-
-                    <div class="reason-selection mt-3">
-                      <small class="text-muted fw-semibold d-block mb-2">Motifs sélectionnés ({{ consultationSelectedReasonItems().length }})</small>
-                      @if (consultationSelectedReasonItems().length === 0) {
-                        <small class="text-muted">Aucun motif sélectionné.</small>
-                      } @else {
-                        <div class="d-flex flex-wrap gap-2">
-                          @for (reason of consultationSelectedReasonItems(); track reason.label) {
-                            <span class="badge rounded-pill bg-body-tertiary text-body border">
-                              {{ reason.label }}@if (reason.value) { : {{ reason.value }} }@if (reason.important) { (important) }
-                            </span>
-                          }
-                        </div>
-                      }
-                    </div>
-                  }
-                </aside>
-              </div>
-            </form>
-
-            <div class="mb-3">
-              <label class="form-label fw-semibold">Motif principal</label>
-              <div class="wysiwyg-toolbar">
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'bold')" title="Modifier" bsTooltip><i class="fa-solid fa-bold"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'italic')" title="Modifier" bsTooltip><i class="fa-solid fa-italic"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'underline')" title="Modifier" bsTooltip><i class="fa-solid fa-underline"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'insertUnorderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ul"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('motifMainHtml', 'insertOrderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ol"></i></button>
-              </div>
-              <div #consultationMotifMainEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('motifMainHtml', $event)"></div>
-            </div>
-
-            <div class="mb-0">
-              <app-consultation-canvas
-                [value]="consultationSchemaHtml()"
-                (valueChange)="consultationSchemaHtml.set($event)"
-              ></app-consultation-canvas>
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label fw-semibold">Tests</label>
-              <div class="wysiwyg-toolbar">
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'bold')" title="Modifier" bsTooltip><i class="fa-solid fa-bold"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'italic')" title="Modifier" bsTooltip><i class="fa-solid fa-italic"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'underline')" title="Modifier" bsTooltip><i class="fa-solid fa-underline"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'insertUnorderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ul"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('testsHtml', 'insertOrderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ol"></i></button>
-              </div>
-              <div #consultationTestsEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('testsHtml', $event)"></div>
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label fw-semibold">Traitements proposes</label>
-              <div class="wysiwyg-toolbar">
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'bold')" title="Modifier" bsTooltip><i class="fa-solid fa-bold"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'italic')" title="Modifier" bsTooltip><i class="fa-solid fa-italic"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'underline')" title="Modifier" bsTooltip><i class="fa-solid fa-underline"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'insertUnorderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ul"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('treatmentsHtml', 'insertOrderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ol"></i></button>
-              </div>
-              <div #consultationTreatmentsEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('treatmentsHtml', $event)"></div>
-            </div>
-
-            <div class="mb-0">
-              <label class="form-label fw-semibold">Remarques</label>
-              <div class="wysiwyg-toolbar">
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'bold')" title="Modifier" bsTooltip><i class="fa-solid fa-bold"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'italic')" title="Modifier" bsTooltip><i class="fa-solid fa-italic"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'underline')" title="Modifier" bsTooltip><i class="fa-solid fa-underline"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'insertUnorderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ul"></i></button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="applyConsultationEditorCommand('remarksHtml', 'insertOrderedList')" title="Modifier" bsTooltip><i class="fa-solid fa-list-ol"></i></button>
-              </div>
-              <div #consultationRemarksEditor class="wysiwyg-editor" contenteditable="true" (input)="onConsultationRichTextInput('remarksHtml', $event)"></div>
-            </div>
-          }
-
-          @if (consultationActiveTab() === 'documents') {
-            @if (consultationModalMode() === 'create') {
-              <div class="mb-3">
-                <label class="form-label fw-semibold d-block">Documents patient</label>
-                <div
-                  class="border rounded-3 p-4 text-center"
-                  [class.bg-body-tertiary]="!isConsultationDocumentDragOver()"
-                  [class.bg-primary-subtle]="isConsultationDocumentDragOver()"
-                  (dragover)="onConsultationDocumentDragOver($event)"
-                  (dragleave)="onConsultationDocumentDragLeave($event)"
-                  (drop)="onConsultationDocumentDrop($event)">
-                  <i class="fa-regular fa-file-lines fs-2 text-secondary d-block mb-2"></i>
-                  <p class="mb-2">Glissez-deposez vos documents ici</p>
-                  <label class="btn btn-outline-primary btn-sm mb-0" for="consultation-document-upload-input">
-                    Ou cliquez pour choisir un fichier
-                  </label>
-                  <input
-                    id="consultation-document-upload-input"
-                    type="file"
-                    class="d-none"
-                    multiple
-                    (change)="onConsultationDocumentFileSelected($event)" />
-                  <p class="text-muted small mb-0 mt-2">Les documents sont chiffrés et liés au patient/à la consultation.</p>
-                  @if (isUploadingConsultationDocuments()) {
-                    <p class="small text-muted mt-2 mb-0">Téléversement en cours...</p>
-                  }
-                </div>
-              </div>
-
-              @if (consultationPendingNonLetterDocuments().length === 0) {
-                <div class="empty-tab-state">
-                  <i class="fa-regular fa-folder-open"></i>
-                  <h3>Aucun document ajoute</h3>
-                  <p>Les documents seront sauvegardes a la creation de la consultation.</p>
-                </div>
-              } @else {
-                <div class="d-flex flex-column gap-3">
-                  @for (document of consultationPendingNonLetterDocuments(); track document.tempKey) {
-                    <article class="border rounded-3 p-3 bg-body">
-                      <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-                        <div>
-                          <p class="fw-semibold mb-1">{{ document.fileName }}</p>
-                          <p class="text-muted small mb-0">{{ document.mimeType || 'Type inconnu' }} · {{ formatFileSize(document.sizeBytes) }}</p>
-                        </div>
-                        <button
-                          type="button"
-                          class="btn btn-outline-danger btn-sm"
-                          (click)="removePendingConsultationDocument(document.tempKey)" title="Supprimer" bsTooltip>
-                          <i class="fa-solid fa-trash me-1"></i>Supprimer
-                        </button>
-                      </div>
-
-                      <div class="row g-2 mt-2">
-                        <div class="col-12 col-lg-5">
-                          <label class="form-label mb-1">Titre</label>
-                          <input
-                            type="text"
-                            class="form-control form-control-sm"
-                            [value]="document.title"
-                            (input)="updatePendingConsultationDocumentTitle(document.tempKey, $any($event.target).value || '')" />
-                        </div>
-                        <div class="col-12 col-lg-7">
-                          <label class="form-label mb-1">Commentaire</label>
-                          <input
-                            type="text"
-                            class="form-control form-control-sm"
-                            [value]="document.comment"
-                            placeholder="Commentaire optionnel"
-                            (input)="updatePendingConsultationDocumentComment(document.tempKey, $any($event.target).value || '')" />
-                        </div>
-                      </div>
-                    </article>
-                  }
-                </div>
-              }
-            } @else {
-              <div class="mb-3">
-                <label class="form-label fw-semibold d-block">Documents patient</label>
-                <div
-                  class="border rounded-3 p-4 text-center"
-                  [class.bg-body-tertiary]="!isConsultationDocumentDragOver()"
-                  [class.bg-primary-subtle]="isConsultationDocumentDragOver()"
-                  (dragover)="onConsultationDocumentDragOver($event)"
-                  (dragleave)="onConsultationDocumentDragLeave($event)"
-                  (drop)="onConsultationDocumentDrop($event)">
-                  <i class="fa-regular fa-file-lines fs-2 text-secondary d-block mb-2"></i>
-                  <p class="mb-2">Glissez-deposez vos documents ici</p>
-                  <label class="btn btn-outline-primary btn-sm mb-0" for="consultation-document-upload-input">
-                    Ou cliquez pour choisir un fichier
-                  </label>
-                  <input
-                    id="consultation-document-upload-input"
-                    type="file"
-                    class="d-none"
-                    multiple
-                    (change)="onConsultationDocumentFileSelected($event)" />
-                  <p class="text-muted small mb-0 mt-2">Les documents sont chiffrés et liés au patient/à la consultation.</p>
-                  @if (isUploadingConsultationDocuments()) {
-                    <p class="small text-muted mt-2 mb-0">Téléversement en cours...</p>
-                  }
-                </div>
-              </div>
-
-              @if (activeConsultationDocuments().length === 0) {
-                <div class="empty-tab-state">
-                  <i class="fa-regular fa-folder-open"></i>
-                  <h3>Aucun document lie a cette consultation</h3>
-                  <p>Les documents de cette consultation apparaitront ici.</p>
-                </div>
-              } @else {
-                <div class="d-flex flex-column gap-3">
-                  @for (document of activeConsultationDocuments(); track document.documentRef) {
-                    <article class="border rounded-3 p-3 bg-body">
-                      <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-                        <div>
-                          <p class="fw-semibold mb-1">{{ document.fileName }}</p>
-                          <p class="text-muted small mb-0">{{ document.mimeType || 'Type inconnu' }} · {{ formatFileSize(document.sizeBytes) }}</p>
-                        </div>
-                        <div class="btn-group btn-group-sm">
-                          <button type="button" class="btn btn-outline-primary" (click)="openPatientDocument(document)" title="Ouvrir" bsTooltip>
-                            <i class="fa-solid fa-eye me-1"></i>Ouvrir
-                          </button>
-                          <button type="button" class="btn btn-outline-secondary" (click)="openPatientDocument(document, true)" title="Ouvrir" bsTooltip>
-                            <i class="fa-solid fa-download me-1"></i>Telecharger
-                          </button>
-                          <button type="button" class="btn btn-outline-danger" [disabled]="isDocumentSaving(document.documentRef) || !canEditPatient()" (click)="deleteConsultationDocument(document.documentRef)" title="Supprimer la consultation" bsTooltip>
-                            <i class="fa-solid fa-trash me-1"></i>Supprimer
-                          </button>
-                        </div>
-                      </div>
-
-                      <div class="row g-2 mt-2">
-                        <div class="col-12 col-lg-5">
-                          <label class="form-label mb-1">Titre</label>
-                          <input #docTitleInput type="text" class="form-control form-control-sm" [value]="document.title" />
-                        </div>
-                        <div class="col-12 col-lg-6">
-                          <label class="form-label mb-1">Commentaire</label>
-                          <input #docCommentInput type="text" class="form-control form-control-sm" [value]="document.comment" placeholder="Commentaire optionnel" />
-                        </div>
-                        <div class="col-12 col-lg-1 d-flex align-items-end">
-                          <button
-                            type="button"
-                            class="btn btn-sm btn-outline-success w-100"
-                            [disabled]="isDocumentSaving(document.documentRef) || !canEditPatient()"
-                            (click)="saveConsultationDocumentMeta(document.documentRef, docTitleInput.value, docCommentInput.value)" title="Enregistrer" bsTooltip>
-                            <i class="fa-solid fa-floppy-disk"></i>
-                          </button>
-                        </div>
-                      </div>
-                    </article>
-                  }
-                </div>
-              }
-            }
-          }
-
-          @if (consultationActiveTab() === 'courriers') {
-            <section class="border rounded-3 p-4 bg-body-secondary">
-              <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-                <div>
-                  <h3 class="h5 mb-1">Courriers sortants</h3>
-                  <p class="mb-0 text-secondary">Préparez et suivez les courriers de sortie et comptes-rendus adressés aux correspondants.</p>
-                </div>
-                <button type="button" class="btn btn-primary" (click)="openPatientLetterComposeModal()" title="Ouvrir" bsTooltip>
-                  <i class="fa-solid fa-pen-fancy me-2"></i>Rédiger un courier patient
-                </button>
-              </div>
-
-              @if (consultationOfficePatientLetterTemplates().length === 0) {
-                <div class="alert alert-warning mt-3 mb-0">
-                  <i class="fa-solid fa-circle-exclamation me-2"></i>Aucune lettre type n'est configurée pour le cabinet actif.
-                </div>
-              }
-            </section>
-
-            @if (consultationModalMode() === 'create') {
-              @if (consultationPendingLetters().length === 0) {
-                <div class="empty-tab-state mt-3">
-                  <i class="fa-solid fa-envelope-open-text"></i>
-                  <h3>Aucun courrier sortant</h3>
-                  <p>Les courriers rédigés pour cette consultation seront sauvegardés à la création de la consultation.</p>
-                </div>
-              } @else {
-                <div class="d-flex flex-column gap-3 mt-3">
-                  @for (letter of consultationPendingLetters(); track letter.tempKey) {
-                    <article class="border rounded-3 p-3 bg-body">
-                      <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-                        <div>
-                          <p class="fw-semibold mb-1">{{ letter.title || letter.fileName }}</p>
-                          <p class="text-muted small mb-0">{{ letter.comment ? letter.comment + ' · ' : '' }}{{ formatFileSize(letter.sizeBytes) }}</p>
-                        </div>
-                        <button
-                          type="button"
-                          class="btn btn-outline-danger btn-sm"
-                          (click)="removePendingConsultationDocument(letter.tempKey)" title="Supprimer" bsTooltip>
-                          <i class="fa-solid fa-trash me-1"></i>Supprimer
-                        </button>
-                      </div>
-                    </article>
-                  }
-                </div>
-              }
-            } @else {
-              @if (activeConsultationLetters().length === 0) {
-                <div class="empty-tab-state mt-3">
-                  <i class="fa-solid fa-envelope-open-text"></i>
-                  <h3>Aucun courrier sortant</h3>
-                  <p>Les courriers rédigés pour cette consultation apparaîtront ici.</p>
-                </div>
-              } @else {
-                <div class="d-flex flex-column gap-3 mt-3">
-                  @for (letter of activeConsultationLetters(); track letter.documentRef) {
-                    <article class="border rounded-3 p-3 bg-body">
-                      <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-                        <div>
-                          <p class="fw-semibold mb-1">{{ letter.title || letter.fileName }}</p>
-                          <p class="text-muted small mb-0">{{ letter.comment ? letter.comment + ' · ' : '' }}{{ formatFileSize(letter.sizeBytes) }}</p>
-                        </div>
-                        <div class="btn-group btn-group-sm">
-                          <button type="button" class="btn btn-outline-primary" (click)="openPatientDocument(letter)" title="Ouvrir" bsTooltip>
-                            <i class="fa-solid fa-eye me-1"></i>Ouvrir
-                          </button>
-                          <button type="button" class="btn btn-outline-secondary" (click)="openPatientDocument(letter, true)" title="Télécharger" bsTooltip>
-                            <i class="fa-solid fa-download me-1"></i>Télécharger
-                          </button>
-                          <button type="button" class="btn btn-outline-danger" [disabled]="isDocumentSaving(letter.documentRef) || !canEditPatient()" (click)="deleteConsultationDocument(letter.documentRef)" title="Supprimer" bsTooltip>
-                            <i class="fa-solid fa-trash me-1"></i>Supprimer
-                          </button>
-                        </div>
-                      </div>
-                    </article>
-                  }
-                </div>
-              }
-            }
-          }
-
-          @if (consultationActiveTab() === 'paiement') {
-            @if (activeConsultationBillingState(); as billing) {
-              <div class="accordion" id="consultation-billing-finalized-accordion">
-                <div class="accordion-item border-success">
-                  <h2 class="accordion-header" id="consultation-billing-finalized-heading">
-                    <button
-                      class="accordion-button bg-success-subtle text-success-emphasis"
-                      type="button"
-                      data-bs-toggle="collapse"
-                      data-bs-target="#consultation-billing-finalized-collapse"
-                      aria-expanded="true"
-                      aria-controls="consultation-billing-finalized-collapse" title="Déplier / replier cette section" bsTooltip>
-                      Facture Finalisée n° {{ billing.invoiceNumber }} ({{ billing.totalAmount.toFixed(2) }} {{ billing.currency }}) :
-                    </button>
-                  </h2>
-                  <div
-                    id="consultation-billing-finalized-collapse"
-                    class="accordion-collapse collapse show"
-                    aria-labelledby="consultation-billing-finalized-heading"
-                    data-bs-parent="#consultation-billing-finalized-accordion">
-                    <div class="accordion-body">
-                      <p class="mb-2">Cette consultation a été facturée le {{ formatShortDate(billing.issuedAt) }} à {{ formatConsultationDate(billing.issuedAt).slice(-5) }} pour un montant total de {{ billing.totalAmount.toFixed(2) }} {{ billing.currency }}</p>
-                      <p class="mb-2">Commentaire interne: {{ billing.internalComment || '-' }}</p>
-                      <p class="mb-3">Facture associée au praticien {{ billing.practitionerName }}</p>
-
-                      <div class="d-flex flex-wrap gap-2 mb-3">
-                        <button type="button" class="btn btn-outline-primary btn-sm" (click)="downloadFinalizedConsultationInvoice()" title="Télécharger la facture finalisée" bsTooltip>
-                          @if (isConsultationPdfDownloadPreferred()) {
-                            <i class="fa-solid fa-download me-2"></i>
-                            Télécharger la facture
-                          } @else {
-                            <i class="fa-solid fa-eye me-2"></i>
-                            Afficher la facture
-                          }
-                        </button>
-                        <button type="button" class="btn btn-outline-danger btn-sm" [disabled]="!canCancelInvoice()" (click)="cancelConsultationInvoice()" title="Annuler la facture" bsTooltip>
-                          <i class="fa-solid fa-ban me-2"></i>Annuler la facture
-                        </button>
-                      </div>
-
-                      <p class="fw-bold mb-2">Informations paiements ({{ billing.totalAmount.toFixed(2) }} {{ billing.currency }})</p>
-                      <p class="mb-2">
-                        Cette facture est
-                        <span
-                          class="badge"
-                          [class.text-bg-success]="billing.paymentStatus === 'paid'"
-                          [class.text-bg-info]="billing.paymentStatus === 'partial'"
-                          [class.text-bg-warning]="billing.paymentStatus === 'pending'">
-                          {{ billing.paymentStatus === 'paid' ? 'Payée' : (billing.paymentStatus === 'partial' ? 'Partiellement payée' : 'Attente de paiement') }}
-                        </span>.
-                        Voici la liste des paiements :
-                      </p>
-                      <p class="mb-3">
-                        <span class="text-secondary">Montant réglé: {{ getConsultationBillingPaidAmount(billing).toFixed(2) }} {{ billing.currency }}</span>
-                        <span class="mx-1 text-secondary">|</span>
-                        <span
-                          [class.text-warning]="getConsultationBillingRemainingAmount(billing) > 0"
-                          [class.fw-semibold]="getConsultationBillingRemainingAmount(billing) > 0"
-                          [class.text-success]="getConsultationBillingRemainingAmount(billing) === 0">
-                          Restant dû: {{ getConsultationBillingRemainingAmount(billing).toFixed(2) }} {{ billing.currency }}
-                        </span>
-                      </p>
-
-                      <ul class="list-unstyled mb-0">
-                        @if (billing.payments.length === 0) {
-                          <li class="d-flex flex-wrap align-items-center gap-2">
-                            <span class="text-secondary">Aucun paiement enregistré.</span>
-                            @if (canManagePayments()) {
-                              <button type="button" class="btn btn-outline-warning btn-sm" (click)="openConsultationPaymentCreateModal()" title="Ajouter un paiement" bsTooltip>
-                                <i class="fa-solid fa-pen-to-square me-1"></i>Renseigner le moyen de paiement
-                              </button>
-                            }
-                          </li>
-                        } @else {
-                          @for (payment of billing.payments; track payment.id) {
-                            <li class="mb-2">
-                              <div class="d-flex flex-wrap align-items-center gap-2">
-                                <span>Paiement de {{ payment.amount.toFixed(2) }} {{ payment.currency }} par {{ payment.method }} le {{ formatConsultationDate(payment.paidAt) }}</span>
-                                @if (canManagePayments()) {
-                                  <button type="button" class="btn btn-outline-secondary btn-sm" (click)="openConsultationPaymentEditModal(payment.id)" title="Modifier ce paiement" bsTooltip>
-                                    <i class="fa-solid fa-pen me-1"></i>Modifier
-                                  </button>
-                                  <button type="button" class="btn btn-outline-danger btn-sm" (click)="deleteConsultationPayment(payment.id)" title="Supprimer ce paiement" bsTooltip>
-                                    <i class="fa-solid fa-trash-can me-1"></i>Supprimer
-                                  </button>
-                                }
-                              </div>
-                              <div class="small text-secondary mt-1">
-                                Commentaire: {{ payment.comment || '-' }}
-                              </div>
-                              @if (isConsultationChequePaymentMethod(payment.method)) {
-                                <div class="small text-secondary mt-1">
-                                  Banque: {{ payment.bankName || '-' }} | N° chèque: {{ payment.chequeNumber || '-' }}
-                                </div>
-                              }
-                            </li>
-                          }
-                          @if (billing.paymentStatus !== 'paid' && canManagePayments()) {
-                            <li class="d-flex flex-wrap align-items-center gap-2 mt-2">
-                              <button type="button" class="btn btn-outline-info btn-sm" (click)="openConsultationPaymentCreateModal()" title="Ajouter un paiement" bsTooltip>
-                                <i class="fa-solid fa-plus me-1"></i>Ajouter un paiement
-                              </button>
-                            </li>
-                          }
-                        }
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            } @else {
-              <div class="alert alert-warning">
-                <div class="fw-semibold mb-2">Choisissez une option pour cette consultation</div>
-                <p class="mb-3">Définissez maintenant si la consultation doit être facturée ou enregistrée comme acte gratuit.</p>
-                <div class="d-flex flex-wrap gap-2">
-                  <button type="button" class="btn btn-outline-primary" (click)="prepareConsultationInvoice()" title="Préparer la facture de consultation" bsTooltip>
-                    <i class="fa-solid fa-file-invoice-dollar me-2"></i>Facturer cette consultation
-                  </button>
-                  <button type="button" class="btn btn-outline-secondary" (click)="markConsultationAsFreeAct()" title="Marquer comme acte gratuit" bsTooltip>
-                    <i class="fa-solid fa-hand-holding-heart me-2"></i>Définir comme acte gratuit
-                  </button>
-                </div>
-              </div>
-
-              @if (consultationBillingChoice() === 'free') {
-                <div class="alert alert-success mb-0">Cette consultation est marquée comme acte gratuit.</div>
-              }
-            }
-          }
-
-          @if (consultationSaveError()) {
-            <div class="alert alert-danger mt-4 mb-0">{{ consultationSaveError() }}</div>
-          }
-
-          @if (consultationPdfError()) {
-            <div class="alert alert-danger mt-3 mb-0">{{ consultationPdfError() }}</div>
-          }
-        </div>
-
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" (click)="closeConsultationModal()" title="Fermer" bsTooltip>Fermer</button>
-          <button
-            type="button"
-            class="btn btn-outline-primary"
-            [disabled]="isGeneratingConsultationPdf()"
-            (click)="generateConsultationSummaryPdf()" title="Générer le PDF de la consultation" bsTooltip>
-            @if (isGeneratingConsultationPdf()) {
-              <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-              Generation PDF...
-            } @else {
-              <i class="fa-solid fa-file-pdf me-2"></i>Compte rendu PDF
-            }
-          </button>
-          @if (consultationModalMode() === 'create') {
-            <button
-              type="button"
-              class="btn btn-outline-success"
-              [disabled]="consultationEditForm.invalid || consultationAutosaveState() === 'saving' || isSavingConsultation()"
-              (click)="saveConsultationDraftNow()" title="Enregistrer" bsTooltip>
-              @if (consultationAutosaveState() === 'saving') {
-                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-                Sauvegarde brouillon...
-              } @else {
-                <i class="fa-solid fa-floppy-disk me-2"></i>Sauvegarder le brouillon
-              }
-            </button>
-          }
-          <button type="button" class="btn btn-primary" [disabled]="isSavingConsultation() || !canCreateConsultation()" (click)="saveConsultation()" title="Enregistrer" bsTooltip>
-            @if (isSavingConsultation()) {
-              <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-            }
-            @if (consultationModalMode() === 'create') {
-              Creer la consultation
-            } @else {
-              Enregistrer la consultation
-            }
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  @if (isConsultationBillingModalOpen()) {
-    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="consultation-billing-modal-title">
-      <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-          <div class="modal-header bg-primary text-white">
-            <h3 id="consultation-billing-modal-title" class="modal-title h5 mb-0">Facturer une consultation</h3>
-            <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeConsultationBillingModal()" title="Fermer" bsTooltip></button>
-          </div>
-
-          <div class="modal-body" [formGroup]="consultationBillingForm">
-            <div class="table-responsive mb-4">
-              <table class="table table-sm align-middle mb-0">
-                <thead>
-                  <tr>
-                    <th>Prestation</th>
-                    <th>Quantité</th>
-                    <th>Montant HT</th>
-                    <th>TVA</th>
-                    <th>Montant TTC</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>
-                      <select
-                        class="form-select form-select-sm"
-                        formControlName="serviceLabel"
-                        (change)="onConsultationBillingServiceChange($any($event.target).value)">
-                        @if (consultationBillingServiceOptions().length === 0) {
-                          <option value="">Aucune prestation configurée</option>
-                        } @else {
-                          @for (service of consultationBillingServiceOptions(); track service.label) {
-                            <option [value]="service.label">{{ service.label }}</option>
-                          }
-                        }
-                      </select>
-                    </td>
-                    <td><input type="number" class="form-control form-control-sm" min="1" formControlName="quantity" /></td>
-                    <td><input type="number" class="form-control form-control-sm" min="0" step="0.01" formControlName="amountHt" /></td>
-                    <td><input type="number" class="form-control form-control-sm" min="0" step="0.01" formControlName="tvaRate" /></td>
-                    <td class="fw-semibold">{{ consultationBillingTotalTtc() }} EUR</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <h4 class="text-center fw-bold mb-4">FACTURER {{ consultationBillingTotalTtc() }} EUR</h4>
-
-            <div class="row g-3">
-              <div class="col-12 col-lg-3 fw-semibold">Sexe :</div>
-              <div class="col-12 col-lg-9 d-flex flex-wrap gap-3">
-                <label class="form-check-label"><input class="form-check-input me-1" type="radio" value="Non renseigne" formControlName="sex" />Indéterminé</label>
-                <label class="form-check-label"><input class="form-check-input me-1" type="radio" value="Femme" formControlName="sex" />Femme</label>
-                <label class="form-check-label"><input class="form-check-input me-1" type="radio" value="Homme" formControlName="sex" />Homme</label>
-              </div>
-
-              <div class="col-12 col-lg-3 fw-semibold">Nom :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="lastName" /></div>
-              <div class="col-12 col-lg-3 fw-semibold">Prénom :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="firstName" /></div>
-              <div class="col-12 col-lg-3 fw-semibold">Téléphone portable :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="mobilePhone" /></div>
-              <div class="col-12 col-lg-3 fw-semibold">Email :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="email" /></div>
-              <div class="col-12 col-lg-3 fw-semibold">Date de naissance :</div>
-              <div class="col-12 col-lg-9">
-                <app-date-picker
-                  mode="flexible"
-                  formControlName="birthDate"
-                  [maxDate]="todayNgbDate"
-                />
-              </div>
-              <div class="col-12 col-lg-3 fw-semibold">Adresse :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="address1" /></div>
-              <div class="col-12 col-lg-3 fw-semibold">Adresse (suite) :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="address2" /></div>
-              <div class="col-12 col-lg-3 fw-semibold">Code postal :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="postalCode" /></div>
-              <div class="col-12 col-lg-3 fw-semibold">Ville :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="city" /></div>
-              <div class="col-12 col-lg-3 fw-semibold">Pays :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="country" /></div>
-              <div class="col-12 col-lg-3 fw-semibold">N° de Sécurité Sociale :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="socialSecurityNumber" /></div>
-              <div class="col-12 col-lg-3 fw-semibold">Mutuelle :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="insurance" /></div>
-              <div class="col-12 col-lg-3 fw-semibold">Mentions supplémentaires :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="additionalMentions" /></div>
-              <div class="col-12 col-lg-3 fw-semibold">Intégrer la signature :</div><div class="col-12 col-lg-9"><input class="form-check-input mt-1" type="checkbox" formControlName="includeSignature" /></div>
-              <div class="col-12 col-lg-3 fw-semibold">Commentaire interne :</div><div class="col-12 col-lg-9"><input class="form-control form-control-sm" type="text" formControlName="internalComment" /></div>
-              <div class="col-12 col-lg-3 fw-semibold">Moyen de paiement :</div>
-              <div class="col-12 col-lg-9">
-                <select
-                  class="form-select form-select-sm"
-                  formControlName="paymentMethod">
-                  <option value="Paiement en attente">Paiement en attente</option>
-                  @for (method of consultationBillingPaymentMethodOptions(); track method) {
-                    <option [value]="method">{{ method }}</option>
-                  }
-                </select>
-                @if (isConsultationBillingPaymentPending()) {
-                  <div class="text-warning small mt-1">Sélectionnez un moyen de paiement pour valider la facturation.</div>
-                }
-              </div>
-            </div>
-
-            <div class="alert alert-warning mt-4 mb-0">
-              <i class="fa-solid fa-circle-exclamation me-2"></i>
-              Attention, une fois enregistrée, cette facture entrera en comptabilité. En cas d'annulation, une facture d'avoir sera générée.
-            </div>
-
-            @if (documentActionError()) {
-              <div class="alert alert-danger mt-3 mb-0">
-                <i class="fa-solid fa-triangle-exclamation me-2"></i>{{ documentActionError() }}
-              </div>
-            }
-          </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn btn-outline-secondary" [disabled]="isGeneratingConsultationInvoice()" (click)="closeConsultationBillingModal()" title="Fermer" bsTooltip>Annuler</button>
-            <button type="button" class="btn btn-success" [disabled]="isGeneratingConsultationInvoice() || !canInvoiceConsultation()" (click)="saveConsultationBillingDraft()" title="Enregistrer la facturation" bsTooltip>
-              @if (isGeneratingConsultationInvoice()) {
-                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Génération...
-              } @else {
-                <i class="fa-solid fa-check me-1"></i>Enregistrer
-              }
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="modal-backdrop fade show"></div>
-  }
-
-  @if (isPatientLetterComposeModalOpen()) {
-    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="patient-letter-compose-modal-title">
-      <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-          <div class="modal-header bg-primary text-white">
-            <h3 id="patient-letter-compose-modal-title" class="modal-title h5 mb-0">Rédiger un courier patient</h3>
-            <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closePatientLetterComposeModal()" title="Fermer" bsTooltip></button>
-          </div>
-
-          <div class="modal-body" [formGroup]="patientLetterComposeForm">
-            <div class="row g-3">
-              <div class="col-12 col-lg-4">
-                <label class="form-label" for="patient-letter-date">Date</label>
-                <app-date-picker id="patient-letter-date" mode="flexible" formControlName="date" />
-              </div>
-              <div class="col-12 col-lg-8">
-                <label class="form-label" for="patient-letter-template">Lettre type</label>
-                <select
-                  id="patient-letter-template"
-                  class="form-select"
-                  formControlName="templateIndex"
-                  (change)="onPatientLetterTemplateChange($any($event.target).value)">
-                  <option value="">Sélectionner une lettre type</option>
-                  @for (template of consultationOfficePatientLetterTemplates(); track $index) {
-                    <option [value]="$index">{{ template.title || ('Lettre type ' + ($index + 1)) }}{{ template.kind === 'payment-reminder' ? ' (Impayé)' : '' }}</option>
-                  }
-                </select>
-              </div>
-
-              <div class="col-12">
-                <label class="form-label" for="patient-letter-subject">Objet</label>
-                <input id="patient-letter-subject" type="text" class="form-control" formControlName="subject" placeholder="Objet du courrier" />
-              </div>
-
-              <div class="col-12">
-                <label class="form-label" for="patient-letter-recipient">Destinataire</label>
-                <textarea
-                  id="patient-letter-recipient"
-                  class="form-control"
-                  rows="5"
-                  formControlName="recipient"
-                  placeholder="Nom et adresse du destinataire"></textarea>
-              </div>
-
-              <div class="col-12">
-                <label class="form-label" for="patient-letter-content">Contenu</label>
-                <textarea
-                  id="patient-letter-content"
-                  class="form-control"
-                  rows="12"
-                  formControlName="content"
-                  placeholder="Rédigez le contenu du courrier"></textarea>
-              </div>
-            </div>
-
-            @if (patientLetterComposeError()) {
-              <div class="alert alert-danger mt-3 mb-0">
-                <i class="fa-solid fa-triangle-exclamation me-2"></i>{{ patientLetterComposeError() }}
-              </div>
-            }
-          </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn btn-outline-secondary" (click)="closePatientLetterComposeModal()" title="Fermer" bsTooltip>Fermer</button>
-            <button type="button" class="btn btn-success" [disabled]="isSavingPatientLetterPdf() || !canEditPatient()" (click)="savePatientLetterAsPdfDocument()" title="Enregistrer les modifications" bsTooltip>
-              @if (isSavingPatientLetterPdf()) {
-                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Enregistrement...
-              } @else {
-                <i class="fa-solid fa-file-pdf me-2"></i>Enregistrer en PDF
-              }
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="modal-backdrop fade show"></div>
-  }
-
-  @if (isConsultationPaymentModalOpen()) {
-    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="consultation-payment-modal-title">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header bg-primary text-white">
-            <h3 id="consultation-payment-modal-title" class="modal-title h5 mb-0">
-              {{ editingConsultationPaymentId() ? 'Modifier un paiement' : 'Ajouter un paiement' }}
-            </h3>
-            <button type="button" class="btn-close btn-close-white" aria-label="Fermer" (click)="closeConsultationPaymentEditModal()" title="Fermer" bsTooltip></button>
-          </div>
-
-          <div class="modal-body" [formGroup]="consultationPaymentEditForm">
-            <div class="row g-3">
-              <div class="col-12">
-                <label class="form-label">Montant</label>
-                <input type="number" min="0.01" step="0.01" inputmode="decimal" class="form-control" formControlName="amount" placeholder="Ex: 65,00" />
-              </div>
-              <div class="col-12">
-                <label class="form-label">Moyen de paiement</label>
-                <select class="form-select" formControlName="method">
-                  <option value="">Selectionner un moyen de paiement</option>
-                  @for (method of getConsultationPaymentMethodOptions(); track method) {
-                    <option [value]="method">{{ method }}</option>
-                  }
-                </select>
-                @if (getConsultationPaymentMethodOptions().length === 0) {
-                  <div class="form-text text-warning">Aucun moyen de paiement actif n'est configuré pour ce cabinet.</div>
-                }
-              </div>
-              @if (isConsultationPaymentMethodChequeSelected()) {
-                <div class="col-12 col-lg-6">
-                  <label class="form-label">Banque du chèque</label>
-                  <input type="text" class="form-control" formControlName="bankName" placeholder="Nom de la banque" />
-                </div>
-                <div class="col-12 col-lg-6">
-                  <label class="form-label">N° de chèque</label>
-                  <input type="text" class="form-control" formControlName="chequeNumber" placeholder="Numero du chèque" />
-                </div>
-              }
-              <div class="col-12">
-                <label class="form-label">Commentaire de paiement</label>
-                <textarea class="form-control" rows="2" formControlName="comment" placeholder="Commentaire (optionnel)"></textarea>
-              </div>
-              <div class="col-12">
-                <label class="form-label">Date et heure</label>
-                <app-date-picker mode="datetime" formControlName="paidAtLocal" />
-              </div>
-            </div>
-
-            @if (getConsultationPaymentValidationError()) {
-              <div class="alert alert-danger py-2 mt-3 mb-0" role="alert">
-                {{ getConsultationPaymentValidationError() }}
-              </div>
-            }
-          </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn btn-outline-secondary" [disabled]="isSavingConsultationPayment()" (click)="closeConsultationPaymentEditModal()" title="Fermer" bsTooltip>Annuler</button>
-            <button type="button" class="btn btn-primary" [disabled]="isSavingConsultationPayment() || !!getConsultationPaymentValidationError() || !canManagePayments()" (click)="saveConsultationPaymentEdit()" title="Enregistrer le paiement" bsTooltip>
-              @if (isSavingConsultationPayment()) {
-                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-              }
-              Enregistrer
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="modal-backdrop fade show"></div>
-  }
 }
+

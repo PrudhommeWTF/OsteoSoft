@@ -1,351 +1,307 @@
-<section class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3 rounded-3 border bg-body-tertiary p-3">
-  <div>
-    <h1 class="h3 mb-1"><i class="fa-solid fa-calendar-days text-primary me-2"></i>Agenda</h1>
-    <p class="text-secondary mb-0">Vue synthétique de votre journée de consultation.</p>
-  </div>
-  <div class="d-flex align-items-center gap-2 flex-wrap">
-    @if (canExportAgenda()) {
-      <button type="button" class="btn btn-outline-primary" title="Exporter les rendez-vous visibles dans l'agenda" bsTooltip (click)="openExportModal()">
-        <i class="fa-solid fa-file-export me-2"></i>Exporter
-      </button>
-    }
-
-    @if (canCreateAppointment()) {
-      <button type="button" class="btn btn-primary" title="Créer un nouveau rendez-vous" bsTooltip (click)="openCreateModal()">
-        <i class="fa-solid fa-plus me-2"></i>Nouveau rendez-vous
-      </button>
-    }
-  </div>
-</section>
-
-<section class="row g-3" aria-label="Indicateurs">
-  @for (stat of stats(); track stat.label) {
-    <article class="col-12 col-md-4">
-      <div class="card h-100">
-        <div class="card-body">
-          <p class="text-secondary text-uppercase small mb-1">{{ stat.label }}</p>
-          <p class="fs-4 fw-bold mb-0">{{ stat.value }}</p>
-        </div>
-      </div>
-    </article>
-  }
-</section>
-
-<section class="card mt-3">
-  <div class="card-body">
-    <div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-3">
-      <h2 class="h5 mb-0"><i class="fa-solid fa-calendar-week me-2 text-primary"></i>Calendrier des consultations</h2>
-
-      @if (officeOptions().length > 0) {
-        <div class="d-flex flex-column gap-1">
-          <label class="form-label small text-uppercase text-secondary mb-0" for="agenda-office-filter">Cabinet</label>
-          <select
-            id="agenda-office-filter"
-            class="form-select form-select-sm"
-            [value]="selectedOfficeId() ?? ''"
-            (change)="onSelectedOfficeChange($any($event.target).value)">
-            <option value="">Tous les cabinets</option>
-            @for (office of officeOptions(); track office.id) {
-              <option [value]="office.id">{{ office.name }}</option>
-            }
-          </select>
-        </div>
-      }
-    </div>
-
-
-    @if (agendaSettings()) {
-      <app-week-calendar
-        [events]="filteredEvents()"
-        [settings]="agendaSettings()!"
-        [selectedCalendars]="selectedCalendars()"
-        [officeOpeningHoursById]="officeOpeningHoursById()"
-        [initialView]="defaultAgendaView()"
-        (visibleEventsChange)="onVisibleEventsChange($event)"
-      ></app-week-calendar>
-    }
-  </div>
-</section>
-
-@if (isExportModalOpen()) {
-  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="export-agenda-modal-title">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 id="export-agenda-modal-title" class="modal-title h5 mb-0">Exporter l'agenda visible</h3>
-          <button type="button" class="btn-close" aria-label="Fermer" title="Fermer la fenêtre d'export" bsTooltip (click)="closeExportModal()" [disabled]="isExportingAgenda()"></button>
-        </div>
-
-        <div class="modal-body">
-          <p class="mb-3 text-secondary">
-            Choisissez le format d'export pour les rendez-vous actuellement visibles dans l'agenda.
-          </p>
-
-          @if (exportAgendaError()) {
-            <div class="alert alert-danger mb-0">{{ exportAgendaError() }}</div>
+<div class="ag-header">
+  <div class="ag-header-right">
+    @if (officeOptions().length > 1) {
+      <div class="ag-office-filter">
+        <label class="ag-filter-label" for="agenda-office-filter">Cabinet</label>
+        <select
+          id="agenda-office-filter"
+          class="ag-filter-select"
+          [value]="selectedOfficeId() ?? ''"
+          (change)="onSelectedOfficeChange($any($event.target).value)">
+          <option value="">Tous les cabinets</option>
+          @for (office of officeOptions(); track office.id) {
+            <option [value]="office.id">{{ office.name }}</option>
           }
-        </div>
+        </select>
+      </div>
+    }
+    @if (canExportAgenda()) {
+      <button type="button" class="ag-btn-outline" (click)="openExportModal()">
+        <i class="fa-solid fa-file-export" aria-hidden="true"></i>Exporter
+      </button>
+    }
+    @if (canCreateAppointment()) {
+      <button type="button" class="ag-btn-primary" (click)="openCreateModal()">
+        <i class="fa-solid fa-plus" aria-hidden="true"></i>Nouveau rendez-vous
+      </button>
+    }
+  </div>
+</div>
 
-        <div class="modal-footer gap-2">
-          <button type="button" class="btn btn-secondary" title="Annuler et fermer sans exporter" bsTooltip (click)="closeExportModal()" [disabled]="isExportingAgenda()">
-            Annuler
+@if (agendaSettings()) {
+  <app-week-calendar
+    [events]="filteredEvents()"
+    [settings]="agendaSettings()!"
+    [selectedCalendars]="selectedCalendars()"
+    [officeOpeningHoursById]="officeOpeningHoursById()"
+    [initialView]="defaultAgendaView()"
+    (visibleEventsChange)="onVisibleEventsChange($event)"
+    (freeSlotClick)="onFreeSlotClick($event)"
+    (appointmentChanged)="reloadAppointments()"
+  ></app-week-calendar>
+}
+
+<!-- Modal Export -->
+@if (isExportModalOpen()) {
+  <div class="ag-modal-backdrop" (click)="closeExportModal()" aria-hidden="true"></div>
+  <div class="ag-modal-wrap" role="dialog" aria-modal="true" aria-labelledby="export-agenda-modal-title">
+    <div class="ag-modal">
+      <div class="ag-modal-header">
+        <h3 id="export-agenda-modal-title" class="ag-modal-title">
+          <i class="fa-solid fa-file-export" aria-hidden="true"></i>Exporter l'agenda
+        </h3>
+        <button type="button" class="ag-modal-close" aria-label="Fermer" (click)="closeExportModal()" [disabled]="isExportingAgenda()">
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+      </div>
+
+      <div class="ag-modal-body">
+        <p class="ag-modal-desc">Choisissez le format d'export pour les rendez-vous actuellement visibles dans l'agenda.</p>
+        @if (exportAgendaError()) {
+          <div class="ag-modal-alert" role="alert">{{ exportAgendaError() }}</div>
+        }
+      </div>
+
+      <div class="ag-modal-footer">
+        <button type="button" class="ag-modal-btn-ghost" (click)="closeExportModal()" [disabled]="isExportingAgenda()">
+          Annuler
+        </button>
+        <div class="ag-modal-footer-actions">
+          <button type="button" class="ag-modal-btn-outline" (click)="exportAgenda('json')" [disabled]="isExportingAgenda()">
+            <i class="fa-solid fa-file-code" aria-hidden="true"></i>JSON
           </button>
-          <button type="button" class="btn btn-outline-primary" title="Télécharger l'agenda au format JSON" bsTooltip (click)="exportAgenda('json')" [disabled]="isExportingAgenda()">
-            <i class="fa-solid fa-file-code me-2"></i>JSON
-          </button>
-          <button type="button" class="btn btn-primary" title="Télécharger l'agenda au format Excel" bsTooltip (click)="exportAgenda('excel')" [disabled]="isExportingAgenda()">
-            <i class="fa-solid fa-file-excel me-2"></i>Excel
+          <button type="button" class="ag-modal-btn-primary" (click)="exportAgenda('excel')" [disabled]="isExportingAgenda()">
+            <i class="fa-solid fa-file-excel" aria-hidden="true"></i>Excel
           </button>
         </div>
       </div>
     </div>
   </div>
-
-  <div class="modal-backdrop fade show"></div>
 }
 
 <!-- Modal Créer Rendez-vous -->
 @if (isCreateModalOpen()) {
-  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="create-appointment-modal-title">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 id="create-appointment-modal-title" class="modal-title h5 mb-0">Nouveau rendez-vous</h3>
-          <button type="button" class="btn-close" aria-label="Fermer" title="Annuler la création" bsTooltip (click)="closeCreateModal()" [disabled]="isCreatingAppointment()"></button>
-        </div>
+  <div class="ag-modal-backdrop" (click)="closeCreateModal()" aria-hidden="true"></div>
+  <div class="ag-modal-wrap" role="dialog" aria-modal="true" aria-labelledby="create-appointment-modal-title">
+    <div class="ag-modal ag-modal--lg">
+      <div class="ag-modal-header">
+        <h3 id="create-appointment-modal-title" class="ag-modal-title">
+          <i class="fa-solid fa-calendar-plus" aria-hidden="true"></i>Nouveau rendez-vous
+        </h3>
+        <button type="button" class="ag-modal-close" aria-label="Fermer" (click)="closeCreateModal()" [disabled]="isCreatingAppointment()">
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+      </div>
 
-        <div class="modal-body">
-          @if (createAppointmentError()) {
-            <div class="alert alert-danger mb-3">{{ createAppointmentError() }}</div>
-          }
+      <div class="ag-modal-body ag-modal-body--scroll">
+        @if (createAppointmentError()) {
+          <div class="ag-modal-alert" role="alert">{{ createAppointmentError() }}</div>
+        }
+        @if (createAppointmentSuccess()) {
+          <div class="ag-modal-alert ag-modal-alert--ok" role="status">{{ createAppointmentSuccess() }}</div>
+        }
 
-          @if (createAppointmentSuccess()) {
-            <div class="alert alert-success mb-3">{{ createAppointmentSuccess() }}</div>
-          }
+        <form [formGroup]="createAppointmentForm" (ngSubmit)="createAppointment()" novalidate>
+          <div class="ag-form-fields">
 
-          <form [formGroup]="createAppointmentForm" (ngSubmit)="createAppointment()" novalidate>
-            <div class="mb-3">
-              <label class="form-label fw-semibold" for="create-office">Cabinet</label>
-              <select
-                id="create-office"
-                class="form-select"
-                [value]="selectedOfficeId() ?? ''"
-                [disabled]="isCreatingAppointment()"
-                (change)="onCreateOfficeChange($any($event.target).value)"
-              >
-                @for (office of officeOptions(); track office.id) {
-                  <option [value]="office.id">{{ office.name }}</option>
-                }
-              </select>
+            <!-- Cabinet + Praticien -->
+            <div class="ag-form-grid-2">
+              <div class="ag-form-field">
+                <label class="ag-form-label" for="create-office">Cabinet <span class="ag-form-required">*</span></label>
+                <select
+                  id="create-office"
+                  class="ag-form-select"
+                  [value]="selectedOfficeId() ?? ''"
+                  [disabled]="isCreatingAppointment()"
+                  (change)="onCreateOfficeChange($any($event.target).value)"
+                >
+                  @for (office of officeOptions(); track office.id) {
+                    <option [value]="office.id">{{ office.name }}</option>
+                  }
+                </select>
+              </div>
+              <div class="ag-form-field">
+                <label class="ag-form-label" for="create-practitioner">Praticien <span class="ag-form-required">*</span></label>
+                <select
+                  id="create-practitioner"
+                  class="ag-form-select"
+                  formControlName="practitioner"
+                  [disabled]="isCreatingAppointment()"
+                >
+                  <option value="">— Sélectionner —</option>
+                  @for (p of practitioners(); track p.id) {
+                    <option [value]="p.displayName || p.username">{{ p.displayName || p.username }}</option>
+                  }
+                </select>
+              </div>
             </div>
 
-            <div class="mb-3 form-check">
+            <!-- Rendez-vous privé -->
+            <div class="ag-form-check">
               <input
                 id="create-private"
-                class="form-check-input"
+                class="ag-form-check-input"
                 type="checkbox"
                 [checked]="createAppointmentForm.controls.isPrivate.value"
                 [disabled]="isCreatingAppointment()"
                 (change)="onCreatePrivateToggle($any($event.target).checked)"
               />
-              <label class="form-check-label" for="create-private">Rendez-vous privé</label>
+              <label class="ag-form-check-label" for="create-private">
+                <i class="fa-solid fa-lock" aria-hidden="true"></i>
+                <span>
+                  <strong>Rendez-vous privé</strong>
+                  <span class="ag-form-check-hint">Créneau bloqué, sans patient (congé, réunion, déjeuner…)</span>
+                </span>
+              </label>
             </div>
 
             @if (!createAppointmentForm.controls.isPrivate.value) {
-              <div class="mb-3">
-                <label class="form-label fw-semibold" for="create-patient-search">Patient</label>
-                <input
-                  id="create-patient-search"
-                  type="search"
-                  class="form-control"
-                  placeholder="Tapez nom ou prenom du patient"
-                  [value]="createPatientSearch()"
-                  [disabled]="isCreatingAppointment()"
-                  (input)="onCreatePatientSearchChange($any($event.target).value || '')"
-                />
+              <!-- Patient -->
+              <div class="ag-form-field">
+                <label class="ag-form-label">Patient</label>
+                <div class="ag-patient-toggle">
+                  <button
+                    type="button"
+                    class="ag-patient-toggle-btn"
+                    [class.ag-patient-toggle-btn--active]="createPatientMode() === 'existing'"
+                    [disabled]="isCreatingAppointment()"
+                    (click)="setCreatePatientMode('existing')"
+                  >
+                    <i class="fa-solid fa-user" aria-hidden="true"></i>Patient existant
+                  </button>
+                  <button
+                    type="button"
+                    class="ag-patient-toggle-btn"
+                    [class.ag-patient-toggle-btn--active]="createPatientMode() === 'new'"
+                    [disabled]="isCreatingAppointment()"
+                    (click)="setCreatePatientMode('new')"
+                  >
+                    <i class="fa-solid fa-user-plus" aria-hidden="true"></i>Nouveau patient
+                  </button>
+                </div>
 
-                @if (isSearchingCreatePatient()) {
-                  <div class="small text-secondary mt-1">Recherche en cours...</div>
-                } @else if (createPatientSearch().trim().length >= 2 && createPatientResults().length === 0 && !selectedCreatePatient()) {
-                  <div class="small text-secondary mt-1">Aucun patient trouve. Vous pouvez saisir un nouveau patient ci-dessous.</div>
-                }
-
-                @if (createPatientResults().length > 0) {
-                  <div class="list-group mt-2">
-                    @for (result of createPatientResults(); track result.id) {
-                      <button
-                        type="button"
-                        class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-                        title="Sélectionner ce patient pour le rendez-vous"
-                        bsTooltip
-                        (click)="selectCreatePatient(result)"
-                      >
-                        <span>{{ result.fullName }}</span>
-                        <small class="text-muted">{{ result.phone || 'Tel. non renseigne' }}</small>
-                      </button>
+                @if (createPatientMode() === 'existing') {
+                  <div class="ag-patient-search-wrap">
+                    <input
+                      type="search"
+                      class="ag-form-input"
+                      placeholder="Tapez nom ou prénom du patient"
+                      [value]="createPatientSearch()"
+                      [disabled]="isCreatingAppointment()"
+                      (input)="onCreatePatientSearchChange($any($event.target).value || '')"
+                    />
+                    @if (createPatientResults().length > 0) {
+                      <div class="ag-patient-results">
+                        @for (result of createPatientResults(); track result.id) {
+                          <button type="button" class="ag-patient-result" (click)="selectCreatePatient(result)">
+                            <span>{{ result.fullName }}</span>
+                            <span class="ag-patient-result-phone">{{ result.phone || 'Tel. non renseigné' }}</span>
+                          </button>
+                        }
+                      </div>
                     }
                   </div>
-                }
-
-                @if (selectedCreatePatient(); as selectedPatient) {
-                  <div class="form-text text-success d-flex justify-content-between align-items-center mt-1">
-                    <span>Patient sélectionné: {{ selectedPatient.fullName }}</span>
-                    <button type="button" class="btn btn-link btn-sm p-0" title="Changer le patient sélectionné" bsTooltip (click)="clearSelectedCreatePatient()">Changer</button>
+                  @if (isSearchingCreatePatient()) {
+                    <div class="ag-form-hint">Recherche en cours…</div>
+                  } @else if (createPatientSearch().trim().length >= 2 && createPatientResults().length === 0 && !selectedCreatePatient()) {
+                    <div class="ag-form-hint">Aucun patient trouvé.</div>
+                  }
+                  @if (selectedCreatePatient(); as selectedPatient) {
+                    <div class="ag-patient-selected">
+                      <span>Patient sélectionné : <strong>{{ selectedPatient.fullName }}</strong></span>
+                      <button type="button" class="ag-patient-change" (click)="clearSelectedCreatePatient()">Changer</button>
+                    </div>
+                  }
+                } @else {
+                  <div class="ag-form-grid-2">
+                    <div class="ag-form-field">
+                      <label class="ag-form-label" for="create-patient-lastname">Nom</label>
+                      <input id="create-patient-lastname" type="text" class="ag-form-input" formControlName="patientLastName" [disabled]="isCreatingAppointment()" />
+                    </div>
+                    <div class="ag-form-field">
+                      <label class="ag-form-label" for="create-patient-firstname">Prénom</label>
+                      <input id="create-patient-firstname" type="text" class="ag-form-input" formControlName="patientFirstName" [disabled]="isCreatingAppointment()" />
+                    </div>
                   </div>
                 }
               </div>
-
-              <div class="row g-2 mb-3">
-                <div class="col-12 col-md-6">
-                  <label class="form-label fw-semibold" for="create-patient-lastname">Nom</label>
-                  <input
-                    id="create-patient-lastname"
-                    type="text"
-                    class="form-control"
-                    formControlName="patientLastName"
-                    [disabled]="isCreatingAppointment()"
-                  />
-                </div>
-
-                <div class="col-12 col-md-6">
-                  <label class="form-label fw-semibold" for="create-patient-firstname">Prénom</label>
-                  <input
-                    id="create-patient-firstname"
-                    type="text"
-                    class="form-control"
-                    formControlName="patientFirstName"
-                    [disabled]="isCreatingAppointment()"
-                  />
-                </div>
-              </div>
             } @else {
-              <div class="mb-3">
-                <label class="form-label fw-semibold" for="create-private-reason">Raison du rendez-vous prive</label>
+              <div class="ag-form-field">
+                <label class="ag-form-label" for="create-private-reason">Intitulé du créneau</label>
                 <input
                   id="create-private-reason"
                   type="text"
-                  class="form-control"
+                  class="ag-form-input"
                   formControlName="privateReason"
-                  placeholder="Ex: Administration, pause, deplacement"
+                  placeholder="Ex: Administration, pause, déplacement"
                   [disabled]="isCreatingAppointment()"
                 />
               </div>
             }
 
-            <div class="mb-3">
-              <label class="form-label fw-semibold" for="create-slot-date">Date</label>
-              <input
-                id="create-slot-date"
-                type="date"
-                class="form-control"
-                [value]="selectedSlotDate()"
-                (input)="onSlotDateChange($any($event.target).value)"
-                [disabled]="isCreatingAppointment()"
-              />
+            <!-- Date + Heure + Durée -->
+            <div class="ag-form-grid-3">
+              <div class="ag-form-field">
+                <label class="ag-form-label" for="create-slot-date">Date</label>
+                <app-date-picker id="create-slot-date" mode="date" formControlName="slotDate" />
+              </div>
+              <div class="ag-form-field">
+                <label class="ag-form-label" for="create-slot-time">Heure</label>
+                <input
+                  id="create-slot-time"
+                  type="time"
+                  class="ag-form-input"
+                  step="900"
+                  [value]="selectedSlotTime()"
+                  (input)="selectTimeSlot($any($event.target).value)"
+                  [disabled]="isCreatingAppointment()"
+                />
+              </div>
+              <div class="ag-form-field">
+                <label class="ag-form-label" for="create-duration">Durée</label>
+                <select
+                  id="create-duration"
+                  class="ag-form-select"
+                  formControlName="durationMinutes"
+                  [disabled]="isCreatingAppointment()"
+                >
+                  <option value="30">30 min</option>
+                  <option value="45">45 min</option>
+                  <option value="60">1 h</option>
+                  <option value="90">1 h 30</option>
+                </select>
+              </div>
             </div>
 
-            @if (selectedSlotDate() && availableTimeSlots().length > 0) {
-              <div class="mb-3">
-                <label class="form-label fw-semibold">Heure</label>
-                <div class="os-slot-grid">
-                  @for (slot of availableTimeSlots(); track slot.time) {
-                    <button
-                      type="button"
-                      class="os-slot-btn"
-                      [class.os-slot-btn--selected]="slot.time === selectedSlotTime()"
-                      [class.os-slot-btn--occupied]="slot.occupied"
-                      [disabled]="isCreatingAppointment() || slot.occupied"
-                      (click)="selectTimeSlot(slot.time)"
-                    >
-                      {{ slot.label }}
-                    </button>
-                  }
-                </div>
-                @if (!selectedSlotTime()) {
-                  <div class="form-text text-muted">Sélectionnez un créneau</div>
-                }
-              </div>
-            }
-
-            @if (selectedSlotDate()) {
-              <div class="mb-3">
-                <button type="button" class="btn btn-link btn-sm p-0 text-muted" (click)="showManualTime.set(!showManualTime())">
-                  + Saisir une heure personnalisée
-                </button>
-                @if (showManualTime()) {
-                  <input
-                    type="time"
-                    class="form-control mt-1"
-                    step="900"
-                    [value]="selectedSlotTime()"
-                    (input)="selectTimeSlot($any($event.target).value)"
-                    [disabled]="isCreatingAppointment()"
-                  />
-                }
-              </div>
-            }
-
-            <div class="mb-3">
-              <label class="form-label fw-semibold" for="create-reason">Motif de la consultation</label>
+            <!-- Motif -->
+            <div class="ag-form-field">
+              <label class="ag-form-label" for="create-reason">Motif <span class="ag-form-optional">(facultatif)</span></label>
               <input
                 id="create-reason"
                 type="text"
-                class="form-control"
+                class="ag-form-input"
                 formControlName="reason"
-                placeholder="Ex: Suivi, bilan, traitement..."
+                placeholder="Ex: Suivi, bilan, traitement…"
                 [disabled]="isCreatingAppointment()"
               />
             </div>
 
-            <div class="mb-3">
-              <label class="form-label fw-semibold" for="create-practitioner">Praticien (facultatif)</label>
-              <input
-                id="create-practitioner"
-                type="text"
-                class="form-control"
-                list="create-practitioner-options"
-                formControlName="practitioner"
-                placeholder="Sélectionner un praticien"
-                [disabled]="isCreatingAppointment()"
-              />
-              <datalist id="create-practitioner-options">
-                @for (practitioner of practitioners(); track practitioner.id) {
-                  <option [value]="practitioner.displayName || practitioner.username"></option>
-                }
-              </datalist>
-            </div>
+          </div>
+        </form>
+      </div>
 
-            <div class="mb-3">
-              <label class="form-label fw-semibold" for="create-status">Statut</label>
-              <select
-                id="create-status"
-                class="form-select"
-                formControlName="status"
-                [disabled]="isCreatingAppointment()"
-              >
-                <option value="A confirmer">À confirmer</option>
-                <option value="En attente">En attente</option>
-                <option value="Termine">Terminé</option>
-              </select>
-            </div>
-          </form>
-        </div>
-
-        <div class="modal-footer gap-2">
-          <button type="button" class="btn btn-secondary" title="Annuler et fermer sans créer" bsTooltip (click)="closeCreateModal()" [disabled]="isCreatingAppointment()">
-            Annuler
-          </button>
-          <button type="button" class="btn btn-primary" title="Enregistrer le nouveau rendez-vous" bsTooltip (click)="createAppointment()" [disabled]="!createAppointmentForm.valid || isCreatingAppointment()">
-            @if (isCreatingAppointment()) {
-              <span>Création en cours...</span>
-            } @else {
-              <span><i class="fa-solid fa-check me-2"></i>Créer le rendez-vous</span>
-            }
-          </button>
-        </div>
+      <div class="ag-modal-footer">
+        <button type="button" class="ag-modal-btn-ghost" (click)="closeCreateModal()" [disabled]="isCreatingAppointment()">
+          Annuler
+        </button>
+        <button type="button" class="ag-modal-btn-primary" (click)="createAppointment()" [disabled]="isCreatingAppointment()">
+          @if (isCreatingAppointment()) {
+            <i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i>Création…
+          } @else {
+            <i class="fa-solid fa-check" aria-hidden="true"></i>Créer le rendez-vous
+          }
+        </button>
       </div>
     </div>
   </div>
-
-  <div class="modal-backdrop fade show"></div>
 }

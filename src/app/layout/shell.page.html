@@ -1,86 +1,84 @@
 <div class="shell" [class.shell-mobile-open]="isMenuOpen()">
+
+  <!-- ══════════════════════════════ SIDEBAR ══════════════════════════════ -->
   <aside class="sidebar" aria-label="Menu principal">
-    <div class="logo-block">
-      <a class="logo-link" routerLink="/accueil" (click)="closeMenu()" aria-label="Aller à la page d'accueil">
-        <p class="brand-lockup mb-0">
-          <span class="brand-mark">
-            <img src="/logo-osteosoft.svg" alt="Logo OsteoSoft" loading="eager" decoding="async" />
-          </span>
-          <span>
-            <span class="title">OsteoSoft</span>
-            <span class="subtitle">logiciel pour ostéopathes</span>
-          </span>
-        </p>
-      </a>
-    </div>
 
-    <div class="sidebar-office-picker">
-      <label class="sidebar-office-label" for="sidebar-office-picker">Cabinet actif</label>
-      <select
-        id="sidebar-office-picker"
-        class="form-select form-select-sm"
-        [disabled]="offices().length <= 1"
-        [value]="activeOfficeId() ?? ''"
-        (change)="onActiveOfficeChange($any($event.target).value)">
-        @if (offices().length === 0) {
-          <option value="">Aucun cabinet disponible</option>
-        } @else {
-          @for (office of offices(); track office.id) {
-            <option [value]="office.id">{{ office.name }}</option>
+    <!-- Brand -->
+    <a class="brand-link" routerLink="/accueil" (click)="closeMenu()" aria-label="Accueil OsteoSoft">
+      <span class="brand-icon" aria-hidden="true"><i class="fa-solid fa-spa"></i></span>
+      <span class="brand-text">
+        <span class="brand-name">OsteoSoft</span>
+        <span class="brand-sub">Gestion de cabinet</span>
+      </span>
+    </a>
+
+    <!-- Office picker -->
+    <div class="office-picker" [class.open]="isOfficeDropdownOpen()">
+      <button
+        type="button"
+        class="office-picker-btn"
+        [attr.aria-expanded]="isOfficeDropdownOpen()"
+        aria-haspopup="listbox"
+        (click)="toggleOfficeDropdown($event)"
+      >
+        <span class="office-picker-badge" aria-hidden="true">
+          @if (activeOfficeId() === null) { Σ } @else { {{ activeOfficeName().slice(0, 1) }} }
+        </span>
+        <span class="office-picker-text">
+          <span class="office-picker-name">{{ activeOfficeName() }}</span>
+          @if (activeOfficeSubLabel()) {
+            <span class="office-picker-sub">{{ activeOfficeSubLabel() }}</span>
           }
-        }
-      </select>
-    </div>
+        </span>
+        <i class="fa-solid fa-chevron-down office-picker-chevron" aria-hidden="true"></i>
+      </button>
 
-    <label class="sidebar-search-label" for="sidebar-search">Rechercher un patient</label>
-    <div class="sidebar-search-area">
-      <input
-          id="sidebar-search"
-          class="form-control"
-          type="search"
-          placeholder="Rechercher un patient"
-          [value]="sidebarSearch()"
-          (input)="onSidebarSearchChange($any($event.target).value)"
-          (blur)="clearSidebarSearchResults()" />
-
-      @if (isSearchingSidebarPatients()) {
-        <div class="sidebar-search-status" aria-live="polite">
-          <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-          Recherche en cours...
-        </div>
-      } @else if (sidebarSearch().trim().length >= 2 && sidebarSearchResults().length === 0) {
-        <p class="sidebar-search-status" aria-live="polite">Aucun patient correspondant.</p>
-      }
-
-      @if (sidebarSearchResults().length > 0) {
-        <div class="sidebar-search-results" role="listbox" aria-label="Suggestions de patients">
-          @for (patient of sidebarSearchResults(); track patient.id) {
+      @if (isOfficeDropdownOpen()) {
+        <div class="office-dropdown" role="listbox" aria-label="Sélectionner un cabinet">
+          <button
+            type="button"
+            class="office-option"
+            [class.active]="activeOfficeId() === null"
+            role="option"
+            [attr.aria-selected]="activeOfficeId() === null"
+            (click)="selectOffice(null, $event)"
+          >
+            <span class="office-option-icon">Σ</span>
+            <span class="office-option-label">
+              <span>Tous mes cabinets</span>
+              <span class="office-option-sub">{{ offices().length }} cabinets</span>
+            </span>
+            @if (activeOfficeId() === null) {
+              <i class="fa-solid fa-check office-option-check" aria-hidden="true"></i>
+            }
+          </button>
+          @for (office of offices(); track office.id) {
             <button
               type="button"
-              class="patient-suggestion"
-              title="Ouvrir la fiche de ce patient"
-              bsTooltip
-              (mousedown)="$event.preventDefault()"
-              (click)="openPatientFromSidebar(patient.id)">
-              <span class="patient-suggestion-icon" [class]="getSidebarPatientSexClass(patient.sex)">
-                <i [class]="getSidebarPatientSexIcon(patient.sex)"></i>
+              class="office-option"
+              [class.active]="activeOfficeId() === office.id"
+              role="option"
+              [attr.aria-selected]="activeOfficeId() === office.id"
+              (click)="selectOffice(office.id, $event)"
+            >
+              <span class="office-option-icon">{{ office.name.slice(0, 1) }}</span>
+              <span class="office-option-label">
+                <span>{{ office.name }}</span>
               </span>
-              <span class="patient-suggestion-content">
-                <span class="patient-suggestion-name">{{ formatSidebarPatientName(patient.fullName) }}</span>
-                <span class="patient-suggestion-meta">
-                  <span>{{ formatSidebarPatientConsultationCount(patient.consultationCount) }}</span>
-                  <span>{{ formatSidebarPatientAge(patient.age) }}</span>
-                </span>
-              </span>
+              @if (activeOfficeId() === office.id) {
+                <i class="fa-solid fa-check office-option-check" aria-hidden="true"></i>
+              }
             </button>
           }
         </div>
       }
     </div>
 
-    <nav class="main-nav">
-      @for (item of visibleNavItems(); track item.label) {
-        @if (item.path) {
+    <!-- Navigation -->
+    <nav class="main-nav" aria-label="Navigation principale">
+      @if (pilotageNavItems().length) {
+        <p class="nav-group-label">Pilotage</p>
+        @for (item of pilotageNavItems(); track item.label) {
           <a
             [routerLink]="item.path"
             routerLinkActive="active"
@@ -90,116 +88,153 @@
             <span class="nav-icon" aria-hidden="true"><i [class]="item.icon + ' fa-fw'"></i></span>
             <span class="nav-label">{{ item.label }}</span>
             @if (item.badge) {
-              <span class="badge rounded-pill text-bg-secondary ms-auto">{{ item.badge }}</span>
+              <span class="nav-badge">{{ item.badge }}</span>
             }
           </a>
-        } @else {
-          <button type="button" class="nav-button" title="Fonctionnalité non disponible" bsTooltip disabled>
+        }
+      }
+
+      @if (cabinetNavItems().length) {
+        <p class="nav-group-label">Cabinet</p>
+        @for (item of cabinetNavItems(); track item.label) {
+          <a
+            [routerLink]="item.path"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
+            (click)="closeMenu()"
+          >
             <span class="nav-icon" aria-hidden="true"><i [class]="item.icon + ' fa-fw'"></i></span>
             <span class="nav-label">{{ item.label }}</span>
-            @if (item.badge) {
-              <span class="badge rounded-pill text-bg-secondary ms-auto">{{ item.badge }}</span>
-            }
-          </button>
+          </a>
         }
       }
     </nav>
 
+    <!-- Footer: user identity + logout -->
     <div class="sidebar-footer">
-      <section class="account-block" aria-label="Compte utilisateur">
-        <p class="account-caption">Connecté(e) en tant que <span class="account-name">{{ username() || 'admin' }}</span></p>
-      </section>
-
-      <nav class="utility-nav" aria-label="Actions secondaires">
-        <div class="utility-profile-row">
-          <button type="button" class="utility-button" title="Modifier mon profil et mes préférences" bsTooltip (click)="navigateToProfile($event)">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-user-pen fa-fw"></i></span>
-            <span>Editer mon profil</span>
-          </button>
-
-          <button
-            type="button"
-            class="theme-toggle"
-            role="switch"
-            [class.is-on]="quickThemeToggleChecked()"
-            [attr.aria-checked]="quickThemeToggleChecked()"
-            [attr.aria-label]="quickThemeAriaLabel()"
-            title="Basculer entre mode clair et sombre"
-            bsTooltip
-            (click)="toggleQuickTheme()"
-          >
-            <span class="theme-toggle-track">
-              <span class="theme-toggle-thumb">
-                <i [class]="quickThemeToggleChecked() ? 'fa-solid fa-moon' : 'fa-solid fa-sun'"></i>
-              </span>
-            </span>
-          </button>
-        </div>
-
-        @for (item of utilityItems(); track item.label) {
-          @if (item.label !== 'Editer mon profil' && item.path) {
-            <a class="utility-button" [routerLink]="item.path" (click)="closeMenu()">
-              <span class="nav-icon" aria-hidden="true"><i [class]="item.icon + ' fa-fw'"></i></span>
-              <span>{{ item.label }}</span>
-            </a>
-          } @else if (item.label !== 'Editer mon profil') {
-            <button type="button" class="utility-button" title="Fonctionnalité non disponible" bsTooltip disabled>
-              <span class="nav-icon" aria-hidden="true"><i [class]="item.icon + ' fa-fw'"></i></span>
-              <span>{{ item.label }}</span>
-            </button>
-          }
-        }
-
-        <button type="button" class="utility-button logout-link" title="Se déconnecter de l'application" bsTooltip (click)="logout()">
-          <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-right-from-bracket fa-fw"></i></span>
-          <span>Déconnexion</span>
-        </button>
-      </nav>
-
-      <p class="sidebar-license">
-        © {{ configService.getAppName() }} v{{ configService.getVersion() }}
+      <div class="user-block">
+        <span class="user-avatar" aria-hidden="true">{{ initials() }}</span>
+        <span class="user-info">
+          <span class="user-name">{{ profileLabel() || username() }}</span>
+          <span class="user-role">{{ role() === 'admin' ? 'Administrateur·rice' : 'Praticien·ne' }}</span>
+        </span>
+        <a
+          routerLink="/aide"
+          class="logout-btn"
+          title="Aide & documentation"
+          bsTooltip
+          (click)="closeMenu()"
+          aria-label="Aide et documentation"
+        >
+          <i class="fa-solid fa-circle-question" aria-hidden="true"></i>
+        </a>
         <button
           type="button"
-          class="credits-inline-btn"
-          aria-label="Afficher les nouveautés"
-          title="Afficher les nouveautés"
+          class="logout-btn"
+          title="Se déconnecter"
           bsTooltip
-          (click)="openChangelogModal()"
+          (click)="logout()"
+          aria-label="Se déconnecter"
         >
-          <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-scroll fa-fw"></i></span>
+          <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>
         </button>
-        <button
-          type="button"
-          class="credits-inline-btn"
-          aria-label="Afficher les crédits"
-          title="Afficher les crédits et les dépendances"
-          bsTooltip
-          (click)="openCreditsModal()"
-        >
-          <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-circle-info fa-fw"></i></span>
+      </div>
+
+      <p class="sidebar-meta">
+        v{{ configService.getVersion() }}
+        <button type="button" class="meta-btn" title="Nouveautés" bsTooltip (click)="openChangelogModal()">
+          <i class="fa-solid fa-scroll fa-fw"></i>
+        </button>
+        <button type="button" class="meta-btn" title="Crédits" bsTooltip (click)="openCreditsModal()">
+          <i class="fa-solid fa-circle-info fa-fw"></i>
         </button>
       </p>
     </div>
   </aside>
 
+  <!-- ══════════════════════════════ CONTENT ZONE ══════════════════════════════ -->
   <div class="content-zone">
-    <header class="topbar border-bottom bg-body-tertiary shadow-sm">
+
+    <!-- TOPBAR -->
+    <header class="topbar" role="banner">
+      <!-- Mobile menu toggle -->
       <button
         type="button"
-        class="menu-btn btn btn-outline-secondary btn-sm"        title="Ouvrir ou fermer le menu de navigation"
-        bsTooltip        (click)="toggleMenu()"
+        class="menu-btn"
+        (click)="toggleMenu()"
         [attr.aria-expanded]="isMenuOpen()"
-        aria-label="Ouvrir le menu"
+        aria-label="Ouvrir le menu de navigation"
       >
-        <i class="fa-solid fa-bars"></i>
+        <i class="fa-solid fa-bars" aria-hidden="true"></i>
       </button>
 
-      @if (topbar.actions().length) {
-        <div class="topbar-actions">
+      <!-- Page title + subtitle -->
+      <div class="topbar-title">
+        <h1 class="page-title">{{ topbar.pageTitle() || currentPageTitle() }}</h1>
+        <p class="page-subtitle">{{ topbarSubtitle() }}</p>
+      </div>
+
+      <!-- Search -->
+      <div class="topbar-search-wrap">
+        <i class="fa-solid fa-magnifying-glass topbar-search-icon" aria-hidden="true"></i>
+        <input
+          type="search"
+          class="topbar-search-input"
+          placeholder="Rechercher un patient…"
+          [value]="topbarSearch()"
+          (input)="onTopbarSearchChange($any($event.target).value)"
+          (blur)="clearSearchResults()"
+          aria-label="Rechercher un patient"
+        />
+        @if (topbarSearchResults().length > 0) {
+          <div class="search-results" role="listbox" aria-label="Suggestions patients">
+            @for (patient of topbarSearchResults(); track patient.id) {
+              <button
+                type="button"
+                class="search-result-item"
+                (mousedown)="$event.preventDefault()"
+                (click)="openPatientFromSearch(patient.id)"
+              >
+                <span class="search-result-avatar">{{ getPatientInitials(patient.fullName) }}</span>
+                <span class="search-result-name">{{ formatPatientName(patient.fullName) }}</span>
+                <span class="search-result-meta">{{ patient.age !== null ? patient.age + ' ans' : '' }}</span>
+              </button>
+            }
+          </div>
+        }
+      </div>
+
+      <!-- Right actions -->
+      <div class="topbar-actions">
+        <!-- Theme toggle -->
+        <button
+          type="button"
+          class="topbar-icon-btn"
+          (click)="toggleQuickTheme()"
+          [title]="isDark() ? 'Passer en mode clair' : 'Passer en mode sombre'"
+          bsTooltip
+          aria-label="Basculer thème clair/sombre"
+        >
+          <i [class]="isDark() ? 'fa-solid fa-sun' : 'fa-solid fa-moon'" aria-hidden="true"></i>
+        </button>
+
+        <!-- Notifications placeholder -->
+        <button
+          type="button"
+          class="topbar-icon-btn notif-btn"
+          title="Notifications"
+          bsTooltip
+          aria-label="Notifications"
+        >
+          <i class="fa-solid fa-bell" aria-hidden="true"></i>
+        </button>
+
+        <!-- Topbar page-specific actions (registered by child pages) -->
+        @if (topbar.actions().length) {
           @for (action of topbar.actions(); track action.id) {
             <button
               type="button"
-              [class]="'btn btn-sm ' + action.btnClass"
+              [class]="'topbar-action-btn ' + action.btnClass"
               [title]="action.label"
               bsTooltip
               [disabled]="action.disabled?.()"
@@ -209,80 +244,56 @@
                 <span class="spinner-border spinner-border-sm me-1" role="status"></span>
                 {{ action.loadingLabel ?? action.label }}
               } @else {
-                @if (action.icon) { <i [class]="'fa-solid ' + action.icon + ' me-1'"></i> }
+                @if (action.icon) { <i [class]="'fa-solid ' + action.icon" aria-hidden="true"></i> }
                 {{ action.label }}
               }
             </button>
           }
-        </div>
-      }
+        }
 
-      <div class="topbar-datetime" aria-live="polite">
-        <p class="date">{{ currentDateTime() }}</p>
+        <button
+          type="button"
+          class="topbar-btn-outline"
+          title="Créer un nouveau dossier patient"
+          bsTooltip
+          (click)="navigateToNewPatient()"
+        >
+          <i class="fa-solid fa-user-plus" aria-hidden="true"></i>
+          Nouveau patient
+        </button>
+
+        @if (!currentUrl().startsWith('/agenda')) {
+          <button
+            type="button"
+            class="topbar-btn-primary"
+            title="Planifier un nouveau rendez-vous"
+            bsTooltip
+            (click)="navigateToNewAppointment()"
+          >
+            <i class="fa-solid fa-plus" aria-hidden="true"></i>
+            Nouveau RDV
+          </button>
+        }
       </div>
     </header>
 
-    <main class="page-content container-fluid py-3 px-3 px-lg-4">
-      <router-outlet />
+    <!-- Scrollable page content -->
+    <main class="page-content">
+      <div class="page-inner">
+        <router-outlet />
+      </div>
     </main>
   </div>
 </div>
 
-@if (isCreditsModalOpen()) {
-  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="credits-modal-title">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 id="credits-modal-title" class="modal-title h5 mb-0">Credits et dependances</h3>
-          <button type="button" class="btn-close" aria-label="Fermer" title="Fermer" bsTooltip (click)="closeCreditsModal()"></button>
-        </div>
-        <div class="modal-body">
-          <p class="text-secondary mb-3">Liste des dependances utilisees par l'application.</p>
-          <div class="table-responsive">
-            <table class="table table-sm align-middle mb-0">
-              <thead>
-                <tr>
-                  <th>Dependance</th>
-                  <th>Version</th>
-                  <th>Type</th>
-                  <th>Site web</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (dep of dependencyCredits(); track dep.name) {
-                  <tr>
-                    <td class="fw-semibold">{{ dep.name }}</td>
-                    <td>{{ dep.version }}</td>
-                    <td>
-                      <span class="badge" [class]="dep.scope === 'runtime' ? 'text-bg-primary' : 'text-bg-secondary'">
-                        {{ dep.scope === 'runtime' ? 'runtime' : 'dev' }}
-                      </span>
-                    </td>
-                    <td>
-                      <a [href]="dep.website" target="_blank" rel="noopener noreferrer">{{ dep.website }}</a>
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" title="Fermer" bsTooltip (click)="closeCreditsModal()">Fermer</button>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="modal-backdrop fade show"></div>
-}
-
+<!-- ══════════════════════════ MODALS ══════════════════════════ -->
 @if (isChangelogModalOpen()) {
   <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="changelog-modal-title">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">
           <h3 id="changelog-modal-title" class="modal-title h5 mb-0">Nouveautés</h3>
-          <button type="button" class="btn-close" aria-label="Fermer" title="Fermer" bsTooltip (click)="closeChangelogModal()"></button>
+          <button type="button" class="btn-close" aria-label="Fermer" (click)="closeChangelogModal()"></button>
         </div>
         <div class="modal-body">
           @if (changelogEntries().length === 0) {
@@ -292,31 +303,43 @@
               <div class="mb-4">
                 <h4 class="h6 fw-bold mb-1">
                   v{{ entry.version }}
-                  @if (entry.date) {
-                    <span class="text-secondary fw-normal ms-2">{{ entry.date }}</span>
-                  }
-                  @if (first) {
-                    <span class="badge text-bg-success ms-2">Version actuelle</span>
-                  }
+                  @if (entry.date) { <span class="text-secondary fw-normal ms-2">{{ entry.date }}</span> }
+                  @if (first) { <span class="badge text-bg-success ms-2">Version actuelle</span> }
                 </h4>
-                @if (entry.sections.length === 0) {
-                  <p class="text-secondary small mb-0">Aucun détail disponible.</p>
-                } @else {
-                  @for (section of entry.sections; track section.label) {
-                    <h5 class="fw-semibold small mb-1 mt-2">{{ section.label }}</h5>
-                    <ul class="mb-0 ps-3">
-                      @for (item of section.items; track item) {
-                        <li class="small">{{ item }}</li>
-                      }
-                    </ul>
-                  }
+                @for (section of entry.sections; track section.label) {
+                  <h5 class="fw-semibold small mb-1 mt-2">{{ section.label }}</h5>
+                  <ul class="mb-0 ps-3">
+                    @for (item of section.items; track item) {
+                      <li class="small">{{ item }}</li>
+                    }
+                  </ul>
                 }
               </div>
             }
           }
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" title="Fermer" bsTooltip (click)="closeChangelogModal()">Fermer</button>
+          <button type="button" class="btn btn-secondary" (click)="closeChangelogModal()">Fermer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop fade show"></div>
+}
+
+@if (isCreditsModalOpen()) {
+  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="credits-modal-title">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="credits-modal-title" class="modal-title h5 mb-0">Crédits et dépendances</h3>
+          <button type="button" class="btn-close" aria-label="Fermer" (click)="closeCreditsModal()"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-secondary mb-2">{{ configService.getAppName() }} v{{ configService.getVersion() }}</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="closeCreditsModal()">Fermer</button>
         </div>
       </div>
     </div>

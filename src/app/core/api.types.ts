@@ -48,6 +48,8 @@ export type AccessManagedUser = {
   colorHex: string;
   bankName: string;
   iban: string;
+  retrocessionPercent: number;
+  retrocessionRecipient: string;
   defaultAgendaView: string;
   defaultYearsForStatistics: number;
   invoiceMentions: string;
@@ -111,7 +113,11 @@ export type Practitioner = {
   id: number;
   username: string;
   displayName?: string;
+  firstName?: string;
+  lastName?: string;
   role: string;
+  cabinetName?: string;
+  retrocessionPercent?: number;
 };
 
 export type ConsultationReasonItem = {
@@ -160,6 +166,7 @@ export type CreateAppointmentPayload = {
   isPrivate?: boolean;
   privateReason?: string;
   practitioner?: string;
+  durationMinutes?: number;
   startsAt: string;
   reason: string;
   status: 'A confirmer' | 'En attente' | 'Termine';
@@ -168,11 +175,22 @@ export type CreateAppointmentPayload = {
   officeId?: number | null;
 };
 
+export type RescheduleAppointmentPayload = {
+  startsAt: string;
+  note?: string;
+};
+
+export type CancelAppointmentPayload = {
+  reason: string;
+  notify: boolean;
+};
+
 export type Patient = {
   id: number;
   fullName: string;
   phone: string;
   lastVisit: string;
+  nextAppointment?: string;
   sex: 'Non renseigne' | 'Femme' | 'Homme';
   age: number | null;
   city: string;
@@ -1230,6 +1248,7 @@ export type WebosteoImportResult = {
   importedInvoices: number;
   importedContacts: number;
   importedDeposits: number;
+  importedDocuments: number;
   updatedRelatedPeople: number;
   errors: Array<{ entity: string; message: string }>;
   tempPasswords: Record<string, string>;

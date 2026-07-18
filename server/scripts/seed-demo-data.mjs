@@ -35,43 +35,69 @@ function isoDate(daysFromNow, hour = 10, minute = 0) {
   return d.toISOString();
 }
 
+// Short motif labels used for reasonItems tags and appointment reasons
 const MOTIFS = [
-  'Suivi lombalgie chronique',
-  'Cervicalgie aigue - premier bilan',
-  'Douleur epaule droite post-sport',
-  'Cephalees de tension recurrentes',
-  'Suivi post-natal J45',
-  'Tendinite rotulienne',
-  'Douleur sacro-iliaque',
-  'Consultation bilan global',
-  'Dorso-lombalgie - suivi',
-  'Sciatique L5-S1',
-  'Douleur poignet droit',
-  'Torticolis aigu',
-];
-
-const TITRES_CONSULTATION = [
-  'Premiere consultation',
-  'Consultation de suivi',
-  'Bilan osteopathique complet',
-  'Seance de traitement',
-  'Consultation urgente',
-  'Suivi trimestriel',
-  'Controle postural',
+  'Lombalgie chronique', 'Cervicalgie aigue', 'Douleur epaule droite post-sport',
+  'Cephalees de tension', 'Suivi post-natal', 'Tendinite rotulienne',
+  'Douleur sacro-iliaque', 'Bilan global prevention', 'Dorso-lombalgie bureau',
+  'Sciatique L5-S1', 'TMS poignet droit', 'Torticolis aigu',
+  'Post-entorse cheville', 'Troubles digestifs fonctionnels', 'Preparation accouchement',
 ];
 
 const PRATICIENS = ['Dr. Claire Martin', 'Dr. Antoine Rousseau', 'Admin'];
 
+// Valid osteopath time slots (1 hour per session, pause dejeuner 12h-14h)
+// Morning: 8h30, 9h30, 10h30, 11h30 | Afternoon: 14h00, 15h00, 16h00, 17h00
+const OSTEO_SLOTS = [
+  { hour: 8, min: 30 }, { hour: 9, min: 30 }, { hour: 10, min: 30 }, { hour: 11, min: 30 },
+  { hour: 14, min: 0 }, { hour: 15, min: 0 }, { hour: 16, min: 0 }, { hour: 17, min: 0 },
+];
+
 // Multiple consultations per patient spread over past years
+// Hours snap to realistic osteopath slots
 const CONSULTATION_TEMPLATES = [
-  { daysAgo: 730, hour: 9, min: 0, title: 'Premier bilan osteopathique' },
-  { daysAgo: 490, hour: 11, min: 0, title: 'Suivi semestriel' },
-  { daysAgo: 330, hour: 14, min: 30, title: 'Controle postural' },
-  { daysAgo: 180, hour: 10, min: 0, title: 'Consultation douleur aigue' },
+  { daysAgo: 730, hour: 9, min: 30, title: 'Premier bilan osteopathique' },
+  { daysAgo: 490, hour: 10, min: 30, title: 'Suivi semestriel' },
+  { daysAgo: 330, hour: 14, min: 0, title: 'Controle postural' },
+  { daysAgo: 180, hour: 9, min: 30, title: 'Consultation douleur aigue' },
   { daysAgo: 90, hour: 15, min: 0, title: 'Bilan osteopathique annuel' },
-  { daysAgo: 30, hour: 9, min: 30, title: 'Suivi trimestriel' },
+  { daysAgo: 30, hour: 8, min: 30, title: 'Suivi trimestriel' },
   { daysAgo: 7, hour: 11, min: 30, title: 'Consultation de suivi recente' },
 ];
+
+// Rich clinical content by consultation title keyword
+const CLINICAL_CONTENT = {
+  'Premier bilan': {
+    tests: '<p>Bilan postural global en statique et en dynamique. Tests de mobilite rachidienne (flexion, extension, inclinaisons). Palpation des zones de tension primaires. Test de Lasegue negatif. Test de Romberg negatif.</p>',
+    treatments: '<p>Traitement osteopathique global. Techniques structurelles sur le rachis lombaire. Normalisation articulaire des sacro-iliaques. Travail fascial sur le diaphragme et les fascias thoraco-lombaires.</p>',
+    remarks: '<p>Revoir dans 6 semaines pour premier controle. Conseils posturaux au bureau remis. Exercices d\'auto-mobilisation prescrits : 5 minutes matin et soir.</p>'
+  },
+  'Suivi': {
+    tests: '<p>Reevaluation des mobilites rachidiennes. Comparaison avec bilan initial. Palpation des zones traitees. Evaluation de la douleur : EVA avant/apres seance.</p>',
+    treatments: '<p>Techniques de normalisation articulaire cervicale. Techniques myofasciales sur les chaines posterieures. Travail sur les fascias costaux et diaphragmatiques. Mobilisation douce des sacro-iliaques.</p>',
+    remarks: '<p>Bonne evolution clinique. Douleurs en nette regression. Revoir dans 2 mois. Maintien des exercices prescrits.</p>'
+  },
+  'Controle': {
+    tests: '<p>Reprise du bilan postural comparatif. Tests de mobilite segmentaire en charge. Evaluation de la symetrie pelvienne. Analyse des appuis plantaires.</p>',
+    treatments: '<p>Techniques de regulation tensegritive globale. Ajustements articulaires mineurs. Travail global sur les fascias thoraco-lombaires et cervicaux.</p>',
+    remarks: '<p>Progression satisfaisante. Maintien des acquis. Pas de recidive majeure. Prochain controle dans 6 mois.</p>'
+  },
+  'Bilan': {
+    tests: '<p>Evaluation posturale globale (plan frontal et sagittal). Tests de mobilite par etages rachidiens. Analyse de la marche. Palpation du systeme cranio-sacre.</p>',
+    treatments: '<p>Traitement osteopathique preventif. Harmonisation du systeme cranio-sacre. Liberation des restrictions fasciales mineures. Conseils ergonomiques et posturaux remis.</p>',
+    remarks: '<p>Etat general satisfaisant. Prevention efficace. Revoir dans 6 mois pour controle annuel.</p>'
+  },
+  'douleur aigue': {
+    tests: '<p>Evaluation de la douleur (EVA). Examen neurologique peripherique : non deficitaire. Palpation des structures en tension. Tests de provocation specifiques.</p>',
+    treatments: '<p>Techniques douces en phase aigue. Methodes inhibitrices sur les muscles paravertebraux. Normalisation articulaire douce en fin d\'amplitude disponible. Glace recommandee 15 min toutes les 2h.</p>',
+    remarks: '<p>Conseils de repos relatif 24-48h. Revoir dans 5 a 7 jours pour controle. Si aggravation ou apparition de signes neurologiques : consultation medicale urgente.</p>'
+  },
+};
+
+function getClinicalContent(title) {
+  const key = Object.keys(CLINICAL_CONTENT).find((k) => title.toLowerCase().includes(k.toLowerCase())) ?? 'Suivi';
+  return CLINICAL_CONTENT[key];
+}
 
 async function main() {
   console.log('[seed:demo] Connexion...');
@@ -97,25 +123,27 @@ async function main() {
   let invoiceCount = 0;
 
   // --- RENDEZ-VOUS : semaine passee + semaine en cours + semaine suivante ---
+  // Tous les creneaux respectent le rythme reel d'un cabinet d'osteopathie :
+  // seances de 1h, matin 8h30/9h30/10h30/11h30, apres-midi 14h/15h/16h/17h, pas de RDV pendant la pause dejeuner.
   const apptSlots = [
-    // passes (statut Termine)
-    { days: -7, hour: 9, min: 0 }, { days: -7, hour: 10, min: 0 }, { days: -7, hour: 11, min: 0 },
-    { days: -6, hour: 9, min: 0 }, { days: -6, hour: 14, min: 0 }, { days: -6, hour: 15, min: 0 },
-    { days: -5, hour: 9, min: 30 }, { days: -5, hour: 11, min: 0 }, { days: -5, hour: 16, min: 0 },
-    { days: -4, hour: 8, min: 0 }, { days: -4, hour: 10, min: 0 }, { days: -4, hour: 14, min: 30 },
-    { days: -3, hour: 9, min: 0 }, { days: -3, hour: 10, min: 30 }, { days: -3, hour: 15, min: 0 },
-    { days: -2, hour: 9, min: 0 }, { days: -2, hour: 11, min: 0 }, { days: -2, hour: 14, min: 0 },
-    { days: -1, hour: 9, min: 0 }, { days: -1, hour: 10, min: 0 }, { days: -1, hour: 11, min: 30 },
+    // passes (statut Termine) — 3-5 patients par jour, avec pause dejeuner
+    { days: -7, hour: 9, min: 30 }, { days: -7, hour: 10, min: 30 }, { days: -7, hour: 14, min: 0 },
+    { days: -6, hour: 8, min: 30 }, { days: -6, hour: 10, min: 30 }, { days: -6, hour: 14, min: 0 }, { days: -6, hour: 15, min: 0 },
+    { days: -5, hour: 9, min: 30 }, { days: -5, hour: 11, min: 30 }, { days: -5, hour: 15, min: 0 }, { days: -5, hour: 16, min: 0 },
+    { days: -4, hour: 8, min: 30 }, { days: -4, hour: 9, min: 30 }, { days: -4, hour: 14, min: 0 },
+    { days: -3, hour: 9, min: 30 }, { days: -3, hour: 10, min: 30 }, { days: -3, hour: 11, min: 30 }, { days: -3, hour: 15, min: 0 },
+    { days: -2, hour: 8, min: 30 }, { days: -2, hour: 10, min: 30 }, { days: -2, hour: 14, min: 0 }, { days: -2, hour: 16, min: 0 },
+    { days: -1, hour: 9, min: 30 }, { days: -1, hour: 10, min: 30 }, { days: -1, hour: 11, min: 30 },
     // aujourd'hui
-    { days: 0, hour: 9, min: 0 }, { days: 0, hour: 10, min: 0 }, { days: 0, hour: 11, min: 0 },
+    { days: 0, hour: 8, min: 30 }, { days: 0, hour: 9, min: 30 }, { days: 0, hour: 10, min: 30 },
     { days: 0, hour: 14, min: 0 }, { days: 0, hour: 15, min: 0 },
-    // a venir
-    { days: 1, hour: 9, min: 0 }, { days: 1, hour: 10, min: 30 }, { days: 1, hour: 14, min: 0 },
-    { days: 2, hour: 9, min: 0 }, { days: 2, hour: 10, min: 0 }, { days: 2, hour: 11, min: 0 },
-    { days: 3, hour: 9, min: 30 }, { days: 3, hour: 14, min: 0 }, { days: 3, hour: 15, min: 30 },
-    { days: 4, hour: 9, min: 0 }, { days: 4, hour: 10, min: 0 },
-    { days: 7, hour: 9, min: 0 }, { days: 7, hour: 10, min: 0 }, { days: 7, hour: 14, min: 0 },
-    { days: 8, hour: 9, min: 30 }, { days: 8, hour: 11, min: 0 },
+    // a venir (semaine + 1 et + 2)
+    { days: 1, hour: 9, min: 30 }, { days: 1, hour: 11, min: 30 }, { days: 1, hour: 14, min: 0 }, { days: 1, hour: 15, min: 0 },
+    { days: 2, hour: 8, min: 30 }, { days: 2, hour: 10, min: 30 }, { days: 2, hour: 11, min: 30 },
+    { days: 3, hour: 9, min: 30 }, { days: 3, hour: 14, min: 0 }, { days: 3, hour: 16, min: 0 },
+    { days: 4, hour: 8, min: 30 }, { days: 4, hour: 9, min: 30 }, { days: 4, hour: 14, min: 0 },
+    { days: 7, hour: 9, min: 30 }, { days: 7, hour: 10, min: 30 }, { days: 7, hour: 14, min: 0 }, { days: 7, hour: 15, min: 0 },
+    { days: 8, hour: 8, min: 30 }, { days: 8, hour: 11, min: 30 }, { days: 8, hour: 16, min: 0 },
   ];
 
   for (let i = 0; i < apptSlots.length; i++) {
@@ -180,23 +208,26 @@ async function main() {
       const tmpl = patientTemplates[tIdx];
       const daysAgo = -(tmpl.daysAgo + (i * 2)); // small offset per patient to avoid duplicate dates
 
+      const clinical = getClinicalContent(tmpl.title);
+      const motifLabel = MOTIFS[(i + tIdx) % MOTIFS.length];
+      const profiles = ['Adulte', 'Adulte', 'Adulte', 'Senior', 'Sportif', 'Perinatalite', 'Enfant'];
       const cRes = await apiRequest('POST', `/api/patients/${patient.id}/consultations`, {
         startedAt: isoDate(daysAgo, tmpl.hour, tmpl.min),
         officeId,
         practitioner: praticien,
         title: tmpl.title,
         important: tIdx === 0 && i % 4 === 0,
-        heightCm: 165 + (i % 20),
-        weightKg: 60 + (i % 30),
-        evaBefore: 1 + ((i + tIdx) % 7),
-        evaAfter: Math.max(0, ((i + tIdx) % 7) - 2),
-        profile: i % 5 === 0 ? 'Pediatrique' : 'Adulte',
-        reasonItems: [{ label: MOTIFS[(i + tIdx) % MOTIFS.length], type: 'fonctionnel' }],
-        motifMainHtml: `<p>${MOTIFS[(i + tIdx) % MOTIFS.length]}</p>`,
-        testsHtml: '<p>Tests osteopathiques realises.</p>',
+        heightCm: 158 + (i % 30),
+        weightKg: 52 + (i % 38),
+        evaBefore: 2 + ((i + tIdx) % 6),
+        evaAfter: Math.max(0, ((i + tIdx) % 6) - 2),
+        profile: profiles[i % profiles.length],
+        reasonItems: [{ label: motifLabel, type: 'fonctionnel' }],
+        motifMainHtml: `<p>${motifLabel}. ${clinical.tests.replace(/<[^>]+>/g, ' ').trim().split('.')[0]}.</p>`,
+        testsHtml: clinical.tests,
         schemaHtml: '',
-        treatmentsHtml: '<p>Traitement osteopathique global.</p>',
-        remarksHtml: '<p>Revoir dans 3 semaines.</p>',
+        treatmentsHtml: clinical.treatments,
+        remarksHtml: clinical.remarks,
         consultationDocuments: [],
       }, cookie);
 

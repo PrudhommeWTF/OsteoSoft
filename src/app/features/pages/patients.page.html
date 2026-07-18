@@ -1,171 +1,172 @@
-<section class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3 rounded-3 border bg-body-tertiary p-3">
-  <div>
-    <h1 class="h3 mb-1"><i class="fa-solid fa-user-group text-primary me-2"></i>Patients</h1>
-    <p class="text-secondary mb-0">Recherche rapide et suivi des dernières consultations.</p>
-  </div>
-  <div class="d-flex align-items-center gap-2 flex-wrap">
-    @if (canExportPatients()) {
-      <button type="button" class="btn btn-outline-secondary" title="Exporter la liste des patients" bsTooltip (click)="openExportModal()">
-        <i class="fa-solid fa-file-export me-2"></i>Exporter
-      </button>
-    }
-    @if (canCreatePatient()) {
-      <a class="btn btn-primary" routerLink="/patients/nouveau">
-        <span class="fw-bold me-2">+</span>Nouveau patient
-      </a>
-    }
-  </div>
-</section>
-
+<!-- ── Export modal (Bootstrap) ── -->
 @if (isExportModalOpen()) {
   <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="export-patients-modal-title">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
           <h3 id="export-patients-modal-title" class="modal-title h5 mb-0">Exporter la liste des patients</h3>
-          <button type="button" class="btn-close" aria-label="Fermer" title="Fermer" bsTooltip (click)="closeExportModal()" [disabled]="isExportingPatients()"></button>
+          <button type="button" class="btn-close" aria-label="Fermer" (click)="closeExportModal()" [disabled]="isExportingPatients()"></button>
         </div>
-
         <div class="modal-body">
-          <p class="mb-3 text-secondary">
-            Choisissez le format d'export pour la liste des patients actuellement affichée.
-          </p>
-
+          <p class="mb-3 text-secondary">Choisissez le format d'export pour la liste des patients actuellement affichée.</p>
           @if (exportPatientsError()) {
             <div class="alert alert-danger mb-0">{{ exportPatientsError() }}</div>
           }
         </div>
-
         <div class="modal-footer gap-2">
-          <button type="button" class="btn btn-secondary" title="Annuler" bsTooltip (click)="closeExportModal()" [disabled]="isExportingPatients()">
-            Annuler
-          </button>
-          <button type="button" class="btn btn-outline-primary" title="Télécharger en format JSON" bsTooltip (click)="exportPatients('json')" [disabled]="isExportingPatients()">
+          <button type="button" class="btn btn-secondary" (click)="closeExportModal()" [disabled]="isExportingPatients()">Annuler</button>
+          <button type="button" class="btn btn-outline-primary" (click)="exportPatients('json')" [disabled]="isExportingPatients()">
             <i class="fa-solid fa-file-code me-2"></i>JSON
           </button>
-          <button type="button" class="btn btn-primary" title="Télécharger en format Excel" bsTooltip (click)="exportPatients('excel')" [disabled]="isExportingPatients()">
+          <button type="button" class="btn btn-primary" (click)="exportPatients('excel')" [disabled]="isExportingPatients()">
             <i class="fa-solid fa-file-excel me-2"></i>Excel
           </button>
         </div>
       </div>
     </div>
   </div>
-
   <div class="modal-backdrop fade show"></div>
 }
 
-<section class="card mb-3">
-  <div class="card-body">
-    <div class="row g-3">
-      <div class="col-12 col-lg-6">
-        <label class="form-label" for="search-input">Rechercher un patient</label>
-        <div class="input-group">
-          <span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
-          <input
-            id="search-input"
-            class="form-control"
-            type="search"
-            [value]="search()"
-            (input)="onSearch($event)"
-            placeholder="Nom du patient"
-          />
-        </div>
-      </div>
-
-      <div class="col-12 col-lg-6">
-        <label class="form-label" for="patients-office-select">Filtrer par cabinet</label>
-        <select
-          id="patients-office-select"
-          class="form-select"
-          [value]="selectedOfficeId() ?? ''"
-          (change)="onOfficeChange($any($event.target).value)"
-        >
-          <option value="">Tous les cabinets</option>
-          @for (office of officeOptions(); track office.id) {
-            <option [value]="office.id">{{ office.name }}</option>
-          }
-        </select>
-      </div>
-    </div>
+<!-- ── Page header ── -->
+<div class="pat-header">
+  <div class="pat-header-left">
+    <label class="pat-filter-label" for="patients-office-select">Cabinet</label>
+    <select
+      id="patients-office-select"
+      class="pat-filter-select"
+      [value]="selectedOfficeId() ?? ''"
+      (change)="onOfficeChange($any($event.target).value)"
+    >
+      <option value="">Tous les cabinets</option>
+      @for (office of officeOptions(); track office.id) {
+        <option [value]="office.id">{{ office.name }}</option>
+      }
+    </select>
+    <span class="pat-count">{{ paginationInfo().total }} dossiers</span>
   </div>
+  <div class="pat-header-right">
+    <div class="pat-search-wrap">
+      <i class="fa-solid fa-magnifying-glass pat-search-icon" aria-hidden="true"></i>
+      <input
+        type="search"
+        class="pat-search-input"
+        placeholder="Rechercher…"
+        [value]="search()"
+        (input)="onSearch($event)"
+        aria-label="Rechercher un patient"
+      />
+    </div>
+    @if (canExportPatients()) {
+      <button type="button" class="pat-btn-outline" (click)="openExportModal()">
+        <i class="fa-solid fa-file-export" aria-hidden="true"></i>
+        Exporter
+      </button>
+    }
+    @if (canCreatePatient()) {
+      <a class="pat-btn-primary" routerLink="/patients/nouveau" aria-label="Créer un nouveau patient">
+        <i class="fa-solid fa-plus" aria-hidden="true"></i>
+        Nouveau patient
+      </a>
+    }
+  </div>
+</div>
+
+<!-- ── Patients table ── -->
+<section class="pat-card" aria-label="Liste des patients">
+
+  <!-- Column headers -->
+  <div class="pat-table-head" aria-hidden="true">
+    <span class="pat-col-patient">Patient·e</span>
+    <span class="pat-col-age">Âge</span>
+    <span class="pat-col-phone">Téléphone</span>
+    <span class="pat-col-visit">Dernière visite</span>
+    <span class="pat-col-next">Prochain RDV</span>
+    <span class="pat-col-arrow"></span>
+  </div>
+
+  <!-- Rows -->
+  @if (pagedPatients().length === 0) {
+    <div class="pat-empty">
+      <i class="fa-solid fa-user-group" aria-hidden="true"></i>
+      <span>Aucun patient trouvé</span>
+    </div>
+  } @else {
+    @for (patient of pagedPatients(); track patient.id) {
+      <a class="pat-row" [routerLink]="['/patients', patient.id]" [attr.aria-label]="patient.fullName">
+        <div class="pat-col-patient">
+          <span class="pat-avatar" aria-hidden="true">
+            {{ getPatientInitials(patient.fullName) }}
+          </span>
+          <span class="pat-name-block">
+            <span class="pat-name">
+              @if (sexIcon(patient.sex); as icon) {
+                <i [class]="icon + ' pat-sex-icon ' + sexColorClass(patient.sex)" aria-hidden="true"></i>
+              }
+              {{ patient.fullName }}
+            </span>
+          </span>
+        </div>
+        <span class="pat-col-age">{{ patient.age != null ? patient.age + ' ans' : '—' }}</span>
+        <span class="pat-col-phone">{{ patient.phone || '—' }}</span>
+        <span class="pat-col-visit">{{ patient.lastVisit || '—' }}</span>
+        <span class="pat-col-next">
+          @if (patient.nextAppointment) {
+            <span class="pat-next-badge">
+              <span class="pat-next-dot" aria-hidden="true"></span>
+              {{ formatNextAppointment(patient.nextAppointment) }}
+            </span>
+          } @else {
+            —
+          }
+        </span>
+        <span class="pat-col-arrow"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></span>
+      </a>
+    }
+  }
 </section>
 
-<section class="card">
-  <div class="card-body">
-    <h2 class="h5 mb-3"><i class="fa-solid fa-address-card me-2 text-primary"></i>Fiche patient</h2>
-    <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead>
-          <tr>
-            <th>Nom</th>
-            <th>Âge</th>
-            <th>Ville</th>
-            <th>Téléphone</th>
-            <th>Dernière visite</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (patient of pagedPatients(); track patient.id) {
-            <tr [routerLink]="['/patients', patient.id]">
-              <td>
-                @if (sexIcon(patient.sex); as icon) {
-                  <i [class]="icon + ' me-2 ' + sexColorClass(patient.sex)" aria-hidden="true"></i>
-                }
-                {{ patient.fullName }}
-              </td>
-              <td>{{ patient.age != null ? patient.age + ' ans' : '—' }}</td>
-              <td>{{ patient.city || '—' }}</td>
-              <td>{{ patient.phone }}</td>
-              <td>{{ patient.lastVisit }}</td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    </div>
+<!-- ── Pagination ── -->
+<div class="pat-pagination">
+  <span class="pat-pag-info">
+    @if (paginationInfo().total === 0) {
+      Aucun résultat
+    } @else {
+      {{ paginationInfo().from }}–{{ paginationInfo().to }} sur {{ paginationInfo().total }} patients
+    }
+  </span>
 
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-3">
-      <div class="text-secondary small">
-        @if (paginationInfo().total === 0) {
-          Aucun résultat
-        } @else {
-          {{ paginationInfo().from }}&ndash;{{ paginationInfo().to }} sur {{ paginationInfo().total }} patients
-        }
-      </div>
+  <div class="pat-pag-controls">
+    <label class="pat-pag-size-label" for="patients-page-size">Par page</label>
+    <select
+      id="patients-page-size"
+      class="pat-pag-size-select"
+      [value]="pageSize()"
+      (change)="setPageSize(+$any($event.target).value)"
+    >
+      @for (opt of pageSizeOptions; track opt) {
+        <option [value]="opt">{{ opt }}</option>
+      }
+    </select>
 
-      <div class="d-flex align-items-center gap-3">
-        <div class="d-flex align-items-center gap-2">
-          <label class="form-label mb-0 small text-secondary text-nowrap" for="patients-page-size">Par page</label>
-          <select
-            id="patients-page-size"
-            class="form-select form-select-sm"
-            style="width:auto"
-            [value]="pageSize()"
-            (change)="setPageSize(+$any($event.target).value)"
-          >
-            @for (opt of pageSizeOptions; track opt) {
-              <option [value]="opt">{{ opt }}</option>
-            }
-          </select>
-        </div>
-
-        <nav aria-label="Pagination patients">
-          <ul class="pagination pagination-sm mb-0">
-            <li class="page-item" [class.disabled]="safeCurrentPage() === 1">
-              <button type="button" class="page-link" title="Page précédente" bsTooltip (click)="goToPrevPage()" aria-label="Page précédente">
-                <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
-              </button>
-            </li>
-            <li class="page-item disabled">
-              <span class="page-link">{{ safeCurrentPage() }} / {{ totalPages() }}</span>
-            </li>
-            <li class="page-item" [class.disabled]="safeCurrentPage() === totalPages()">
-              <button type="button" class="page-link" title="Page suivante" bsTooltip (click)="goToNextPage()" aria-label="Page suivante">
-                <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
-              </button>
-            </li>
-          </ul>
-        </nav>
-      </div>
-    </div>
+    <button
+      type="button"
+      class="pat-pag-btn"
+      [disabled]="safeCurrentPage() === 1"
+      (click)="goToPrevPage()"
+      aria-label="Page précédente"
+    >
+      <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+    </button>
+    <span class="pat-pag-pages">{{ safeCurrentPage() }} / {{ totalPages() }}</span>
+    <button
+      type="button"
+      class="pat-pag-btn"
+      [disabled]="safeCurrentPage() === totalPages()"
+      (click)="goToNextPage()"
+      aria-label="Page suivante"
+    >
+      <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+    </button>
   </div>
-</section>
+</div>

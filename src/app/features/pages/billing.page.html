@@ -1,33 +1,32 @@
-<section class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
-  <div>
-    <h1 class="h3 mb-1"><i class="fa-solid fa-file-invoice-dollar text-primary me-2"></i>Comptabilité</h1>
-    <p class="text-secondary mb-0">Suivi des operations debit/credit du cabinet et des praticiens.</p>
+<div class="fac-header">
+  <div class="fac-header-left">
+    <p class="fac-subtitle">Suivi des opérations débit/crédit du cabinet et des praticiens.</p>
   </div>
 
-  <div class="d-flex flex-wrap gap-2 align-items-center">
+  <div class="fac-header-right">
     @if (canManageBilling()) {
-      <button type="button" class="btn btn-primary btn-sm" (click)="openExpenseModal()" title="Ouvrir" bsTooltip>
-        <i class="fa-solid fa-plus me-1"></i>Ajouter une depense
+      <button type="button" class="fac-btn-primary" (click)="openExpenseModal()">
+        <i class="fa-solid fa-plus" aria-hidden="true"></i>Ajouter une dépense
       </button>
       <div class="dropdown" (click)="$event.stopPropagation()">
         <button
           type="button"
-          class="btn btn-outline-primary btn-sm dropdown-toggle"
+          class="fac-btn-outline dropdown-toggle"
           [class.show]="isDepositMenuOpen()"
           [attr.aria-expanded]="isDepositMenuOpen()"
           aria-label="Ouvrir le menu des remises"
-          (click)="toggleDepositMenu()" title="Ouvrir le menu des remises" bsTooltip>
-          <i class="fa-solid fa-building-columns me-1"></i>Remises
+          (click)="toggleDepositMenu()">
+          <i class="fa-solid fa-building-columns" aria-hidden="true"></i>Remises
         </button>
         <ul class="dropdown-menu" [class.show]="isDepositMenuOpen()">
           <li>
-            <button type="button" class="dropdown-item" (click)="openDepositModal('cheque')" title="Ouvrir" bsTooltip>
-              <i class="fa-solid fa-money-check-dollar me-2"></i>Remise de cheques
+            <button type="button" class="dropdown-item" (click)="openDepositModal('cheque')">
+              <i class="fa-solid fa-money-check-dollar me-2"></i>Remise de chèques
             </button>
           </li>
           <li>
-            <button type="button" class="dropdown-item" (click)="openDepositModal('especes')" title="Ouvrir" bsTooltip>
-              <i class="fa-solid fa-money-bill-wave me-2"></i>Remise d'especes
+            <button type="button" class="dropdown-item" (click)="openDepositModal('especes')">
+              <i class="fa-solid fa-money-bill-wave me-2"></i>Remise d'espèces
             </button>
           </li>
         </ul>
@@ -37,44 +36,43 @@
       <div class="dropdown" (click)="$event.stopPropagation()">
         <button
           type="button"
-          class="btn btn-outline-secondary btn-sm dropdown-toggle"
-          data-bs-toggle="dropdown"
+          class="fac-btn-outline dropdown-toggle"
           [class.show]="isExportMenuOpen()"
           [attr.aria-expanded]="isExportMenuOpen()"
           aria-label="Ouvrir le menu des exports"
-          (click)="toggleExportMenu()" title="Ouvrir le menu des exports" bsTooltip>
-          <i class="fa-solid fa-file-export me-1"></i>Exports
+          (click)="toggleExportMenu()">
+          <i class="fa-solid fa-file-export" aria-hidden="true"></i>Exports
         </button>
         <ul class="dropdown-menu dropdown-menu-end" [class.show]="isExportMenuOpen()">
           <li>
-            <button type="button" class="dropdown-item" (click)="exportOperations('excel', 'standard')" title="Exporter / Télécharger" bsTooltip>
+            <button type="button" class="dropdown-item" (click)="exportOperations('excel', 'standard')">
               <i class="fa-solid fa-file-excel me-2"></i>Export Excel
             </button>
           </li>
           <li>
-            <button type="button" class="dropdown-item" (click)="exportOperations('json', 'standard')" title="Exporter / Télécharger" bsTooltip>
+            <button type="button" class="dropdown-item" (click)="exportOperations('json', 'standard')">
               <i class="fa-solid fa-file-code me-2"></i>Export JSON
             </button>
           </li>
           <li><hr class="dropdown-divider" /></li>
           <li>
-            <button type="button" class="dropdown-item" (click)="exportOperations('excel', 'analytical')" title="Exporter / Télécharger" bsTooltip>
+            <button type="button" class="dropdown-item" (click)="exportOperations('excel', 'analytical')">
               <i class="fa-solid fa-chart-line me-2"></i>Export Excel analytique
             </button>
           </li>
           <li>
-            <button type="button" class="dropdown-item" (click)="exportOperations('json', 'analytical')" title="Exporter / Télécharger" bsTooltip>
+            <button type="button" class="dropdown-item" (click)="exportOperations('json', 'analytical')">
               <i class="fa-solid fa-database me-2"></i>Export JSON analytique
             </button>
           </li>
           <li><hr class="dropdown-divider" /></li>
           <li>
-            <button type="button" class="dropdown-item" [disabled]="isSnapshotExporting() || isSaving()" (click)="exportSnapshotPack('excel')" title="Exporter / Télécharger" bsTooltip>
+            <button type="button" class="dropdown-item" [disabled]="isSnapshotExporting() || isSaving()" (click)="exportSnapshotPack('excel')">
               <i class="fa-solid fa-box-archive me-2"></i>Pack export CSV
             </button>
           </li>
           <li>
-            <button type="button" class="dropdown-item" [disabled]="isSnapshotExporting() || isSaving()" (click)="exportSnapshotPack('json')" title="Exporter / Télécharger" bsTooltip>
+            <button type="button" class="dropdown-item" [disabled]="isSnapshotExporting() || isSaving()" (click)="exportSnapshotPack('json')">
               <i class="fa-solid fa-box-open me-2"></i>Pack export JSON
             </button>
           </li>
@@ -82,7 +80,7 @@
       </div>
     }
   </div>
-</section>
+</div>
 
 @if (isExportToastVisible()) {
   <section class="mb-3" aria-label="Notification export">
@@ -93,12 +91,24 @@
 }
 
 @if (canCustomizeInvoiceTemplate()) {
-  <nav class="nav nav-tabs mb-3">
-    <button type="button" class="nav-link" [class.active]="activeBillingTab() === 'operations'" (click)="switchBillingTab('operations')" title="Opérations comptables" bsTooltip>
-      <i class="fa-solid fa-list-check me-1"></i>Opérations
+  <nav class="fac-tabs" role="tablist">
+    <button
+      type="button"
+      class="fac-tab"
+      role="tab"
+      [class.active]="activeBillingTab() === 'operations'"
+      [attr.aria-selected]="activeBillingTab() === 'operations'"
+      (click)="switchBillingTab('operations')">
+      <i class="fa-solid fa-list-check" aria-hidden="true"></i>Opérations
     </button>
-    <button type="button" class="nav-link" [class.active]="activeBillingTab() === 'invoice-template'" (click)="switchBillingTab('invoice-template')" title="Template facture PDF" bsTooltip>
-      <i class="fa-solid fa-file-invoice me-1"></i>Template facture
+    <button
+      type="button"
+      class="fac-tab"
+      role="tab"
+      [class.active]="activeBillingTab() === 'invoice-template'"
+      [attr.aria-selected]="activeBillingTab() === 'invoice-template'"
+      (click)="switchBillingTab('invoice-template')">
+      <i class="fa-solid fa-file-invoice" aria-hidden="true"></i>Template facture
     </button>
   </nav>
 }
@@ -576,19 +586,17 @@
   </div>
 </section>
 
-<section class="row g-3" aria-label="KPI comptabilité">
+<div class="fac-kpi-grid mb-3" aria-label="KPI comptabilité">
   @for (tile of tiles(); track tile.label) {
-    <article class="col-12 col-md-4">
-      <div class="card h-100">
-        <h5 class="card-header">{{ tile.label }}</h5>
-        <div class="card-body">
-          <p class="fs-4 fw-bold mb-1">{{ tile.value }}</p>
-          <p class="text-success fw-semibold mb-0">{{ tile.trend }}</p>
-        </div>
-      </div>
-    </article>
+    <div class="fac-kpi-card">
+      <p class="fac-kpi-label">{{ tile.label }}</p>
+      <p class="fac-kpi-value">{{ tile.value }}</p>
+      @if (tile.trend) {
+        <p class="fac-kpi-trend">{{ tile.trend }}</p>
+      }
+    </div>
   }
-</section>
+</div>
 
 @if (billingInsights(); as insights) {
   <section class="row g-3 mt-1" aria-label="Tendances comptables">

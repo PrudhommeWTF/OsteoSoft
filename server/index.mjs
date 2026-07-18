@@ -2914,17 +2914,88 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
   const occupations = ['Cadre', 'Etudiant', 'Profession liberale', 'Artisan', 'Infirmier', 'Retraite'];
   const hobbies = ['Running, yoga', 'Natation, randonnee', 'Escalade, mobilite', 'Musculation, pilates', 'Marche active'];
   const maritalStatuses = ['Non renseigne', 'Celibataire', 'Marie(e)', 'Pacs(e)', 'Divorce(e)'];
-  const pastAppointmentStatuses = ['Termine', 'En attente'];
-  const futureAppointmentStatuses = ['A confirmer', 'En attente'];
+  const pastAppointmentStatuses = ['Termine', 'Termine', 'Termine', 'Termine', 'Annule'];
+  const futureAppointmentStatuses = ['A confirmer', 'En attente', 'A confirmer', 'A confirmer'];
   const futureAppointmentReasons = [
-    'Controle de suivi',
-    'Douleur cervicale recente',
-    'Gene lombaire apres effort',
-    'Suivi sportif preventif',
-    'Point postural'
+    'Controle de suivi', 'Bilan de suivi trimestriel', 'Suivi post-traitement',
+    'Douleur cervicale recente', 'Cervicalgie et tensions occipitales',
+    'Gene lombaire apres effort', 'Reprise douleurs lombaires basses',
+    'Suivi sportif preventif', 'Preparation sportive et mobilite',
+    'Point postural semestriel', 'Controle postural et rachidien',
+    'Douleur epaule gauche post-sport', 'Sciatique L5 recidivante',
+    'Cephalees de tension persistantes', 'Suivi post-natal M3',
+    'Tendinite rotulienne droite', 'Lombalgie de grossesse',
+    'Suivi pediatrique croissance', 'Douleur sacro-iliaque'
   ];
   const paidMethods = ['cb', 'especes', 'virement', 'cheque', 'cb', 'cb', 'especes'];
   const unpaidMethods = ['cheque', 'virement'];
+
+  // Valid osteopath time slots: 1h sessions with breaks between
+  // Morning: 8h30, 9h30, 10h30, 11h30 | Afternoon: 14h00, 15h00, 16h00, 17h00
+  const OSTEO_SLOTS_MORNING = [8 * 60 + 30, 9 * 60 + 30, 10 * 60 + 30, 11 * 60 + 30];
+  const OSTEO_SLOTS_AFTERNOON = [14 * 60, 15 * 60, 16 * 60, 17 * 60];
+  const OSTEO_SLOTS_ALL = [...OSTEO_SLOTS_MORNING, ...OSTEO_SLOTS_AFTERNOON];
+
+  // Snap a base time (in minutes) to the nearest valid osteopath slot,
+  // using `seed` to break ties and add variety within the same half-day block.
+  const snapToOsteoSlot = (baseMinutes, seed) => {
+    const slots = baseMinutes < 13 * 60 ? OSTEO_SLOTS_MORNING : OSTEO_SLOTS_AFTERNOON;
+    return slots[Math.floor(Math.abs(Math.sin(seed) * 10000 - Math.floor(Math.abs(Math.sin(seed) * 10000))) * slots.length) % slots.length];
+  };
+
+  // Advance a date past weekends (Sat→Mon, Sun→Mon)
+  const skipWeekend = (date) => {
+    const dow = date.getDay();
+    if (dow === 6) date.setDate(date.getDate() + 2);
+    else if (dow === 0) date.setDate(date.getDate() + 1);
+  };
+
+  // Rich consultation content keyed by template title keyword
+  const consultationContentByTitle = {
+    'Premier bilan': {
+      motifs: ['Premiere consultation. Douleurs lombaires basses depuis plusieurs semaines, majorees en station debout prolongee.', 'Bilan initial a la demande du medecin traitant. Cervicalgies chroniques et tension sous-occipitale.', 'Premiere venue au cabinet. Plainte principale : dorsalgie mecanique recurrente depuis un an.'],
+      tests: '<p>Bilan postural global en statique et dynamique. Tests de mobilite rachidienne (flexion, extension, inclinaisons). Palpation des zones de tension primaires. Test de Romberg negatif.</p>',
+      treatments: '<p>Traitement osteopathique global. Techniques structurelles sur le rachis lombaire. Normalisation articulaire des sacro-iliaques. Travail fascial sur le diaphragme et les fascias lombaires.</p>',
+      remarks: '<p>Revoir dans 6 semaines pour controle. Conseils posturaux au bureau remis. Exercices d\'auto-mobilisation prescrits.</p>'
+    },
+    'Suivi': {
+      motifs: ['Suivi a 3 mois : nette amelioration des douleurs lombaires. Persistance de tensions cervicales moderees.', 'Controle de suivi. Patient stable, quelques recurrences en fin de semaine de travail.', 'Seance de suivi. Douleurs initiales resolues a 80 %, residuel sur epaule gauche.'],
+      tests: '<p>Réévaluation des mobilites rachidiennes. Palpation des zones traitees. Comparaison avec le bilan initial.</p>',
+      treatments: '<p>Techniques de normalisation articulaire cervicale. Techniques myofasciales sur les chaines posterieures. Travail visceral sur le colon sigmoide.</p>',
+      remarks: '<p>Bonne evolution. Revoir dans 2 mois. Maintien des exercices prescrits.</p>'
+    },
+    'Bilan': {
+      motifs: ['Bilan osteopathique annuel preventif. Pas de plainte majeure actuellement.', 'Bilan de mi-annee. Quelques tensions dorso-lombaires en lien avec la reprise sportive.', 'Bilan global : evaluation posturale et analyse des chaines musculo-aponeurotiques.'],
+      tests: '<p>Evaluation posturale globale (plan frontal et sagittal). Tests de mobilite segmentaire rachidienne. Analyse de la marche. Palpation des structures cranio-sacrées.</p>',
+      treatments: '<p>Traitement global preventif. Ajustements structurels mineurs. Harmonisation du systeme cranio-sacre. Conseils ergonomiques remis.</p>',
+      remarks: '<p>Etat general satisfaisant. Revoir dans 6 mois pour controle annuel.</p>'
+    },
+    'Controle': {
+      motifs: ['Controle postural : asymetrie rachidienne legere stable. Patient sportif actif.', 'Point de controle a 6 mois. Maintien des acquis du traitement precedent.'],
+      tests: '<p>Reprise du bilan postural comparatif. Tests de mobilite en charge. Evaluation de la symmetrie pelvienne.</p>',
+      treatments: '<p>Techniques de regulation tensegritive. Ajustements articulaires mineurs. Travail global sur les fascias thoraco-lombaires.</p>',
+      remarks: '<p>Progression satisfaisante. Pas de recidive. Prochain controle dans 6 mois.</p>'
+    },
+    'Consultation douleur aigue': {
+      motifs: ['Consultation urgente : lumbago aigu apparu il y a 48h apres port de charge. Douleur 7/10.', 'Douleur cervicale aigue suite a un effort. Limitation importante de la rotation droite.', 'Torticolis aigu depuis ce matin. Impossibilite de tourner la tete a gauche. Douleur 8/10.'],
+      tests: '<p>Evaluation de la douleur (EVA 7/10). Examen neurologique peripherique (non deficitaire). Test de Lasegue negatif. Palpation des structures en tension.</p>',
+      treatments: '<p>Traitement doux en phase aigue. Techniques inhibitrices sur les muscles paravertebraux. Normalisation articulaire douce en fin d\'amplitude. Application locale de froid recommandee.</p>',
+      remarks: '<p>Conseils de repos relatif. Revoir dans 5 a 7 jours. Si aggravation ou signes neurologiques : consultation medicale.</p>'
+    },
+    'Consultation preventive': {
+      motifs: ['Consultation de prevention chez un sportif de haut niveau avant reprise des entrainements.', 'Bilan preventif annuel : profession a risque (metier manuel).'],
+      tests: '<p>Analyse biomecanique du geste sportif. Evaluation des zones de fragilite tissulaire. Bilan des mobilites articulaires.</p>',
+      treatments: '<p>Traitement osteopathique de prevention. Liberation des zones de restriction. Travail sur l\'equilibre pelvi-rachidien.</p>',
+      remarks: '<p>Pas de contre-indication a la reprise sportive. Revoir dans 4 mois.</p>'
+    }
+  };
+
+  const getConsultationContent = (title, seed) => {
+    const key = Object.keys(consultationContentByTitle).find((k) => title.includes(k)) ?? 'Suivi';
+    const content = consultationContentByTitle[key];
+    const motif = content.motifs[Math.floor(Math.abs(Math.sin(seed) * 10000 - Math.floor(Math.abs(Math.sin(seed) * 10000))) * content.motifs.length) % content.motifs.length];
+    return { motif, tests: content.tests, treatments: content.treatments, remarks: content.remarks };
+  };
 
   const seededUnit = (seed) => {
     const value = Math.sin(seed) * 10000;
@@ -3074,16 +3145,13 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
 
       for (const [index, template] of consultationTemplates.entries()) {
         const jitterSeed = patientSeedBase + ((index + 1) * 71);
-        const hourJitter = ((jitterSeed * 13) % 3) - 1;
-        const minuteJitter = ((jitterSeed * 37) % 41) - 20;
         const minDaysAgo = Number(template.minDaysAgo);
         const maxDaysAgo = Number(template.maxDaysAgo);
         const daySpread = Math.max(maxDaysAgo - minDaysAgo, 1);
         const daysAgo = minDaysAgo + Math.floor(seededUnit(jitterSeed + 3) * daySpread);
+        // Snap to valid osteopath slot based on the template's half-day preference
         const baseMinutes = (template.hour * 60) + template.minute;
-        const jitteredMinutes = baseMinutes + (hourJitter * 60) + minuteJitter;
-        const boundedMinutes = Math.min(Math.max(jitteredMinutes, 8 * 60), (19 * 60) + 30);
-        const roundedMinutes = Math.round(boundedMinutes / 5) * 5;
+        const roundedMinutes = snapToOsteoSlot(baseMinutes, jitterSeed + 7);
         const startHour = Math.floor(roundedMinutes / 60);
         const startMinute = roundedMinutes % 60;
 
@@ -3132,12 +3200,13 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
         const consultationId = Number(consultationResult.lastInsertRowid);
         consultationCount += 1;
 
+        const clinicalContent = getConsultationContent(template.title, jitterSeed + 200);
         replaceConsultationSections(consultationId, {
-          motifMainHtml: `<p>${consultationTitle}</p>`,
-          testsHtml: '',
+          motifMainHtml: `<p>${clinicalContent.motif}</p>`,
+          testsHtml: clinicalContent.tests,
           schemaHtml: '',
-          treatmentsHtml: '',
-          remarksHtml: `<p>Compte rendu de demonstration ${officeLabel} (${index + 1}).</p>`
+          treatmentsHtml: clinicalContent.treatments,
+          remarksHtml: clinicalContent.remarks
         });
 
         insertAppointment.run(
@@ -3215,7 +3284,10 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
         const futureSeed = patientSeedBase + 200 + (futureIndex * 19);
         const daysAhead = 3 + Math.floor(seededUnit(futureSeed + 3) * 110);
         const futureStartDate = new Date(now.getTime() + (daysAhead * 24 * 60 * 60 * 1000));
-        const futureMinutes = (8 * 60) + Math.round((seededUnit(futureSeed + 7) * ((19 * 60) - (8 * 60))) / 5) * 5;
+        // Skip weekends: move to next Monday
+        skipWeekend(futureStartDate);
+        // Pick from valid osteopath slots only
+        const futureMinutes = OSTEO_SLOTS_ALL[Math.floor(seededUnit(futureSeed + 7) * OSTEO_SLOTS_ALL.length)];
         const futureHour = Math.floor(futureMinutes / 60);
         const futureMinute = futureMinutes % 60;
         futureStartDate.setHours(futureHour, futureMinute, 0, 0);
@@ -10104,6 +10176,8 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
   try {
     // Extract SQLite from ZIP if .bck, otherwise use directly
     let sqliteBuffer = fileBuffer;
+    // filename -> { base64, mimeType, sizeBytes } for patient document files found in the zip
+    const weoDocumentFiles = new Map();
     if (lowerFileName.endsWith('.bck')) {
       const zip = await JSZip.loadAsync(fileBuffer);
       const sqliteEntry = zip.file('webosteo.data') || zip.file(/\.data$/i)[0] || zip.file(/\.sqlite$/i)[0] || zip.file(/\.db$/i)[0];
@@ -10111,6 +10185,24 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         return res.status(400).json({ message: 'Archive .bck invalide: fichier de base de donnees WebOsteo introuvable dans l\'archive' });
       }
       sqliteBuffer = await sqliteEntry.async('nodebuffer');
+
+      // Extract patient document files from the zip's patients/ folder (courrier_entrant)
+      const patientFileEntries = [];
+      zip.folder('patients')?.forEach((relativePath, entry) => {
+        if (!entry.dir) patientFileEntries.push({ relativePath, entry });
+      });
+      for (const { relativePath, entry } of patientFileEntries) {
+        try {
+          const buf = await entry.async('nodebuffer');
+          const detected = await fileTypeFromBuffer(buf);
+          const mimeType = detected?.mime ?? 'application/octet-stream';
+          weoDocumentFiles.set(path.basename(relativePath), {
+            base64: buf.toString('base64'),
+            mimeType,
+            sizeBytes: buf.length
+          });
+        } catch { /* ignore individual file errors */ }
+      }
     }
 
     fs.writeFileSync(tempDbPath, sqliteBuffer);
@@ -10210,6 +10302,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
     let importedInvoices = 0;
     let importedContacts = 0;
     let importedDeposits = 0;
+    let importedDocuments = 0;
     let updatedRelatedPeople = 0;
 
     // ---- Pré-calcul des mots de passe utilisateurs (async, avant la transaction) ----
@@ -10217,6 +10310,9 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
     // so we compute all password hashes up-front before entering the transaction.
     let weoUsers = [];
     try { weoUsers = weoDb.prepare('SELECT * FROM utilisateur').all(); } catch { /* table may not exist */ }
+
+    let weoCourriers = [];
+    try { weoCourriers = weoDb.prepare('SELECT * FROM courrier_entrant').all(); } catch { /* table may not exist */ }
 
     // userPreparedData: Map<login, { hash, tempPassword, isActive, retro }>
     const userPreparedData = new Map();
@@ -10440,7 +10536,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         const description = str(ap.comment) || str(antecedent.nom) || '';
         const important = Number(ap.important) === 1 ? 1 : 0;
         const sortKey = Number(antecedent.ordre) || 99;
-        const dateDisplay = parseWeoDate(str(ap.date_debut)) || '';
+        const dateDisplay = parseWeoDate(str(ap.date_debut ?? ap.date ?? '')) || '';
 
         storeAntecedentTypes([category]);
 
@@ -10487,11 +10583,12 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         const heightCm = parseImportedNullableNumber(wc.taille);
         const weightKg = parseImportedNullableNumber(wc.poids);
         const evaBefore = Math.min(10, Math.max(0, num(wc.douleur)));
-        const evaAfter = Math.min(10, Math.max(0, num(wc.douleur_apres)));
+        const evaAfter = Math.min(10, Math.max(0, num(wc.douleur2 ?? wc.douleur_apres)));
         const important = str(wc.important) === '1' ? 1 : 0;
         const profile = str(wc.nourrisson).toLowerCase() === 'oui' ? 'Nourrisson' : 'Adulte';
-        // Use titre if present, otherwise derive a plain-text title from motif
-        const rawTitle = str(wc.titre) || str(wc.motif)
+        // Use titre if present, otherwise derive a plain-text title from remarques_motifs (WebOsteo ≥ v7)
+        // or motif (older schema fallback)
+        const rawTitle = str(wc.titre) || str(wc.remarques_motifs ?? wc.motif)
           .replace(/<[^>]*>/g, ' ')
           .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
           .replace(/\s+/g, ' ').trim();
@@ -10519,7 +10616,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         weoConsultationIdToOsteoId.set(str(wc.id), consultationId);
 
         replaceConsultationSections(consultationId, {
-          motifMainHtml: str(wc.motif),
+          motifMainHtml: str(wc.remarques_motifs ?? wc.motif),
           testsHtml: str(wc.tests),
           schemaHtml: str(wc.schemadysfonctionnel),
           treatmentsHtml: str(wc.traitement),
@@ -10642,6 +10739,10 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         const consultationId = weoConsultationIdToOsteoId.get(str(wf.id_consultation)) ?? null;
         // Use formatted number if available, otherwise raw number, otherwise generate unique fallback
         const invoiceNumber = str(wf.numero_formatte) || str(wf.numero) || `WEO-${str(wf.id)}`;
+        // mode_paiement does not exist on the facture table in WebOsteo — derive from the first payment record
+        const firstPfEntry = paiementsByFacture.get(str(wf.id))?.[0];
+        const firstPaiementData = firstPfEntry ? paiementById.get(str(firstPfEntry.id_paiement)) : null;
+        const invoicePaymentMethod = firstPaiementData ? str(firstPaiementData.moyen_paiement) : '';
 
         const inserted = db.prepare(
           `INSERT INTO invoices (patient_id, invoice_number, amount_cents, status, issued_at, due_at, notes_cipher, office_id, consultation_id, payment_method)
@@ -10656,7 +10757,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
           encryptSensitiveField(str(wf.commentaire)),
           officeId,
           consultationId,
-          str(wf.mode_paiement)
+          invoicePaymentMethod
         );
 
         const invoiceId = Number(inserted.lastInsertRowid);
@@ -10709,19 +10810,19 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         }
 
         // Fallback: if no paiement_facture rows exist for this paid invoice, synthesize
-        // a payment from invoice-level payment fields (for older Webosteo versions)
+        // a payment using the invoice amount and date (date_paiement / mode_paiement do not
+        // exist as columns in the WebOsteo facture table, so we use issuedAt and empty method)
         if (paiementFactures.length === 0 && invoiceStatus === 'payee') {
           try {
-            const paidAt = parseWeoDate(str(wf.date_paiement)) ?? issuedAt;
             db.prepare(
               `INSERT INTO invoice_payments (invoice_id, paid_at, amount_cents, currency, payment_method, bank_name_cipher, cheque_number, reference, notes)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
             ).run(
               invoiceId,
-              paidAt,
+              issuedAt,
               amountCents,
               str(wf.devise) || 'EUR',
-              str(wf.mode_paiement),
+              '',
               '',
               '',
               '',
@@ -10767,6 +10868,49 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
         importedContacts += 1;
       } catch (err) {
         errors.push({ entity: 'contact', message: `ID ${str(wc.id)}: ${err instanceof Error ? err.message : 'Erreur'}` });
+      }
+    }
+
+    // ---- Documents patients (courriers entrants) ----
+    // courrier_entrant stores metadata; the actual file bytes were extracted from the zip's
+    // patients/ folder into weoDocumentFiles before the transaction.
+    // patient_documents cascade-delete from patients, so no explicit DELETE is needed here.
+    for (const wc of weoCourriers) {
+      try {
+        const patientId = weoPatientIdToOsteoId.get(str(wc.patient));
+        if (!patientId) continue;
+        const fileName = str(wc.titre);
+        if (!fileName) continue;
+        const fileData = weoDocumentFiles.get(fileName);
+        if (!fileData) continue; // file not present in zip (e.g. .data import without folder)
+
+        const consultationId = weoConsultationIdToOsteoId.get(str(wc.consultation)) ?? null;
+        const createdAt = parseWeoDate(wc.date_courrier)
+          ? `${parseWeoDate(wc.date_courrier)}T00:00:00.000Z`
+          : new Date().toISOString();
+
+        db.prepare(
+          `INSERT OR IGNORE INTO patient_documents
+            (document_ref, patient_id, consultation_id, office_id, created_by, file_name, mime_type, size_bytes, title_cipher, comment_cipher, content_cipher, document_type, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+          `doc-weo-${str(wc.id)}`,
+          patientId,
+          consultationId,
+          officeId,
+          null,
+          fileName,
+          fileData.mimeType,
+          fileData.sizeBytes,
+          null,
+          wc.comment ? encryptSensitiveField(str(wc.comment)) : null,
+          encryptSensitiveField(fileData.base64),
+          'document',
+          createdAt
+        );
+        importedDocuments += 1;
+      } catch (err) {
+        errors.push({ entity: 'document', message: `ID ${str(wc.id)}: ${err instanceof Error ? err.message : 'Erreur'}` });
       }
     }
 
@@ -10818,34 +10962,103 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
     }
 
     // ---- Remises bancaires (comptabilité) ----
-    // WebOsteo may store bank deposit remittances (cheques, especes) in various table names.
-    // Try the most common ones and import into accounting_deposits + accounting_deposit_items.
-    let weoRemises = [];
-    let weoRemisePaiements = [];
-    let weoRemiseTableFound = false;
+    // WebOsteo stores remittances either as two separate typed tables (remise_cheque /
+    // remise_especes — current schema) or as a single generic table (older schemas).
+    // We try the two-table approach first, then fall back to the generic candidates.
 
-    // Try known WebOsteo table names for bank deposit remittances
-    const remiseCandidates = ['encaissement', 'remise_bancaire', 'remise', 'depot_banque'];
-    const remisePaiementCandidates = ['encaissement_paiement', 'remise_bancaire_paiement', 'remise_paiement', 'depot_banque_paiement'];
+    const insertDeposit = (wr, type, amountCents, paiementIdsByRemise) => {
+      const weoRemiseId = str(wr.id ?? '');
+      const occurredRaw = wr.date_remise ?? wr.date_encaissement ?? wr.date_depot ?? wr.date ?? null;
+      const occurredAt = parseWeoDate(occurredRaw);
+      if (!occurredAt) return;
 
-    for (let i = 0; i < remiseCandidates.length; i++) {
-      try {
-        const rows = weoDb.prepare(`SELECT * FROM ${remiseCandidates[i]}`).all();
-        weoRemises = rows;
-        // Try to find associated payments junction table
+      const rawBanque = str(wr.banque ?? wr.etablissement ?? wr.bank ?? '');
+      const reference = str(wr.reference ?? wr.code ?? wr.ref ?? '');
+      const notes = str(wr.commentaire ?? wr.comment ?? wr.libelle ?? wr.notes ?? '');
+      const title = type === 'especes' ? 'Remise d\'especes' : 'Remise de cheques';
+      const createdByLogin = str(wr.createdby ?? wr.utilisateur ?? wr.login ?? '');
+      const ownerUser = createdByLogin
+        ? db.prepare('SELECT id FROM users WHERE username = ?').get(createdByLogin)
+        : null;
+      const ownerUserId = ownerUser ? ownerUser.id : null;
+
+      const depositResult = db.prepare(
+        `INSERT INTO accounting_deposits (occurred_at, office_id, owner_user_id, type, deposit_code, bank_name_cipher, account_label, title, amount_cents, currency, notes, retrocession_percent, retrocession_recipient, is_deleted, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        `${occurredAt}T10:00:00.000Z`,
+        officeId,
+        ownerUserId,
+        type,
+        reference || `WEO-${weoRemiseId}`,
+        rawBanque ? encryptSensitiveField(rawBanque) : '',
+        '',
+        title,
+        amountCents,
+        'EUR',
+        notes,
+        0,
+        '',
+        0,
+        ownerUserId
+      );
+      const depositId = Number(depositResult.lastInsertRowid);
+      importedDeposits += 1;
+
+      const linkedPaiementIds = paiementIdsByRemise.get(weoRemiseId) ?? [];
+      for (const weoPaiementId of linkedPaiementIds) {
+        const osteoIpId = weoPaymentIdToOsteoInvoicePaymentId.get(weoPaiementId);
+        if (!osteoIpId) continue;
         try {
-          weoRemisePaiements = weoDb.prepare(`SELECT * FROM ${remisePaiementCandidates[i]}`).all();
-        } catch { /* junction table may not exist for this variant */ }
-        weoRemiseTableFound = true;
-        break;
-      } catch { /* table not found, try next */ }
-    }
+          db.prepare(
+            `INSERT OR IGNORE INTO accounting_deposit_items (deposit_id, source_type, source_id, created_at) VALUES (?, ?, ?, ?)`
+          ).run(depositId, 'invoice', osteoIpId, new Date().toISOString());
+        } catch { /* ignore duplicate / FK errors */ }
+      }
+    };
 
-    if (weoRemiseTableFound && weoRemises.length > 0) {
-      // Build map: weoRemiseId -> list of weo paiement ids
+    // Approach 1: two dedicated tables (remise_cheque / remise_especes) — WebOsteo current schema
+    let usedTwoTableApproach = false;
+    try {
+      const remiseCheques = weoDb.prepare('SELECT * FROM remise_cheque').all();
+      const remiseEspeces = weoDb.prepare('SELECT * FROM remise_especes').all();
+      usedTwoTableApproach = true;
+
+      for (const wr of remiseCheques) {
+        try {
+          const amountCents = Math.round(num(wr.montant_cheques ?? wr.montant ?? 0) * 100);
+          insertDeposit(wr, 'cheque', amountCents, new Map());
+        } catch (err) {
+          errors.push({ entity: 'remise_cheque', message: `ID ${str(wr.id ?? '')}: ${err instanceof Error ? err.message : 'Erreur'}` });
+        }
+      }
+      for (const wr of remiseEspeces) {
+        try {
+          const amountCents = Math.round(num(wr.montant ?? 0) * 100);
+          insertDeposit(wr, 'especes', amountCents, new Map());
+        } catch (err) {
+          errors.push({ entity: 'remise_especes', message: `ID ${str(wr.id ?? '')}: ${err instanceof Error ? err.message : 'Erreur'}` });
+        }
+      }
+    } catch { /* tables don't exist, fall through to generic approach */ }
+
+    // Approach 2: generic single table (older WebOsteo schemas)
+    if (!usedTwoTableApproach) {
+      let weoRemises = [];
+      let weoRemisePaiements = [];
+      const remiseCandidates = ['encaissement', 'remise_bancaire', 'remise', 'depot_banque'];
+      const remisePaiementCandidates = ['encaissement_paiement', 'remise_bancaire_paiement', 'remise_paiement', 'depot_banque_paiement'];
+
+      for (let i = 0; i < remiseCandidates.length; i++) {
+        try {
+          weoRemises = weoDb.prepare(`SELECT * FROM ${remiseCandidates[i]}`).all();
+          try { weoRemisePaiements = weoDb.prepare(`SELECT * FROM ${remisePaiementCandidates[i]}`).all(); } catch { /* no junction table */ }
+          break;
+        } catch { /* table not found, try next */ }
+      }
+
       const paiementIdsByRemise = new Map();
       for (const rp of weoRemisePaiements) {
-        // Support common column name variations
         const remiseId = str(rp.id_encaissement ?? rp.id_remise ?? rp.id_depot ?? rp.encaissement_id ?? rp.remise_id ?? '');
         const paiementId = str(rp.id_paiement ?? rp.paiement_id ?? '');
         if (!remiseId || !paiementId) continue;
@@ -10862,60 +11075,9 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
 
       for (const wr of weoRemises) {
         try {
-          // Support common column name variations across WebOsteo versions
-          const weoRemiseId = str(wr.id ?? '');
-          const occurredRaw = wr.date_remise ?? wr.date_encaissement ?? wr.date_depot ?? wr.date ?? null;
-          const occurredAt = parseWeoDate(occurredRaw);
-          if (!occurredAt) continue;
-
           const type = mapRemiseType(wr.type_remise ?? wr.type_encaissement ?? wr.type ?? wr.mode ?? '');
-          const rawBanque = str(wr.banque ?? wr.etablissement ?? wr.bank ?? '');
-          const amountCents = Math.round(num(wr.montant ?? wr.montant_total ?? wr.amount ?? 0) * 100);
-          const reference = str(wr.reference ?? wr.code ?? wr.ref ?? '');
-          const notes = str(wr.commentaire ?? wr.libelle ?? wr.notes ?? '');
-          const title = type === 'especes' ? 'Remise d\'especes' : 'Remise de cheques';
-
-          // Resolve owner user if createdby field is present
-          const createdByLogin = str(wr.createdby ?? wr.utilisateur ?? wr.login ?? '');
-          const ownerUser = createdByLogin
-            ? db.prepare('SELECT id FROM users WHERE username = ?').get(createdByLogin)
-            : null;
-          const ownerUserId = ownerUser ? ownerUser.id : null;
-
-          const depositResult = db.prepare(
-            `INSERT INTO accounting_deposits (occurred_at, office_id, owner_user_id, type, deposit_code, bank_name_cipher, account_label, title, amount_cents, currency, notes, retrocession_percent, retrocession_recipient, is_deleted, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          ).run(
-            `${occurredAt}T10:00:00.000Z`,
-            officeId,
-            ownerUserId,
-            type,
-            reference || `WEO-${weoRemiseId}`,
-            rawBanque ? encryptSensitiveField(rawBanque) : '',
-            '',
-            title,
-            amountCents,
-            'EUR',
-            notes,
-            0,
-            '',
-            0,
-            ownerUserId
-          );
-          const depositId = Number(depositResult.lastInsertRowid);
-          importedDeposits += 1;
-
-          // Link associated payments as deposit items
-          const linkedPaiementIds = paiementIdsByRemise.get(weoRemiseId) ?? [];
-          for (const weoPaiementId of linkedPaiementIds) {
-            const osteoIpId = weoPaymentIdToOsteoInvoicePaymentId.get(weoPaiementId);
-            if (!osteoIpId) continue;
-            try {
-              db.prepare(
-                `INSERT OR IGNORE INTO accounting_deposit_items (deposit_id, source_type, source_id, created_at) VALUES (?, ?, ?, ?)`
-              ).run(depositId, 'invoice', osteoIpId, new Date().toISOString());
-            } catch { /* ignore duplicate / FK errors */ }
-          }
+          const amountCents = Math.round(num(wr.montant ?? wr.montant_total ?? wr.montant_cheques ?? wr.amount ?? 0) * 100);
+          insertDeposit(wr, type, amountCents, paiementIdsByRemise);
         } catch (err) {
           errors.push({ entity: 'remise', message: `ID ${str(wr.id ?? '')}: ${err instanceof Error ? err.message : 'Erreur'}` });
         }
@@ -10931,6 +11093,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
       importedInvoices,
       importedContacts,
       importedDeposits,
+      importedDocuments,
       updatedRelatedPeople,
       errorCount: errors.length
     });
@@ -10943,6 +11106,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
       importedInvoices,
       importedContacts,
       importedDeposits,
+      importedDocuments,
       updatedRelatedPeople,
       errors: errors.slice(0, 100),
       tempPasswords
@@ -11417,15 +11581,37 @@ app.get('/api/consultation-context', authMiddleware, requirePermission('create-c
 
 app.get('/api/practitioners', authMiddleware, requirePermission('read-dashboard'), (_req, res) => {
   const rows = db
-    .prepare('SELECT id, username, role FROM users ORDER BY lower(username) ASC')
+    .prepare(
+      `SELECT u.id, u.username, u.first_name, u.last_name, u.role, u.retrocession_percent,
+              (
+                SELECT group_concat(o.name, ', ')
+                FROM user_offices uo
+                INNER JOIN offices o ON o.id = uo.office_id
+                WHERE uo.user_id = u.id
+              ) AS office_names,
+              o.name AS office_name
+       FROM users u
+       LEFT JOIN offices o ON o.id = u.office_id
+       ORDER BY lower(u.username) ASC`
+    )
     .all();
 
   return res.json({
-    practitioners: rows.map((row) => ({
-      id: row.id,
-      username: row.username,
-      role: row.role
-    }))
+    practitioners: rows.map((row) => {
+      const firstName = row.first_name ?? '';
+      const lastName = row.last_name ?? '';
+      const displayName = [firstName, lastName].filter(Boolean).join(' ') || row.username;
+      return {
+        id: row.id,
+        username: row.username,
+        firstName,
+        lastName,
+        displayName,
+        role: row.role,
+        cabinetName: row.office_names ?? row.office_name ?? '',
+        retrocessionPercent: Number(row.retrocession_percent ?? 0)
+      };
+    })
   });
 });
 
@@ -13285,19 +13471,23 @@ app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-lis
     }
   }
 
+  const today = new Date().toISOString().slice(0, 10);
   const rows = db
     .prepare(
-      `SELECT id,
-              cipher_full_name,
-              cipher_phone,
-              cipher_medical_notes,
-              last_visit,
-              sex,
-              birth_date
-       FROM patients
-       WHERE is_deleted = 0`
+      `SELECT p.id,
+              p.cipher_full_name,
+              p.cipher_phone,
+              p.cipher_medical_notes,
+              p.last_visit,
+              p.sex,
+              p.birth_date,
+              (SELECT MIN(a.starts_at) FROM appointments a
+               WHERE a.patient_id = p.id AND date(a.starts_at) >= ?
+               AND a.status NOT IN ('Annule','Absent','Termine')) AS next_appointment
+       FROM patients p
+       WHERE p.is_deleted = 0`
     )
-    .all();
+    .all(today);
 
   const patients = [];
   for (const row of rows) {
@@ -13335,6 +13525,7 @@ app.get('/api/patients', authMiddleware, requireAnyPermission(['read-patient-lis
       fullName,
       phone: decryptSensitiveField(row.cipher_phone),
       lastVisit: row.last_visit ? formatDateFr(row.last_visit) : '',
+      nextAppointment: row.next_appointment ? row.next_appointment.slice(0, 10) : '',
       sex: row.sex === 'F' ? 'Femme' : row.sex === 'M' ? 'Homme' : 'Non renseigne',
       age: getAgeFromBirthDate(row.birth_date),
       city,

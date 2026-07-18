@@ -5,10 +5,72 @@
 
 @import '@fortawesome/fontawesome-free/css/all.min.css';
 
+/* ─── Design tokens — Clinique theme ───────────────────────────────────────── */
+html {
+  /* Light mode (default) */
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface-2: #f1f4f8;
+  --text: #1b2733;
+  --text-soft: #677584;
+  --accent: #3f6fb0;
+  --accent-soft: #e8f0f9;
+  --accent-contrast: #ffffff;
+  --secondary: #7c8ba0;
+  --border: #e6eaf0;
+  --shadow: 0 1px 2px rgba(27, 39, 51, 0.05), 0 6px 16px rgba(27, 39, 51, 0.04);
+  --radius: 10px;
+  --radius-sm: 8px;
+  --ok-text: #3f8f6d;
+  --ok-bg: #e6f5ef;
+  --warn-text: #b9822f;
+  --warn-bg: #f4ead4;
+  --danger-text: #c0524a;
+  --danger-bg: #f6e0dd;
+  /* Shorthand aliases used across the design system */
+  --ok: #3f8f6d;
+  --ok-soft: #e6f5ef;
+  --warn: #b9822f;
+  --warn-soft: #f4ead4;
+  --danger: #c0524a;
+  --danger-soft: #f6e0dd;
+  --font-head: 'Manrope', system-ui, sans-serif;
+  --font-body: 'Manrope', system-ui, sans-serif;
+}
+
+html[data-theme='dark'] {
+  --bg: #0f141a;
+  --surface: #171d25;
+  --surface-2: #1d2530;
+  --text: #e6ecf3;
+  --text-soft: #8c9bab;
+  --accent: #6f9ad6;
+  --accent-soft: #1b2632;
+  --accent-contrast: #0c1117;
+  --secondary: #7c8da0;
+  --border: #252f3b;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 22px rgba(0, 0, 0, 0.5);
+  --ok-text: #74bd99;
+  --ok-bg: #1c3529;
+  --warn-text: #d9a85a;
+  --warn-bg: #3a2f1c;
+  --danger-text: #e07a72;
+  --danger-bg: #3a221f;
+  /* Shorthand aliases */
+  --ok: #74bd99;
+  --ok-soft: #1c3529;
+  --warn: #d9a85a;
+  --warn-soft: #3a2f1c;
+  --danger: #e07a72;
+  --danger-soft: #3a221f;
+  --font-head: 'Manrope', system-ui, sans-serif;
+  --font-body: 'Manrope', system-ui, sans-serif;
+}
+/* ──────────────────────────────────────────────────────────────────────────── */
+
 :root {
   color-scheme: light;
-  font-family: var(--bs-font-sans-serif);
-  --bs-body-font-family: var(--bs-font-sans-serif);
+  --bs-body-font-family: 'Manrope', system-ui, sans-serif;
   --bs-primary: #4d92d1;
   --bs-primary-rgb: 77, 146, 209;
   --bs-border-color: #dbe4ea;
@@ -26,24 +88,32 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  background: var(--app-bg);
+  background: var(--bg, var(--app-bg));
 }
 
 body {
-  color: var(--app-text);
+  font-family: 'Manrope', system-ui, sans-serif;
+  color: var(--text, var(--app-text));
+}
+
+/* Tabular numbers for amounts, counters, times */
+.tabular-nums,
+.kpi-value,
+.amount {
+  font-variant-numeric: tabular-nums;
 }
 
 html[data-bs-theme='dark'] {
   color-scheme: dark;
-  --app-bg: #0f1923;
-  --app-text: #d7e2ea;
-  --app-card-bg: #142231;
-  --app-card-border: #2a3c4f;
-  --bs-body-bg: #0f1923;
-  --bs-body-color: #d7e2ea;
-  --bs-secondary-bg: #1a2b3a;
-  --bs-tertiary-bg: #1f3143;
-  --bs-border-color: #2a3c4f;
+  --app-bg: #0f141a;
+  --app-text: #e6ecf3;
+  --app-card-bg: #171d25;
+  --app-card-border: #252f3b;
+  --bs-body-bg: #0f141a;
+  --bs-body-color: #e6ecf3;
+  --bs-secondary-bg: #1d2530;
+  --bs-tertiary-bg: #171d25;
+  --bs-border-color: #252f3b;
 }
 
 html[data-bs-theme='dark'] .card,
@@ -241,4 +311,35 @@ html[data-bs-theme='dark'] {
       color: var(--app-text);
     }
   }
+}
+
+/* ── Shared consultation modal tabs (patient-detail, patient-create) ── */
+.modal-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 0;
+}
+
+.modal-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+
+  &:hover { color: var(--text); }
+  &.active { color: var(--accent); border-bottom-color: var(--accent); }
+  &.modal-tab--warn { color: #d97706; }
+  &.modal-tab--warn.active { color: #d97706; border-bottom-color: #d97706; }
 }

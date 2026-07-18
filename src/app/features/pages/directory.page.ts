@@ -5,7 +5,6 @@ import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { DirectoryContact, DirectoryContactPayload, OfficeOption } from '../../core/api.types';
-import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 import { sanitizeCellValue } from '../../core/xlsx-export.utils';
 
 type ContactKindFilter = 'all' | 'person' | 'company';
@@ -13,7 +12,7 @@ type ContactKindFilter = 'all' | 'person' | 'company';
 @Component({
   selector: 'app-directory-page',
   standalone: true,
-  imports: [ReactiveFormsModule, BsTooltipDirective],
+  imports: [ReactiveFormsModule],
   templateUrl: './directory.page.html',
   styleUrl: './directory.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -482,6 +481,18 @@ export class DirectoryPage {
     anchor.click();
     anchor.remove();
     window.URL.revokeObjectURL(url);
+  }
+
+  getContactInitials(contact: DirectoryContact): string {
+    const name = contact.displayName?.trim();
+    if (name) {
+      const parts = name.split(/\s+/);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      return name.slice(0, 2).toUpperCase();
+    }
+    const org = contact.organization?.trim();
+    if (org) return org.slice(0, 2).toUpperCase();
+    return '??';
   }
 
   kindLabel(kind: 'person' | 'company'): string {

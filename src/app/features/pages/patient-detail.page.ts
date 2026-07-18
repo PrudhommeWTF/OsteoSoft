@@ -14,7 +14,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { jsPDF } from 'jspdf';
-import { NgbDateStruct } from '@ng-bootstrap/ng-bootstrap';
+import { DateBound } from '../../shared/date-picker/date-picker.component';
 
 import { ApiService } from '../../core/api.service';
 import {
@@ -126,7 +126,7 @@ Je vous remercie par avance, et vous prie d'agréer mes sincères salutations.`;
 
 @Component({
   selector: 'app-patient-detail-page',
-  imports: [RouterLink, ReactiveFormsModule, BsTooltipDirective, ConsultationCanvasComponent, DatePickerComponent],
+  imports: [RouterLink, ReactiveFormsModule, BsTooltipDirective, DatePickerComponent],
   templateUrl: './patient-detail.page.html',
   styleUrl: './patient-detail.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -226,6 +226,11 @@ export class PatientDetailPage implements OnInit, OnDestroy {
   readonly autosaveToastVisible = signal(false);
   readonly autosaveToastMessage = signal('');
 
+  readonly activePatientTab = signal<'consultations' | 'corps' | 'facturation'>('consultations');
+  readonly isEditPanelOpen = signal(false);
+  readonly expandedGroups = signal<Record<string, boolean>>({});
+  readonly expandedConsultationIds = signal<Set<number>>(new Set());
+
   readonly showRelatedPicker = signal(false);
   readonly relatedSearch = signal('');
   readonly relatedSearchResults = signal<Patient[]>([]);
@@ -244,7 +249,7 @@ export class PatientDetailPage implements OnInit, OnDestroy {
   readonly antecedentDatePrecision = signal<AntecedentPrecision>('date');
   readonly antecedentDateDisplay = signal('');
   readonly antecedentDateCtrl = new FormControl<string | null>(null);
-  readonly todayNgbDate: NgbDateStruct = (() => {
+  readonly todayNgbDate: DateBound = (() => {
     const d = new Date();
     return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() };
   })();
@@ -527,6 +532,52 @@ export class PatientDetailPage implements OnInit, OnDestroy {
 
   readonly totalConsultationCount = computed(() => this.consultationRecords().length);
 
+  readonly patientInitials = computed(() => {
+    const name = this.patient()?.fullName ?? '';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  });
+
+  readonly fullAddress = computed(() => {
+    const p = this.patient();
+    if (!p) return '';
+    return [p.address1, p.address2, [p.postalCode, p.city].filter(Boolean).join(' '), p.country]
+      .filter(Boolean)
+      .join(', ');
+  });
+
+  readonly patientTotalPaidLabel = computed(() => {
+    const total = Object.values(this.consultationBillingStates())
+      .reduce((sum, s) => sum + s.payments.reduce((ps, pmt) => ps + (Number(pmt.amount) || 0), 0), 0);
+    return this.formatAmountFr(total) + ' €';
+  });
+
+  readonly patientTotalDueLabel = computed(() => {
+    const total = Object.values(this.consultationBillingStates())
+      .reduce((sum, s) => {
+        const paid = s.payments.reduce((ps, pmt) => ps + (Number(pmt.amount) || 0), 0);
+        return sum + Math.max(0, s.totalAmount - paid);
+      }, 0);
+    return this.formatAmountFr(total) + ' €';
+  });
+
+  readonly invoiceRows = computed(() =>
+    Object.values(this.consultationBillingStates())
+      .filter(s => s.billingInvoiceId !== null)
+      .sort((a, b) => b.issuedAt.localeCompare(a.issuedAt))
+      .map(s => {
+        return {
+          consultationId: s.consultationId,
+          invoiceNumber: s.invoiceNumber || `#${s.billingInvoiceId}`,
+          issuedAt: this.formatShortDate(s.issuedAt),
+          amount: this.formatAmountFr(s.totalAmount) + ' €',
+          statusLabel: s.paymentStatus === 'paid' ? 'Réglée' : s.paymentStatus === 'partial' ? 'Partiel' : 'En attente',
+          statusCls: s.paymentStatus === 'paid' ? 'ok' : s.paymentStatus === 'partial' ? 'warn' : 'danger'
+        };
+      })
+  );
+
   readonly auditRows = computed(() => {
     return this.auditLogs().flatMap((log) =>
       log.changes.map((change) => ({
@@ -797,30 +848,7 @@ export class PatientDetailPage implements OnInit, OnDestroy {
     const consultationId = Number(consultationIdRaw);
     this.pendingFocusedConsultationId = Number.isInteger(consultationId) && consultationId > 0 ? consultationId : null;
 
-    const topbarItems: Parameters<typeof this.topbar.set>[0] = [
-      {
-        id: 'back',
-        label: 'Retour',
-        icon: 'fa-arrow-left',
-        btnClass: 'btn-outline-secondary',
-        onClick: () => void this.router.navigate(['/patients'])
-      }
-    ];
-
-    if (this.canEditPatient()) {
-      topbarItems.push({
-        id: 'save',
-        label: 'Enregistrer',
-        icon: 'fa-floppy-disk',
-        btnClass: 'btn-primary',
-        loadingLabel: 'Enregistrement...',
-        disabled: () => this.isSaving() || this.editForm.invalid,
-        loading: () => this.isSaving(),
-        onClick: () => void this.saveEdit()
-      });
-    }
-
-    this.topbar.set(topbarItems);
+    this.topbar.set([]);
 
     void this.loadLocationPairs();
     void this.load(id);
@@ -910,6 +938,61 @@ export class PatientDetailPage implements OnInit, OnDestroy {
     this.editForm.controls.sex.setValue(value);
     this.editSex.set(value);
     this.cdr.markForCheck();
+  }
+
+  private readonly MONTH_SHORT = ['janv', 'févr', 'mars', 'avr', 'mai', 'juin', 'juil', 'août', 'sept', 'oct', 'nov', 'déc'];
+
+  goBack(): void {
+    void this.router.navigate(['/patients']);
+  }
+
+  getConsultationDateParts(startedAt: string): { day: string; mon: string; time: string } {
+    const d = new Date(startedAt);
+    if (Number.isNaN(d.getTime())) return { day: '?', mon: '?', time: '' };
+    return {
+      day: String(d.getDate()),
+      mon: this.MONTH_SHORT[d.getMonth()],
+      time: d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    };
+  }
+
+  sanitizeHtml(html: string): string {
+    return this.htmlSanitizer.sanitize(html || '');
+  }
+
+  formatAmount(amount: number): string {
+    return this.formatAmountFr(amount);
+  }
+
+  toggleConsultationExpand(id: number): void {
+    this.expandedConsultationIds.update(s => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  isConsultationExpanded(id: number): boolean {
+    return this.expandedConsultationIds().has(id);
+  }
+
+  openConsultationById(id: number): void {
+    const consultation = this.consultationRecords().find(c => c.id === id);
+    if (consultation) {
+      this.openConsultationModal(consultation);
+    }
+  }
+
+  toggleGroupExpand(key: string, initiallyOpen: boolean): void {
+    this.expandedGroups.update(groups => {
+      const current = key in groups ? groups[key] : initiallyOpen;
+      return { ...groups, [key]: !current };
+    });
+  }
+
+  isGroupExpanded(key: string, initiallyOpen: boolean): boolean {
+    const groups = this.expandedGroups();
+    return key in groups ? groups[key] : initiallyOpen;
   }
 
   openAntecedentModal(): void {

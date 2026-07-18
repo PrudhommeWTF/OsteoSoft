@@ -1,232 +1,280 @@
-@if (showBackupReminderModal()) {
-  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="backup-reminder-modal-title">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2 id="backup-reminder-modal-title" class="modal-title h5 mb-0">
-            <i class="fa-solid fa-triangle-exclamation text-warning me-2" aria-hidden="true"></i>Rappel de sauvegarde
-          </h2>
-          <button type="button" class="btn-close" aria-label="Fermer" (click)="dismissBackupReminderModal()"></button>
-        </div>
-        <div class="modal-body">
-          @if (canManageBackup()) {
-            @if (noBackupEver()) {
-              <p class="mb-3">
-                Aucune sauvegarde n'a encore été effectuée sur cette application.
-              </p>
-            } @else {
-              <p class="mb-3">
-                La dernière sauvegarde de l'application date de <strong>{{ backupOverdueDays() }} jour{{ backupOverdueDays() > 1 ? 's' : '' }}</strong>.
-              </p>
-            }
-            <p class="mb-0">Il est recommandé d'effectuer une sauvegarde régulière pour protéger les données. Veuillez effectuer une sauvegarde dès que possible.</p>
-          } @else {
-            @if (noBackupEver()) {
-              <p class="mb-0">
-                Aucune sauvegarde de l'application n'a encore été effectuée.
-                Veuillez contacter un administrateur pour qu'il effectue une sauvegarde.
-              </p>
-            } @else {
-              <p class="mb-0">
-                La sauvegarde de l'application n'a pas été effectuée depuis <strong>{{ backupOverdueDays() }} jour{{ backupOverdueDays() > 1 ? 's' : '' }}</strong>.
-                Veuillez contacter un administrateur pour qu'il effectue une sauvegarde.
-              </p>
-            }
-          }
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" (click)="dismissBackupReminderModal()">
-            Fermer
-          </button>
-          @if (canManageBackup()) {
-            <a [routerLink]="['/parametres']" class="btn btn-primary" (click)="dismissBackupReminderModal()">
-              <i class="fa-solid fa-database me-1" aria-hidden="true"></i>Aller à la gestion des données
-            </a>
-          }
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="modal-backdrop fade show" (click)="dismissBackupReminderModal()"></div>
-}
-
-<section class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
-  <div>
-    <h1 class="h3 mb-1"><i class="fa-solid fa-house text-primary me-2"></i>Accueil</h1>
-    <p class="text-secondary mb-0">Vue globale des consultations, patients et reglements.</p>
-  </div>
-</section>
-
 @if (isLoading()) {
-  <section class="card">
-    <div class="card-body py-4">
-      <div class="d-flex align-items-center gap-2 mb-3" role="status" aria-live="polite">
-        <div class="spinner-border spinner-border-sm text-primary" aria-hidden="true"></div>
-        <span>Chargement du tableau de bord...</span>
-      </div>
-      <div class="placeholder-glow">
-        <span class="placeholder col-12 mb-2"></span>
-        <span class="placeholder col-10 mb-2"></span>
-        <span class="placeholder col-8"></span>
-      </div>
-    </div>
-  </section>
+  <!-- Skeleton loading -->
+  <div class="skeleton-greeting"></div>
+  <div class="kpi-grid">
+    @for (_ of [1,2,3,4]; track $index) {
+      <div class="kpi-card skeleton-card"></div>
+    }
+  </div>
 } @else {
-  <section class="card mb-3">
-    <div class="card-body">
-      <h2 class="h5 mb-3"><i class="fa-solid fa-calendar-days me-2 text-primary"></i>Agenda des consultations</h2>
-      @if (calendarSettings(); as settings) {
-        <app-week-calendar [events]="calendarEvents()" [settings]="settings" [initialView]="defaultAgendaView()" />
-      }
+  <!-- ── Greeting header ── -->
+  <section class="greeting-row" aria-label="Salutation">
+    <div class="greeting-left">
+      <p class="greeting-date">{{ todayLong() }}</p>
+      <h1 class="greeting-title">Bonjour{{ greetingFirstName() ? ', ' + greetingFirstName() : '' }}</h1>
     </div>
+    @if (nextAppointment()) {
+      <div class="next-rdv-card" aria-label="Prochain rendez-vous">
+        <span class="next-rdv-dot" aria-hidden="true"></span>
+        <span class="next-rdv-time">{{ nextAppointmentLabel() }}</span>
+        <span class="next-rdv-label">· prochain rendez-vous</span>
+      </div>
+    }
   </section>
 
-  <section class="row g-3 mb-3" aria-label="Indicateurs graphiques">
-    <article class="col-12 col-xl-6">
-      <div class="card h-100">
-        <div class="card-body">
-          <h2 class="h5 mb-3"><i class="fa-solid fa-chart-line me-2 text-primary"></i>Evolution des consultations par mois</h2>
-          @if (hasMonthlyChartData()) {
-            <div class="ratio ratio-16x9">
-              <canvas #monthlyChartHost class="w-100 h-100" aria-label="Graphique des consultations mensuelles"></canvas>
-            </div>
-          } @else {
-            <div class="alert alert-light border mb-0">Aucune consultation enregistrée sur la période.</div>
-          }
-        </div>
+  <!-- ── 4 KPI cards ── -->
+  <section class="kpi-grid" aria-label="Indicateurs clés">
+    <article class="kpi-card">
+      <div class="kpi-header">
+        <span class="kpi-icon"><i class="fa-solid fa-stethoscope" aria-hidden="true"></i></span>
+        <span [class]="'kpi-badge ' + kpiBadge1().cls">
+          @if (kpiBadge1().icon) { <i [class]="'fa-solid ' + kpiBadge1().icon" aria-hidden="true"></i> }
+          {{ kpiBadge1().text }}
+        </span>
       </div>
+      <div class="kpi-value tabular-nums">{{ kpiConsultationsToday() }}</div>
+      <div class="kpi-label">Consultations du jour</div>
     </article>
 
-    <article class="col-12 col-xl-6">
-      <div class="card h-100">
-        <div class="card-body">
-          <h2 class="h5 mb-3"><i class="fa-solid fa-venus-mars me-2 text-primary"></i>Repartition des patients</h2>
-          <p class="text-secondary small text-uppercase mb-2">Par tranche d'age et sexe</p>
-          @if (hasAgeChartData()) {
-            <div class="ratio ratio-16x9">
-              <canvas #ageChartHost class="w-100 h-100" aria-label="Graphique empilé de répartition des patients par tranche d'âge et sexe"></canvas>
-            </div>
-          } @else {
-            <div class="alert alert-light border mb-0 small">Aucune répartition disponible.</div>
-          }
-        </div>
+    <article class="kpi-card">
+      <div class="kpi-header">
+        <span class="kpi-icon"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i></span>
+        <span [class]="'kpi-badge ' + kpiBadge2().cls">
+          @if (kpiBadge2().icon) { <i [class]="'fa-solid ' + kpiBadge2().icon" aria-hidden="true"></i> }
+          {{ kpiBadge2().text }}
+        </span>
       </div>
+      <div class="kpi-value tabular-nums">{{ kpiUpcomingAppointments() }}</div>
+      <div class="kpi-label">RDV à venir</div>
+    </article>
+
+    <article class="kpi-card">
+      <div class="kpi-header">
+        <span class="kpi-icon"><i class="fa-solid fa-users" aria-hidden="true"></i></span>
+        <span [class]="'kpi-badge ' + kpiBadge3().cls">
+          @if (kpiBadge3().icon) { <i [class]="'fa-solid ' + kpiBadge3().icon" aria-hidden="true"></i> }
+          {{ kpiBadge3().text }}
+        </span>
+      </div>
+      <div class="kpi-value tabular-nums">{{ kpiActivePatients() }}</div>
+      <div class="kpi-label">Patients actifs</div>
+    </article>
+
+    <article class="kpi-card">
+      <div class="kpi-header">
+        <span class="kpi-icon"><i class="fa-solid fa-euro-sign" aria-hidden="true"></i></span>
+        <span [class]="'kpi-badge ' + kpiBadge4().cls">
+          @if (kpiBadge4().icon) { <i [class]="'fa-solid ' + kpiBadge4().icon" aria-hidden="true"></i> }
+          {{ kpiBadge4().text }}
+        </span>
+      </div>
+      <div class="kpi-value tabular-nums">{{ kpiMonthlyRevenueLabel() }}</div>
+      <div class="kpi-label">Encaissé ce mois</div>
     </article>
   </section>
 
-  <section class="row g-3" aria-label="Listes principales">
-    <article class="col-12 col-xl-6">
-      <div class="card h-100">
-        <div class="card-body">
-          <h2 class="h5 mb-3"><i class="fa-solid fa-user-clock me-2 text-primary"></i>10 derniers patients ayant consulte</h2>
-          <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-              <thead>
-                <tr>
-                  <th>Nom</th>
-                  <th>Telephone</th>
-                  <th>Derniere visite</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (patient of recentPatients(); track patient.id) {
-                  <tr [routerLink]="['/patients', patient.id]">
-                    <td>{{ patient.fullName }}</td>
-                    <td>{{ patient.phone }}</td>
-                    <td>{{ patient.lastVisit }}</td>
-                  </tr>
-                } @empty {
-                  <tr>
-                    <td colspan="3" class="text-center text-secondary py-3">Aucun patient consulte pour le moment.</td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </article>
+  <!-- ── 2-column dashboard grid ── -->
+  <section class="dashboard-grid" aria-label="Tableau de bord">
 
-    <article class="col-12 col-xl-6">
-      <div class="card h-100">
-        <div class="card-body">
-          <h2 class="h5 mb-3"><i class="fa-solid fa-hourglass-half me-2 text-primary"></i>Paiements en attente</h2>
-          <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-              <thead>
-                <tr>
-                  <th>Facture</th>
-                  <th>Patient</th>
-                  <th>Échéance</th>
-                  <th class="text-end">Montant</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (payment of pendingPaymentsPageItems(); track payment.invoiceNumber) {
-                  <tr
-                    [routerLink]="['/patients', payment.patientId]"
-                    [queryParams]="payment.consultationId ? { consultationId: payment.consultationId } : null"
-                  >
-                    <td>{{ payment.invoiceNumber }}</td>
-                    <td>{{ payment.patientName }}</td>
-                    <td>{{ payment.dueAt }}</td>
-                    <td class="text-end">{{ payment.amountLabel }}</td>
-                  </tr>
-                } @empty {
-                  <tr>
-                    <td colspan="4" class="text-center text-secondary py-3">Aucun paiement en attente.</td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-          @if (hasPendingPaymentsPagination()) {
-            <nav class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3" aria-label="Pagination paiements en attente">
-              <span class="small text-secondary">Page {{ pendingPaymentsPage() }} / {{ pendingPaymentsTotalPages() }}</span>
-              <ul class="pagination pagination-sm mb-0">
-                <li class="page-item" [class.disabled]="pendingPaymentsPage() === 1">
-                  <button
-                    type="button"
-                    class="page-link"
-                    (click)="goToPendingPaymentsPage(pendingPaymentsPage() - 1)"
-                    [disabled]="pendingPaymentsPage() === 1"
-                  >
-                    Précédent
-                  </button>
-                </li>
-                @for (item of pendingPaymentsPaginationItems(); track item.key) {
-                  @if (item.kind === 'page') {
-                    <li class="page-item" [class.active]="pendingPaymentsPage() === item.page">
-                      <button
-                        type="button"
-                        class="page-link"
-                        (click)="goToPendingPaymentsPage(item.page)"
-                        [attr.aria-current]="pendingPaymentsPage() === item.page ? 'page' : null"
-                      >
-                        {{ item.page }}
-                      </button>
-                    </li>
-                  } @else {
-                    <li class="page-item disabled" aria-hidden="true">
-                      <span class="page-link">...</span>
-                    </li>
-                  }
-                }
-                <li class="page-item" [class.disabled]="pendingPaymentsPage() === pendingPaymentsTotalPages()">
-                  <button
-                    type="button"
-                    class="page-link"
-                    (click)="goToPendingPaymentsPage(pendingPaymentsPage() + 1)"
-                    [disabled]="pendingPaymentsPage() === pendingPaymentsTotalPages()"
-                  >
-                    Suivant
-                  </button>
-                </li>
-              </ul>
-            </nav>
+    <!-- Left column -->
+    <div class="col-main">
+
+      <!-- Agenda du jour -->
+      <div class="dash-card">
+        <div class="dash-card-header">
+          <h2 class="dash-card-title">
+            <i class="fa-solid fa-calendar-day" aria-hidden="true"></i>
+            Agenda du jour
+          </h2>
+          <a routerLink="/agenda" class="dash-card-link">
+            Voir la semaine <i class="fa-solid fa-arrow-right" style="font-size:10px" aria-hidden="true"></i>
+          </a>
+        </div>
+        <div class="agenda-list">
+          @if (todayEvents().length === 0) {
+            <p class="empty-state">Aucun rendez-vous aujourd'hui.</p>
+          } @else {
+            @for (event of todayEvents(); track event.id) {
+              <div class="agenda-item" [routerLink]="['/patients', event.patientId]" role="button" tabindex="0">
+                <div class="agenda-time-block">
+                  <span class="agenda-time">{{ formatTime(event.start) }}</span>
+                  <span class="agenda-dur">{{ formatDuration(agendaSessionMinutes()) }}</span>
+                </div>
+                <div class="agenda-bar" aria-hidden="true"></div>
+                <div class="agenda-avatar" aria-hidden="true">{{ getEventInitials(event.patient) }}</div>
+                <div class="agenda-info">
+                  <span class="agenda-patient">{{ event.patient }}</span>
+                  <span class="agenda-reason">{{ event.reason || event.consultationType }}</span>
+                </div>
+                <span class="status-badge" [class]="getStatusClass(event.status)">
+                  {{ getStatusLabel(event.status) }}
+                </span>
+              </div>
+            }
           }
         </div>
       </div>
-    </article>
+
+      <!-- Consultations par mois -->
+      <div class="dash-card chart-card">
+        <div class="dash-card-header">
+          <div>
+            <h2 class="dash-card-title">
+              <i class="fa-solid fa-chart-column" aria-hidden="true"></i>
+              Consultations par mois
+            </h2>
+            @if (monthlyTotal() > 0) {
+              <p class="dash-card-subtitle">Année en cours · {{ monthlyTotal() }} consultations</p>
+            }
+          </div>
+        </div>
+        @if (hasMonthlyChartData()) {
+          <div class="chart-host">
+            <canvas #monthlyChartHost aria-label="Histogramme des consultations mensuelles"></canvas>
+          </div>
+        } @else {
+          <p class="empty-state">Aucune consultation enregistrée sur la période.</p>
+        }
+      </div>
+    </div>
+
+    <!-- Right column -->
+    <div class="col-side">
+
+      <!-- Répartition patients -->
+      <div class="dash-card">
+        <div class="dash-card-header">
+          <h2 class="dash-card-title">
+            <i class="fa-solid fa-chart-pie" aria-hidden="true"></i>
+            Répartition patients
+          </h2>
+        </div>
+        @if (hasAgeBrackets()) {
+          <div class="age-legend">
+            <span class="age-legend-item">
+              <span class="age-legend-dot age-legend-dot--female"></span>Femmes
+            </span>
+            <span class="age-legend-item">
+              <span class="age-legend-dot age-legend-dot--male"></span>Hommes
+            </span>
+          </div>
+          <div class="age-rows">
+            @for (b of ageBrackets(); track b.label) {
+              <div class="age-row">
+                <span class="age-row-label">{{ b.label }}</span>
+                <div class="age-bar-track">
+                  <div class="age-bar-female" [style.width]="b.femaleW"></div>
+                  <div class="age-bar-male" [style.width]="b.maleW"></div>
+                  <div class="age-bar-unknown" [style.width]="b.unknownW"></div>
+                </div>
+                <span class="age-row-total">{{ b.total }}</span>
+              </div>
+            }
+          </div>
+        } @else {
+          <p class="empty-state">Aucune répartition disponible.</p>
+        }
+      </div>
+
+      <!-- Paiements en attente -->
+      <div class="dash-card">
+        <div class="dash-card-header">
+          <h2 class="dash-card-title">
+            <i class="fa-solid fa-hourglass-half" style="color:var(--warn)" aria-hidden="true"></i>
+            Paiements en attente
+          </h2>
+          @if (pendingBadgeLabel()) {
+            <span class="pending-badge">{{ pendingBadgeLabel() }}</span>
+          }
+        </div>
+        <div class="payments-list">
+          @if (pendingPaymentsPageItems().length === 0) {
+            <p class="empty-state">Aucun paiement en attente.</p>
+          } @else {
+            @for (payment of pendingPaymentsPageItems(); track payment.invoiceNumber) {
+              <div
+                class="payment-row"
+                [routerLink]="['/patients', payment.patientId]"
+                [queryParams]="payment.consultationId ? { consultationId: payment.consultationId } : null"
+                role="button"
+                tabindex="0"
+              >
+                <span class="payment-icon" aria-hidden="true">
+                  <i class="fa-solid fa-file-invoice"></i>
+                </span>
+                <div class="payment-info">
+                  <span class="payment-patient">{{ payment.patientName }}</span>
+                  <span class="payment-meta">{{ payment.invoiceNumber }} · {{ payment.dueDateLabel }}</span>
+                </div>
+                <div class="payment-right">
+                  <span class="payment-amount tabular-nums">{{ payment.amountLabel }}</span>
+                  <span class="status-badge" [class]="getPaymentStatusClass(payment.status)">
+                    {{ payment.status }}
+                  </span>
+                </div>
+              </div>
+            }
+          }
+        </div>
+        @if (hasPendingPaymentsPagination()) {
+          <div class="payments-pagination">
+            <button
+              type="button"
+              class="pag-btn"
+              [disabled]="pendingPaymentsPage() === 1"
+              (click)="goToPendingPaymentsPage(pendingPaymentsPage() - 1)"
+              aria-label="Page précédente"
+            >
+              <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <span class="pag-info">{{ pendingPaymentsPage() }} / {{ pendingPaymentsTotalPages() }}</span>
+            <button
+              type="button"
+              class="pag-btn"
+              [disabled]="pendingPaymentsPage() === pendingPaymentsTotalPages()"
+              (click)="goToPendingPaymentsPage(pendingPaymentsPage() + 1)"
+              aria-label="Page suivante"
+            >
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </div>
+        }
+      </div>
+
+      <!-- Équipe & rétrocessions -->
+      @if (teamMembers().length > 0) {
+        <div class="dash-card">
+          <div class="dash-card-header">
+            <h2 class="dash-card-title">
+              <i class="fa-solid fa-people-group" aria-hidden="true"></i>
+              Équipe &amp; rétrocessions
+            </h2>
+          </div>
+          <div class="team-list">
+            @for (m of teamMembers(); track m.id) {
+              <div class="team-row">
+                <span class="team-avatar">{{ getPractitionerInitials(m.displayName) }}</span>
+                <div class="team-info">
+                  <span class="team-name">
+                    {{ m.displayName }}
+                    @if (m.isYou) {
+                      <span class="team-you">Vous</span>
+                    }
+                  </span>
+                  <span class="team-role">
+                    {{ m.role }}
+                    @if (m.cabinet) { · {{ m.cabinet }} }
+                  </span>
+                </div>
+                @if (m.retro !== null) {
+                  <span class="team-retro" [class.team-retro--you]="m.isYou">{{ m.retro }}</span>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+    </div>
   </section>
 }

@@ -736,46 +736,42 @@
       </div>
       <div class="wizard-card-body">
 
-        <nav class="nav nav-tabs nav-justified mb-4" role="tablist" aria-label="Sections de la consultation">
+        <nav class="modal-tabs mb-4" role="tablist" aria-label="Sections de la consultation">
           <button
             type="button"
-            class="nav-link"
+            class="modal-tab"
             [class.active]="consultationActiveTab() === 'consultation'"
             role="tab"
             [attr.aria-selected]="consultationActiveTab() === 'consultation'"
-            (click)="setConsultationTab('consultation')"
-           title="Action" bsTooltip>
+            (click)="setConsultationTab('consultation')">
             Consultation
           </button>
           <button
             type="button"
-            class="nav-link"
+            class="modal-tab"
             [class.active]="consultationActiveTab() === 'documents'"
             role="tab"
             [attr.aria-selected]="consultationActiveTab() === 'documents'"
-            (click)="setConsultationTab('documents')"
-           title="Action" bsTooltip>
+            (click)="setConsultationTab('documents')">
             Documents patient
           </button>
           <button
             type="button"
-            class="nav-link"
+            class="modal-tab"
             [class.active]="consultationActiveTab() === 'courriers'"
             role="tab"
             [attr.aria-selected]="consultationActiveTab() === 'courriers'"
-            (click)="setConsultationTab('courriers')"
-           title="Action" bsTooltip>
+            (click)="setConsultationTab('courriers')">
             Courriers sortants
           </button>
           <button
             type="button"
-            class="nav-link"
+            class="modal-tab"
             [class.active]="consultationActiveTab() === 'paiement'"
-            [class.text-warning]="isConsultationPaymentPending()"
+            [class.modal-tab--warn]="isConsultationPaymentPending()"
             role="tab"
             [attr.aria-selected]="consultationActiveTab() === 'paiement'"
-            (click)="setConsultationTab('paiement')"
-           title="Action" bsTooltip>
+            (click)="setConsultationTab('paiement')">
             Paiement
           </button>
         </nav>

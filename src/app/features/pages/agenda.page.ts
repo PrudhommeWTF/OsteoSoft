@@ -8,18 +8,20 @@ import {
   signal
 } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
-import { AgendaSettings, Appointment, DashboardEvent, LocalAgendaCalendar, OfficeOpeningHours, OfficeOption, Patient, Practitioner } from '../../core/api.types';
+import { AgendaSettings, Appointment, DashboardEvent, LocalAgendaCalendar, OfficeOpeningHours, OfficeWeekDay, OfficeOption, Patient, Practitioner } from '../../core/api.types';
+import { TopbarService } from '../../core/topbar.service';
+import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 import { WeekCalendar } from './week-calendar';
-import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
 import { sanitizeCellValue } from '../../core/xlsx-export.utils';
 
 @Component({
   selector: 'app-agenda-page',
   standalone: true,
-  imports: [ReactiveFormsModule, WeekCalendar, BsTooltipDirective],
+  imports: [ReactiveFormsModule, WeekCalendar, DatePickerComponent],
   templateUrl: './agenda.page.html',
   styleUrl: './agenda.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -28,6 +30,12 @@ export class AgendaPage implements OnDestroy {
   private readonly api = inject(ApiService);
   private readonly authService = inject(AuthService);
   private readonly fb = inject(FormBuilder);
+  private readonly topbarService = inject(TopbarService);
+
+  private readonly openCreateFromTopbarEffect = effect(() => {
+    const req = this.topbarService.openCreateAppointmentRequest();
+    if (req > 0) this.openCreateModal();
+  });
 
   readonly stats = signal([
     { label: 'Consultations du jour', value: '0' },
@@ -39,7 +47,7 @@ export class AgendaPage implements OnDestroy {
   readonly officeOptions = signal<OfficeOption[]>([]);
   readonly selectedOfficeId = signal<number | null>(this.authService.activeOfficeId());
   readonly isAllOfficesOverride = signal(false);
-  readonly defaultAgendaView = signal<string>('Semaine');
+  readonly defaultAgendaView = signal<string>('Jour');
   readonly events = signal<DashboardEvent[]>([]);
   readonly officeOpeningHoursById = signal<Record<number, OfficeOpeningHours>>({});
   readonly agendaSettings = signal<AgendaSettings | null>(null);
@@ -78,23 +86,44 @@ export class AgendaPage implements OnDestroy {
   readonly selectedSlotTime = signal<string>('');
   readonly showManualTime = signal(false);
 
-  private readonly SLOT_STEP_MINUTES = 30;
-
   readonly availableTimeSlots = computed((): Array<{ time: string; label: string; occupied: boolean }> => {
     const date = this.selectedSlotDate();
     if (!date) return [];
 
-    const slots: Array<{ time: string; label: string; occupied: boolean }> = [];
-    for (let h = 8; h < 19; h++) {
-      for (let m = 0; m < 60; m += this.SLOT_STEP_MINUTES) {
-        const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-        const slotStart = new Date(`${date}T${time}`);
-        const slotEnd = new Date(slotStart.getTime() + this.SLOT_STEP_MINUTES * 60_000);
+    const s = this.agendaSettings();
+    const sessionMin = s?.defaultSessionDurationMinutes ?? s?.slotDurationMinutes ?? 30;
 
-        const occupied = (this.appointments() ?? []).some((appt) => {
+    // Determine open intervals for the selected date using office opening hours
+    const officeId = this.selectedOfficeId();
+    const openingHours = officeId != null ? this.officeOpeningHoursById()[officeId] : undefined;
+    const dayKey = this.getDayOfWeek(date);
+
+    let intervals: Array<{ start: number; end: number }>;
+    if (openingHours && openingHours[dayKey]?.length) {
+      intervals = openingHours[dayKey]
+        .map((r) => ({ start: this.parseTimeToMinutes(r.start), end: this.parseTimeToMinutes(r.end) }))
+        .filter((iv) => iv.start >= 0 && iv.end > iv.start);
+    } else {
+      // Fall back to agenda settings bounds
+      intervals = [{ start: (s?.dayStartHour ?? 8) * 60, end: (s?.dayEndHour ?? 19) * 60 }];
+    }
+
+    const appointments = this.appointments() ?? [];
+    const slots: Array<{ time: string; label: string; occupied: boolean }> = [];
+
+    for (const interval of intervals) {
+      // Step by session duration, starting from office opening time → aligned slots
+      for (let m = interval.start; m < interval.end; m += sessionMin) {
+        const h = Math.floor(m / 60);
+        const min = m % 60;
+        const time = `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+        const slotStart = new Date(`${date}T${time}`);
+        const slotEnd = new Date(slotStart.getTime() + sessionMin * 60_000);
+
+        const occupied = appointments.some((appt) => {
           if (!appt.startsAt) return false;
           const apptStart = new Date(appt.startsAt);
-          const apptEnd = new Date(apptStart.getTime() + 30 * 60_000);
+          const apptEnd = new Date(apptStart.getTime() + sessionMin * 60_000);
           return apptStart < slotEnd && apptEnd > slotStart;
         });
 
@@ -121,6 +150,8 @@ export class AgendaPage implements OnDestroy {
     void this.load();
   });
 
+  readonly createPatientMode = signal<'existing' | 'new'>('existing');
+
   readonly createAppointmentForm = this.fb.nonNullable.group({
     patientId: [0],
     patientFirstName: ['', [Validators.maxLength(120)]],
@@ -128,15 +159,24 @@ export class AgendaPage implements OnDestroy {
     isPrivate: [false],
     privateReason: ['', [Validators.maxLength(180)]],
     practitioner: ['', [Validators.maxLength(120)]],
+    durationMinutes: [30],
+    slotDate: [''],
     startsAt: ['', [Validators.required]],
-    reason: ['', [Validators.required]],
-    status: ['A confirmer' as const, [Validators.required]]
+    reason: ['', [Validators.maxLength(240)]],
+    status: ['A confirmer' as const]
   });
 
   private defaultsLoaded = false;
 
   constructor() {
+    this.createAppointmentForm.controls.slotDate.valueChanges
+      .pipe(takeUntilDestroyed())
+      .subscribe((v) => this.onSlotDateChange(v ?? ''));
     this.load();
+  }
+
+  reloadAppointments(): void {
+    void this.load();
   }
 
   async onSelectedOfficeChange(value: string): Promise<void> {
@@ -173,7 +213,7 @@ export class AgendaPage implements OnDestroy {
     if (!this.defaultsLoaded) {
       this.defaultsLoaded = true;
       const profile = await this.api.getMyUserProfile();
-      this.defaultAgendaView.set(profile.defaultAgendaView || 'Semaine');
+      this.defaultAgendaView.set(profile.defaultAgendaView || 'Jour');
     }
 
     const me = await this.api.me();
@@ -251,6 +291,7 @@ export class AgendaPage implements OnDestroy {
     this.selectedSlotDate.set('');
     this.selectedSlotTime.set('');
     this.showManualTime.set(false);
+    this.createPatientMode.set('existing');
     this.createAppointmentForm.reset({
       patientId: 0,
       patientFirstName: '',
@@ -258,6 +299,8 @@ export class AgendaPage implements OnDestroy {
       isPrivate: false,
       privateReason: '',
       practitioner: '',
+      durationMinutes: 30,
+      slotDate: '',
       startsAt: '',
       reason: '',
       status: 'A confirmer'
@@ -334,6 +377,21 @@ export class AgendaPage implements OnDestroy {
       this.createAppointmentForm.controls.patientLastName.setValue('');
     } else {
       this.createAppointmentForm.controls.privateReason.setValue('');
+    }
+  }
+
+  setCreatePatientMode(mode: 'existing' | 'new'): void {
+    this.createPatientMode.set(mode);
+    this.clearSelectedCreatePatient();
+    this.createAppointmentForm.controls.patientFirstName.setValue('');
+    this.createAppointmentForm.controls.patientLastName.setValue('');
+  }
+
+  onFreeSlotClick(slot: { date: string; time: string | null }): void {
+    this.openCreateModal();
+    this.createAppointmentForm.controls.slotDate.setValue(slot.date);
+    if (slot.time) {
+      this.selectTimeSlot(slot.time);
     }
   }
 
@@ -436,9 +494,10 @@ export class AgendaPage implements OnDestroy {
         isPrivate,
         privateReason: raw.privateReason.trim(),
         practitioner: raw.practitioner.trim(),
+        durationMinutes: Number(raw.durationMinutes) || 30,
         startsAt: raw.startsAt ? new Date(raw.startsAt).toISOString() : raw.startsAt,
         reason: raw.reason,
-        status: raw.status,
+        status: raw.status || 'A confirmer',
         localCalendarId: calendarForOffice?.id ?? null,
         officeId: activeOfficeId
       });
@@ -553,6 +612,7 @@ export class AgendaPage implements OnDestroy {
       this.createPatientSearchDebounceId = null;
     }
     this.activeOfficeSyncEffect.destroy();
+    this.openCreateFromTopbarEffect.destroy();
   }
 
   private downloadBlob(blob: Blob, fileName: string): void {
@@ -564,5 +624,17 @@ export class AgendaPage implements OnDestroy {
     anchor.click();
     anchor.remove();
     window.URL.revokeObjectURL(url);
+  }
+
+  private getDayOfWeek(dateStr: string): OfficeWeekDay {
+    const days: OfficeWeekDay[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const d = new Date(`${dateStr}T00:00:00`);
+    return days[d.getDay()];
+  }
+
+  private parseTimeToMinutes(timeStr: string): number {
+    const [h, m] = timeStr.split(':').map(Number);
+    if (isNaN(h) || isNaN(m)) return -1;
+    return h * 60 + m;
   }
 }

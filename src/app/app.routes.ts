@@ -62,6 +62,18 @@ export const routes: Routes = [
         loadComponent: () => import('./features/pages/patient-create.page').then((m) => m.PatientCreatePage)
       },
       {
+        path: 'patients/:patientId/consultations/nouvelle',
+        title: 'Nouvelle consultation',
+        canActivate: [permissionGuard('create-consultation')],
+        loadComponent: () => import('./features/pages/consultation-workspace.page').then((m) => m.ConsultationWorkspacePage)
+      },
+      {
+        path: 'patients/:patientId/consultations/:consultationId',
+        title: 'Modifier la consultation',
+        canActivate: [permissionGuard('create-consultation')],
+        loadComponent: () => import('./features/pages/consultation-workspace.page').then((m) => m.ConsultationWorkspacePage)
+      },
+      {
         path: 'patients/:id',
         title: 'Fiche patient',
         canActivate: [permissionGuard('read-patient-record')],

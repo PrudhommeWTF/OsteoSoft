@@ -1,51 +1,53 @@
 <div class="wc-root">
   <!-- Toolbar -->
-  <div class="wc-toolbar d-flex align-items-center flex-wrap gap-2 mb-2">
-    <div class="btn-group btn-group-sm" role="group" aria-label="Navigation calendrier">
-      <button type="button" class="btn btn-outline-secondary" title="Aller à la période précédente" bsTooltip (click)="goToPrev()" aria-label="Période précédente">
+  <div class="wc-toolbar">
+    <!-- Nav buttons -->
+    <div class="wc-nav-group" role="group" aria-label="Navigation calendrier">
+      <button type="button" class="wc-nav-btn" title="Aller à la période précédente" bsTooltip (click)="goToPrev()" aria-label="Période précédente">
         <i class="fa-solid fa-chevron-left"></i>
       </button>
-      <button type="button" class="btn btn-outline-secondary" title="Revenir à aujourd'hui" bsTooltip (click)="goToToday()">Aujourd'hui</button>
-      <button type="button" class="btn btn-outline-secondary" title="Aller à la période suivante" bsTooltip (click)="goToNext()" aria-label="Période suivante">
+      <button type="button" class="wc-today-btn" title="Revenir à aujourd'hui" bsTooltip (click)="goToToday()">Aujourd'hui</button>
+      <button type="button" class="wc-nav-btn" title="Aller à la période suivante" bsTooltip (click)="goToNext()" aria-label="Période suivante">
         <i class="fa-solid fa-chevron-right"></i>
       </button>
     </div>
 
     <span class="wc-title">{{ calendarTitle() }}</span>
 
-    <div class="ms-auto btn-group btn-group-sm" role="group" aria-label="Mode d'affichage">
+    <!-- View mode segmented control -->
+    <div class="wc-view-toggle" role="group" aria-label="Mode d'affichage">
       <button
         type="button"
-        class="btn btn-outline-primary"
-        [class.active]="viewMode() === 'month'"
-        title="Afficher la vue mensuelle"
-        bsTooltip
-        (click)="viewMode.set('month')"
-      >Mois</button>
-      <button
-        type="button"
-        class="btn btn-outline-primary"
-        [class.active]="viewMode() === 'week'"
-        title="Afficher la vue hebdomadaire"
-        bsTooltip
-        (click)="viewMode.set('week')"
-      >Semaine</button>
-      <button
-        type="button"
-        class="btn btn-outline-primary"
-        [class.active]="viewMode() === 'three-days'"
-        title="Afficher les 3 prochains jours"
-        bsTooltip
-        (click)="viewMode.set('three-days')"
-      >3 jours</button>
-      <button
-        type="button"
-        class="btn btn-outline-primary"
+        class="wc-view-btn"
         [class.active]="viewMode() === 'day'"
         title="Afficher la vue journalière"
         bsTooltip
         (click)="viewMode.set('day')"
-      >Jour</button>
+      ><i class="fa-solid fa-calendar-day" aria-hidden="true"></i>Jour</button>
+      <button
+        type="button"
+        class="wc-view-btn"
+        [class.active]="viewMode() === 'three-days'"
+        title="Afficher les 3 prochains jours"
+        bsTooltip
+        (click)="viewMode.set('three-days')"
+      ><i class="fa-solid fa-calendar-days" aria-hidden="true"></i>3 jours</button>
+      <button
+        type="button"
+        class="wc-view-btn"
+        [class.active]="viewMode() === 'week'"
+        title="Afficher la vue hebdomadaire"
+        bsTooltip
+        (click)="viewMode.set('week')"
+      ><i class="fa-solid fa-calendar-week" aria-hidden="true"></i>Semaine</button>
+      <button
+        type="button"
+        class="wc-view-btn"
+        [class.active]="viewMode() === 'month'"
+        title="Afficher la vue mensuelle"
+        bsTooltip
+        (click)="viewMode.set('month')"
+      ><i class="fa-solid fa-calendar" aria-hidden="true"></i>Mois</button>
     </div>
   </div>
 
@@ -66,7 +68,8 @@
                 role="gridcell"
                 [class.wc-month-cell--outside]="!day.inCurrentMonth"
                 [class.wc-month-cell--today]="day.isToday"
-                [attr.aria-label]="day.longLabel + ' ' + day.dayNum"
+                [attr.aria-label]="'Créer un rendez-vous le ' + day.longLabel + ' ' + day.dayNum"
+                (click)="emitFreeSlotClick(day.dateStr, null)"
               >
                 <div class="wc-month-daynum" [class.wc-month-daynum--today]="day.isToday">{{ day.dayNum }}</div>
 
@@ -79,7 +82,7 @@
                       [attr.title]="ev.title"
                       role="button"
                       tabindex="0"
-                      (click)="openAppointmentModal(ev.event)"
+                      (click)="openAppointmentModal(ev.event); $event.stopPropagation()"
                     >
                       <span class="wc-month-event-time">{{ ev.timeLabel }}</span>
                       @if (ev.sexIconClass) {
@@ -98,7 +101,7 @@
                       class="wc-month-more"
                       title="Voir tous les rendez-vous de cette journée"
                       bsTooltip
-                      (click)="openMonthDayModal(day)"
+                      (click)="openMonthDayModal(day); $event.stopPropagation()"
                       [attr.aria-label]="'Afficher les ' + (day.events.length - 3) + ' rendez-vous supplémentaires du ' + day.longLabel + ' ' + day.dayNum"
                     >
                       +{{ day.events.length - 3 }} autres
@@ -111,8 +114,101 @@
         }
       </div>
     </div>
+  } @else if (viewMode() === 'day') {
+  <!-- ── Day view: pill strip + list + sidebar ── -->
+  <div class="wc-day-pills" role="tablist" aria-label="Sélection du jour">
+    @for (pill of dayViewWeekPills(); track pill.dateStr) {
+      <button
+        type="button"
+        class="wc-day-pill"
+        [class.wc-day-pill--selected]="pill.isSelected"
+        [class.wc-day-pill--today]="pill.isToday"
+        role="tab"
+        [attr.aria-selected]="pill.isSelected"
+        (click)="selectDayViewDate(pill.date)"
+      >
+        <div class="wc-day-pill-dow">{{ pill.dow }}</div>
+        <div class="wc-day-pill-num">{{ pill.dayNum }}</div>
+        <div class="wc-day-pill-count">{{ pill.count > 0 ? pill.count : '—' }}</div>
+      </button>
+    }
+  </div>
+
+  <div class="wc-day-layout">
+    <!-- Slot list -->
+    <section class="wc-day-slots" aria-label="Créneaux du jour">
+      @if (dayNowIndicatorPercent(); as pct) {
+        <div class="wc-day-now-line" [style.top]="pct" aria-hidden="true">
+          <div class="wc-day-now-dot"></div>
+        </div>
+      }
+      @for (slot of dayViewSlots(); track slot.time) {
+        <div class="wc-day-slot-row">
+          <div class="wc-day-slot-time" aria-hidden="true">{{ slot.time }}</div>
+          <div class="wc-day-slot-body">
+            @if (slot.isFree) {
+              <button
+                type="button"
+                class="wc-day-slot-free"
+                (click)="emitFreeSlotClick(referenceDate(), slot.time)"
+                aria-label="Créer un rendez-vous à {{ slot.time }}"
+              >Créneau libre</button>
+            } @else {
+              <button
+                type="button"
+                class="wc-day-slot-booked"
+                [style.border-left-color]="slot.borderColor"
+                [style.background-color]="slot.bgColor"
+                [attr.aria-label]="'Rendez-vous ' + slot.patientName"
+                (click)="openAppointmentModal(slot.event!)"
+              >
+                <span class="wc-day-slot-booked-info">
+                  <span class="wc-day-slot-booked-name">{{ slot.patientName }}</span>
+                  <span class="wc-day-slot-booked-meta">{{ slot.motif }} · {{ slot.duration }}</span>
+                </span>
+                <span [class]="slot.statusClass">{{ slot.statusLabel }}</span>
+              </button>
+            }
+          </div>
+        </div>
+      }
+      @if (dayViewSlots().length === 0) {
+        <div class="wc-day-empty">
+          <i class="fa-solid fa-calendar-xmark" aria-hidden="true"></i>
+          <div class="wc-day-empty-title">Cabinet fermé ce jour</div>
+          <div class="wc-day-empty-desc">Aucune consultation programmée. Sélectionnez un autre jour ouvré.</div>
+        </div>
+      }
+    </section>
+
+    <!-- Summary sidebar -->
+    @if (dayViewSummary(); as summary) {
+      <section class="wc-day-summary" aria-label="Résumé du jour">
+        <h2 class="wc-day-summary-title">Résumé du jour</h2>
+        <div class="wc-day-summary-rows">
+          <div class="wc-day-summary-row">
+            <span class="wc-day-summary-label">Consultations</span>
+            <span class="wc-day-summary-val">{{ summary.consultations }}</span>
+          </div>
+          <div class="wc-day-summary-row">
+            <span class="wc-day-summary-label">Créneaux libres</span>
+            <span class="wc-day-summary-val">{{ summary.freeSlots }}</span>
+          </div>
+        </div>
+        <div class="wc-day-summary-divider"></div>
+        <div class="wc-day-summary-row">
+          <span class="wc-day-summary-label">Taux de remplissage</span>
+          <span class="wc-day-summary-val">{{ summary.fillRate }}%</span>
+        </div>
+        <div class="wc-day-fill-bar">
+          <div class="wc-day-fill-bar-inner" [style.width]="summary.fillWidth"></div>
+        </div>
+      </section>
+    }
+  </div>
+
   } @else {
-  <!-- Calendrier -->
+  <!-- ── Week / 3-day grid ── -->
   <div class="wc-scroll" role="grid" [attr.aria-label]="calendarTitle()">
     <!-- En-têtes des jours (sticky) -->
     <div class="wc-header-row" role="row">
@@ -162,7 +258,9 @@
               [style.height.px]="settings().displayHeight"
               [class.wc-slot--lunch]="slotInfo.isLunch"
               [class.wc-slot--full-hour]="slotInfo.isFullHour"
-              role="presentation"
+              role="button"
+              [attr.aria-label]="'Créer un rendez-vous le ' + day.longLabel + ' à ' + slotInfo.time"
+              (click)="emitFreeSlotClick(day.dateStr, slotInfo.time)"
             ></div>
           }
 
@@ -268,123 +366,190 @@
   }
 
   @if (selectedEvent(); as event) {
-    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="appointment-detail-modal-title">
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h3 id="appointment-detail-modal-title" class="modal-title h5 mb-0">
-              Détail du rendez-vous
-            </h3>
-            <button type="button" class="btn-close" aria-label="Fermer" title="Fermer le détail" bsTooltip (click)="closeAppointmentModal()"></button>
-          </div>
-
-          <div class="modal-body">
-            <div class="wc-modal-patient mb-3" [style.border-left-color]="selectedEventColor()">
-              <p class="wc-modal-patient-name mb-1">
-                @if (settings().showPatientSex && getSexIcon(event.patientSex)) {
-                  <i [class]="(getSexIcon(event.patientSex) || '') + ' ' + (getSexColorClass(event.patientSex) || '')" [class.fw-bold]="event.isNewPatient"></i>
-                }
-                <span [class]="getSexColorClass(event.patientSex) || ''" [class.fw-bold]="event.isNewPatient">{{ event.patient }}</span>
-                @if (event.isNewPatient) {
-                  <i class="fa-solid fa-asterisk wc-new-patient-asterisk fw-bold" aria-hidden="true"></i>
-                }
-              </p>
-              <p class="text-secondary mb-0">{{ formatEventDateTime(event.start) }}</p>
-              @if (event.isPrivate && event.privateReason) {
-                <p class="text-secondary mb-0 mt-1">Raison privee: {{ event.privateReason }}</p>
-              }
+    @if (!isRescheduleModalOpen() && !isCancelModalOpen()) {
+      <div class="wc-rdv-backdrop" (click)="closeAppointmentModal()" aria-hidden="true"></div>
+      <div class="wc-rdv-wrap" role="dialog" aria-modal="true" aria-labelledby="rdv-detail-title">
+        <div class="wc-rdv-modal">
+          <div class="wc-rdv-header">
+            <div class="wc-rdv-avatar">{{ getEventInitials(event.isPrivate ? (event.privateReason || 'Privé') : event.patient) }}</div>
+            <div class="wc-rdv-header-info">
+              <div class="wc-rdv-patient-name" id="rdv-detail-title">{{ event.isPrivate ? (event.privateReason || 'Rendez-vous privé') : event.patient }}</div>
+              <div class="wc-rdv-patient-meta">{{ event.isPrivate ? 'Créneau privé' : (event.consultationType || event.reason) }}</div>
             </div>
-
-            <div class="mb-3">
-              <label class="form-label fw-semibold" for="consultation-title-input">Titre de la consultation</label>
-              <input
-                id="consultation-title-input"
-                type="text"
-                class="form-control"
-                placeholder="Saisir le titre de la consultation"
-                [value]="consultationTitleDraft()"
-                [disabled]="isSavingConsultationMeta()"
-                (input)="setConsultationTitleDraft($any($event.target).value || '')"
-              />
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label fw-semibold" for="consultation-practitioner-picker">Praticien</label>
-              @if (isPractitionersLoading()) {
-                <div class="small text-secondary">Chargement des utilisateurs...</div>
-              } @else {
-                <select
-                  id="consultation-practitioner-picker"
-                  class="form-select"
-                  [value]="consultationPractitionerDraft()"
-                  [disabled]="isSavingConsultationMeta()"
-                  (change)="setConsultationPractitionerDraft($any($event.target).value || '')"
-                >
-                  <option value="">Aucun praticien</option>
-                  @for (practitioner of practitioners(); track practitioner.id) {
-                    <option [value]="practitioner.username">
-                      {{ practitioner.username }}
-                    </option>
-                  }
-                </select>
-              }
-            </div>
-
-            @if (consultationMetaError()) {
-              <div class="alert alert-danger py-2" role="alert">{{ consultationMetaError() }}</div>
-            }
-
-            @if (consultationMetaSuccess()) {
-              <div class="alert alert-success py-2" role="status">{{ consultationMetaSuccess() }}</div>
-            }
-
-            <dl class="row mb-0">
-              @for (item of getEventDetailItems(event); track item.label) {
-                <dt class="col-12 col-sm-5 text-secondary fw-semibold mb-1 mb-sm-2">{{ item.label }}</dt>
-                <dd class="col-12 col-sm-7 mb-2">{{ item.value }}</dd>
-              }
-            </dl>
-          </div>
-
-          <div class="modal-footer">
-            @if (!event.isPrivate) {
-              <button
-                type="button"
-                class="btn btn-outline-primary"
-                (click)="openPatientRecord()"
-                aria-label="Voir la fiche patient"
-                title="Voir la fiche patient"
-                bsTooltip>
-                <i class="fa-solid fa-user"></i>
-              </button>
-            }
-            @if (!event.isPrivate && event.consultationId) {
-              <button
-                type="button"
-                class="btn btn-outline-success"
-                (click)="openConsultationRecord()"
-                aria-label="Voir la consultation"
-                title="Voir la consultation"
-                bsTooltip>
-                <i class="fa-solid fa-notes-medical"></i>
-              </button>
-            }
-            <button
-              type="button"
-              class="btn btn-success"
-              [disabled]="isSavingConsultationMeta()"
-              (click)="saveConsultationMeta()"
-              aria-label="Enregistrer"
-              title="Enregistrer les modifications"
-              bsTooltip>
-              <i class="fa-solid fa-floppy-disk"></i>
+            <button type="button" class="wc-rdv-close" aria-label="Fermer" (click)="closeAppointmentModal()">
+              <i class="fa-solid fa-xmark" aria-hidden="true"></i>
             </button>
-            <button type="button" class="btn btn-outline-secondary" title="Fermer le détail" bsTooltip (click)="closeAppointmentModal()">Fermer</button>
+          </div>
+
+          <div class="wc-rdv-body">
+            <div class="wc-rdv-row">
+              <i class="fa-solid fa-clock" aria-hidden="true"></i>
+              <span>{{ formatEventDateTime(event.start) }}</span>
+            </div>
+            @if (!event.isPrivate && event.reason) {
+              <div class="wc-rdv-row">
+                <i class="fa-solid fa-notes-medical" aria-hidden="true"></i>
+                <span>{{ event.reason }}</span>
+              </div>
+            }
+            @if (!event.isPrivate && (event.patientMobilePhone || event.patientLandlinePhone)) {
+              <div class="wc-rdv-row">
+                <i class="fa-solid fa-phone" aria-hidden="true"></i>
+                <span>{{ event.patientMobilePhone || event.patientLandlinePhone }}</span>
+              </div>
+            }
+            <div class="wc-rdv-row">
+              <i class="fa-solid fa-circle-dot" aria-hidden="true"></i>
+              <span [class]="getStatusClass(event.status)">{{ getStatusLabel(event.status) }}</span>
+            </div>
+            @if (consultationMetaError()) {
+              <div class="wc-modal-alert" role="alert">{{ consultationMetaError() }}</div>
+            }
+          </div>
+
+          <div class="wc-rdv-footer">
+            <button type="button" class="wc-rdv-btn-outline" (click)="openRescheduleModal()">
+              <i class="fa-solid fa-calendar-day" aria-hidden="true"></i>Reprogrammer
+            </button>
+            @if (!event.isPrivate) {
+              <button type="button" class="wc-rdv-btn-outline" (click)="openPatientRecord()">
+                <i class="fa-solid fa-user" aria-hidden="true"></i>Voir la fiche
+              </button>
+              <button type="button" class="wc-rdv-btn-primary" (click)="convertToConsultation()">
+                <i class="fa-solid fa-notes-medical" aria-hidden="true"></i>
+                {{ event.consultationId ? 'Voir la consultation' : 'Convertir en consultation' }}
+              </button>
+            }
+            <button type="button" class="wc-rdv-btn-danger-link" (click)="openCancelModal()">
+              Annuler le rendez-vous
+            </button>
           </div>
         </div>
       </div>
-    </div>
-    <div class="modal-backdrop fade show" (click)="closeAppointmentModal()"></div>
+    }
+
+    @if (isRescheduleModalOpen()) {
+      <div class="wc-rdv-backdrop" (click)="closeRescheduleModal()" aria-hidden="true"></div>
+      <div class="wc-rdv-wrap" role="dialog" aria-modal="true" aria-labelledby="rdv-reschedule-title">
+        <div class="wc-rdv-modal">
+          <div class="wc-rdv-modal-header">
+            <h3 id="rdv-reschedule-title" class="wc-rdv-modal-title">
+              <i class="fa-solid fa-calendar-day" aria-hidden="true"></i>Reprogrammer le rendez-vous
+            </h3>
+            <button type="button" class="wc-rdv-close" aria-label="Fermer" (click)="closeRescheduleModal()" [disabled]="isReschedulingAppointment()">
+              <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <div class="wc-rdv-body">
+            <div class="wc-reschedule-patient">
+              <div class="wc-rdv-avatar wc-rdv-avatar--sm">{{ getEventInitials(event.isPrivate ? (event.privateReason || 'Privé') : event.patient) }}</div>
+              <span>{{ event.isPrivate ? (event.privateReason || 'Rendez-vous privé') : event.patient }}</span>
+            </div>
+
+            <div class="wc-reschedule-current">
+              <i class="fa-solid fa-clock" aria-hidden="true"></i>
+              <span>{{ formatEventDateTime(event.start) }}</span>
+            </div>
+
+            <div class="wc-form-field">
+              <label class="wc-form-label" for="reschedule-datetime">Nouvelle date &amp; heure</label>
+              <app-date-picker id="reschedule-datetime" mode="datetime" [formControl]="rescheduleDateTimeControl" />
+            </div>
+
+            <div class="wc-reschedule-duration">
+              <i class="fa-solid fa-lock" aria-hidden="true"></i>
+              <span>Définie par le cabinet</span>
+            </div>
+
+            <div class="wc-form-field">
+              <label class="wc-form-label" for="reschedule-note">Note <span class="wc-form-optional">(facultatif)</span></label>
+              <textarea
+                id="reschedule-note"
+                class="wc-form-input"
+                rows="3"
+                placeholder="Motif du report, informations complémentaires…"
+                [value]="rescheduleNote()"
+                [disabled]="isReschedulingAppointment()"
+                (input)="rescheduleNote.set($any($event.target).value || '')"
+              ></textarea>
+            </div>
+
+            @if (rescheduleError()) {
+              <div class="wc-modal-alert" role="alert">{{ rescheduleError() }}</div>
+            }
+          </div>
+
+          <div class="wc-rdv-modal-footer">
+            <button type="button" class="wc-rdv-btn-ghost" (click)="closeRescheduleModal()" [disabled]="isReschedulingAppointment()">
+              Annuler
+            </button>
+            <button type="button" class="wc-rdv-btn-primary" (click)="confirmReschedule()" [disabled]="isReschedulingAppointment()">
+              @if (isReschedulingAppointment()) {
+                <i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i>Enregistrement…
+              } @else {
+                Confirmer le report
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
+    @if (isCancelModalOpen()) {
+      <div class="wc-rdv-backdrop" (click)="closeCancelModal()" aria-hidden="true"></div>
+      <div class="wc-rdv-wrap" role="dialog" aria-modal="true" aria-labelledby="rdv-cancel-title">
+        <div class="wc-rdv-modal">
+          <div class="wc-cancel-header">
+            <div class="wc-cancel-alert-icon" aria-hidden="true">
+              <i class="fa-solid fa-calendar-xmark"></i>
+            </div>
+            <div class="wc-cancel-header-text">
+              <div id="rdv-cancel-title" class="wc-cancel-title">Annuler le rendez-vous ?</div>
+            </div>
+            <button type="button" class="wc-rdv-close" aria-label="Fermer" (click)="closeCancelModal()" [disabled]="isCancellingAppointment()">
+              <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <div class="wc-rdv-body">
+            <p class="wc-cancel-desc">Cette action annulera définitivement le rendez-vous de <strong>{{ event.isPrivate ? (event.privateReason || 'ce créneau') : event.patient }}</strong> prévu le {{ formatEventDateTime(event.start) }}.</p>
+
+            <div class="wc-form-field">
+              <label class="wc-form-label">Motif</label>
+              <div class="wc-cancel-reasons">
+                @for (option of cancelReasonOptions; track option.value) {
+                  <button
+                    type="button"
+                    class="wc-cancel-reason"
+                    [class.wc-cancel-reason--active]="cancelReason() === option.value"
+                    [disabled]="isCancellingAppointment()"
+                    (click)="cancelReason.set(option.value)"
+                  >{{ option.label }}</button>
+                }
+              </div>
+            </div>
+
+            @if (cancelError()) {
+              <div class="wc-modal-alert" role="alert">{{ cancelError() }}</div>
+            }
+          </div>
+
+          <div class="wc-rdv-modal-footer">
+            <button type="button" class="wc-rdv-btn-ghost" (click)="closeCancelModal()" [disabled]="isCancellingAppointment()">
+              Garder le RDV
+            </button>
+            <button type="button" class="wc-rdv-btn-danger-solid" (click)="confirmCancel()" [disabled]="isCancellingAppointment()">
+              @if (isCancellingAppointment()) {
+                <i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i>Annulation…
+              } @else {
+                Confirmer l'annulation
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    }
   }
 
   @if (isConsultationConflictModalOpen() && consultationConflictCandidate(); as conflict) {

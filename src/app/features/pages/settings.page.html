@@ -1,48 +1,45 @@
-<div class="container-fluid px-0">
-  <div class="card border-0 shadow-sm mb-4">
-    <div class="card-body p-4">
-      <h1 class="h3 mb-1">{{ pageTitle() }}</h1>
-      <p class="text-secondary mb-0">{{ pageDescription() }}</p>
-    </div>
-  </div>
+<div class="set-page-header">
+  <p class="set-page-subtitle">{{ pageDescription() }}</p>
+</div>
 
-  <section class="row g-4" aria-label="Configuration de l'application">
-    <nav class="col-12" aria-label="Onglets des paramètres">
-      <div class="card border-0 shadow-sm">
-        <div class="nav nav-pills flex-row flex-wrap p-3 gap-2" role="tablist" aria-orientation="horizontal">
-          @for (section of visibleSections(); track section.id) {
-            <button
-              type="button"
-              class="nav-link"
-              role="tab"
-              [class.active]="activeSectionId() === section.id"
-              [attr.aria-selected]="activeSectionId() === section.id"
-              [attr.aria-controls]="section.id + '-panel'"
-              [id]="section.id + '-tab'"
-              (click)="selectSection(section.id)"
-             title="Sélectionner" bsTooltip>
-              {{ section.label }}
-            </button>
-          }
-        </div>
+<div class="set-layout" aria-label="Configuration de l'application">
+
+  <!-- Rail nav -->
+  <nav class="set-rail-nav" role="tablist" aria-orientation="vertical" aria-label="Sections des paramètres">
+    @for (section of visibleSections(); track section.id) {
+      <button
+        type="button"
+        class="set-rail-item"
+        role="tab"
+        [class.active]="activeSectionId() === section.id"
+        [attr.aria-selected]="activeSectionId() === section.id"
+        [attr.aria-controls]="section.id + '-panel'"
+        [id]="section.id + '-tab'"
+        (click)="selectSection(section.id)">
+        <span class="set-rail-icon" aria-hidden="true"><i [class]="section.icon"></i></span>
+        <span class="set-rail-text">
+          <span class="set-rail-label">{{ section.label }}</span>
+          <span class="set-rail-summary">{{ section.summary }}</span>
+        </span>
+      </button>
+    }
+  </nav>
+
+  <!-- Content panel -->
+  <article
+    class="set-panel"
+    role="tabpanel"
+    [attr.aria-labelledby]="activeSection().id + '-tab'"
+    [id]="activeSection().id + '-panel'"
+  >
+    <div class="set-panel-header">
+      <span class="set-panel-icon" aria-hidden="true"><i [class]="activeSection().icon"></i></span>
+      <div>
+        <h2 class="set-panel-title">{{ activeSection().label }}</h2>
+        <p class="set-panel-desc">{{ activeSection().description }}</p>
       </div>
-    </nav>
-
-    <article
-      class="col-12"
-      role="tabpanel"
-      [attr.aria-labelledby]="activeSection().id + '-tab'"
-      [id]="activeSection().id + '-panel'"
-    >
-      <div class="card border-0 shadow-sm">
-        <div class="card-body p-4">
-          <div class="settings-panel-hero mb-4">
-            <span class="settings-panel-icon"><i [class]="activeSection().icon"></i></span>
-            <div>
-              <h2 class="h4 mb-2">{{ activeSection().label }}</h2>
-              <p class="text-secondary mb-0">{{ activeSection().description }}</p>
-            </div>
-          </div>
+    </div>
+    <div class="set-panel-body">
       @if (activeSection().id === 'data-management') {
         <nav class="mb-3" aria-label="Onglets de gestion des données">
           <div class="nav nav-pills flex-row flex-wrap gap-2" role="tablist" aria-orientation="horizontal">
@@ -479,7 +476,7 @@
                   <div class="mt-3 border rounded p-3 bg-light-subtle">
                     <p class="mb-2 fw-semibold">Résultat de l'import WebOsteo</p>
                     <div class="small text-secondary mb-2">
-                      Utilisateurs: {{ result.importedUsers }} — Patients: {{ result.importedPatients }} — Consultations: {{ result.importedConsultations }} — Rendez-vous: {{ result.importedAppointments }} — Factures: {{ result.importedInvoices }} — Contacts: {{ result.importedContacts }} — Remises: {{ result.importedDeposits }} — Liens de parenté: {{ result.updatedRelatedPeople }}
+                      Utilisateurs: {{ result.importedUsers }} — Patients: {{ result.importedPatients }} — Consultations: {{ result.importedConsultations }} — Rendez-vous: {{ result.importedAppointments }} — Factures: {{ result.importedInvoices }} — Documents: {{ result.importedDocuments }} — Contacts: {{ result.importedContacts }} — Remises: {{ result.importedDeposits }} — Liens de parenté: {{ result.updatedRelatedPeople }}
                     </div>
 
                     @if (result.errors.length > 0) {
@@ -3433,9 +3430,7 @@
           </div>
         </section>
       }
-    </div>
-      </div>
-  </article>
-</section>
+    </div><!-- /set-panel-body -->
+  </article><!-- /set-panel -->
 
-</div>
+</div><!-- /set-layout -->

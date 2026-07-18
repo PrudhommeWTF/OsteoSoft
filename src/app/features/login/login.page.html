@@ -1,65 +1,77 @@
-<main class="login-screen d-flex align-items-center justify-content-center" aria-labelledby="login-title">
-  <section class="login-card card shadow-lg border-0" role="region" aria-describedby="login-hint">
-    <div class="card-body p-4 p-lg-5">
-      <div class="text-center mb-4">
-        <div class="brand-badge mx-auto mb-3">
-          <i class="fa-solid fa-calendar-days"></i>
-        </div>
-        <h1 id="login-title" class="h3 mb-2">Connexion</h1>
-        <p id="login-hint" class="text-secondary mb-0">{{ configService.getAppName() }} v{{ configService.getVersion() }}</p>
+<main class="login-screen" aria-labelledby="login-title">
+
+  <!-- Brand header (above card) -->
+  <div class="login-brand">
+    <div class="login-logo" aria-hidden="true">
+      <i class="fa-solid fa-spa"></i>
+    </div>
+    <h1 class="login-app-name">OsteoSoft</h1>
+    <p class="login-app-sub">Gestion de cabinet d'ostéopathie</p>
+  </div>
+
+  <!-- Form card -->
+  <section class="login-card">
+    <h2 id="login-title" class="login-card-title">Connexion</h2>
+
+    <form [formGroup]="form" (ngSubmit)="submit()" novalidate class="login-form">
+
+      <div class="lf-field">
+        <label class="lf-label" for="username">Identifiant</label>
+        <input
+          id="username"
+          type="text"
+          class="lf-input"
+          [class.lf-input-error]="form.controls.username.invalid && form.controls.username.touched"
+          formControlName="username"
+          autocomplete="username"
+          placeholder="admin"
+        />
       </div>
 
-      <form class="d-grid gap-3" [formGroup]="form" (ngSubmit)="submit()" novalidate>
-        <div>
-          <label class="form-label" for="username">Login</label>
-          <div class="input-group">
-            <span class="input-group-text"><i class="fa-solid fa-user"></i></span>
-            <input
-              id="username"
-              type="text"
-              class="form-control"
-              formControlName="username"
-              autocomplete="username"
-              [class.is-invalid]="form.controls.username.invalid && form.controls.username.touched"
-            />
-          </div>
-        </div>
+      <div class="lf-field">
+        <label class="lf-label" for="password">Mot de passe</label>
+        <input
+          id="password"
+          type="password"
+          class="lf-input"
+          [class.lf-input-error]="form.controls.password.invalid && form.controls.password.touched"
+          formControlName="password"
+          autocomplete="current-password"
+          placeholder="••••••••"
+        />
+      </div>
 
-        <div>
-          <label class="form-label" for="password">Mot de passe</label>
-          <div class="input-group">
-            <span class="input-group-text"><i class="fa-solid fa-lock"></i></span>
-            <input
-              id="password"
-              type="password"
-              class="form-control"
-              formControlName="password"
-              autocomplete="current-password"
-              [class.is-invalid]="form.controls.password.invalid && form.controls.password.touched"
-            />
-          </div>
-        </div>
+      <label class="lf-check">
+        <input type="checkbox" formControlName="remember" />
+        <span>Rester connecté·e</span>
+      </label>
 
-        <div class="form-check">
-          <input id="remember" class="form-check-input" type="checkbox" formControlName="remember" />
-          <label class="form-check-label" for="remember">Se souvenir de moi</label>
+      @if (errorMessage()) {
+        <div class="lf-error" role="alert">
+          <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
+          {{ errorMessage() }}
         </div>
+      }
 
-        @if (errorMessage()) {
-          <div class="alert alert-danger py-2 mb-0" role="alert">{{ errorMessage() }}</div>
+      <button type="submit" class="lf-submit" [disabled]="isSubmitting()">
+        @if (isSubmitting()) {
+          <i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i>
+          Connexion…
+        } @else {
+          <i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>
+          Se connecter
         }
+      </button>
 
-        <button type="submit" class="btn btn-primary btn-lg w-100" [disabled]="isSubmitting()">
-          <i class="fa-solid fa-right-to-bracket me-2"></i>
-          @if (isSubmitting()) {
-            Connexion...
-          } @else {
-            Connexion
-          }
-        </button>
-      </form>
-
-      <p class="license text-center text-secondary small mt-4 mb-0">© {{ configService.getAppName() }} v{{ configService.getVersion() }}</p>
-    </div>
+      <p class="lf-forgot">Mot de passe oublié ?</p>
+    </form>
   </section>
+
+  <!-- Setup link -->
+  <p class="login-setup-link">
+    Première utilisation ?
+    <a href="/installation" class="login-setup-btn">Lancer l'installation</a>
+  </p>
+
+  <p class="login-meta">{{ configService.getAppName() }} v{{ configService.getVersion() }}</p>
 </main>

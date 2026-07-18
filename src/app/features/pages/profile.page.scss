@@ -2,6 +2,57 @@
 	display: block;
 }
 
+/* ── Profile header ── */
+.prof-header {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.prof-title {
+  margin: 0;
+  font-size: 23px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.4px;
+}
+
+.prof-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+/* ── Profile section nav ── */
+.prof-section-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.prof-section-pill {
+  padding: 6px 16px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-soft);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+
+  &:hover { background: var(--surface-2); color: var(--text); }
+  &.active { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+}
+
+/* Legacy alias — keep for any remaining references */
 .profile-tabs-nav {
 	align-items: center;
 }

@@ -1,0 +1,89 @@
+:host {
+  display: block;
+}
+
+/* ── Page header ── */
+.stats-page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 20px;
+}
+
+.stats-page-title {
+  margin: 0;
+  font-size: 23px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.4px;
+}
+
+.stats-page-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+/* ── Section tab bar ── */
+.stats-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 20px;
+}
+
+.stats-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+
+  &:hover:not(.active) {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  &.active {
+    background: var(--accent);
+    color: var(--accent-contrast);
+    border-color: var(--accent);
+  }
+}
+
+.stats-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 99px;
+  font-size: 10.5px;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.12);
+  color: inherit;
+
+  .stats-tab.active & {
+    background: rgba(255, 255, 255, 0.25);
+  }
+}
+
+/* ── Charts ── */
+.chart-wrap {
+  position: relative;
+  height: 260px;
+}

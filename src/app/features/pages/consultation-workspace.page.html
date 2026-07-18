@@ -1,0 +1,778 @@
+@if (isLoading()) {
+  <div class="cw-loading">
+    <i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i>
+    Chargement…
+  </div>
+} @else if (loadError()) {
+  <div class="cw-error">
+    <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+    {{ loadError() }}
+    <button type="button" class="cw-btn-outline" (click)="goBack()">Retour</button>
+  </div>
+} @else {
+
+<!-- ══ Topbar ══════════════════════════════════════════════════════════════ -->
+<header class="cw-topbar">
+  <div class="cw-topbar-left">
+    <button type="button" class="cw-back-btn" (click)="goBack()" title="Retour à la fiche patient" bsTooltip>
+      <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+    </button>
+    <nav class="cw-breadcrumb" aria-label="Fil d'Ariane">
+      <a [routerLink]="['/patients', patientId()]" class="cw-breadcrumb-link">{{ patient()?.fullName }}</a>
+      <i class="fa-solid fa-chevron-right cw-breadcrumb-sep" aria-hidden="true"></i>
+      <span class="cw-breadcrumb-current">{{ pageTitle() }}</span>
+    </nav>
+  </div>
+  <div class="cw-topbar-right">
+    @if (autosaveState() !== 'disabled') {
+      <span class="cw-autosave-badge" [title]="autosaveStatusText()">
+        <i class="fa-solid fa-cloud-arrow-up" [class.cw-autosave-icon--saving]="autosaveState() === 'saving'" [class.cw-autosave-icon--error]="autosaveState() === 'error'" aria-hidden="true"></i>
+        {{ autosaveStatusText() }}
+      </span>
+    }
+    <button type="button" class="cw-btn-outline" (click)="generatePdf()" [disabled]="isGeneratingPdf()" title="Aperçu PDF" bsTooltip>
+      <i class="fa-solid fa-file-pdf" aria-hidden="true"></i>
+      Aperçu PDF
+    </button>
+  </div>
+</header>
+
+<!-- ══ Tab bar ═════════════════════════════════════════════════════════════ -->
+<nav class="cw-tabbar" role="tablist">
+  <button type="button" role="tab" class="cw-tab" [class.cw-tab--active]="activeTab() === 'consultation'" (click)="setTab('consultation')">
+    <i class="fa-solid fa-notes-medical" aria-hidden="true"></i>
+    Consultation
+  </button>
+  <button type="button" role="tab" class="cw-tab" [class.cw-tab--active]="activeTab() === 'documents'" (click)="setTab('documents')">
+    <i class="fa-solid fa-paperclip" aria-hidden="true"></i>
+    Documents patient
+    @if (mode() === 'edit' && activeConsultationDocuments().length > 0) {
+      <span class="cw-tab-badge">{{ activeConsultationDocuments().length }}</span>
+    }
+    @if (mode() === 'create' && pendingNonLetterDocuments().length > 0) {
+      <span class="cw-tab-badge">{{ pendingNonLetterDocuments().length }}</span>
+    }
+  </button>
+  <button type="button" role="tab" class="cw-tab" [class.cw-tab--active]="activeTab() === 'courriers'" (click)="setTab('courriers')">
+    <i class="fa-solid fa-envelope-open-text" aria-hidden="true"></i>
+    Courriers sortants
+  </button>
+  <button type="button" role="tab" class="cw-tab" [class.cw-tab--active]="activeTab() === 'paiement'" (click)="setTab('paiement')">
+    <i class="fa-solid fa-euro-sign" aria-hidden="true"></i>
+    Paiement
+  </button>
+</nav>
+
+<!-- ══ Body ════════════════════════════════════════════════════════════════ -->
+<div class="cw-body">
+
+  <!-- ── Onglet Consultation ─────────────────────────────────────────────── -->
+  @if (activeTab() === 'consultation') {
+    <div class="cw-consultation-grid" [formGroup]="editForm">
+
+      <!-- Colonne gauche -->
+      <div class="cw-col-left">
+
+        <!-- Patient header -->
+        <div class="cw-patient-header">
+          <div class="cw-patient-avatar">{{ patientInitials() }}</div>
+          <div class="cw-patient-info">
+            <div class="cw-patient-name">
+              {{ patient()?.fullName }}
+              @if (sexIcon()) {
+                <i [class]="sexIcon() + ' ' + sexColorClass()" aria-hidden="true"></i>
+              }
+            </div>
+            <div class="cw-patient-sub">
+              @if (patient()?.age) { {{ patient()?.age }} ans }
+              @if (patient()?.occupationOrSchool) { · {{ patient()?.occupationOrSchool }} }
+            </div>
+          </div>
+        </div>
+
+        <!-- Titre de la consultation -->
+        <input type="text" class="cw-title-input" formControlName="title" placeholder="Titre de la consultation…" autocomplete="off" maxlength="200" />
+
+        <!-- Motif principal -->
+        <div class="cw-card cw-editor-card">
+          <div class="cw-editor-toolbar">
+            <span class="cw-editor-label">Motif principal</span>
+            <div class="cw-toolbar-btns">
+              <button type="button" class="cw-toolbar-btn" (click)="applyEditorCommand('motifMainHtml', 'bold')" title="Gras"><i class="fa-solid fa-bold" aria-hidden="true"></i></button>
+              <button type="button" class="cw-toolbar-btn" (click)="applyEditorCommand('motifMainHtml', 'italic')" title="Italique"><i class="fa-solid fa-italic" aria-hidden="true"></i></button>
+              <button type="button" class="cw-toolbar-btn" (click)="applyEditorCommand('motifMainHtml', 'underline')" title="Souligné"><i class="fa-solid fa-underline" aria-hidden="true"></i></button>
+              <button type="button" class="cw-toolbar-btn" (click)="applyEditorCommand('motifMainHtml', 'insertUnorderedList')" title="Liste"><i class="fa-solid fa-list-ul" aria-hidden="true"></i></button>
+            </div>
+          </div>
+          <div #motifMainEditor class="cw-editor" contenteditable="true" (input)="onRichTextInput('motifMainHtml', $event)"></div>
+        </div>
+
+        <!-- Schéma corporel (repliable) -->
+        <div class="cw-schema-wrap">
+          <button type="button" class="cw-schema-toggle" (click)="isSchemaExpanded.set(!isSchemaExpanded())">
+            <span class="cw-schema-toggle-left">
+              <i class="fa-solid fa-person-rays cw-schema-icon" aria-hidden="true"></i>
+              <span>
+                <span class="cw-schema-toggle-title">Schéma corporel</span>
+                <span class="cw-schema-toggle-sub">· optionnel{{ schemaHtml() ? ' · dessiné' : '' }}</span>
+              </span>
+            </span>
+            <i class="fa-solid" [class.fa-chevron-down]="!isSchemaExpanded()" [class.fa-chevron-up]="isSchemaExpanded()" aria-hidden="true"></i>
+          </button>
+          @if (isSchemaExpanded()) {
+            <div class="cw-card cw-schema-card">
+              <app-consultation-canvas
+                [value]="schemaHtml()"
+                (valueChange)="schemaHtml.set($event)"
+              ></app-consultation-canvas>
+            </div>
+          }
+        </div>
+
+        <!-- Tests -->
+        <div class="cw-card cw-editor-card">
+          <div class="cw-editor-toolbar">
+            <span class="cw-editor-label">Examen clinique / Tests</span>
+            <div class="cw-toolbar-btns">
+              <button type="button" class="cw-toolbar-btn" (click)="applyEditorCommand('testsHtml', 'bold')"><i class="fa-solid fa-bold" aria-hidden="true"></i></button>
+              <button type="button" class="cw-toolbar-btn" (click)="applyEditorCommand('testsHtml', 'italic')"><i class="fa-solid fa-italic" aria-hidden="true"></i></button>
+              <button type="button" class="cw-toolbar-btn" (click)="applyEditorCommand('testsHtml', 'insertUnorderedList')"><i class="fa-solid fa-list-ul" aria-hidden="true"></i></button>
+            </div>
+          </div>
+          <div #testsEditor class="cw-editor" contenteditable="true" (input)="onRichTextInput('testsHtml', $event)"></div>
+        </div>
+
+        <!-- Traitements -->
+        <div class="cw-card cw-editor-card">
+          <div class="cw-editor-toolbar">
+            <span class="cw-editor-label">Techniques réalisées</span>
+            <div class="cw-toolbar-btns">
+              <button type="button" class="cw-toolbar-btn" (click)="applyEditorCommand('treatmentsHtml', 'bold')"><i class="fa-solid fa-bold" aria-hidden="true"></i></button>
+              <button type="button" class="cw-toolbar-btn" (click)="applyEditorCommand('treatmentsHtml', 'italic')"><i class="fa-solid fa-italic" aria-hidden="true"></i></button>
+              <button type="button" class="cw-toolbar-btn" (click)="applyEditorCommand('treatmentsHtml', 'insertUnorderedList')"><i class="fa-solid fa-list-ul" aria-hidden="true"></i></button>
+            </div>
+          </div>
+          <div #treatmentsEditor class="cw-editor" contenteditable="true" (input)="onRichTextInput('treatmentsHtml', $event)"></div>
+        </div>
+
+        <!-- Remarques -->
+        <div class="cw-card cw-editor-card">
+          <div class="cw-editor-toolbar">
+            <span class="cw-editor-label">Remarques</span>
+            <div class="cw-toolbar-btns">
+              <button type="button" class="cw-toolbar-btn" (click)="applyEditorCommand('remarksHtml', 'bold')"><i class="fa-solid fa-bold" aria-hidden="true"></i></button>
+              <button type="button" class="cw-toolbar-btn" (click)="applyEditorCommand('remarksHtml', 'italic')"><i class="fa-solid fa-italic" aria-hidden="true"></i></button>
+            </div>
+          </div>
+          <div #remarksEditor class="cw-editor cw-editor--short" contenteditable="true" (input)="onRichTextInput('remarksHtml', $event)"></div>
+        </div>
+
+      </div>
+
+      <!-- Colonne droite -->
+      <div class="cw-col-right">
+
+        <!-- Séance -->
+        <div class="cw-card">
+          <div class="cw-card-title">Séance</div>
+          <div class="cw-form-row">
+            <label class="cw-label">Début de consultation</label>
+            <app-date-picker
+              formControlName="startedAtLocal"
+              [mode]="'datetime'"
+            ></app-date-picker>
+          </div>
+          <div class="cw-form-row">
+            <label class="cw-label">Praticien</label>
+            <input type="text" class="cw-input" formControlName="practitioner" list="cw-practitioner-list" placeholder="Praticien…" autocomplete="off" />
+            <datalist id="cw-practitioner-list">
+              @for (opt of practitionerOptions(); track opt.username) {
+                <option [value]="opt.displayName">{{ opt.label }}</option>
+              }
+            </datalist>
+          </div>
+          <div class="cw-form-row">
+            <label class="cw-label">Profil de consultation</label>
+            <select class="cw-select" formControlName="profile" (change)="setProfile(editForm.controls.profile.value)">
+              @for (opt of profileOptions(); track opt) {
+                <option [value]="opt">{{ opt }}</option>
+              }
+            </select>
+          </div>
+          <label class="cw-checkbox-row">
+            <input type="checkbox" class="cw-checkbox" formControlName="important" />
+            <span>Consultation importante</span>
+            <i class="fa-solid fa-star cw-important-star" aria-hidden="true"></i>
+          </label>
+        </div>
+
+        <!-- EVA -->
+        <div class="cw-card">
+          <div class="cw-card-title">Douleur — EVA</div>
+          <div class="cw-eva-scores">
+            <span class="cw-eva-value cw-eva-value--before">{{ editForm.controls.evaBefore.value }}</span>
+            <i class="fa-solid fa-arrow-right-long cw-eva-arrow" aria-hidden="true"></i>
+            <span class="cw-eva-value cw-eva-value--after">{{ editForm.controls.evaAfter.value }}</span>
+            @if (editForm.controls.evaBefore.value !== editForm.controls.evaAfter.value) {
+              <span class="cw-eva-delta" [class.cw-eva-delta--ok]="editForm.controls.evaAfter.value < editForm.controls.evaBefore.value">
+                {{ editForm.controls.evaAfter.value < editForm.controls.evaBefore.value ? '−' : '+' }}{{ Math.abs(editForm.controls.evaAfter.value - editForm.controls.evaBefore.value) }}
+              </span>
+            }
+          </div>
+          <div class="cw-form-row">
+            <label class="cw-label">EVA au début : {{ editForm.controls.evaBefore.value }}/10</label>
+            <input type="range" class="cw-slider cw-slider--before" min="0" max="10" formControlName="evaBefore"
+              [style.background]="getEvaBackground(editForm.controls.evaBefore.value)" />
+          </div>
+          <div class="cw-form-row">
+            <label class="cw-label">EVA en fin : {{ editForm.controls.evaAfter.value }}/10</label>
+            <input type="range" class="cw-slider cw-slider--after" min="0" max="10" formControlName="evaAfter"
+              [style.background]="getEvaBackground(editForm.controls.evaAfter.value)" />
+          </div>
+        </div>
+
+        <!-- Morphologie -->
+        <div class="cw-card">
+          <div class="cw-card-title">Morphologie</div>
+          <div class="cw-morph-grid">
+            <div class="cw-form-row">
+              <label class="cw-label">Taille (cm)</label>
+              <input type="text" class="cw-input" formControlName="heightCm" placeholder="170" />
+            </div>
+            <div class="cw-form-row">
+              <label class="cw-label">Poids (kg)</label>
+              <input type="text" class="cw-input" formControlName="weightKg" placeholder="70" />
+            </div>
+          </div>
+          @if (formBmi()) {
+            <div class="cw-bmi-block">
+              <span class="cw-bmi-label">IMC calculé</span>
+              <span class="cw-bmi-value">{{ formBmi() }}</span>
+            </div>
+          }
+        </div>
+
+        <!-- Motifs du profil -->
+        @if (reasonItems().length > 0) {
+          <div class="cw-card">
+            <div class="cw-card-title-row">
+              <span class="cw-card-title">Motifs du profil</span>
+              <span class="cw-card-subtitle">{{ selectedReasonItems().length }} sélectionné(s)</span>
+            </div>
+            @if (officeName()) {
+              <div class="cw-card-office">Cabinet : {{ officeName() }}</div>
+            }
+            <div class="cw-reason-list">
+              @for (item of reasonItems(); track item.reason) {
+                <div class="cw-reason-item" [class.cw-reason-item--checked]="item.checked">
+                  <div class="cw-reason-row">
+                    <label class="cw-reason-label">
+                      <input type="checkbox" class="cw-reason-check" [checked]="item.checked" (change)="setReasonChecked(item.reason, $any($event.target).checked)" />
+                      {{ item.reason }}
+                    </label>
+                    <button type="button" class="cw-reason-important" [class.cw-reason-important--active]="item.important" (click)="setReasonImportant(item.reason, !item.important)" title="Marquer comme important">
+                      <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                  @if (item.checked) {
+                    <input type="text" class="cw-input cw-reason-value" placeholder="Préciser…" [value]="item.value" (input)="setReasonValue(item.reason, $any($event.target).value)" />
+                  }
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+      </div>
+    </div>
+  }
+
+  <!-- ── Onglet Documents ────────────────────────────────────────────────── -->
+  @if (activeTab() === 'documents') {
+    <div class="cw-tab-content">
+      <h2 class="cw-section-title">Documents patient</h2>
+      <p class="cw-section-sub">Les documents sont chiffrés et liés au patient et à cette consultation.</p>
+
+      @if (documentActionError()) {
+        <div class="cw-error-inline">{{ documentActionError() }}</div>
+      }
+
+      <!-- Dropzone -->
+      <div class="cw-dropzone" [class.cw-dropzone--over]="isDocumentDragOver()"
+        (dragover)="onDocumentDragOver($event)" (dragleave)="onDocumentDragLeave()" (drop)="onDocumentDrop($event)">
+        <i class="fa-solid fa-cloud-arrow-up cw-dropzone-icon" aria-hidden="true"></i>
+        <p class="cw-dropzone-text">Glissez-déposez vos documents ici</p>
+        <label class="cw-dropzone-file-btn">
+          Choisir un fichier
+          <input type="file" multiple hidden (change)="onDocumentFilesSelected($event)" />
+        </label>
+        <p class="cw-dropzone-hint">Ordonnances, imagerie, comptes-rendus — PDF, images, DICOM</p>
+        @if (isUploadingDocuments()) {
+          <span class="cw-uploading"><i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i> Téléversement…</span>
+        }
+      </div>
+
+      <!-- Pending documents (create mode) -->
+      @if (pendingNonLetterDocuments().length > 0) {
+        <div class="cw-doc-list">
+          <div class="cw-doc-list-title">En attente d'enregistrement</div>
+          @for (doc of pendingNonLetterDocuments(); track doc.tempKey) {
+            <div class="cw-doc-item">
+              <div class="cw-doc-icon">
+                <i [class]="doc.mimeType === 'application/pdf' ? 'fa-solid fa-file-pdf' : 'fa-solid fa-file'" aria-hidden="true"></i>
+              </div>
+              <div class="cw-doc-meta">
+                <span class="cw-doc-name">{{ doc.fileName }}</span>
+                <span class="cw-doc-size">{{ formatFileSize(doc.sizeBytes) }}</span>
+              </div>
+              <button type="button" class="cw-icon-btn cw-icon-btn--danger" (click)="removePendingDocument(doc.tempKey)" title="Supprimer">
+                <i class="fa-solid fa-trash" aria-hidden="true"></i>
+              </button>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- Saved documents (edit mode) -->
+      @if (mode() === 'edit' && activeConsultationDocuments().length > 0) {
+        <div class="cw-doc-list">
+          @for (doc of activeConsultationDocuments(); track doc.documentRef) {
+            <div class="cw-doc-card">
+              <div class="cw-doc-card-top">
+                <div class="cw-doc-icon">
+                  <i [class]="doc.mimeType === 'application/pdf' ? 'fa-solid fa-file-pdf' : 'fa-solid fa-file'" aria-hidden="true"></i>
+                </div>
+                <div class="cw-doc-info">
+                  <span class="cw-doc-name">{{ doc.title || doc.fileName }}</span>
+                  <span class="cw-doc-size">{{ formatFileSize(doc.sizeBytes) }}</span>
+                </div>
+                <div class="cw-doc-actions">
+                  <button type="button" class="cw-icon-btn" (click)="openDocument(doc)" title="Ouvrir">
+                    <i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i>
+                  </button>
+                  <button type="button" class="cw-icon-btn" (click)="downloadDocument(doc)" title="Télécharger">
+                    <i class="fa-solid fa-download" aria-hidden="true"></i>
+                  </button>
+                  <button type="button" class="cw-icon-btn cw-icon-btn--danger" (click)="deleteDocument(doc.documentRef)" title="Supprimer">
+                    <i class="fa-solid fa-trash" aria-hidden="true"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="cw-doc-card-fields">
+                <div>
+                  <label class="cw-label">Titre</label>
+                  <input type="text" class="cw-input" [value]="doc.title" (blur)="saveDocumentMeta(doc.documentRef, $any($event.target).value, doc.comment)" [placeholder]="doc.fileName" />
+                </div>
+                <div>
+                  <label class="cw-label">Commentaire</label>
+                  <input type="text" class="cw-input" [value]="doc.comment" (blur)="saveDocumentMeta(doc.documentRef, doc.title, $any($event.target).value)" placeholder="Optionnel" />
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      @if (mode() === 'edit' && activeConsultationDocuments().length === 0 && !isUploadingDocuments()) {
+        <div class="cw-empty">
+          <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
+          <p>Aucun document lié à cette consultation.</p>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ── Onglet Courriers ────────────────────────────────────────────────── -->
+  @if (activeTab() === 'courriers') {
+    <div class="cw-tab-content">
+      <div class="cw-section-header">
+        <div>
+          <h2 class="cw-section-title">Courriers sortants</h2>
+          <p class="cw-section-sub">Préparez et suivez les courriers de sortie et comptes-rendus adressés aux correspondants.</p>
+        </div>
+        <button type="button" class="cw-btn-primary" (click)="openLetterCompose()">
+          <i class="fa-solid fa-plus" aria-hidden="true"></i>
+          Nouveau courrier
+        </button>
+      </div>
+
+      @if (isLetterComposeOpen()) {
+        <div class="cw-card cw-letter-compose" [formGroup]="letterForm">
+          <div class="cw-card-title">Nouveau courrier</div>
+          @if (letterTemplates().length > 0) {
+            <div class="cw-form-row">
+              <label class="cw-label">Modèle</label>
+              <select class="cw-select" formControlName="templateIndex" (change)="onLetterTemplateChange(letterForm.controls.templateIndex.value)">
+                <option value="">— Choisir un modèle —</option>
+                @for (tpl of letterTemplates(); track $index) {
+                  <option [value]="$index">{{ tpl.title }}</option>
+                }
+              </select>
+            </div>
+          }
+          <div class="cw-form-row">
+            <label class="cw-label">Date</label>
+            <input type="date" class="cw-input" formControlName="date" />
+          </div>
+          <div class="cw-letter-compose-grid">
+            <div class="cw-form-row">
+              <label class="cw-label">Destinataire</label>
+              <input type="text" class="cw-input" formControlName="recipient" placeholder="Dr. Dupont, médecin traitant…" />
+            </div>
+            <div class="cw-form-row">
+              <label class="cw-label">Objet</label>
+              <input type="text" class="cw-input" formControlName="subject" placeholder="Objet du courrier…" />
+            </div>
+          </div>
+          <div class="cw-form-row">
+            <label class="cw-label">Contenu</label>
+            <textarea class="cw-textarea" formControlName="content" rows="6" placeholder="Corps du courrier…"></textarea>
+          </div>
+          @if (letterComposeError()) {
+            <div class="cw-error-inline">{{ letterComposeError() }}</div>
+          }
+          <div class="cw-letter-actions">
+            <button type="button" class="cw-btn-outline" (click)="closeLetterCompose()">Annuler</button>
+            <button type="button" class="cw-btn-outline" (click)="saveLetterAsPdf()" [disabled]="isSavingLetterPdf()">Aperçu</button>
+            <button type="button" class="cw-btn-ok" (click)="saveLetterAsPdf()" [disabled]="isSavingLetterPdf()">
+              <i class="fa-solid fa-file-pdf" aria-hidden="true"></i>
+              {{ isSavingLetterPdf() ? 'Génération…' : 'Enregistrer en PDF' }}
+            </button>
+          </div>
+        </div>
+      }
+
+      @if (activeConsultationLetters().length > 0) {
+        <div class="cw-doc-list">
+          @for (letter of activeConsultationLetters(); track letter.documentRef) {
+            <div class="cw-doc-item">
+              <div class="cw-doc-icon">
+                <i class="fa-solid fa-envelope-open-text" aria-hidden="true"></i>
+              </div>
+              <div class="cw-doc-info">
+                <span class="cw-doc-name">{{ letter.title || letter.fileName }}</span>
+                <span class="cw-doc-size">PDF · {{ formatFileSize(letter.sizeBytes) }}</span>
+              </div>
+              <div class="cw-doc-actions">
+                <button type="button" class="cw-icon-btn" (click)="openDocument(letter)" title="Ouvrir">
+                  <i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="cw-icon-btn" (click)="downloadDocument(letter)" title="Télécharger">
+                  <i class="fa-solid fa-download" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="cw-icon-btn cw-icon-btn--danger" (click)="deleteDocument(letter.documentRef)" title="Supprimer">
+                  <i class="fa-solid fa-trash" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+      } @else if (!isLetterComposeOpen()) {
+        <div class="cw-empty">
+          <i class="fa-solid fa-envelope-open-text" aria-hidden="true"></i>
+          <p>Aucun courrier pour cette consultation.</p>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ── Onglet Paiement ─────────────────────────────────────────────────── -->
+  @if (activeTab() === 'paiement') {
+    <div class="cw-tab-content">
+
+      @if (documentActionError()) {
+        <div class="cw-error-inline">{{ documentActionError() }}</div>
+      }
+
+      <!-- KPIs billing -->
+      @if (billingState(); as billing) {
+        <div class="cw-billing-kpi-row">
+          <div class="cw-billing-kpi">
+            <div class="cw-kpi-label">Honoraires</div>
+            <div class="cw-kpi-amount-row">
+              <span class="cw-kpi-amount">{{ formatAmount(billing.totalAmount) }}</span>
+              <span class="cw-kpi-amount-unit">€ TTC</span>
+            </div>
+            @if (billing.invoiceNumber) {
+              <div class="cw-kpi-meta">Facture n° {{ billing.invoiceNumber }}</div>
+            }
+          </div>
+          <div class="cw-billing-kpi">
+            <div class="cw-kpi-label">Statut</div>
+            <span class="cw-billing-pill" [class.cw-billing-pill--paid]="billing.paymentStatus === 'paid'" [class.cw-billing-pill--partial]="billing.paymentStatus === 'partial'" [class.cw-billing-pill--pending]="billing.paymentStatus === 'pending'">
+              {{ billing.paymentStatus === 'paid' ? 'Réglée' : billing.paymentStatus === 'partial' ? 'Partiel' : 'En attente' }}
+            </span>
+            <div class="cw-kpi-hint">
+              {{ billing.paymentStatus === 'paid' ? 'Consultation entièrement réglée.' : billing.paymentStatus === 'partial' ? 'Paiement partiel enregistré.' : 'Aucun paiement enregistré.' }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Paiements -->
+        <div class="cw-card">
+          <div class="cw-card-title-row">
+            <span class="cw-card-title">Paiements enregistrés</span>
+            @if (canManagePayments()) {
+              <button type="button" class="cw-btn-primary cw-btn-sm" (click)="openPaymentModal(null)">
+                <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                Ajouter un paiement
+              </button>
+            }
+          </div>
+          @if (billing.payments.length > 0) {
+            @for (payment of billing.payments; track payment.id) {
+              <div class="cw-payment-row">
+                <span class="cw-payment-pastille">
+                  <i class="fa-solid fa-check" aria-hidden="true"></i>
+                </span>
+                <div class="cw-payment-info">
+                  <span class="cw-payment-amount">{{ formatAmount(payment.amount) }} € par {{ payment.method }}</span>
+                  <span class="cw-payment-date">le {{ payment.paidAt | slice:0:10 }}</span>
+                </div>
+                @if (canManagePayments()) {
+                  <div class="cw-payment-actions">
+                    <button type="button" class="cw-icon-btn" (click)="openPaymentModal(payment.id)" title="Modifier">
+                      <i class="fa-solid fa-pen" aria-hidden="true"></i>
+                    </button>
+                    <button type="button" class="cw-icon-btn cw-icon-btn--danger" (click)="deletePayment(payment.id)" title="Supprimer">
+                      <i class="fa-solid fa-trash" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                }
+              </div>
+            }
+          } @else {
+            <div class="cw-billing-warn">
+              <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
+              Aucun paiement enregistré. Renseignez le moyen de paiement pour générer la facture.
+            </div>
+          }
+        </div>
+
+        <!-- Actions facture -->
+        @if (canInvoiceConsultation()) {
+          <div class="cw-billing-actions">
+            <button type="button" class="cw-btn-outline" (click)="downloadInvoice()">
+              <i class="fa-solid fa-file-invoice-dollar" aria-hidden="true"></i>
+              Télécharger la facture
+            </button>
+            @if (canCancelInvoice()) {
+              <button type="button" class="cw-btn-danger" (click)="cancelInvoice()">
+                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                Annuler la facture
+              </button>
+            }
+          </div>
+        }
+
+      } @else {
+        <!-- No billing yet — unified Facturation card -->
+        <div class="cw-card cw-billing-facturation-card">
+          <div class="cw-billing-section-label">Facturation</div>
+
+          <div class="cw-billing-choices">
+            <button type="button" class="cw-billing-choice" [class.cw-billing-choice--selected]="billingChoice() === 'bill'" (click)="selectBillingChoice('bill')">
+              <i class="fa-solid fa-file-invoice" aria-hidden="true"></i>
+              <span>Facturer la consultation</span>
+            </button>
+            <button type="button" class="cw-billing-choice" [class.cw-billing-choice--selected]="billingChoice() === 'free'" (click)="selectBillingChoice('free')">
+              <i class="fa-solid fa-gift" aria-hidden="true"></i>
+              <span>Consultation gratuite</span>
+            </button>
+          </div>
+
+          @if (billingChoice() === 'bill' && canInvoiceConsultation()) {
+            <div [formGroup]="billingForm">
+
+              <!-- Prestation + montants -->
+              <div class="cw-billing-form-grid">
+                <div class="cw-form-row">
+                  <label class="cw-label">Prestation</label>
+                  <select class="cw-select" formControlName="serviceLabel" (change)="onBillingServiceChange(billingForm.controls.serviceLabel.value)">
+                    @for (opt of billingServiceOptions(); track opt.label) {
+                      <option [value]="opt.label">{{ opt.label }}</option>
+                    }
+                    <option value="">Autre</option>
+                  </select>
+                </div>
+                <div class="cw-form-row">
+                  <label class="cw-label">Montant HT (€)</label>
+                  <input type="number" class="cw-input" formControlName="amountHt" min="0" step="0.5" />
+                </div>
+                <div class="cw-form-row">
+                  <label class="cw-label">TVA (%)</label>
+                  <input type="number" class="cw-input" formControlName="tvaRate" min="0" max="100" />
+                </div>
+              </div>
+
+              <!-- Règlements -->
+              <div class="cw-billing-splits-section">
+                <div class="cw-billing-splits-header">
+                  <span class="cw-billing-section-label">Règlements</span>
+                  <button type="button" class="cw-billing-splits-add" (click)="addPaymentSplit()">
+                    <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                    Ajouter un règlement
+                  </button>
+                </div>
+
+                @if (paymentSplits().length === 0) {
+                  <div class="cw-billing-splits-empty">
+                    <i class="fa-solid fa-clock" aria-hidden="true"></i>
+                    Aucun règlement ajouté — la facture sera générée en attente de paiement.
+                  </div>
+                } @else {
+                  <div class="cw-billing-splits-list">
+                    @for (split of paymentSplits(); track split.id) {
+                      <div class="cw-billing-split-row">
+                        <select class="cw-select" [value]="split.method" (change)="updatePaymentSplitMethod(split.id, $any($event.target).value)">
+                          <option value="">— Moyen de paiement —</option>
+                          @for (m of billingPaymentMethodOptions(); track m) {
+                            <option [value]="m">{{ m }}</option>
+                          }
+                        </select>
+                        <input type="number" class="cw-input" [value]="split.amount" (input)="updatePaymentSplitAmount(split.id, $any($event.target).value)" placeholder="0,00" min="0" step="0.5" />
+                        <button type="button" class="cw-split-remove" (click)="removePaymentSplit(split.id)" title="Supprimer ce règlement">
+                          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                        </button>
+                      </div>
+                    }
+                  </div>
+                  <div class="cw-billing-splits-balance">
+                    <span class="cw-splits-paid">Réglé : <strong>{{ formatAmount(paymentSplitsTotal()) }} €</strong></span>
+                    @if (paymentSplitsRemaining() > 0.005) {
+                      <span class="cw-splits-remaining">Restant : <strong>{{ formatAmount(paymentSplitsRemaining()) }} €</strong></span>
+                    } @else {
+                      <span class="cw-splits-complete"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> Soldé</span>
+                    }
+                  </div>
+                }
+              </div>
+
+              <!-- Commentaire + total + action -->
+              <div class="cw-billing-form-footer">
+                <div class="cw-form-row cw-billing-comment-row">
+                  <label class="cw-label">Commentaire interne</label>
+                  <input type="text" class="cw-input" formControlName="internalComment" placeholder="Optionnel…" />
+                </div>
+                <div class="cw-billing-footer-actions">
+                  <div class="cw-billing-total">Total TTC : <strong>{{ formatAmount(billingTotalTtc()) }} €</strong></div>
+                  <button type="button" class="cw-btn-ok" (click)="generateInvoice()" [disabled]="isGeneratingInvoice()">
+                    <i class="fa-solid fa-file-invoice-dollar" aria-hidden="true"></i>
+                    {{ isGeneratingInvoice() ? 'Génération…' : 'Générer la facture acquittée' }}
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          }
+
+          @if (billingChoice() === 'free') {
+            <div class="cw-billing-free-notice">
+              <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+              Cette consultation est marquée comme gratuite — aucune facture ne sera générée.
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+
+</div>
+
+<!-- ══ Payment modal ═══════════════════════════════════════════════════════ -->
+@if (isPaymentModalOpen()) {
+  <div class="cw-modal-backdrop" (click)="closePaymentModal()">
+    <div class="cw-modal" (click)="$event.stopPropagation()" [formGroup]="paymentForm">
+      <div class="cw-modal-header">
+        <h3 class="cw-modal-title">{{ editingPaymentId() ? 'Modifier le paiement' : 'Ajouter un paiement' }}</h3>
+        <button type="button" class="cw-modal-close" (click)="closePaymentModal()"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </div>
+      <div class="cw-modal-body">
+        <div class="cw-form-row">
+          <label class="cw-label">Moyen de paiement</label>
+          <select class="cw-select" formControlName="method">
+            <option value="">— Choisir —</option>
+            @for (m of billingPaymentMethodOptions(); track m) {
+              <option [value]="m">{{ m }}</option>
+            }
+          </select>
+        </div>
+        @if (isChequeSelected()) {
+          <div class="cw-form-row">
+            <label class="cw-label">Banque</label>
+            <input type="text" class="cw-input" formControlName="bankName" placeholder="Nom de la banque" />
+          </div>
+          <div class="cw-form-row">
+            <label class="cw-label">Numéro de chèque</label>
+            <input type="text" class="cw-input" formControlName="chequeNumber" placeholder="N° de chèque" />
+          </div>
+        }
+        <div class="cw-form-row">
+          <label class="cw-label">Montant (€)</label>
+          <input type="text" class="cw-input" formControlName="amount" placeholder="55,00" />
+        </div>
+        <div class="cw-form-row">
+          <label class="cw-label">Date du paiement</label>
+          <app-date-picker formControlName="paidAtLocal" [mode]="'datetime'"></app-date-picker>
+        </div>
+        <div class="cw-form-row">
+          <label class="cw-label">Commentaire</label>
+          <input type="text" class="cw-input" formControlName="comment" placeholder="Commentaire…" />
+        </div>
+        @if (documentActionError()) {
+          <div class="cw-error-inline">{{ documentActionError() }}</div>
+        }
+      </div>
+      <div class="cw-modal-footer">
+        <button type="button" class="cw-btn-outline" (click)="closePaymentModal()">Annuler</button>
+        <button type="button" class="cw-btn-primary" (click)="savePayment()" [disabled]="isSavingPayment()">
+          {{ isSavingPayment() ? 'Enregistrement…' : 'Enregistrer' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- ══ Footer ══════════════════════════════════════════════════════════════ -->
+<footer class="cw-footer">
+  <div class="cw-footer-left">
+    @if (saveError()) {
+      <span class="cw-save-error">
+        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+        {{ saveError() }}
+      </span>
+    }
+  </div>
+  <div class="cw-footer-right">
+    <button type="button" class="cw-btn-outline" (click)="goBack()">Annuler</button>
+    @if (mode() === 'create') {
+      <button type="button" class="cw-btn-outline" (click)="save({ close: false })" [disabled]="isSaving() || editForm.invalid">
+        <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>
+        {{ isSaving() ? 'Sauvegarde…' : 'Sauvegarder' }}
+      </button>
+      <button type="button" class="cw-btn-primary" (click)="save({ close: true })" [disabled]="isSaving() || editForm.invalid">
+        <i class="fa-solid fa-check" aria-hidden="true"></i>
+        {{ isSaving() ? 'Création…' : 'Créer la consultation' }}
+      </button>
+    } @else {
+      <button type="button" class="cw-btn-outline" (click)="save({ close: false })" [disabled]="isSaving() || editForm.invalid">
+        <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>
+        {{ isSaving() ? 'Sauvegarde…' : 'Sauvegarder' }}
+      </button>
+      <button type="button" class="cw-btn-primary" (click)="save({ close: true })" [disabled]="isSaving() || editForm.invalid">
+        <i class="fa-solid fa-check" aria-hidden="true"></i>
+        {{ isSaving() ? 'Enregistrement…' : 'Enregistrer et fermer' }}
+      </button>
+    }
+  </div>
+</footer>
+
+<!-- Autosave toast -->
+@if (autosaveToastVisible()) {
+  <div class="cw-toast">
+    <i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i>
+    {{ autosaveToastMessage() }}
+  </div>
+}
+
+} <!-- end @else (not loading/error) -->
