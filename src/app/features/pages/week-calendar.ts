@@ -406,10 +406,18 @@ export class WeekCalendar {
       return;
     }
 
+    // The datetime picker emits a local "YYYY-MM-DDTHH:mm" string; normalise it to an
+    // ISO instant on the client (same as appointment creation) so storage stays consistent.
+    const parsedStart = new Date(startsAt);
+    if (isNaN(parsedStart.getTime())) {
+      this.rescheduleError.set('Date et heure invalides.');
+      return;
+    }
+
     this.isReschedulingAppointment.set(true);
     this.rescheduleError.set('');
     try {
-      const payload: RescheduleAppointmentPayload = { startsAt };
+      const payload: RescheduleAppointmentPayload = { startsAt: parsedStart.toISOString() };
       const note = this.rescheduleNote().trim();
       if (note) payload.note = note;
       await this.api.rescheduleAppointment(event.id, payload);
