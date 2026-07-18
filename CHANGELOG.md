@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.3.0](https://github.com/PrudhommeWTF/OsteoSoft/compare/v0.2.0...v0.3.0) (2026-07-18)
+
+
+### Nouvelles fonctionnalités
+
+* refonte UI complète — design system, agenda, workspace consultation et datepicker ([088ef69](https://github.com/PrudhommeWTF/OsteoSoft/commit/088ef69075b4a000da57872c609e271963ab11fb))
+
 ## [0.2.0](https://github.com/PrudhommeWTF/OsteoSoft/compare/v0.1.0...v0.2.0) (2026-06-15)
 
 
