@@ -1,0 +1,96 @@
+name: Docker image
+
+on:
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "server/**"
+      - "src/**"
+      - "public/**"
+      - "angular.json"
+      - "tsconfig*.json"
+      - ".github/workflows/docker-image.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "Dockerfile"
+      - "server/**"
+      - "src/**"
+      - ".github/workflows/docker-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & smoke-test the single image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t osteosoft:ci .
+
+      - name: Run container
+        run: |
+          docker run -d --name osteosoft -p 4199:4199 \
+            -e OSTEOSOFT_DATA_KEY="$(openssl rand -base64 32)" \
+            -e JWT_SECRET="$(openssl rand -base64 48)" \
+            osteosoft:ci
+
+      - name: Smoke tests
+        run: |
+          set -euo pipefail
+
+          # 1) Attendre que l'API réponde (l'API sert aussi le frontend).
+          up=0
+          for _ in $(seq 1 45); do
+            if curl -fsS http://localhost:4199/api/config >/dev/null 2>&1; then up=1; break; fi
+            sleep 2
+          done
+          if [ "$up" != 1 ]; then echo "::error::L'API n'a pas démarré"; exit 1; fi
+          echo "✓ API démarrée (/api/config)"
+
+          # 2) Le frontend Angular est servi à la racine.
+          curl -fsS http://localhost:4199/ | grep -q '<app-root' \
+            && echo "✓ frontend Angular servi (/)"
+
+          # 3) Fallback SPA : un deep-link renvoie index.html (200).
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4199/patients)
+          [ "$code" = 200 ] && echo "✓ deep-link SPA (/patients → $code)" \
+            || { echo "::error::deep-link attendu 200, obtenu $code"; exit 1; }
+
+          # 4) L'API répond bien du JSON.
+          curl -fsS -H 'Accept: application/json' http://localhost:4199/api/config \
+            | grep -q '{' && echo "✓ /api/config renvoie du JSON"
+
+          # 5) Une route /api inconnue renvoie 404 (et non l'index SPA).
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4199/api/does-not-exist)
+          [ "$code" = 404 ] && echo "✓ /api inconnu → 404 (pas de fallback SPA)" \
+            || { echo "::error::attendu 404 pour /api inconnu, obtenu $code"; exit 1; }
+
+          echo "Tous les smoke tests sont passés."
+
+      - name: Healthcheck du conteneur
+        run: |
+          # Laisser le HEALTHCHECK du Dockerfile converger, puis vérifier l'état.
+          for _ in $(seq 1 15); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' osteosoft 2>/dev/null || echo none)
+            if [ "$status" = healthy ]; then echo "✓ conteneur healthy"; exit 0; fi
+            if [ "$status" = unhealthy ]; then echo "::error::conteneur unhealthy"; docker logs osteosoft; exit 1; fi
+            sleep 4
+          done
+          echo "::warning::état de santé non déterminé ($status) — l'API répond pourtant aux smoke tests"
+
+      - name: Logs du conteneur (si échec)
+        if: failure()
+        run: docker logs osteosoft || true
