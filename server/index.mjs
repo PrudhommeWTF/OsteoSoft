@@ -1215,6 +1215,34 @@ try {
   console.warn('Sensitive field encryption migration failed:', err.message);
 }
 
+// Migration v2: encrypt consultation title and antecedent category (art. 9 health data).
+// Idempotent via restoreCipherField (encrypts plaintext, leaves existing ciphertext untouched).
+try {
+  const migrationDone = getConfigValue('migration_sensitive_fields_v2', '0');
+  if (migrationDone !== '1') {
+    db.transaction(() => {
+      const consultationRows = db.prepare('SELECT id, title FROM consultations').all();
+      const updateConsultation = db.prepare('UPDATE consultations SET title = ? WHERE id = ?');
+      for (const row of consultationRows) {
+        updateConsultation.run(restoreCipherField(String(row.title ?? '')), row.id);
+      }
+
+      const antecedentRows = db.prepare('SELECT id, category FROM patient_antecedents').all();
+      const updateAntecedent = db.prepare('UPDATE patient_antecedents SET category = ? WHERE id = ?');
+      for (const row of antecedentRows) {
+        updateAntecedent.run(restoreCipherField(String(row.category ?? '')), row.id);
+      }
+
+      db.prepare(
+        "INSERT OR REPLACE INTO config (key, value) VALUES ('migration_sensitive_fields_v2', '1')"
+      ).run();
+    })();
+    console.log('✓ Encrypted consultation title and antecedent category');
+  }
+} catch (err) {
+  console.warn('Sensitive field encryption migration v2 failed:', err.message);
+}
+
 // Migration: encrypt historical patient audit before/after values stored in clear text
 try {
   const migrationDone = getConfigValue('migration_patient_audit_encryption_v1', '0');
@@ -3190,7 +3218,7 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
           normalizedOfficeId,
           practitionerName,
           normalizedCreatedByUserId,
-          consultationTitle,
+          encryptSensitiveField(consultationTitle),
           0,
           null,
           null,
@@ -4526,7 +4554,7 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
         Number(row.patient_id),
         String(row.date_precision ?? 'date').trim() || 'date',
         restoreCipherField(String(row.date_display ?? '').trim()),
-        String(row.category ?? '').trim(),
+        restoreCipherField(String(row.category ?? '').trim()),
         restoreCipherField(String(row.description ?? '').trim()),
         Number(row.important) ? 1 : 0,
         Number(row.sort_key) || 0,
@@ -4672,7 +4700,7 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
         row.office_id != null ? Number(row.office_id) : null,
         row.practitioner ?? '',
         row.user_id != null ? Number(row.user_id) : null,
-        row.title ?? '',
+        restoreCipherField(String(row.title ?? '')),
         Number(row.important) ? 1 : 0,
         row.height_cm ?? null,
         row.weight_kg ?? null,
@@ -6357,7 +6385,7 @@ function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}
       consultationOfficeId,
       String(data.practitioner ?? '').trim(),
       resolveUserIdFromPractitionerText(String(data.practitioner ?? '')),
-      String(data.title ?? '').trim(),
+      encryptSensitiveField(String(data.title ?? '').trim()),
       data.important ? 1 : 0,
       typeof data.heightCm === 'number' ? data.heightCm : null,
       typeof data.weightKg === 'number' ? data.weightKg : null,
@@ -6580,7 +6608,7 @@ function replacePatientAntecedents(patientId, medicalHistoryRaw) {
         id,
         item.datePrecision,
         encryptSensitiveField(item.dateDisplay),
-        item.category,
+        encryptSensitiveField(item.category),
         encryptSensitiveField(item.description),
         item.important ? 1 : 0,
         item.sortKey
@@ -6736,7 +6764,7 @@ function getPatientAntecedentItems(patientId, medicalHistoryRaw = null) {
   if (rows.length > 0) {
     return rows
       .map((row) => ({
-        category: String(row.category ?? '').trim(),
+        category: safeDecryptField(row.category ?? '').trim(),
         label: safeDecryptField(row.description).trim(),
         important: Boolean(row.important)
       }))
@@ -6872,7 +6900,7 @@ function buildPatientAntecedentsMap(rows) {
     const patientId = Number(row.patient_id);
     const items = map.get(patientId) ?? [];
     items.push({
-      category: String(row.category ?? '').trim(),
+      category: safeDecryptField(row.category ?? '').trim(),
       label: safeDecryptField(row.description).trim(),
       important: Boolean(row.important)
     });
@@ -9802,7 +9830,7 @@ app.post('/api/data-management/import', heavyOperationLimiter, authMiddleware, r
           payload.officeId,
           consultation.practitioner.trim(),
           resolveUserIdFromPractitionerText(consultation.practitioner),
-          consultation.title.trim(),
+          encryptSensitiveField(consultation.title.trim()),
           consultation.important ? 1 : 0,
           consultation.heightCm,
           consultation.weightKg,
@@ -10553,7 +10581,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
           patientId,
           'date',
           encryptSensitiveField(dateDisplay),
-          category,
+          encryptSensitiveField(category),
           encryptSensitiveField(description),
           important,
           sortKey
@@ -10609,7 +10637,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
           officeId,
           practitioner.slice(0, 100),
           resolveUserIdFromPractitionerText(practitioner),
-          title,
+          encryptSensitiveField(title),
           important,
           heightCm,
           weightKg,
@@ -11486,7 +11514,7 @@ app.get('/api/patients/:id/antecedents', authMiddleware, requirePermission('read
     id: Number(row.id),
     datePrecision: String(row.date_precision ?? 'date').trim() || 'date',
     date: safeDecryptField(row.date_display).trim(),
-    category: String(row.category ?? '').trim(),
+    category: safeDecryptField(row.category ?? '').trim(),
     description: safeDecryptField(row.description).trim(),
     important: Boolean(row.important),
     sortKey: Number(row.sort_key) || 0
@@ -13821,7 +13849,7 @@ app.get('/api/patients/:id/consultations', authMiddleware, requirePermission('re
       type: 'consultation',
       startedAt: row.started_at,
       practitioner: row.practitioner ?? '',
-      title: row.title ?? '',
+      title: safeDecryptField(row.title ?? ''),
       important: Boolean(row.important),
       heightCm: row.height_cm ?? null,
       weightKg: row.weight_kg ?? null,
@@ -13916,7 +13944,7 @@ app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-co
     payload.startedAt,
     payload.practitioner.trim(),
     resolveUserIdFromPractitionerText(payload.practitioner),
-    payload.title.trim(),
+    encryptSensitiveField(payload.title.trim()),
     payload.important ? 1 : 0,
     payload.heightCm,
     payload.weightKg,
@@ -14007,7 +14035,7 @@ app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('c
     officeId,
     payload.practitioner.trim(),
     resolveUserIdFromPractitionerText(payload.practitioner),
-    payload.title.trim(),
+    encryptSensitiveField(payload.title.trim()),
     payload.important ? 1 : 0,
     payload.heightCm,
     payload.weightKg,
@@ -14367,7 +14395,7 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
     id: row.id,
     datePrecision: String(row.date_precision ?? 'date').trim() || 'date',
     date: safeDecryptField(row.date_display).trim(),
-    category: String(row.category ?? '').trim(),
+    category: safeDecryptField(row.category ?? '').trim(),
     description: safeDecryptField(row.description).trim(),
     important: Boolean(row.important)
   }));
@@ -14380,7 +14408,7 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
       id: consultation.id,
       startedAt: consultation.started_at,
       practitioner: consultation.practitioner ?? '',
-      title: consultation.title ?? '',
+      title: safeDecryptField(consultation.title ?? ''),
       important: Boolean(consultation.important),
       heightCm: consultation.height_cm ?? null,
       weightKg: consultation.weight_kg ?? null,
@@ -15718,7 +15746,7 @@ app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePerm
       conflict: {
         existingConsultation: {
           id: Number(existingConsultation.id),
-          title: String(existingConsultation.title ?? '').trim(),
+          title: safeDecryptField(String(existingConsultation.title ?? '')).trim(),
           practitioner: String(existingConsultation.practitioner ?? '').trim(),
           startedAt: String(existingConsultation.started_at ?? appointment.starts_at)
         }
@@ -15731,7 +15759,7 @@ app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePerm
   if (existingConsultation && (appointment.consultation_id != null || linkStrategy !== 'create-new')) {
     consultationId = Number(existingConsultation.id);
     db.prepare('UPDATE consultations SET title = ?, practitioner = ?, user_id = ? WHERE id = ?').run(
-      title,
+      encryptSensitiveField(title),
       practitioner,
       resolveUserIdFromPractitionerText(practitioner),
       consultationId
@@ -15745,7 +15773,7 @@ app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePerm
            eva_before, eva_after, profile
          ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, 'Adulte')`
       )
-      .run(appointment.patient_id, appointment.starts_at, appointmentOfficeId, practitioner, resolveUserIdFromPractitionerText(practitioner), title);
+      .run(appointment.patient_id, appointment.starts_at, appointmentOfficeId, practitioner, resolveUserIdFromPractitionerText(practitioner), encryptSensitiveField(title));
     consultationId = Number(created.lastInsertRowid);
   }
 
