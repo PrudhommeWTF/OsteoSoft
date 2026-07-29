@@ -14137,6 +14137,10 @@ app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('c
     return res.status(404).json({ message: 'Patient introuvable' });
   }
 
+  if (!canUserAccessPatient(patientId, req.userAccess)) {
+    return res.status(403).json({ message: 'Accès refusé' });
+  }
+
   if (isPatientProcessingRestricted(patientId)) {
     return res.status(409).json({ message: PROCESSING_RESTRICTED_MESSAGE, code: 'PROCESSING_RESTRICTED' });
   }
