@@ -1305,6 +1305,31 @@ try {
   console.warn('audit_logs integrity_hash migration failed:', err.message);
 }
 
+// Migration: backfill patients.office_id from the earliest clinical activity so
+// existing patients are scoped by cabinet (cross-cabinet isolation). Patients
+// with no office-bearing activity stay NULL (legacy-visible). Idempotent.
+try {
+  const done = getConfigValue('migration_backfill_patient_office_v1', '0');
+  if (done !== '1') {
+    db.prepare(`
+      UPDATE patients
+      SET office_id = COALESCE(
+        (SELECT office_id FROM consultations WHERE patient_id = patients.id AND office_id IS NOT NULL ORDER BY started_at ASC LIMIT 1),
+        (SELECT office_id FROM appointments  WHERE patient_id = patients.id AND office_id IS NOT NULL ORDER BY starts_at ASC LIMIT 1)
+      )
+      WHERE office_id IS NULL
+        AND (
+          EXISTS (SELECT 1 FROM consultations WHERE patient_id = patients.id AND office_id IS NOT NULL)
+          OR EXISTS (SELECT 1 FROM appointments WHERE patient_id = patients.id AND office_id IS NOT NULL)
+        )
+    `).run();
+    db.prepare("INSERT OR REPLACE INTO config (key, value) VALUES ('migration_backfill_patient_office_v1', '1')").run();
+    console.log('✓ Backfilled patients.office_id from clinical activity');
+  }
+} catch (err) {
+  console.warn('patients office_id backfill migration failed:', err.message);
+}
+
 // Migration: encrypt historical patient audit before/after values stored in clear text
 try {
   const migrationDone = getConfigValue('migration_patient_audit_encryption_v1', '0');
@@ -13186,11 +13211,16 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
   // signals it was signed. No more hardcoded consent_signed = 1 (RGPD Art. 7).
   const consentSigned = payload.consentSigned === true ? 1 : 0;
   const consentSignedAt = consentSigned ? new Date().toISOString() : null;
+  // Assign a home office so the patient is scoped by cabinet from creation
+  // (cross-cabinet isolation). Prefer the office of the consultation being
+  // created, else the creator's primary accessible office. NULL only if unknown.
+  const creatorOfficeId = Number.isInteger(req.userAccess?.officeIds?.[0]) ? req.userAccess.officeIds[0] : null;
+  const patientOfficeId = consultationScheduling?.consultationOfficeId ?? creatorOfficeId;
   const inserted = db
     .prepare(
       `INSERT INTO patients
-       (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count, last_visit, consent_signed, consent_signed_at, consent_form_version, retention_until)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count, last_visit, consent_signed, consent_signed_at, consent_form_version, retention_until, office_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       encryptSensitiveField(fullName),
@@ -13204,7 +13234,8 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
       consentSigned,
       consentSignedAt,
       CURRENT_CONSENT_FORM_VERSION,
-      retentionUntil
+      retentionUntil,
+      patientOfficeId
     );
 
   writeAuditLog(req.user.sub, 'CREATE', 'patients', String(inserted.lastInsertRowid), {
