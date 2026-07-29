@@ -30,8 +30,18 @@ const app = express();
 const port = Number(process.env.API_PORT ?? 4199);
 const dataDir = path.resolve(process.cwd(), 'server/data');
 const dbPath = path.resolve(dataDir, 'osteo.db');
-const jwtSecret = process.env.JWT_SECRET ?? 'dev-only-jwt-secret-change-me';
+// Treat an empty/whitespace JWT_SECRET as unset so it falls back to the sentinel
+// dev value (which the guard below then rejects) instead of silently signing
+// tokens with an empty secret.
+const jwtSecret = process.env.JWT_SECRET && process.env.JWT_SECRET.trim()
+  ? process.env.JWT_SECRET
+  : 'dev-only-jwt-secret-change-me';
 const isProduction = process.env.NODE_ENV === 'production';
+// Development mode must be opted into EXPLICITLY. Any other NODE_ENV value —
+// including an UNSET one — is treated as a real deployment, so the dev key/secret
+// guards below fire unless NODE_ENV=development. This prevents silently booting a
+// production instance with the public development key/secret.
+const isDevelopment = process.env.NODE_ENV === 'development';
 const allowRemoteSetup = /^(1|true|yes)$/i.test(String(process.env.ALLOW_REMOTE_SETUP ?? 'false'));
 const SUPER_ADMIN_PROFILE_ID = 'super-admin';
 const requestBodyLimit = process.env.API_BODY_LIMIT ?? '5mb';
@@ -53,11 +63,14 @@ const AUDIT_LOG_RETENTION_DAYS = Number(process.env.AUDIT_LOG_RETENTION_DAYS ?? 
 // Draft retention: drafts not updated in 7 days are considered orphaned and purged.
 const DRAFT_RETENTION_DAYS = Number(process.env.DRAFT_RETENTION_DAYS ?? 7);
 
-if (isProduction && jwtSecret === 'dev-only-jwt-secret-change-me') {
-  throw new Error('JWT_SECRET must be configured in production.');
+if (!isDevelopment && jwtSecret === 'dev-only-jwt-secret-change-me') {
+  throw new Error(
+    'JWT_SECRET must be set to a strong non-empty value unless NODE_ENV=development. ' +
+    'Refusing to start with the public development secret.'
+  );
 }
 
-if (!isProduction && jwtSecret === 'dev-only-jwt-secret-change-me') {
+if (isDevelopment && jwtSecret === 'dev-only-jwt-secret-change-me') {
   console.warn('WARNING: Using development JWT secret. Set JWT_SECRET for safer local environments.');
 }
 
@@ -713,16 +726,21 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_id ON audit_logs(entity, entity_id, created_at);
 `);
 
-const rawDataKey = process.env.OSTEOSOFT_DATA_KEY;
+// Empty/whitespace is treated as unset (→ triggers the guard below) rather than
+// decoding to a zero-length key.
+const rawDataKey = process.env.OSTEOSOFT_DATA_KEY && process.env.OSTEOSOFT_DATA_KEY.trim()
+  ? process.env.OSTEOSOFT_DATA_KEY.trim()
+  : undefined;
 
-if (isProduction && !rawDataKey) {
+if (!isDevelopment && !rawDataKey) {
   throw new Error(
-    'OSTEOSOFT_DATA_KEY must be configured in production. ' +
+    'OSTEOSOFT_DATA_KEY must be configured unless NODE_ENV=development. ' +
+    'Refusing to start with the public development encryption key. ' +
     'Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"'
   );
 }
 
-if (!isProduction && !rawDataKey) {
+if (isDevelopment && !rawDataKey) {
   console.warn('WARNING: Using development encryption key. Set OSTEOSOFT_DATA_KEY.');
 }
 
