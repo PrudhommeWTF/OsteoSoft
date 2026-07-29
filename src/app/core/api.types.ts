@@ -260,6 +260,8 @@ export type DirectoryContactsPayload = {
 export type CreatePatientPayload = {
   lastName: string;
   firstName: string;
+  /** Whether the patient signed the consent form (RGPD Art. 7). */
+  consentSigned?: boolean;
   sex: 'Non renseigne' | 'Femme' | 'Homme';
   birthDate: string;
   mobilePhone: string;

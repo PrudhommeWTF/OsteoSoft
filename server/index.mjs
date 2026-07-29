@@ -1054,6 +1054,20 @@ const anonymizePatientTx = db.transaction((patientId) => {
     .run(String(patientId));
 });
 
+const PROCESSING_RESTRICTED_MESSAGE =
+  'Traitement restreint (RGPD Art. 18) : le consentement de ce patient a été retiré. ' +
+  'Les données sont conservées mais aucun nouveau traitement n\'est autorisé.';
+
+// RGPD Art. 18: once a patient's consent is withdrawn (processing_restricted = 1),
+// new processing of their data must be refused. Storage and read (for the legal
+// retention period and care continuity) stay allowed; this guards write paths.
+function isPatientProcessingRestricted(patientId) {
+  const id = Number(patientId);
+  if (!Number.isInteger(id) || id <= 0) return false;
+  const row = db.prepare('SELECT processing_restricted FROM patients WHERE id = ? AND is_deleted = 0').get(id);
+  return !!(row && Number(row.processing_restricted) === 1);
+}
+
 function processExpiredPatients() {
   const today = new Date().toISOString().slice(0, 10);
 
@@ -7303,6 +7317,9 @@ const createPatientSchema = z.object({
   sex: z.enum(['Non renseigne', 'Femme', 'Homme']),
   lastName: z.string().min(1).max(100),
   firstName: z.string().min(1).max(100),
+  // Whether the patient actually signed the consent form at creation. Defaults to
+  // false: consent must be genuinely captured, never fabricated (RGPD Art. 7).
+  consentSigned: z.boolean().optional().default(false),
   birthDate: z.string().max(20).optional().default(''),
   mobilePhone: z.string().max(50).optional().default(''),
   landlinePhone: z.string().max(50).optional().default(''),
@@ -13107,7 +13124,10 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
 
   const birthDate = payload.birthDate.trim();
   const retentionUntil = computePatientRetentionDateIso(birthDate || null);
-  const consentSignedAt = new Date().toISOString();
+  // Honest consent capture: only record consent when the caller explicitly
+  // signals it was signed. No more hardcoded consent_signed = 1 (RGPD Art. 7).
+  const consentSigned = payload.consentSigned === true ? 1 : 0;
+  const consentSignedAt = consentSigned ? new Date().toISOString() : null;
   const inserted = db
     .prepare(
       `INSERT INTO patients
@@ -13123,7 +13143,7 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
       payload.maritalStatus,
       payload.childrenCount,
       null,
-      1,
+      consentSigned,
       consentSignedAt,
       CURRENT_CONSENT_FORM_VERSION,
       retentionUntil
@@ -13282,6 +13302,10 @@ app.post('/api/patients/:id/documents', authMiddleware, requirePermission('creat
 
   if (!canUserAccessPatient(patientId, req.userAccess)) {
     return res.status(403).json({ message: 'Accès refusé' });
+  }
+
+  if (isPatientProcessingRestricted(patientId)) {
+    return res.status(409).json({ message: PROCESSING_RESTRICTED_MESSAGE, code: 'PROCESSING_RESTRICTED' });
   }
 
   const fileName = String(req.body?.fileName ?? '').trim();
@@ -13942,6 +13966,10 @@ app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-co
     return res.status(403).json({ error: 'Access denied' });
   }
 
+  if (isPatientProcessingRestricted(Number(consultation.patient_id))) {
+    return res.status(409).json({ message: PROCESSING_RESTRICTED_MESSAGE, code: 'PROCESSING_RESTRICTED' });
+  }
+
   const payload = parsed.data;
   const normalizedReasonItems = normalizeConsultationReasonItems(payload.reasonItems);
 
@@ -14018,6 +14046,10 @@ app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('c
   const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND is_deleted = 0').get(patientId);
   if (!patient) {
     return res.status(404).json({ message: 'Patient introuvable' });
+  }
+
+  if (isPatientProcessingRestricted(patientId)) {
+    return res.status(409).json({ message: PROCESSING_RESTRICTED_MESSAGE, code: 'PROCESSING_RESTRICTED' });
   }
 
   const parsed = createPatientConsultationSchema.safeParse(req.body);
@@ -14181,6 +14213,10 @@ app.put('/api/patients/:id', authMiddleware, requirePermission('create-patient-r
 
   if (!canUserAccessPatient(id, req.userAccess)) {
     return res.status(403).json({ message: 'Accès refusé' });
+  }
+
+  if (isPatientProcessingRestricted(id)) {
+    return res.status(409).json({ message: PROCESSING_RESTRICTED_MESSAGE, code: 'PROCESSING_RESTRICTED' });
   }
 
   const existingFullName = decryptSensitiveField(existing.cipher_full_name);
@@ -15733,6 +15769,10 @@ app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePerm
         return res.status(403).json({ message: 'Accès refusé - rendez-vous d\'un autre cabinet' });
       }
     }
+  }
+
+  if (isPatientProcessingRestricted(appointment.patient_id)) {
+    return res.status(409).json({ message: PROCESSING_RESTRICTED_MESSAGE, code: 'PROCESSING_RESTRICTED' });
   }
 
   const title = String(parsed.data.title ?? '').trim();
