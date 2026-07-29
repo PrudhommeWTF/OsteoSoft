@@ -977,10 +977,28 @@ function createAccessProfileId(label) {
   return `${base || 'profile'}-${Date.now()}`;
 }
 
+// Tamper-evidence chain (RGPD Art. 30): each audit row carries an HMAC over its
+// IMMUTABLE fields (action/entity/entity_id/created_at) plus the previous row's
+// hash. Signed with the server key, so tampering (editing a row, deleting a row
+// mid-stream) is detectable and cannot be forged without the key. user_id and
+// metadata are deliberately excluded — they are legitimately mutated later
+// (user deletion nullifies user_id; PII in metadata is encrypted retroactively).
+function computeAuditIntegrityHash(prevHash, action, entity, entityId, createdAt) {
+  return crypto
+    .createHmac('sha256', dataKey)
+    .update([prevHash ?? '', action ?? '', entity ?? '', entityId ?? '', createdAt ?? ''].join(' '))
+    .digest('hex');
+}
+
 function writeAuditLog(userId, action, entity, entityId, metadata = null) {
+  const createdAt = new Date().toISOString();
+  const prev = db
+    .prepare('SELECT integrity_hash FROM audit_logs WHERE integrity_hash IS NOT NULL ORDER BY id DESC LIMIT 1')
+    .get();
+  const integrityHash = computeAuditIntegrityHash(prev?.integrity_hash ?? '', action, entity, entityId ?? null, createdAt);
   db.prepare(
-    'INSERT INTO audit_logs (user_id, action, entity, entity_id, metadata) VALUES (?, ?, ?, ?, ?)'
-  ).run(userId ?? null, action, entity, entityId ?? null, metadata ? JSON.stringify(metadata) : null);
+    'INSERT INTO audit_logs (user_id, action, entity, entity_id, metadata, created_at, integrity_hash) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(userId ?? null, action, entity, entityId ?? null, metadata ? JSON.stringify(metadata) : null, createdAt, integrityHash);
 }
 
 const anonymizePatientTx = db.transaction((patientId) => {
@@ -1050,8 +1068,9 @@ const anonymizePatientTx = db.transaction((patientId) => {
      WHERE id = ?`
   ).run(anonymizedValue, anonymizedValue, anonymizedValue, patientId);
 
-  db.prepare("DELETE FROM audit_logs WHERE entity = 'patients' AND entity_id = ?")
-    .run(String(patientId));
+  // The patient's audit trail is intentionally PRESERVED (RGPD Art. 30
+  // accountability): it records who accessed the record, and any PII it carries
+  // in metadata is already encrypted. Destroying it would erase the access log.
 });
 
 const PROCESSING_RESTRICTED_MESSAGE =
@@ -1273,6 +1292,17 @@ try {
   }
 } catch (err) {
   console.warn('Sensitive field encryption migration v2 failed:', err.message);
+}
+
+// Migration: add tamper-evidence hash chain column to audit_logs (RGPD Art. 30).
+try {
+  const cols = db.prepare('PRAGMA table_info(audit_logs)').all().map((c) => c.name);
+  if (cols.length > 0 && !cols.includes('integrity_hash')) {
+    db.exec('ALTER TABLE audit_logs ADD COLUMN integrity_hash TEXT');
+    console.log('✓ Added integrity_hash column to audit_logs');
+  }
+} catch (err) {
+  console.warn('audit_logs integrity_hash migration failed:', err.message);
 }
 
 // Migration: encrypt historical patient audit before/after values stored in clear text
@@ -4193,7 +4223,7 @@ function buildDataBackupSnapshot(options = {}) {
        ORDER BY user_id ASC, flow_key ASC`
     ).all(),
     auditLogs: db.prepare(
-      `SELECT id, user_id, action, entity, entity_id, metadata, created_at
+      `SELECT id, user_id, action, entity, entity_id, metadata, created_at, integrity_hash
        FROM audit_logs
        ORDER BY id ASC`
     ).all()
@@ -4392,8 +4422,8 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
        VALUES (?, ?, ?, ?, ?)`
     );
     const insertAuditLog = db.prepare(
-      `INSERT INTO audit_logs (id, user_id, action, entity, entity_id, metadata, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO audit_logs (id, user_id, action, entity, entity_id, metadata, created_at, integrity_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     );
 
     for (const row of Array.isArray(backup.accessProfiles) ? backup.accessProfiles : []) {
@@ -4803,7 +4833,8 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
         row.entity,
         row.entity_id ?? null,
         row.metadata ?? null,
-        row.created_at ?? new Date().toISOString()
+        row.created_at ?? new Date().toISOString(),
+        row.integrity_hash ?? null
       );
     }
   });
@@ -11238,6 +11269,33 @@ app.get('/api/audit-logs', authMiddleware, adminOnlyMiddleware, (req, res) => {
   const logs = rows.map(mapAuditLogRow);
 
   return res.json({ logs });
+});
+
+// Verify the audit-log tamper-evidence chain. Each hashed row is checked against
+// its predecessor's stored hash; a mismatch means that row (or one before it) was
+// edited or deleted. The very first hashed row has no predecessor to check.
+function verifyAuditLogChain() {
+  const rows = db
+    .prepare(
+      'SELECT id, action, entity, entity_id, created_at, integrity_hash FROM audit_logs WHERE integrity_hash IS NOT NULL ORDER BY id ASC'
+    )
+    .all();
+  const brokenLinks = [];
+  let prevHash = null;
+  for (const row of rows) {
+    if (prevHash !== null) {
+      const expected = computeAuditIntegrityHash(prevHash, row.action, row.entity, row.entity_id ?? null, row.created_at);
+      if (expected !== row.integrity_hash) {
+        brokenLinks.push({ id: Number(row.id), createdAt: row.created_at, action: row.action, entity: row.entity });
+      }
+    }
+    prevHash = row.integrity_hash;
+  }
+  return { checkedRows: rows.length, brokenLinks, intact: brokenLinks.length === 0 };
+}
+
+app.get('/api/audit-logs/integrity', authMiddleware, adminOnlyMiddleware, (_req, res) => {
+  return res.json(verifyAuditLogChain());
 });
 
 app.get('/api/audit-logs/security/setup', authMiddleware, adminOnlyMiddleware, (req, res) => {
