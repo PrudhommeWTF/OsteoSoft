@@ -53,18 +53,22 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 ## Option B - Installation Docker Compose
 
+Image **unique** : un seul conteneur, l'API Node servant à la fois le frontend
+Angular compilé et `/api` (aucun conteneur web séparé).
+
 ### 1) Démarrage
 
 Depuis la racine du projet:
 
 ```
+cp .env.example .env   # renseigner OSTEOSOFT_DATA_KEY et JWT_SECRET
 docker compose up -d --build
 ```
 
 ### 2) Vérification
 
-- Frontend: http://localhost:4200
-- API: http://localhost:4199/api/config
+- Application (frontend + API): http://localhost:4199/
+- Santé API: http://localhost:4199/api/config
 
 ### 3) Arrêt
 
@@ -80,6 +84,26 @@ Attention: supprime la base SQLite et les données du volume Docker.
 docker compose down -v
 ```
 
+## Option C - Déploiement LXC Proxmox (natif, sans Docker)
+
+Un kit de déploiement natif est fourni dans `deploy/lxc/` : conteneur LXC
+Debian 12, **mono-service** (l'API Node sert à la fois `/api` et le frontend
+Angular compilé), lancé par un unique service **systemd** — aucun nginx requis.
+
+Depuis l'hôte Proxmox VE (en root) :
+
+```bash
+git clone https://github.com/PrudhommeWTF/OsteoSoft.git
+cd OsteoSoft/deploy/lxc
+./proxmox-create-lxc.sh          # ou: DOMAIN=osteosoft.example.com ./proxmox-create-lxc.sh
+```
+
+Le script crée le conteneur, y transfère le code (fonctionne aussi pour un
+dépôt privé) puis lance l'installation (Node 20, build, secrets générés,
+service systemd). L'application est ensuite accessible sur
+`http://<ip-du-lxc>:4199/`. TLS, options réseau, exploitation et sauvegarde :
+voir [`deploy/lxc/README.md`](deploy/lxc/README.md).
+
 ## Données persistantes
 
 En mode Docker, les données SQLite sont conservées dans le volume nommé:
@@ -92,7 +116,8 @@ Cela permet de redémarrer les conteneurs sans perdre les données du cabinet.
 
 **OsteoSoft doit toujours être exposé en HTTPS en dehors d'un réseau local de confiance.**
 
-L'application elle-même ne termine pas TLS. Placez un reverse proxy devant l'API et le frontend.
+L'application elle-même ne termine pas TLS. En mono-service, l'API sert le
+frontend **et** `/api` sur un seul port : placez un reverse proxy devant ce port.
 
 ### Exemple avec nginx
 
@@ -104,16 +129,10 @@ server {
     ssl_certificate     /etc/letsencrypt/live/osteosoft.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/osteosoft.example.com/privkey.pem;
 
-    # Frontend Angular
-    location / {
-        proxy_pass http://localhost:4200;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
+    client_max_body_size 60m;
 
-    # API Node.js
-    location /api/ {
+    # Tout (frontend + /api) est servi par l'API Node.
+    location / {
         proxy_pass http://localhost:4199;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -169,13 +188,9 @@ Mettre une valeur à `0` désactive la purge automatique correspondante.
 
 ## Commandes utiles
 
-- Logs API:
+- Logs (frontend + API, conteneur unique):
 
-  docker compose logs -f api
-
-- Logs frontend:
-
-  docker compose logs -f web
+  docker compose logs -f osteosoft
 
 - Rebuild propre:
 

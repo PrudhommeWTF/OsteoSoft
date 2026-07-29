@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
+import { fileURLToPath } from 'node:url';
 
 import argon2 from 'argon2';
 import Database from 'better-sqlite3';
@@ -29,8 +30,18 @@ const app = express();
 const port = Number(process.env.API_PORT ?? 4199);
 const dataDir = path.resolve(process.cwd(), 'server/data');
 const dbPath = path.resolve(dataDir, 'osteo.db');
-const jwtSecret = process.env.JWT_SECRET ?? 'dev-only-jwt-secret-change-me';
+// Treat an empty/whitespace JWT_SECRET as unset so it falls back to the sentinel
+// dev value (which the guard below then rejects) instead of silently signing
+// tokens with an empty secret.
+const jwtSecret = process.env.JWT_SECRET && process.env.JWT_SECRET.trim()
+  ? process.env.JWT_SECRET
+  : 'dev-only-jwt-secret-change-me';
 const isProduction = process.env.NODE_ENV === 'production';
+// Development mode must be opted into EXPLICITLY. Any other NODE_ENV value —
+// including an UNSET one — is treated as a real deployment, so the dev key/secret
+// guards below fire unless NODE_ENV=development. This prevents silently booting a
+// production instance with the public development key/secret.
+const isDevelopment = process.env.NODE_ENV === 'development';
 const allowRemoteSetup = /^(1|true|yes)$/i.test(String(process.env.ALLOW_REMOTE_SETUP ?? 'false'));
 const SUPER_ADMIN_PROFILE_ID = 'super-admin';
 const requestBodyLimit = process.env.API_BODY_LIMIT ?? '5mb';
@@ -52,11 +63,14 @@ const AUDIT_LOG_RETENTION_DAYS = Number(process.env.AUDIT_LOG_RETENTION_DAYS ?? 
 // Draft retention: drafts not updated in 7 days are considered orphaned and purged.
 const DRAFT_RETENTION_DAYS = Number(process.env.DRAFT_RETENTION_DAYS ?? 7);
 
-if (isProduction && jwtSecret === 'dev-only-jwt-secret-change-me') {
-  throw new Error('JWT_SECRET must be configured in production.');
+if (!isDevelopment && jwtSecret === 'dev-only-jwt-secret-change-me') {
+  throw new Error(
+    'JWT_SECRET must be set to a strong non-empty value unless NODE_ENV=development. ' +
+    'Refusing to start with the public development secret.'
+  );
 }
 
-if (!isProduction && jwtSecret === 'dev-only-jwt-secret-change-me') {
+if (isDevelopment && jwtSecret === 'dev-only-jwt-secret-change-me') {
   console.warn('WARNING: Using development JWT secret. Set JWT_SECRET for safer local environments.');
 }
 
@@ -712,16 +726,21 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_id ON audit_logs(entity, entity_id, created_at);
 `);
 
-const rawDataKey = process.env.OSTEOSOFT_DATA_KEY;
+// Empty/whitespace is treated as unset (→ triggers the guard below) rather than
+// decoding to a zero-length key.
+const rawDataKey = process.env.OSTEOSOFT_DATA_KEY && process.env.OSTEOSOFT_DATA_KEY.trim()
+  ? process.env.OSTEOSOFT_DATA_KEY.trim()
+  : undefined;
 
-if (isProduction && !rawDataKey) {
+if (!isDevelopment && !rawDataKey) {
   throw new Error(
-    'OSTEOSOFT_DATA_KEY must be configured in production. ' +
+    'OSTEOSOFT_DATA_KEY must be configured unless NODE_ENV=development. ' +
+    'Refusing to start with the public development encryption key. ' +
     'Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"'
   );
 }
 
-if (!isProduction && !rawDataKey) {
+if (isDevelopment && !rawDataKey) {
   console.warn('WARNING: Using development encryption key. Set OSTEOSOFT_DATA_KEY.');
 }
 
@@ -958,10 +977,28 @@ function createAccessProfileId(label) {
   return `${base || 'profile'}-${Date.now()}`;
 }
 
+// Tamper-evidence chain (RGPD Art. 30): each audit row carries an HMAC over its
+// IMMUTABLE fields (action/entity/entity_id/created_at) plus the previous row's
+// hash. Signed with the server key, so tampering (editing a row, deleting a row
+// mid-stream) is detectable and cannot be forged without the key. user_id and
+// metadata are deliberately excluded — they are legitimately mutated later
+// (user deletion nullifies user_id; PII in metadata is encrypted retroactively).
+function computeAuditIntegrityHash(prevHash, action, entity, entityId, createdAt) {
+  return crypto
+    .createHmac('sha256', dataKey)
+    .update([prevHash ?? '', action ?? '', entity ?? '', entityId ?? '', createdAt ?? ''].join(' '))
+    .digest('hex');
+}
+
 function writeAuditLog(userId, action, entity, entityId, metadata = null) {
+  const createdAt = new Date().toISOString();
+  const prev = db
+    .prepare('SELECT integrity_hash FROM audit_logs WHERE integrity_hash IS NOT NULL ORDER BY id DESC LIMIT 1')
+    .get();
+  const integrityHash = computeAuditIntegrityHash(prev?.integrity_hash ?? '', action, entity, entityId ?? null, createdAt);
   db.prepare(
-    'INSERT INTO audit_logs (user_id, action, entity, entity_id, metadata) VALUES (?, ?, ?, ?, ?)'
-  ).run(userId ?? null, action, entity, entityId ?? null, metadata ? JSON.stringify(metadata) : null);
+    'INSERT INTO audit_logs (user_id, action, entity, entity_id, metadata, created_at, integrity_hash) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(userId ?? null, action, entity, entityId ?? null, metadata ? JSON.stringify(metadata) : null, createdAt, integrityHash);
 }
 
 const anonymizePatientTx = db.transaction((patientId) => {
@@ -1031,9 +1068,24 @@ const anonymizePatientTx = db.transaction((patientId) => {
      WHERE id = ?`
   ).run(anonymizedValue, anonymizedValue, anonymizedValue, patientId);
 
-  db.prepare("DELETE FROM audit_logs WHERE entity = 'patients' AND entity_id = ?")
-    .run(String(patientId));
+  // The patient's audit trail is intentionally PRESERVED (RGPD Art. 30
+  // accountability): it records who accessed the record, and any PII it carries
+  // in metadata is already encrypted. Destroying it would erase the access log.
 });
+
+const PROCESSING_RESTRICTED_MESSAGE =
+  'Traitement restreint (RGPD Art. 18) : le consentement de ce patient a été retiré. ' +
+  'Les données sont conservées mais aucun nouveau traitement n\'est autorisé.';
+
+// RGPD Art. 18: once a patient's consent is withdrawn (processing_restricted = 1),
+// new processing of their data must be refused. Storage and read (for the legal
+// retention period and care continuity) stay allowed; this guards write paths.
+function isPatientProcessingRestricted(patientId) {
+  const id = Number(patientId);
+  if (!Number.isInteger(id) || id <= 0) return false;
+  const row = db.prepare('SELECT processing_restricted FROM patients WHERE id = ? AND is_deleted = 0').get(id);
+  return !!(row && Number(row.processing_restricted) === 1);
+}
 
 function processExpiredPatients() {
   const today = new Date().toISOString().slice(0, 10);
@@ -1212,6 +1264,70 @@ try {
   }
 } catch (err) {
   console.warn('Sensitive field encryption migration failed:', err.message);
+}
+
+// Migration v2: encrypt consultation title and antecedent category (art. 9 health data).
+// Idempotent via restoreCipherField (encrypts plaintext, leaves existing ciphertext untouched).
+try {
+  const migrationDone = getConfigValue('migration_sensitive_fields_v2', '0');
+  if (migrationDone !== '1') {
+    db.transaction(() => {
+      const consultationRows = db.prepare('SELECT id, title FROM consultations').all();
+      const updateConsultation = db.prepare('UPDATE consultations SET title = ? WHERE id = ?');
+      for (const row of consultationRows) {
+        updateConsultation.run(restoreCipherField(String(row.title ?? '')), row.id);
+      }
+
+      const antecedentRows = db.prepare('SELECT id, category FROM patient_antecedents').all();
+      const updateAntecedent = db.prepare('UPDATE patient_antecedents SET category = ? WHERE id = ?');
+      for (const row of antecedentRows) {
+        updateAntecedent.run(restoreCipherField(String(row.category ?? '')), row.id);
+      }
+
+      db.prepare(
+        "INSERT OR REPLACE INTO config (key, value) VALUES ('migration_sensitive_fields_v2', '1')"
+      ).run();
+    })();
+    console.log('✓ Encrypted consultation title and antecedent category');
+  }
+} catch (err) {
+  console.warn('Sensitive field encryption migration v2 failed:', err.message);
+}
+
+// Migration: add tamper-evidence hash chain column to audit_logs (RGPD Art. 30).
+try {
+  const cols = db.prepare('PRAGMA table_info(audit_logs)').all().map((c) => c.name);
+  if (cols.length > 0 && !cols.includes('integrity_hash')) {
+    db.exec('ALTER TABLE audit_logs ADD COLUMN integrity_hash TEXT');
+    console.log('✓ Added integrity_hash column to audit_logs');
+  }
+} catch (err) {
+  console.warn('audit_logs integrity_hash migration failed:', err.message);
+}
+
+// Migration: backfill patients.office_id from the earliest clinical activity so
+// existing patients are scoped by cabinet (cross-cabinet isolation). Patients
+// with no office-bearing activity stay NULL (legacy-visible). Idempotent.
+try {
+  const done = getConfigValue('migration_backfill_patient_office_v1', '0');
+  if (done !== '1') {
+    db.prepare(`
+      UPDATE patients
+      SET office_id = COALESCE(
+        (SELECT office_id FROM consultations WHERE patient_id = patients.id AND office_id IS NOT NULL ORDER BY started_at ASC LIMIT 1),
+        (SELECT office_id FROM appointments  WHERE patient_id = patients.id AND office_id IS NOT NULL ORDER BY starts_at ASC LIMIT 1)
+      )
+      WHERE office_id IS NULL
+        AND (
+          EXISTS (SELECT 1 FROM consultations WHERE patient_id = patients.id AND office_id IS NOT NULL)
+          OR EXISTS (SELECT 1 FROM appointments WHERE patient_id = patients.id AND office_id IS NOT NULL)
+        )
+    `).run();
+    db.prepare("INSERT OR REPLACE INTO config (key, value) VALUES ('migration_backfill_patient_office_v1', '1')").run();
+    console.log('✓ Backfilled patients.office_id from clinical activity');
+  }
+} catch (err) {
+  console.warn('patients office_id backfill migration failed:', err.message);
 }
 
 // Migration: encrypt historical patient audit before/after values stored in clear text
@@ -3189,7 +3305,7 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
           normalizedOfficeId,
           practitionerName,
           normalizedCreatedByUserId,
-          consultationTitle,
+          encryptSensitiveField(consultationTitle),
           0,
           null,
           null,
@@ -4132,7 +4248,7 @@ function buildDataBackupSnapshot(options = {}) {
        ORDER BY user_id ASC, flow_key ASC`
     ).all(),
     auditLogs: db.prepare(
-      `SELECT id, user_id, action, entity, entity_id, metadata, created_at
+      `SELECT id, user_id, action, entity, entity_id, metadata, created_at, integrity_hash
        FROM audit_logs
        ORDER BY id ASC`
     ).all()
@@ -4331,8 +4447,8 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
        VALUES (?, ?, ?, ?, ?)`
     );
     const insertAuditLog = db.prepare(
-      `INSERT INTO audit_logs (id, user_id, action, entity, entity_id, metadata, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO audit_logs (id, user_id, action, entity, entity_id, metadata, created_at, integrity_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     );
 
     for (const row of Array.isArray(backup.accessProfiles) ? backup.accessProfiles : []) {
@@ -4525,7 +4641,7 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
         Number(row.patient_id),
         String(row.date_precision ?? 'date').trim() || 'date',
         restoreCipherField(String(row.date_display ?? '').trim()),
-        String(row.category ?? '').trim(),
+        restoreCipherField(String(row.category ?? '').trim()),
         restoreCipherField(String(row.description ?? '').trim()),
         Number(row.important) ? 1 : 0,
         Number(row.sort_key) || 0,
@@ -4671,7 +4787,7 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
         row.office_id != null ? Number(row.office_id) : null,
         row.practitioner ?? '',
         row.user_id != null ? Number(row.user_id) : null,
-        row.title ?? '',
+        restoreCipherField(String(row.title ?? '')),
         Number(row.important) ? 1 : 0,
         row.height_cm ?? null,
         row.weight_kg ?? null,
@@ -4742,7 +4858,8 @@ function restoreDataBackupSnapshot(backupPayload, prehashedUserPasswords = new M
         row.entity,
         row.entity_id ?? null,
         row.metadata ?? null,
-        row.created_at ?? new Date().toISOString()
+        row.created_at ?? new Date().toISOString(),
+        row.integrity_hash ?? null
       );
     }
   });
@@ -6356,7 +6473,7 @@ function insertConsultationFromNote(patientId, consultationNoteRaw, options = {}
       consultationOfficeId,
       String(data.practitioner ?? '').trim(),
       resolveUserIdFromPractitionerText(String(data.practitioner ?? '')),
-      String(data.title ?? '').trim(),
+      encryptSensitiveField(String(data.title ?? '').trim()),
       data.important ? 1 : 0,
       typeof data.heightCm === 'number' ? data.heightCm : null,
       typeof data.weightKg === 'number' ? data.weightKg : null,
@@ -6440,15 +6557,17 @@ async function validateDocumentMimeType(contentBase64) {
   const detected = await fileTypeFromBuffer(buffer);
   const actualMime = detected?.mime ?? null;
 
-  if (actualMime !== null && !ALLOWED_DOCUMENT_MIME_TYPES.has(actualMime)) {
-    throw Object.assign(new Error(`Type de fichier non autorisé: ${actualMime}`), { statusCode: 415 });
+  // Strict allowlist: reject both a detected-but-forbidden type AND an undetected
+  // type. file-type returns null for text-based formats (HTML, SVG, XML, CSV…),
+  // so accepting null would let a booby-trapped document through as octet-stream.
+  if (actualMime === null || !ALLOWED_DOCUMENT_MIME_TYPES.has(actualMime)) {
+    throw Object.assign(
+      new Error(`Type de fichier non autorisé${actualMime ? `: ${actualMime}` : ' (format non reconnu)'}`),
+      { statusCode: 415 }
+    );
   }
 
-  if (actualMime !== null) {
-    return actualMime;
-  }
-
-  return 'application/octet-stream';
+  return actualMime;
 }
 
 async function normalizeConsultationDocumentsPayload(rawDocuments) {
@@ -6577,7 +6696,7 @@ function replacePatientAntecedents(patientId, medicalHistoryRaw) {
         id,
         item.datePrecision,
         encryptSensitiveField(item.dateDisplay),
-        item.category,
+        encryptSensitiveField(item.category),
         encryptSensitiveField(item.description),
         item.important ? 1 : 0,
         item.sortKey
@@ -6733,7 +6852,7 @@ function getPatientAntecedentItems(patientId, medicalHistoryRaw = null) {
   if (rows.length > 0) {
     return rows
       .map((row) => ({
-        category: String(row.category ?? '').trim(),
+        category: safeDecryptField(row.category ?? '').trim(),
         label: safeDecryptField(row.description).trim(),
         important: Boolean(row.important)
       }))
@@ -6869,7 +6988,7 @@ function buildPatientAntecedentsMap(rows) {
     const patientId = Number(row.patient_id);
     const items = map.get(patientId) ?? [];
     items.push({
-      category: String(row.category ?? '').trim(),
+      category: safeDecryptField(row.category ?? '').trim(),
       label: safeDecryptField(row.description).trim(),
       important: Boolean(row.important)
     });
@@ -6989,7 +7108,7 @@ function authMiddleware(req, res, next) {
   }
 
   try {
-    const payload = jwt.verify(token, jwtSecret);
+    const payload = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] });
     req.user = payload;
 
     // Enforce must_change_password: fast-path from JWT flag (mcp=true) or fallback DB
@@ -7032,9 +7151,12 @@ function authMiddleware(req, res, next) {
 }
 
 function adminOnlyMiddleware(req, res, next) {
+  // Resolve the role from the database (fresh), not from the JWT payload: a token
+  // signed before a demotion still carries role:'admin', so trusting req.user.role
+  // would let a demoted (or deactivated) account keep admin access until expiry.
   const access = getUserAccessContext(req.user.sub);
 
-  if (req.user.role === 'admin' || access?.profileId === SUPER_ADMIN_PROFILE_ID) {
+  if (access && (access.role === 'admin' || access.profileId === SUPER_ADMIN_PROFILE_ID)) {
     req.userAccess = access;
     return next();
   }
@@ -7251,6 +7373,9 @@ const createPatientSchema = z.object({
   sex: z.enum(['Non renseigne', 'Femme', 'Homme']),
   lastName: z.string().min(1).max(100),
   firstName: z.string().min(1).max(100),
+  // Whether the patient actually signed the consent form at creation. Defaults to
+  // false: consent must be genuinely captured, never fabricated (RGPD Art. 7).
+  consentSigned: z.boolean().optional().default(false),
   birthDate: z.string().max(20).optional().default(''),
   mobilePhone: z.string().max(50).optional().default(''),
   landlinePhone: z.string().max(50).optional().default(''),
@@ -9796,7 +9921,7 @@ app.post('/api/data-management/import', heavyOperationLimiter, authMiddleware, r
           payload.officeId,
           consultation.practitioner.trim(),
           resolveUserIdFromPractitionerText(consultation.practitioner),
-          consultation.title.trim(),
+          encryptSensitiveField(consultation.title.trim()),
           consultation.important ? 1 : 0,
           consultation.heightCm,
           consultation.weightKg,
@@ -10547,7 +10672,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
           patientId,
           'date',
           encryptSensitiveField(dateDisplay),
-          category,
+          encryptSensitiveField(category),
           encryptSensitiveField(description),
           important,
           sortKey
@@ -10603,7 +10728,7 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
           officeId,
           practitioner.slice(0, 100),
           resolveUserIdFromPractitionerText(practitioner),
-          title,
+          encryptSensitiveField(title),
           important,
           heightCm,
           weightKg,
@@ -11140,8 +11265,10 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
       tempPasswords
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Echec de l\'import WebOsteo';
-    return res.status(400).json({ message });
+    // Log the detail server-side; return a generic message so internal/SQLite
+    // error text is never surfaced to the client.
+    logger.error('WebOsteo import failed:', error);
+    return res.status(400).json({ message: 'Echec de l\'import WebOsteo. Vérifiez le fichier fourni.' });
   } finally {
     if (weoDb) {
       try { weoDb.close(); } catch { /* ignore */ }
@@ -11167,6 +11294,33 @@ app.get('/api/audit-logs', authMiddleware, adminOnlyMiddleware, (req, res) => {
   const logs = rows.map(mapAuditLogRow);
 
   return res.json({ logs });
+});
+
+// Verify the audit-log tamper-evidence chain. Each hashed row is checked against
+// its predecessor's stored hash; a mismatch means that row (or one before it) was
+// edited or deleted. The very first hashed row has no predecessor to check.
+function verifyAuditLogChain() {
+  const rows = db
+    .prepare(
+      'SELECT id, action, entity, entity_id, created_at, integrity_hash FROM audit_logs WHERE integrity_hash IS NOT NULL ORDER BY id ASC'
+    )
+    .all();
+  const brokenLinks = [];
+  let prevHash = null;
+  for (const row of rows) {
+    if (prevHash !== null) {
+      const expected = computeAuditIntegrityHash(prevHash, row.action, row.entity, row.entity_id ?? null, row.created_at);
+      if (expected !== row.integrity_hash) {
+        brokenLinks.push({ id: Number(row.id), createdAt: row.created_at, action: row.action, entity: row.entity });
+      }
+    }
+    prevHash = row.integrity_hash;
+  }
+  return { checkedRows: rows.length, brokenLinks, intact: brokenLinks.length === 0 };
+}
+
+app.get('/api/audit-logs/integrity', authMiddleware, adminOnlyMiddleware, (_req, res) => {
+  return res.json(verifyAuditLogChain());
 });
 
 app.get('/api/audit-logs/security/setup', authMiddleware, adminOnlyMiddleware, (req, res) => {
@@ -11478,7 +11632,7 @@ app.get('/api/patients/:id/antecedents', authMiddleware, requirePermission('read
     id: Number(row.id),
     datePrecision: String(row.date_precision ?? 'date').trim() || 'date',
     date: safeDecryptField(row.date_display).trim(),
-    category: String(row.category ?? '').trim(),
+    category: safeDecryptField(row.category ?? '').trim(),
     description: safeDecryptField(row.description).trim(),
     important: Boolean(row.important),
     sortKey: Number(row.sort_key) || 0
@@ -13053,12 +13207,20 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
 
   const birthDate = payload.birthDate.trim();
   const retentionUntil = computePatientRetentionDateIso(birthDate || null);
-  const consentSignedAt = new Date().toISOString();
+  // Honest consent capture: only record consent when the caller explicitly
+  // signals it was signed. No more hardcoded consent_signed = 1 (RGPD Art. 7).
+  const consentSigned = payload.consentSigned === true ? 1 : 0;
+  const consentSignedAt = consentSigned ? new Date().toISOString() : null;
+  // Assign a home office so the patient is scoped by cabinet from creation
+  // (cross-cabinet isolation). Prefer the office of the consultation being
+  // created, else the creator's primary accessible office. NULL only if unknown.
+  const creatorOfficeId = Number.isInteger(req.userAccess?.officeIds?.[0]) ? req.userAccess.officeIds[0] : null;
+  const patientOfficeId = consultationScheduling?.consultationOfficeId ?? creatorOfficeId;
   const inserted = db
     .prepare(
       `INSERT INTO patients
-       (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count, last_visit, consent_signed, consent_signed_at, consent_form_version, retention_until)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (cipher_full_name, cipher_phone, cipher_medical_notes, sex, birth_date, marital_status, children_count, last_visit, consent_signed, consent_signed_at, consent_form_version, retention_until, office_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       encryptSensitiveField(fullName),
@@ -13069,10 +13231,11 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
       payload.maritalStatus,
       payload.childrenCount,
       null,
-      1,
+      consentSigned,
       consentSignedAt,
       CURRENT_CONSENT_FORM_VERSION,
-      retentionUntil
+      retentionUntil,
+      patientOfficeId
     );
 
   writeAuditLog(req.user.sub, 'CREATE', 'patients', String(inserted.lastInsertRowid), {
@@ -13228,6 +13391,10 @@ app.post('/api/patients/:id/documents', authMiddleware, requirePermission('creat
 
   if (!canUserAccessPatient(patientId, req.userAccess)) {
     return res.status(403).json({ message: 'Accès refusé' });
+  }
+
+  if (isPatientProcessingRestricted(patientId)) {
+    return res.status(409).json({ message: PROCESSING_RESTRICTED_MESSAGE, code: 'PROCESSING_RESTRICTED' });
   }
 
   const fileName = String(req.body?.fileName ?? '').trim();
@@ -13813,7 +13980,7 @@ app.get('/api/patients/:id/consultations', authMiddleware, requirePermission('re
       type: 'consultation',
       startedAt: row.started_at,
       practitioner: row.practitioner ?? '',
-      title: row.title ?? '',
+      title: safeDecryptField(row.title ?? ''),
       important: Boolean(row.important),
       heightCm: row.height_cm ?? null,
       weightKg: row.weight_kg ?? null,
@@ -13888,6 +14055,10 @@ app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-co
     return res.status(403).json({ error: 'Access denied' });
   }
 
+  if (isPatientProcessingRestricted(Number(consultation.patient_id))) {
+    return res.status(409).json({ message: PROCESSING_RESTRICTED_MESSAGE, code: 'PROCESSING_RESTRICTED' });
+  }
+
   const payload = parsed.data;
   const normalizedReasonItems = normalizeConsultationReasonItems(payload.reasonItems);
 
@@ -13908,7 +14079,7 @@ app.patch('/api/consultations/:id', authMiddleware, requirePermission('create-co
     payload.startedAt,
     payload.practitioner.trim(),
     resolveUserIdFromPractitionerText(payload.practitioner),
-    payload.title.trim(),
+    encryptSensitiveField(payload.title.trim()),
     payload.important ? 1 : 0,
     payload.heightCm,
     payload.weightKg,
@@ -13966,6 +14137,14 @@ app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('c
     return res.status(404).json({ message: 'Patient introuvable' });
   }
 
+  if (!canUserAccessPatient(patientId, req.userAccess)) {
+    return res.status(403).json({ message: 'Accès refusé' });
+  }
+
+  if (isPatientProcessingRestricted(patientId)) {
+    return res.status(409).json({ message: PROCESSING_RESTRICTED_MESSAGE, code: 'PROCESSING_RESTRICTED' });
+  }
+
   const parsed = createPatientConsultationSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: 'Payload invalide' });
@@ -13999,7 +14178,7 @@ app.post('/api/patients/:id/consultations', authMiddleware, requirePermission('c
     officeId,
     payload.practitioner.trim(),
     resolveUserIdFromPractitionerText(payload.practitioner),
-    payload.title.trim(),
+    encryptSensitiveField(payload.title.trim()),
     payload.important ? 1 : 0,
     payload.heightCm,
     payload.weightKg,
@@ -14127,6 +14306,10 @@ app.put('/api/patients/:id', authMiddleware, requirePermission('create-patient-r
 
   if (!canUserAccessPatient(id, req.userAccess)) {
     return res.status(403).json({ message: 'Accès refusé' });
+  }
+
+  if (isPatientProcessingRestricted(id)) {
+    return res.status(409).json({ message: PROCESSING_RESTRICTED_MESSAGE, code: 'PROCESSING_RESTRICTED' });
   }
 
   const existingFullName = decryptSensitiveField(existing.cipher_full_name);
@@ -14359,7 +14542,7 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
     id: row.id,
     datePrecision: String(row.date_precision ?? 'date').trim() || 'date',
     date: safeDecryptField(row.date_display).trim(),
-    category: String(row.category ?? '').trim(),
+    category: safeDecryptField(row.category ?? '').trim(),
     description: safeDecryptField(row.description).trim(),
     important: Boolean(row.important)
   }));
@@ -14372,7 +14555,7 @@ app.get('/api/patients/:id/export', authMiddleware, requireAnyPermission(['expor
       id: consultation.id,
       startedAt: consultation.started_at,
       practitioner: consultation.practitioner ?? '',
-      title: consultation.title ?? '',
+      title: safeDecryptField(consultation.title ?? ''),
       important: Boolean(consultation.important),
       heightCm: consultation.height_cm ?? null,
       weightKg: consultation.weight_kg ?? null,
@@ -15644,7 +15827,7 @@ app.get('/api/appointments/:id/patient', authMiddleware, requirePermission('read
   return res.json({ patientId: Number(row.patient_id) });
 });
 
-app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePermission('read-dashboard'), (req, res) => {
+app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePermission('create-consultation'), (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
     return res.status(400).json({ message: 'ID de rendez-vous invalide' });
@@ -15681,6 +15864,10 @@ app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePerm
     }
   }
 
+  if (isPatientProcessingRestricted(appointment.patient_id)) {
+    return res.status(409).json({ message: PROCESSING_RESTRICTED_MESSAGE, code: 'PROCESSING_RESTRICTED' });
+  }
+
   const title = String(parsed.data.title ?? '').trim();
   const practitioner = String(parsed.data.practitioner ?? '').trim();
   const linkStrategy = parsed.data.linkStrategy;
@@ -15710,7 +15897,7 @@ app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePerm
       conflict: {
         existingConsultation: {
           id: Number(existingConsultation.id),
-          title: String(existingConsultation.title ?? '').trim(),
+          title: safeDecryptField(String(existingConsultation.title ?? '')).trim(),
           practitioner: String(existingConsultation.practitioner ?? '').trim(),
           startedAt: String(existingConsultation.started_at ?? appointment.starts_at)
         }
@@ -15723,7 +15910,7 @@ app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePerm
   if (existingConsultation && (appointment.consultation_id != null || linkStrategy !== 'create-new')) {
     consultationId = Number(existingConsultation.id);
     db.prepare('UPDATE consultations SET title = ?, practitioner = ?, user_id = ? WHERE id = ?').run(
-      title,
+      encryptSensitiveField(title),
       practitioner,
       resolveUserIdFromPractitionerText(practitioner),
       consultationId
@@ -15737,7 +15924,7 @@ app.patch('/api/appointments/:id/consultation-meta', authMiddleware, requirePerm
            eva_before, eva_after, profile
          ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, 'Adulte')`
       )
-      .run(appointment.patient_id, appointment.starts_at, appointmentOfficeId, practitioner, resolveUserIdFromPractitionerText(practitioner), title);
+      .run(appointment.patient_id, appointment.starts_at, appointmentOfficeId, practitioner, resolveUserIdFromPractitionerText(practitioner), encryptSensitiveField(title));
     consultationId = Number(created.lastInsertRowid);
   }
 
@@ -19291,6 +19478,25 @@ app.get('/api/invoices/summary', authMiddleware, requirePermission('read-billing
 });
 
 await ensureSeedData();
+
+// ── Frontend statique (déploiement mono-service) ─────────────────────────────
+// Si le build Angular est présent, l'API le sert directement : plus besoin d'un
+// serveur web séparé (nginx) ni de `ng serve`. En dev (build absent), ce bloc est
+// inactif et le frontend reste servi par `ng serve` comme avant.
+const staticDir = process.env.OSTEOSOFT_STATIC_DIR
+  || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'OsteoSoft', 'browser');
+if (fs.existsSync(path.join(staticDir, 'index.html'))) {
+  app.use(express.static(staticDir));
+  // Fallback SPA : toute route GET hors /api renvoie index.html (routing Angular).
+  // NB: on utilise app.use (et non app.get('*')) car Express 5 rejette le motif '*'.
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    if (req.path.startsWith('/api')) return next();
+    return res.sendFile(path.join(staticDir, 'index.html'));
+  });
+  // eslint-disable-next-line no-console
+  console.log(`Serving frontend from ${staticDir}`);
+}
 
 app.use((err, req, res, _next) => {
   if (err?.type === 'entity.too.large') {
