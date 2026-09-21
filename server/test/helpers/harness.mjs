@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
 import { randomBytes, createDecipheriv } from 'node:crypto';
 import Database from 'better-sqlite3';
+import JSZip from 'jszip';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..');
@@ -31,10 +32,12 @@ function getFreePort() {
 }
 
 // Démarre le serveur sur un port libre, avec une base et une clé jetables.
-export async function startTestServer() {
+// options.dataKey : réutiliser une clé existante (base64 32 octets), par exemple
+// pour tester une restauration avec la même clé ou avec une clé différente.
+export async function startTestServer(options = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'osteosoft-e2e-'));
   const port = await getFreePort();
-  const dataKey = randomBytes(32).toString('base64');
+  const dataKey = options.dataKey ?? randomBytes(32).toString('base64');
   const env = {
     ...process.env,
     NODE_ENV: 'development',
@@ -113,8 +116,18 @@ export function createClient(baseUrl) {
     return { status: res.status, body: json, raw };
   }
 
+  // Récupère une réponse binaire (ex : le ZIP de sauvegarde) avec les cookies.
+  async function getBinary(path) {
+    const h = {};
+    if (jar.size) h.Cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
+    const res = await fetch(`${baseUrl}${path}`, { headers: h });
+    absorb(res);
+    return { status: res.status, buffer: Buffer.from(await res.arrayBuffer()) };
+  }
+
   return {
     request,
+    getBinary,
     cookies: jar,
     get: (p, o) => request('GET', p, o),
     post: (p, body, o) => request('POST', p, { ...o, body }),
@@ -179,6 +192,19 @@ export async function createUser(client, { username, password, profileId, office
     throw new Error(`création de l'utilisateur "${username}" a échoué (${r.status}): ${r.raw?.slice(0, 200)}`);
   }
   return r.body?.user?.id ?? null;
+}
+
+// Télécharge et décompresse la sauvegarde (ZIP contenant manifest.json et
+// data.json). Renvoie { manifest, data }, prêt à repasser à /restore.
+export async function downloadBackup(client) {
+  const r = await client.getBinary('/api/data-management/backup');
+  if (r.status !== 200) {
+    throw new Error(`téléchargement de la sauvegarde a échoué (${r.status})`);
+  }
+  const zip = await JSZip.loadAsync(r.buffer);
+  const manifest = JSON.parse(await zip.file('manifest.json').async('string'));
+  const data = JSON.parse(await zip.file('data.json').async('string'));
+  return { manifest, data };
 }
 
 // Ouvre la base de test en lecture seule (pour vérifier le chiffrement au repos).
