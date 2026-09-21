@@ -125,9 +125,21 @@ export function createClient(baseUrl) {
     return { status: res.status, buffer: Buffer.from(await res.arrayBuffer()) };
   }
 
+  // POST JSON avec réponse binaire (ex : sauvegarde chiffrée), CSRF géré.
+  async function postBinary(path, body) {
+    const h = {};
+    if (jar.size) h.Cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
+    if (jar.has('os_csrf')) h['x-csrf-token'] = jar.get('os_csrf');
+    h['Content-Type'] = 'application/json';
+    const res = await fetch(`${baseUrl}${path}`, { method: 'POST', headers: h, body: JSON.stringify(body) });
+    absorb(res);
+    return { status: res.status, buffer: Buffer.from(await res.arrayBuffer()) };
+  }
+
   return {
     request,
     getBinary,
+    postBinary,
     cookies: jar,
     get: (p, o) => request('GET', p, o),
     post: (p, body, o) => request('POST', p, { ...o, body }),

@@ -40,7 +40,7 @@ import {
   loadServerConfig,
   assertConfigUsable
 } from './lib/config.mjs';
-import { BACKUP_MANIFEST_FORMAT, createBackupService } from './lib/backup.mjs';
+import { BACKUP_MANIFEST_FORMAT, createBackupService, encryptBackupArchive, decryptBackupArchive } from './lib/backup.mjs';
 import { createWebOsteoImport } from './lib/webosteo-import.mjs';
 import {
   parseBillingOperationId,
@@ -4987,6 +4987,7 @@ app.use(
 // Patterns are kept strict (bounded \d{1,10}) to avoid runaway regex on malformed paths
 const LARGE_BODY_ROUTE_PATTERNS = [
   /^\/api\/data-management\/restore$/,
+  /^\/api\/data-management\/restore\/encrypted$/,
   /^\/api\/data-management\/import$/,
   /^\/api\/data-management\/webosteo-import$/,
   /^\/api\/patients\/\d{1,10}\/documents$/,
@@ -7325,6 +7326,124 @@ app.get('/api/data-management/backup', heavyOperationLimiter, authMiddleware, re
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
   return res.status(200).send(archive);
+});
+
+// Sauvegarde chiffrée (autoportante) : archive ZIP chiffrée par phrase de passe
+// (scrypt + AES-256-GCM), incluant la clé de chiffrement des données (key.json)
+// pour permettre une reprise après sinistre avec la seule phrase de passe.
+app.post('/api/data-management/backup/encrypted', heavyOperationLimiter, authMiddleware, requirePermission('manage-data-backup-restore'), async (req, res) => {
+  const passphrase = String(req.body?.passphrase ?? '');
+  if (passphrase.length < 12) {
+    return res.status(400).json({ message: 'Phrase de passe trop courte (au moins 12 caractères).' });
+  }
+
+  const scopedOfficeIds = getDataManagementScopedOfficeIds(req.userAccess);
+  const snapshot = buildDataBackupSnapshot(
+    isApplicationSuperAdmin(req.userAccess) ? {} : { officeIds: scopedOfficeIds }
+  );
+
+  const zip = new JSZip();
+  zip.file('manifest.json', JSON.stringify(snapshot.manifest, null, 2));
+  zip.file('data.json', JSON.stringify(snapshot.data, null, 2));
+  zip.file('meta.json', JSON.stringify(snapshot.meta, null, 2));
+  // Clé de chiffrement des données embarquée : l'archive est autoportante, la
+  // phrase de passe protège l'ensemble. Indispensable à la reprise après sinistre.
+  zip.file('key.json', JSON.stringify({ dataKey: dataKey.toString('base64') }));
+
+  const archive = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 9 } });
+  const encrypted = encryptBackupArchive(archive, passphrase);
+
+  db.prepare(
+    `INSERT INTO config (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+  ).run('settings_last_backup_at', new Date().toISOString());
+
+  writeAuditLog(req.user.sub, 'BACKUP', 'data-management', null, { encrypted: true });
+
+  const now = new Date().toISOString().replace(/[:.]/g, '-');
+  res.setHeader('Content-Type', 'application/octet-stream');
+  res.setHeader('Content-Disposition', `attachment; filename="osteosoft-backup-${now}.osteobackup"`);
+  return res.status(200).send(encrypted);
+});
+
+// Restauration d'une sauvegarde chiffrée : déchiffre l'archive avec la phrase de
+// passe, vérifie que la clé de données embarquée correspond à celle de l'instance
+// (sinon les PII seraient illisibles : on refuse et on indique la marche à
+// suivre), puis restaure.
+app.post('/api/data-management/restore/encrypted', heavyOperationLimiter, authMiddleware, requirePermission('manage-data-backup-restore'), async (req, res) => {
+  if (!isApplicationSuperAdmin(req.userAccess)) {
+    return res.status(403).json({ message: 'Restauration globale reservee au super administrateur application.' });
+  }
+
+  const passphrase = String(req.body?.passphrase ?? '');
+  const archiveBase64 = String(req.body?.archiveBase64 ?? '').trim();
+  if (!archiveBase64) {
+    return res.status(400).json({ message: 'Archive chiffrée manquante.' });
+  }
+
+  let payload;
+  try {
+    const encrypted = Buffer.from(archiveBase64, 'base64');
+    const zipBuffer = decryptBackupArchive(encrypted, passphrase);
+    const zip = await JSZip.loadAsync(zipBuffer);
+    const dataText = await zip.file('data.json')?.async('string');
+    const manifestText = await zip.file('manifest.json')?.async('string');
+    const metaText = await zip.file('meta.json')?.async('string');
+    const keyText = await zip.file('key.json')?.async('string');
+    if (!dataText) {
+      return res.status(400).json({ message: 'Archive invalide : data.json introuvable.' });
+    }
+
+    // Vérifie la cohérence de la clé de données embarquée avec l'instance.
+    if (keyText) {
+      let embeddedKey = '';
+      try { embeddedKey = String(JSON.parse(keyText)?.dataKey ?? ''); } catch { embeddedKey = ''; }
+      if (embeddedKey && embeddedKey !== dataKey.toString('base64')) {
+        return res.status(409).json({
+          message: 'La clé de chiffrement de cette sauvegarde diffère de celle de l\'instance. '
+            + 'Pour restaurer cette archive (reprise après sinistre), démarrez l\'instance avec la variable '
+            + 'OSTEOSOFT_DATA_KEY correspondant à la clé de la sauvegarde, puis relancez la restauration.'
+        });
+      }
+    }
+
+    payload = {
+      data: JSON.parse(dataText),
+      manifest: manifestText ? JSON.parse(manifestText) : null,
+      meta: metaText ? JSON.parse(metaText) : null
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Impossible de déchiffrer la sauvegarde.';
+    return res.status(400).json({ message });
+  }
+
+  const parsed = dataRestoreSchema.safeParse(payload);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Fichier de sauvegarde invalide' });
+  }
+
+  try {
+    const usersInBackup = Array.isArray(parsed.data?.data?.users) ? parsed.data.data.users : [];
+    const prehashedUserPasswords = new Map();
+    const tempPasswords = [];
+    for (const row of usersInBackup) {
+      const userId = Number(row?.id);
+      if (!Number.isInteger(userId) || userId <= 0) continue;
+      const normalizedUsername = String(row?.username ?? '').trim();
+      if (!normalizedUsername) continue;
+      const tempPassword = crypto.randomBytes(8).toString('hex');
+      const hash = await argon2.hash(tempPassword, { type: argon2.argon2id, memoryCost: 2 ** 16, timeCost: 3, parallelism: 1 });
+      prehashedUserPasswords.set(userId, { hash, tempPassword });
+      tempPasswords.push({ userId, username: normalizedUsername, tempPassword });
+    }
+
+    restoreDataBackupSnapshot(parsed.data, prehashedUserPasswords);
+    writeAuditLog(req.user.sub, 'RESTORE', 'data-management', null, { encrypted: true });
+    return res.status(200).json({ tempPasswords });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'La restauration de la sauvegarde a echoue';
+    return res.status(400).json({ message });
+  }
 });
 
 app.post('/api/setup/office', setupLimiter, setupBootstrapGuard, async (req, res) => {

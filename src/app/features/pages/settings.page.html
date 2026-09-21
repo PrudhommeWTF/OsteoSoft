@@ -75,6 +75,25 @@
                 <button type="button" class="btn btn-primary" [disabled]="isDownloadingBackup()" (click)="downloadBackup()" title="Exporter / Télécharger" bsTooltip>
                   <i class="fa-solid fa-download me-1"></i>Télécharger la sauvegarde
                 </button>
+
+                <hr class="my-3" />
+                <p class="settings-card-status mb-1">Sauvegarde chiffrée (recommandée hors site)</p>
+                <p class="small text-secondary mb-2">Archive protégée par une phrase de passe et autoportante (reprise après sinistre). Conservez la phrase de passe en lieu sûr et séparément : elle est indispensable pour restaurer.</p>
+                <div class="mb-2">
+                  <label class="form-label mb-1" for="backup-passphrase">Phrase de passe (au moins 12 caractères)</label>
+                  <input
+                    id="backup-passphrase"
+                    type="password"
+                    class="form-control"
+                    autocomplete="new-password"
+                    [value]="encryptedBackupPassphrase()"
+                    (input)="encryptedBackupPassphrase.set($any($event.target).value)"
+                    [disabled]="isDownloadingBackup()"
+                  />
+                </div>
+                <button type="button" class="btn btn-outline-primary" [disabled]="isDownloadingBackup() || encryptedBackupPassphrase().length < 12" (click)="downloadEncryptedBackup()">
+                  <i class="fa-solid fa-lock me-1"></i>Télécharger une sauvegarde chiffrée
+                </button>
               </article>
             </div>
 
@@ -106,6 +125,42 @@
                   (click)="restoreBackup()"
                  title="Revenir" bsTooltip>
                   <i class="fa-solid fa-rotate-left me-1"></i>Restaurer la sauvegarde
+                </button>
+
+                <hr class="my-3" />
+                <p class="settings-card-status mb-1">Restaurer une sauvegarde chiffrée</p>
+                <div class="mb-2">
+                  <label class="form-label mb-1" for="encrypted-backup-file">Fichier chiffré (.osteobackup)</label>
+                  <input
+                    id="encrypted-backup-file"
+                    type="file"
+                    class="form-control"
+                    accept=".osteobackup,application/octet-stream"
+                    [disabled]="isRestoringBackup()"
+                    (change)="onEncryptedBackupFileSelected($event)"
+                  />
+                  @if (selectedEncryptedBackupFileName()) {
+                    <p class="small text-secondary mt-2 mb-0">Fichier sélectionné: {{ selectedEncryptedBackupFileName() }}</p>
+                  }
+                </div>
+                <div class="mb-2">
+                  <label class="form-label mb-1" for="encrypted-restore-passphrase">Phrase de passe</label>
+                  <input
+                    id="encrypted-restore-passphrase"
+                    type="password"
+                    class="form-control"
+                    autocomplete="off"
+                    [value]="encryptedRestorePassphrase()"
+                    (input)="encryptedRestorePassphrase.set($any($event.target).value)"
+                    [disabled]="isRestoringBackup()"
+                  />
+                </div>
+                <button
+                  type="button"
+                  class="btn btn-outline-primary"
+                  [disabled]="isRestoringBackup() || !selectedEncryptedBackupFile() || !encryptedRestorePassphrase()"
+                  (click)="restoreEncryptedBackup()">
+                  <i class="fa-solid fa-unlock me-1"></i>Restaurer la sauvegarde chiffrée
                 </button>
 
                 @if (restoreProgressStep() !== 'idle') {
