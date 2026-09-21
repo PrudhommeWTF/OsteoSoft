@@ -21,6 +21,18 @@ import { z } from 'zod';
 import { createFieldCrypto } from './lib/crypto.mjs';
 import { markBaselineIfEmpty, runMigrations } from './lib/migrations.mjs';
 import { mapAuditLogRow, createAuditLog } from './lib/audit.mjs';
+import {
+  SUPER_ADMIN_PROFILE_ID,
+  buildAccessRights,
+  normalizeAccessRights,
+  buildAccessRightsForPermissions,
+  createAccessProfileId,
+  hasPermission,
+  isApplicationSuperAdmin,
+  getAccessibleBillingOfficeIds,
+  getScopedBillingOfficeIds,
+  createAccessControl
+} from './lib/access.mjs';
 
 dotenv.config();
 
@@ -47,7 +59,6 @@ const isProduction = process.env.NODE_ENV === 'production';
 // production instance with the public development key/secret.
 const isDevelopment = process.env.NODE_ENV === 'development';
 const allowRemoteSetup = /^(1|true|yes)$/i.test(String(process.env.ALLOW_REMOTE_SETUP ?? 'false'));
-const SUPER_ADMIN_PROFILE_ID = 'super-admin';
 const requestBodyLimit = process.env.API_BODY_LIMIT ?? '5mb';
 const largeRequestBodyLimit = process.env.API_LARGE_BODY_LIMIT ?? '200mb';
 const MAX_PATIENT_DOCUMENT_BYTES = Number(process.env.MAX_PATIENT_DOCUMENT_BYTES ?? 15 * 1024 * 1024);
@@ -852,109 +863,9 @@ function clearCsrfCookie(res) {
   });
 }
 
-const ACCESS_DOMAIN_DEFINITIONS = {
-  'patient-record': [
-    'read-patient-record',
-    'create-patient-record',
-    'delete-patient-record',
-    'export-patient-record',
-    'create-consultation',
-    'read-consultation-detail',
-    'choose-consultation-author',
-    'read-protected-patient-record',
-    'protect-patient-record',
-    'invoice-consultation',
-    'cancel-invoice'
-  ],
-  'patients-list': ['read-patient-list', 'search-patient-list', 'export-patient-list'],
-  agenda: ['read-agenda', 'create-appointment', 'edit-appointment', 'delete-appointment', 'export-agenda'],
-  billing: ['read-billing-kpis', 'create-invoice', 'customize-invoice-template', 'mark-payment', 'export-billing'],
-  statistics: ['read-dashboard', 'read-advanced-statistics', 'read-peer-statistics', 'export-statistics'],
-  'contact-directory': ['read-directory', 'create-directory-contact', 'edit-directory-contact', 'delete-directory-contact', 'export-directory'],
-  'office-management': [
-    'read-office-settings',
-    'create-office',
-    'update-office-settings',
-    'delete-office',
-    'reorder-offices',
-    'manage-data-backup-restore',
-    'manage-data-rgpd',
-    'manage-data-import',
-    'manage-data-cleanup'
-  ]
-};
-
-function buildAccessRights(defaultValue = false) {
-  return Object.entries(ACCESS_DOMAIN_DEFINITIONS).reduce((acc, [domainId, permissionIds]) => {
-    acc[domainId] = permissionIds.reduce((permissions, permissionId) => {
-      permissions[permissionId] = defaultValue;
-      return permissions;
-    }, {});
-    return acc;
-  }, {});
-}
-
-function normalizeAccessRights(rawRights, fallbackValue = false) {
-  const source = rawRights && typeof rawRights === 'object' ? rawRights : {};
-
-  return Object.entries(ACCESS_DOMAIN_DEFINITIONS).reduce((acc, [domainId, permissionIds]) => {
-    const sourceDomain = source[domainId] && typeof source[domainId] === 'object' ? source[domainId] : {};
-
-    acc[domainId] = permissionIds.reduce((permissions, permissionId) => {
-      if (sourceDomain[permissionId] === true || sourceDomain[permissionId] === false) {
-        permissions[permissionId] = sourceDomain[permissionId];
-      } else {
-        permissions[permissionId] = fallbackValue;
-      }
-      return permissions;
-    }, {});
-
-    return acc;
-  }, {});
-}
-
-function buildAccessRightsForPermissions(enabledPermissionIds) {
-  const enabled = new Set(enabledPermissionIds);
-  const rights = buildAccessRights(false);
-
-  for (const domainRights of Object.values(rights)) {
-    for (const permissionId of Object.keys(domainRights)) {
-      if (enabled.has(permissionId)) {
-        domainRights[permissionId] = true;
-      }
-    }
-  }
-
-  return rights;
-}
-
-function mergeAccessRights(rightsList) {
-  const merged = buildAccessRights(false);
-
-  for (const rights of Array.isArray(rightsList) ? rightsList : []) {
-    const normalized = normalizeAccessRights(rights, false);
-    for (const [domainId, domainRights] of Object.entries(normalized)) {
-      for (const [permissionId, enabled] of Object.entries(domainRights)) {
-        if (enabled === true) {
-          merged[domainId][permissionId] = true;
-        }
-      }
-    }
-  }
-
-  return merged;
-}
-
-function createAccessProfileId(label) {
-  const base = String(label ?? '')
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 48);
-
-  return `${base || 'profile'}-${Date.now()}`;
-}
+// Modèle de permissions, contexte d'accès et cloisonnement : extraits dans
+// server/lib/access.mjs (fonctions pures importées ci-dessus, primitives liées à
+// la base instanciées via createAccessControl après le journal d'audit).
 
 // Tamper-evidence chain (RGPD Art. 30): each audit row carries an HMAC over its
 // IMMUTABLE fields (action/entity/entity_id/created_at) plus the previous row's
@@ -965,6 +876,20 @@ function createAccessProfileId(label) {
 // Extrait dans ./lib/audit.mjs. Le getter () => dataKey reflete une redefinition
 // de la cle au runtime (assistant d'installation).
 const { writeAuditLog, writeAuthSecurityLog, verifyAuditLogChain } = createAuditLog(db, () => dataKey);
+
+// Contrôle d'accès lié à la base (server/lib/access.mjs) : contexte utilisateur,
+// middlewares d'autorisation et cloisonnement par cabinet. writeAuthSecurityLog
+// est injecté pour journaliser les refus d'autorisation.
+const {
+  getUserOfficeOptions,
+  getScopedOfficeOptions,
+  getDataManagementScopedOfficeIds,
+  getUserAccessContext,
+  adminOnlyMiddleware,
+  requirePermission,
+  requireAnyPermission,
+  canUserAccessPatient
+} = createAccessControl(db, { writeAuthSecurityLog });
 
 const anonymizePatientTx = db.transaction((patientId) => {
   const anonymizedValue = encryptSensitiveField('ANONYMIZED');
@@ -2499,68 +2424,6 @@ function getUserOfficeIds(userId) {
   const legacy = db.prepare('SELECT office_id FROM users WHERE id = ?').get(userId);
   const legacyOfficeId = Number(legacy?.office_id);
   return Number.isInteger(legacyOfficeId) && legacyOfficeId > 0 ? [legacyOfficeId] : [];
-}
-
-function getUserOfficeOptions(userId) {
-  return db
-    .prepare(
-      `SELECT DISTINCT o.id, o.name
-       FROM offices o
-       WHERE o.id IN (
-         SELECT office_id FROM user_offices WHERE user_id = ?
-         UNION
-         SELECT office_id FROM office_user_delegations WHERE user_id = ?
-       )
-       ORDER BY lower(o.name) ASC, o.id ASC`
-    )
-    .all(userId, userId)
-    .map((row) => ({ id: Number(row.id), name: String(row.name ?? '').trim() }));
-}
-
-function getScopedOfficeOptions(userAccess, isAdmin) {
-  const canAccessAllOffices = isAdmin || userAccess?.profileId === SUPER_ADMIN_PROFILE_ID;
-  if (canAccessAllOffices) {
-    return db
-      .prepare('SELECT id, name FROM offices ORDER BY lower(name) ASC, id ASC')
-      .all()
-      .map((row) => ({ id: Number(row.id), name: String(row.name ?? '').trim() }));
-  }
-
-  return Array.isArray(userAccess?.offices) ? userAccess.offices : [];
-}
-
-function isApplicationSuperAdmin(access) {
-  return access?.role === 'admin' || access?.profileId === SUPER_ADMIN_PROFILE_ID;
-}
-
-function getDataManagementScopedOfficeIds(userAccess) {
-  if (isApplicationSuperAdmin(userAccess)) {
-    return db
-      .prepare('SELECT id FROM offices ORDER BY id ASC')
-      .all()
-      .map((row) => Number(row.id))
-      .filter((id) => Number.isInteger(id) && id > 0);
-  }
-
-  const delegatedSuperAdminOfficeIds = db
-    .prepare(
-      `SELECT office_id
-       FROM office_user_delegations
-       WHERE user_id = ?
-         AND profile_id = ?
-       ORDER BY office_id ASC`
-    )
-    .all(Number(userAccess?.id ?? 0), SUPER_ADMIN_PROFILE_ID)
-    .map((row) => Number(row.office_id))
-    .filter((id) => Number.isInteger(id) && id > 0);
-
-  if (delegatedSuperAdminOfficeIds.length > 0) {
-    return [...new Set(delegatedSuperAdminOfficeIds)];
-  }
-
-  return [...new Set((Array.isArray(userAccess?.officeIds) ? userAccess.officeIds : [])
-    .map((officeId) => Number(officeId))
-    .filter((officeId) => Number.isInteger(officeId) && officeId > 0))];
 }
 
 function mapDirectoryContactRow(row) {
@@ -7075,20 +6938,6 @@ function authMiddleware(req, res, next) {
   }
 }
 
-function adminOnlyMiddleware(req, res, next) {
-  // Resolve the role from the database (fresh), not from the JWT payload: a token
-  // signed before a demotion still carries role:'admin', so trusting req.user.role
-  // would let a demoted (or deactivated) account keep admin access until expiry.
-  const access = getUserAccessContext(req.user.sub);
-
-  if (access && (access.role === 'admin' || access.profileId === SUPER_ADMIN_PROFILE_ID)) {
-    req.userAccess = access;
-    return next();
-  }
-
-  return res.status(403).json({ message: 'Acces refuse' });
-}
-
 function isLoopbackAddress(address) {
   const value = String(address ?? '').trim();
   if (!value) {
@@ -7144,148 +6993,6 @@ function setupBootstrapGuard(req, res, next) {
   }
 
   return next();
-}
-
-function getUserAccessContext(userId) {
-  const row = db
-    .prepare(
-      `SELECT u.id, u.username, u.role, u.is_active, u.profile_id, p.label AS profile_label, p.rights_json
-       FROM users u
-       LEFT JOIN access_profiles p ON p.id = u.profile_id
-       WHERE u.id = ?`
-    )
-    .get(userId);
-
-  if (!row || !row.is_active) {
-    return null;
-  }
-
-  let parsedRights;
-  try {
-    parsedRights = row.rights_json ? JSON.parse(row.rights_json) : {};
-  } catch {
-    parsedRights = {};
-  }
-
-  const delegatedRightsRows = db
-    .prepare(
-      `SELECT p.rights_json
-       FROM office_user_delegations oud
-       INNER JOIN access_profiles p ON p.id = oud.profile_id
-       WHERE oud.user_id = ?`
-    )
-    .all(userId);
-
-  const delegatedRights = delegatedRightsRows.map((delegation) => {
-    try {
-      return delegation.rights_json ? JSON.parse(delegation.rights_json) : {};
-    } catch {
-      return {};
-    }
-  });
-
-  const hasGlobalOfficeAccess = row.role === 'admin' || row.profile_id === SUPER_ADMIN_PROFILE_ID;
-  let offices = hasGlobalOfficeAccess
-    ? db
-      .prepare('SELECT id, name FROM offices ORDER BY lower(name) ASC, id ASC')
-      .all()
-      .map((office) => ({ id: Number(office.id), name: String(office.name ?? '').trim() }))
-    : getUserOfficeOptions(row.id);
-
-  if (hasGlobalOfficeAccess && offices.length === 0) {
-    // Legacy fallback: old datasets may have offices marked inactive by mistake.
-    offices = db
-      .prepare('SELECT id, name FROM offices ORDER BY lower(name) ASC, id ASC')
-      .all()
-      .map((office) => ({ id: Number(office.id), name: String(office.name ?? '').trim() }));
-  }
-
-  offices = offices.filter((office) => Number.isInteger(office.id) && office.id > 0 && office.name.length > 0);
-  const officeIds = offices.map((office) => office.id);
-
-  return {
-    id: row.id,
-    username: row.username,
-    role: row.role,
-    profileId: row.profile_id ?? null,
-    profileLabel: row.profile_label ?? null,
-    officeIds,
-    offices,
-    rights: hasGlobalOfficeAccess
-      ? buildAccessRights(true)
-      : mergeAccessRights(delegatedRights.length > 0 ? delegatedRights : [parsedRights])
-  };
-}
-
-function hasPermission(rights, permissionId) {
-  for (const domainRights of Object.values(rights ?? {})) {
-    if (domainRights && typeof domainRights === 'object' && domainRights[permissionId] === true) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-function requirePermission(permissionId) {
-  return (req, res, next) => {
-    const access = getUserAccessContext(req.user.sub);
-    if (!access) {
-      return res.status(401).json({ message: 'Session invalide' });
-    }
-
-    if (access.role === 'admin' || access.profileId === SUPER_ADMIN_PROFILE_ID) {
-      req.userAccess = access;
-      return next();
-    }
-
-    if (!hasPermission(access.rights, permissionId)) {
-      writeAuthSecurityLog(req, 'authorization_denied', {
-        userId: access.id,
-        username: access.username,
-        profileId: access.profileId,
-        permissionId,
-        reason: 'missing_permission'
-      });
-      return res.status(403).json({ message: 'Droit insuffisant' });
-    }
-
-    req.userAccess = access;
-    return next();
-  };
-}
-
-function requireAnyPermission(permissionIds) {
-  const normalizedPermissionIds = Array.isArray(permissionIds)
-    ? permissionIds.map((permissionId) => String(permissionId ?? '').trim()).filter((permissionId) => permissionId.length > 0)
-    : [];
-
-  return (req, res, next) => {
-    const access = getUserAccessContext(req.user.sub);
-    if (!access) {
-      return res.status(401).json({ message: 'Session invalide' });
-    }
-
-    if (access.role === 'admin' || access.profileId === SUPER_ADMIN_PROFILE_ID) {
-      req.userAccess = access;
-      return next();
-    }
-
-    const hasAnyPermission = normalizedPermissionIds.some((permissionId) => hasPermission(access.rights, permissionId));
-    if (!hasAnyPermission) {
-      writeAuthSecurityLog(req, 'authorization_denied', {
-        userId: access.id,
-        username: access.username,
-        profileId: access.profileId,
-        permissionIds: normalizedPermissionIds,
-        reason: 'missing_any_permission'
-      });
-      return res.status(403).json({ message: 'Droit insuffisant' });
-    }
-
-    req.userAccess = access;
-    return next();
-  };
 }
 
 const loginSchema = z.object({
@@ -16017,64 +15724,6 @@ function buildBillingDateRange(fromRaw, toRaw) {
     fromIso: from.toISOString(),
     toIso: to.toISOString()
   };
-}
-
-function getAccessibleBillingOfficeIds(access) {
-  return [...new Set(
-    (Array.isArray(access?.officeIds) ? access.officeIds : [])
-      .map((value) => Number(value))
-      .filter((value) => Number.isInteger(value) && value > 0)
-  )];
-}
-
-function getScopedBillingOfficeIds(access, requestedOfficeId) {
-  const allowed = new Set(getAccessibleBillingOfficeIds(access));
-  const asked = Number(requestedOfficeId);
-  if (Number.isInteger(asked) && asked > 0) {
-    return allowed.has(asked) ? [asked] : [];
-  }
-  return [...allowed];
-}
-
-// Returns true if the requesting user can access the given patient record.
-// A practitioner has access when the patient has at least one consultation or
-// appointment in any of their accessible offices, or when patients.office_id
-// matches one of their offices.  Patients that have no office affiliation at
-// all (legacy data created before office tracking) remain accessible to every
-// practitioner for backward compatibility.
-function canUserAccessPatient(patientId, userAccess) {
-  if (!userAccess) return false;
-  if (userAccess.role === 'admin' || userAccess.profileId === SUPER_ADMIN_PROFILE_ID) return true;
-
-  const officeIds = getAccessibleBillingOfficeIds(userAccess);
-  if (officeIds.length === 0) return false;
-
-  const placeholders = officeIds.map(() => '?').join(', ');
-
-  // Fast path: patient linked to an accessible office via consultations,
-  // appointments or their registration office (patients.office_id).
-  // On utilise EXISTS ... OR ... : placer LIMIT dans chaque branche d'un
-  // UNION ALL est une syntaxe SQLite invalide (levait une erreur, donc un 500
-  // pour tout utilisateur non-admin, cassant de fait le cloisonnement).
-  const hasAccess = db.prepare(`
-    SELECT 1 WHERE
-         EXISTS (SELECT 1 FROM consultations WHERE patient_id = ? AND office_id IN (${placeholders}))
-      OR EXISTS (SELECT 1 FROM appointments  WHERE patient_id = ? AND office_id IN (${placeholders}))
-      OR EXISTS (SELECT 1 FROM patients WHERE id = ? AND is_deleted = 0 AND office_id IN (${placeholders}))
-  `).get(patientId, ...officeIds, patientId, ...officeIds, patientId, ...officeIds);
-
-  if (hasAccess) return true;
-
-  // Backward compatibility: if the patient has no office affiliation anywhere
-  // (all rows have NULL office_id), they remain visible to every practitioner.
-  const hasAnyOfficeLink = db.prepare(`
-    SELECT 1 WHERE
-         EXISTS (SELECT 1 FROM consultations WHERE patient_id = ? AND office_id IS NOT NULL)
-      OR EXISTS (SELECT 1 FROM appointments WHERE patient_id = ? AND office_id IS NOT NULL)
-      OR EXISTS (SELECT 1 FROM patients WHERE id = ? AND office_id IS NOT NULL AND is_deleted = 0)
-  `).get(patientId, patientId, patientId);
-
-  return hasAnyOfficeLink == null;
 }
 
 function normalizeInvoiceLineItems(rawItems, fallbackAmountCents) {
