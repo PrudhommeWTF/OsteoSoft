@@ -393,6 +393,14 @@ export class SettingsPage implements OnDestroy {
   readonly encryptedRestorePassphrase = signal('');
   readonly selectedEncryptedBackupFile = signal<File | null>(null);
   readonly selectedEncryptedBackupFileName = signal('');
+  // RGPD : conservation et anonymisation confirmee
+  readonly retentionEligible = signal<Array<{ id: number; retentionUntil: string; processingRestricted: boolean }>>([]);
+  readonly retentionExpiringSoon = signal<Array<{ id: number; retentionUntil: string; isExpired: boolean }>>([]);
+  readonly retentionChecked = signal(false);
+  readonly isCheckingRetention = signal(false);
+  readonly isAnonymizingExpired = signal(false);
+  readonly retentionMessage = signal('');
+  readonly retentionError = signal('');
   readonly isCleanupLoading = signal(false);
   readonly isCleanupApplying = signal(false);
   readonly isSearchingRgpdPatients = signal(false);
@@ -2047,6 +2055,57 @@ export class SettingsPage implements OnDestroy {
       this.dataManagementError.set(apiMessage || 'La restauration a échoué. Vérifiez le fichier et la phrase de passe.');
     } finally {
       this.isRestoringBackup.set(false);
+    }
+  }
+
+  async checkRetentionStatus(): Promise<void> {
+    this.retentionMessage.set('');
+    this.retentionError.set('');
+    this.isCheckingRetention.set(true);
+    try {
+      const status = await this.api.getRetentionStatus();
+      this.retentionEligible.set(status.eligibleForAnonymization ?? []);
+      this.retentionExpiringSoon.set(status.expiringSoon ?? []);
+      this.retentionChecked.set(true);
+    } catch {
+      this.retentionError.set('Impossible de vérifier l\'état des durées de conservation.');
+    } finally {
+      this.isCheckingRetention.set(false);
+    }
+  }
+
+  async anonymizeEligiblePatients(): Promise<void> {
+    const eligible = this.retentionEligible();
+    if (eligible.length === 0) {
+      return;
+    }
+    this.retentionMessage.set('');
+    this.retentionError.set('');
+
+    const count = eligible.length;
+    const confirmation = globalThis.confirm(
+      `Anonymisation définitive de ${count} dossier(s) dont la durée légale de conservation est échue. `
+      + 'Cette opération est irréversible : les données personnelles et les consultations seront supprimées, '
+      + 'seule la trace d\'audit sera conservée. Confirmer ?'
+    );
+    if (!confirmation) {
+      return;
+    }
+
+    this.isAnonymizingExpired.set(true);
+    try {
+      const patientIds = eligible.map((item) => item.id);
+      const result = await this.api.anonymizeExpiredPatients(patientIds);
+      const skippedCount = result.skipped?.length ?? 0;
+      this.retentionMessage.set(
+        `${result.anonymizedCount} dossier(s) anonymisé(s).`
+        + (skippedCount > 0 ? ` ${skippedCount} dossier(s) ignoré(s) (durée non échue ou déjà traités).` : '')
+      );
+      await this.checkRetentionStatus();
+    } catch {
+      this.retentionError.set('L\'anonymisation a échoué. Aucune donnée n\'a été modifiée.');
+    } finally {
+      this.isAnonymizingExpired.set(false);
     }
   }
 

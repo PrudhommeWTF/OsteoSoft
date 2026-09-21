@@ -43,7 +43,9 @@ import { parseStatisticsAntecedents } from './statistics.mjs';
  *   parseOfficeOpeningHours: (rawJson: any) => any,
  *   resolveUserIdFromPractitionerText: (text: any) => any,
  *   normalizeAuditValue: (value: any) => any,
- *   normalizePersonNameKey: (name: any) => any
+ *   normalizePersonNameKey: (name: any) => any,
+ *   retentionYears?: number,
+ *   retentionMinorUntilAge?: number
  * }} deps
  */
 export function createPatientRecords(db, {
@@ -58,7 +60,9 @@ export function createPatientRecords(db, {
   parseOfficeOpeningHours,
   resolveUserIdFromPractitionerText,
   normalizeAuditValue,
-  normalizePersonNameKey
+  normalizePersonNameKey,
+  retentionYears = 10,
+  retentionMinorUntilAge = 28
 }) {
   function isPatientProcessingRestricted(/** @type {any} */ patientId) {
     const id = Number(patientId);
@@ -67,27 +71,70 @@ export function createPatientRecords(db, {
     return !!(row && Number(row.processing_restricted) === 1);
   }
 
-  function processExpiredPatients() {
-    const today = new Date().toISOString().slice(0, 10);
-
-    // Anonymise patients whose retention period has expired, including those
-    // whose processing was restricted following consent withdrawal (RGPD Art. 18).
-    const expired = db.prepare(
+  /**
+   * Liste, sans rien detruire, les dossiers dont la retention est echue (donc
+   * eligibles a l'anonymisation). Remplace l'ancienne anonymisation automatique :
+   * la destruction n'a plus lieu qu'apres confirmation humaine explicite.
+   * @param {string} [referenceDateIso] Date de reference (defaut : aujourd'hui).
+   * @returns {Array<{ id: number, retentionUntil: string, processingRestricted: boolean }>}
+   */
+  function getPatientsDueForAnonymization(referenceDateIso) {
+    const today = String(referenceDateIso ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
+    const rows = db.prepare(
       `SELECT id, retention_until, processing_restricted FROM patients
        WHERE is_deleted = 0
          AND retention_until IS NOT NULL
-         AND retention_until < ?`
+         AND retention_until < ?
+       ORDER BY retention_until ASC, id ASC`
     ).all(today);
+    return rows.map((/** @type {any} */ row) => ({
+      id: Number(row.id),
+      retentionUntil: String(row.retention_until),
+      processingRestricted: Number(row.processing_restricted) === 1
+    }));
+  }
 
-    for (const { id, retention_until: retentionUntil, processing_restricted: processingRestricted } of expired) {
+  /**
+   * Anonymise UNIQUEMENT les dossiers dont l'echeance est reellement passee, parmi
+   * la liste d'identifiants confirmee par l'utilisateur. Les identifiants non
+   * eligibles (introuvables, deja anonymises, ou dont la retention n'est pas
+   * echue) sont ignores et rapportes. Chaque anonymisation est journalisee.
+   * @param {any[]} patientIds
+   * @param {any} userId
+   * @param {string} [referenceDateIso]
+   * @returns {{ anonymized: number[], skipped: Array<{ id: number, reason: string }> }}
+   */
+  function anonymizeExpiredPatients(patientIds, userId, referenceDateIso) {
+    const today = String(referenceDateIso ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
+    const ids = [...new Set((Array.isArray(patientIds) ? patientIds : [])
+      .map((/** @type {any} */ value) => Number(value))
+      .filter((/** @type {any} */ value) => Number.isInteger(value) && value > 0))];
+
+    /** @type {number[]} */
+    const anonymized = [];
+    /** @type {Array<{ id: number, reason: string }>} */
+    const skipped = [];
+
+    for (const id of ids) {
+      const row = db.prepare(
+        'SELECT id, retention_until, processing_restricted, is_deleted FROM patients WHERE id = ?'
+      ).get(id);
+      if (!row) { skipped.push({ id, reason: 'introuvable' }); continue; }
+      if (Number(row.is_deleted) === 1) { skipped.push({ id, reason: 'deja_anonymise' }); continue; }
+      if (!row.retention_until || String(row.retention_until) >= today) {
+        skipped.push({ id, reason: 'retention_non_echue' });
+        continue;
+      }
       anonymizePatientTx(id);
-      writeAuditLog(null, 'AUTO_ANONYMIZE', 'patients', String(id), {
-        reason: processingRestricted ? 'processing_restricted_retention_expired' : 'retention_expired',
-        retentionUntil
+      writeAuditLog(userId ?? null, 'ANONYMIZE', 'patients', String(id), {
+        reason: Number(row.processing_restricted) === 1 ? 'processing_restricted_retention_expired' : 'retention_expired',
+        retentionUntil: String(row.retention_until),
+        confirmed: true
       });
+      anonymized.push(id);
     }
 
-    return expired.length;
+    return { anonymized, skipped };
   }
 
   function resolveConsultationSchedulingContextFromRaw(/** @type {any} */ consultationNoteRaw, /** @type {any} */ options = {}) {
@@ -179,20 +226,28 @@ export function createPatientRecords(db, {
   }
 
   function updatePatientRetentionFields(/** @type {any} */ patientId, /** @type {any} */ consultationDateIso) {
-    // Compute candidate retention date: consultation + 10 years
-    // Also compute birth_date + 28 years (French law: minor records kept until age 28)
-    // and use whichever is later.
+    // Date d'echeance candidate : consultation + N annees, et pour un mineur
+    // naissance + M annees ; on retient la plus lointaine. Les durees N et M sont
+    // parametrables (defauts 10 et 28), passees en modificateurs de date SQLite.
+    const yearsMod = `+${retentionYears} years`;
+    const minorMod = `+${retentionMinorUntilAge} years`;
     db.prepare(
       `UPDATE patients SET
          last_visit = CASE WHEN last_visit IS NULL OR date(?) > last_visit THEN date(?) ELSE last_visit END,
          retention_until = CASE
-           WHEN birth_date IS NOT NULL AND date(birth_date, '+28 years') > date(?, '+10 years')
-             THEN CASE WHEN retention_until IS NULL OR date(birth_date, '+28 years') > retention_until THEN date(birth_date, '+28 years') ELSE retention_until END
+           WHEN birth_date IS NOT NULL AND date(birth_date, ?) > date(?, ?)
+             THEN CASE WHEN retention_until IS NULL OR date(birth_date, ?) > retention_until THEN date(birth_date, ?) ELSE retention_until END
            ELSE
-             CASE WHEN retention_until IS NULL OR date(?, '+10 years') > retention_until THEN date(?, '+10 years') ELSE retention_until END
+             CASE WHEN retention_until IS NULL OR date(?, ?) > retention_until THEN date(?, ?) ELSE retention_until END
          END
        WHERE id = ?`
-    ).run(consultationDateIso, consultationDateIso, consultationDateIso, consultationDateIso, consultationDateIso, patientId);
+    ).run(
+      consultationDateIso, consultationDateIso,
+      minorMod, consultationDateIso, yearsMod,
+      minorMod, minorMod,
+      consultationDateIso, yearsMod, consultationDateIso, yearsMod,
+      patientId
+    );
   }
 
   function insertConsultationFromNote(/** @type {any} */ patientId, /** @type {any} */ consultationNoteRaw, /** @type {any} */ options = {}) {
@@ -864,7 +919,8 @@ export function createPatientRecords(db, {
 
   return {
     isPatientProcessingRestricted,
-    processExpiredPatients,
+    getPatientsDueForAnonymization,
+    anonymizeExpiredPatients,
     resolveConsultationSchedulingContextFromRaw,
     updatePatientRetentionFields,
     insertConsultationFromNote,

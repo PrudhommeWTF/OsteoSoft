@@ -341,6 +341,74 @@
                 </div>
               </article>
             </div>
+
+            <div class="col-12">
+              <article class="settings-card">
+                <p class="settings-card-status mb-2">Conservation et anonymisation</p>
+                <h3 class="settings-card-title">Durées légales de conservation</h3>
+                <p class="settings-card-copy mb-3">
+                  Vérifiez les dossiers dont la durée légale de conservation est échue. L'anonymisation n'est jamais
+                  automatique : elle ne s'applique qu'aux dossiers réellement échus, et uniquement après votre confirmation.
+                  L'opération est irréversible (les données personnelles et les consultations sont supprimées, seule la
+                  trace d'audit est conservée).
+                </p>
+
+                <div class="mb-3">
+                  <button
+                    type="button"
+                    class="btn btn-outline-primary"
+                    [disabled]="isCheckingRetention() || isAnonymizingExpired()"
+                    (click)="checkRetentionStatus()"
+                    title="Vérifier" bsTooltip>
+                    <i class="fa-solid fa-magnifying-glass me-1"></i>
+                    {{ isCheckingRetention() ? 'Vérification...' : 'Vérifier les durées de conservation' }}
+                  </button>
+                </div>
+
+                @if (retentionChecked()) {
+                  @if (retentionEligible().length === 0) {
+                    <div class="alert alert-success py-2 mb-3">
+                      Aucun dossier n'a atteint sa durée légale de conservation. Rien à anonymiser.
+                    </div>
+                  } @else {
+                    <div class="alert alert-warning py-2 mb-3">
+                      {{ retentionEligible().length }} dossier(s) ont dépassé leur durée légale de conservation
+                      et sont éligibles à l'anonymisation.
+                    </div>
+                    <ul class="list-group list-group-flush mb-3">
+                      @for (item of retentionEligible(); track item.id) {
+                        <li class="list-group-item d-flex align-items-center justify-content-between py-2 px-2">
+                          <span>Dossier n° {{ item.id }}</span>
+                          <span class="text-muted small">Échéance : {{ item.retentionUntil }}</span>
+                        </li>
+                      }
+                    </ul>
+                    <button
+                      type="button"
+                      class="btn btn-outline-danger"
+                      [disabled]="isAnonymizingExpired() || isCheckingRetention()"
+                      (click)="anonymizeEligiblePatients()"
+                      title="Anonymiser" bsTooltip>
+                      <i class="fa-solid fa-user-slash me-1"></i>
+                      {{ isAnonymizingExpired() ? 'Anonymisation...' : 'Anonymiser les dossiers échus' }}
+                    </button>
+                  }
+
+                  @if (retentionExpiringSoon().length > 0) {
+                    <p class="settings-card-copy small text-muted mt-3 mb-0">
+                      {{ retentionExpiringSoon().length }} dossier(s) arrivent bientôt à échéance.
+                    </p>
+                  }
+                }
+
+                @if (retentionMessage()) {
+                  <div class="alert alert-success py-2 mt-3 mb-0">{{ retentionMessage() }}</div>
+                }
+                @if (retentionError()) {
+                  <div class="alert alert-danger py-2 mt-3 mb-0">{{ retentionError() }}</div>
+                }
+              </article>
+            </div>
           </section>
         } @else if (activeDataManagementTabId() === 'import') {
           <section class="row g-3 mb-4" aria-label="Import de données" role="tabpanel" id="data-management-import-panel" aria-labelledby="data-management-import-tab">
