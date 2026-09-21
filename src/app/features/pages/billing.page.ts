@@ -1605,6 +1605,33 @@ export class BillingPage implements OnDestroy {
     }
   }
 
+  async exportRecettesJournal(): Promise<void> {
+    this.closeActionMenus();
+    if (!this.canExportBilling()) {
+      this.errorMessage.set('Vous n\'avez pas le droit d\'exporter la comptabilité.');
+      return;
+    }
+
+    this.isSaving.set(true);
+    this.errorMessage.set('');
+    this.successMessage.set('');
+    try {
+      const filters = this.buildFilters();
+      const blob = await this.api.exportRecettesJournal({
+        from: filters.from,
+        to: filters.to,
+        officeId: filters.officeId
+      });
+      const fileName = `livre-recettes-${new Date().toISOString().slice(0, 10)}.csv`;
+      this.downloadBlob(blob, fileName);
+      this.successMessage.set('Livre des recettes exporté.');
+    } catch {
+      this.errorMessage.set('Impossible d\'exporter le livre des recettes.');
+    } finally {
+      this.isSaving.set(false);
+    }
+  }
+
   async exportAlertsCsv(): Promise<void> {
     // removed
   }

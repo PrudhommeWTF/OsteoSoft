@@ -12261,7 +12261,7 @@ const {
 // Comptabilité (server/lib/accounting.mjs) : agrégation du registre des
 // opérations, réutilisée par les routes billing (relevé, aperçus, prévisions,
 // alertes, dépôts, export). Instanciée avant les statistiques, qui en dépendent.
-const { getBillingOperationsData } = createAccountingService(db, {
+const { getBillingOperationsData, getRecettesJournal } = createAccountingService(db, {
   decryptSensitiveField,
   getBillingOfficeOptions,
   getBillingUsersForOfficeIds
@@ -14178,6 +14178,57 @@ app.get('/api/billing/export', authMiddleware, requirePermission('export-billing
       : [])
   ]);
   const csv = [header, ...rows]
+    .map((line) => line.map((value) => serializeCsvCell(value, ';')).join(';'))
+    .join('\n');
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  return res.status(200).send(`\ufeff${csv}`);
+});
+
+// Livre des recettes (micro-BNC) : journal chronologique des recettes encaiss\u00e9es
+// (tr\u00e9sorerie), pour une p\u00e9riode et les cabinets accessibles. format=json (d\u00e9faut,
+// pour l'affichage) ou csv (livre t\u00e9l\u00e9chargeable, avec ligne de total).
+app.get('/api/billing/recettes', authMiddleware, requirePermission('read-billing-kpis'), (req, res) => {
+  const format = String(req.query.format ?? 'json').trim().toLowerCase();
+  if (!['json', 'csv'].includes(format)) {
+    return res.status(400).json({ message: 'Format invalide' });
+  }
+  if (format === 'csv' && !hasPermission(req.userAccess?.rights, 'export-billing')
+    && req.userAccess?.role !== 'admin' && req.userAccess?.profileId !== SUPER_ADMIN_PROFILE_ID) {
+    return res.status(403).json({ message: 'Droit d\'export insuffisant' });
+  }
+
+  const range = buildBillingDateRange(req.query.from, req.query.to);
+  const scopedOfficeIds = getScopedBillingOfficeIds(req.userAccess, req.query.officeId);
+
+  const journal = getRecettesJournal({
+    fromIso: range.fromIso,
+    toIso: range.toIso,
+    scopedOfficeIds
+  });
+
+  if (format === 'json') {
+    return res.status(200).json({
+      meta: { from: range.fromIso, to: range.toIso, count: journal.count },
+      totalCents: journal.totalCents,
+      entries: journal.entries
+    });
+  }
+
+  const datePart = new Date().toISOString().slice(0, 10);
+  const fileName = `livre-recettes-${datePart}.csv`;
+  const header = ['Date encaissement', 'Client', 'Numero facture', 'Mode de reglement', 'Montant', 'Devise'];
+  const rows = journal.entries.map((entry) => [
+    String(entry.paidAt ?? '').slice(0, 10),
+    entry.patientName,
+    entry.invoiceNumber,
+    entry.paymentMethod,
+    (Number(entry.amountCents ?? 0) / 100).toFixed(2),
+    entry.currency
+  ]);
+  const totalRow = ['', '', '', 'TOTAL', (journal.totalCents / 100).toFixed(2), 'EUR'];
+  const csv = [header, ...rows, totalRow]
     .map((line) => line.map((value) => serializeCsvCell(value, ';')).join(';'))
     .join('\n');
 

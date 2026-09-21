@@ -67,6 +67,12 @@
           </li>
           <li><hr class="dropdown-divider" /></li>
           <li>
+            <button type="button" class="dropdown-item" [disabled]="isSaving()" (click)="exportRecettesJournal()">
+              <i class="fa-solid fa-book me-2"></i>Livre des recettes (micro-BNC)
+            </button>
+          </li>
+          <li><hr class="dropdown-divider" /></li>
+          <li>
             <button type="button" class="dropdown-item" [disabled]="isSnapshotExporting() || isSaving()" (click)="exportSnapshotPack('excel')">
               <i class="fa-solid fa-box-archive me-2"></i>Pack export CSV
             </button>
