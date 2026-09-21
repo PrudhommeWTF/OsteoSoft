@@ -18500,8 +18500,17 @@ app.delete('/api/billing/invoices/:id', authMiddleware, requirePermission('cance
     }
   }
 
-  db.prepare('DELETE FROM invoices WHERE id = ?').run(id);
-  writeAuditLog(req.user.sub, 'DELETE', 'invoices', String(id), {});
+  // Annulation conservatrice : une facture émise ne se supprime pas (obligation
+  // comptable, numérotation continue). On la conserve avec le statut annulee, on
+  // retire ses paiements (l'argent réellement encaissé est reporté sur la facture
+  // de remplacement), ce qui garde les totaux encaissés justes sans double compte.
+  const cancelInvoice = db.transaction(() => {
+    db.prepare("UPDATE invoices SET status = 'annulee' WHERE id = ?").run(id);
+    db.prepare('DELETE FROM invoice_payments WHERE invoice_id = ?').run(id);
+  });
+  cancelInvoice();
+
+  writeAuditLog(req.user.sub, 'CANCEL', 'invoices', String(id), {});
 
   return res.json({ ok: true });
 });
