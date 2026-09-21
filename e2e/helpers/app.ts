@@ -60,3 +60,74 @@ export async function login(
   await page.waitForURL('**/accueil');
   await expect(page).toHaveURL(/\/accueil$/);
 }
+
+/**
+ * Garantit une instance amorcee et une session admin active. Utilisable en tete
+ * de chaque scenario : installe le cabinet si l'instance est vierge (une seule
+ * fois par instance), puis se connecte. Rend chaque fichier de scenario
+ * autonome, y compris execute seul.
+ */
+export async function ensureLoggedIn(page: Page): Promise<void> {
+  await page.goto('/');
+  await page.waitForURL(/\/(installation|login|accueil)$/);
+
+  if (/\/installation$/.test(page.url())) {
+    await installFreshInstance(page);
+  }
+  if (!/\/accueil$/.test(page.url())) {
+    await login(page);
+  }
+}
+
+/**
+ * Renseigne la date de naissance via le selecteur calendrier (composant maison,
+ * pas de saisie texte). On recule de quelques mois pour rester dans le passe,
+ * puis on choisit le 15 du mois affiche et on valide.
+ */
+export async function pickBirthDate(page: Page): Promise<void> {
+  await page.locator('#birthDate .os-dp-field').click();
+  await expect(page.locator('.os-dp-popup')).toBeVisible();
+
+  for (let i = 0; i < 3; i += 1) {
+    await page.getByRole('button', { name: 'Précédent' }).click();
+  }
+
+  await page.locator('.os-dp-day:not(.os-dp-day--other)').filter({ hasText: /^15$/ }).first().click();
+  await page.getByRole('button', { name: 'Valider' }).click();
+
+  await expect(page.locator('.os-dp-popup')).toBeHidden();
+}
+
+/**
+ * Cree un patient via l'assistant (5 etapes ; seule l'etape 1 est obligatoire).
+ * Termine sur la liste des patients.
+ */
+export async function createPatient(
+  page: Page,
+  options: { lastName: string; firstName: string; sex?: 'Femme' | 'Homme' }
+): Promise<void> {
+  const sex = options.sex ?? 'Femme';
+
+  await page.goto('/patients/nouveau');
+
+  // Etape 1 : identite (obligatoire).
+  await page.getByRole('button', { name: sex, exact: true }).click();
+  await page.locator('#lastName').fill(options.lastName);
+  await page.locator('#firstName').fill(options.firstName);
+  await pickBirthDate(page);
+  await page.locator('#consentSigned').check();
+
+  // Etapes 2 a 5 : facultatives, on avance jusqu'a la derniere. Apres chaque
+  // clic on attend l'entete de l'etape suivante : cela synchronise avec le rendu
+  // Angular (un minuteur rafraichit l'indicateur de brouillon chaque seconde) et
+  // evite de cliquer pendant un re-rendu. exact:true evite que getByRole('Suivant')
+  // attrape les libelles "...suivante" par sous-chaine.
+  const nextHeadings = ['Coordonnées', 'Autres informations', 'Antécédents', 'Premiere consultation'];
+  for (const heading of nextHeadings) {
+    await page.getByRole('button', { name: 'Suivant', exact: true }).click();
+    await expect(page.getByRole('heading', { name: heading })).toBeVisible();
+  }
+
+  await page.getByRole('button', { name: 'Creer le patient' }).click();
+  await page.waitForURL('**/patients');
+}
