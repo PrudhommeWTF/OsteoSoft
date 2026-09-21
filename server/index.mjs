@@ -18,6 +18,8 @@ import jwt from 'jsonwebtoken';
 import ExcelJS from 'exceljs';
 import { z } from 'zod';
 
+import { createFieldCrypto } from './lib/crypto.mjs';
+
 dotenv.config();
 
 const { createRequire } = await import('node:module');
@@ -779,45 +781,10 @@ function updateEnvFile(key, value) {
   fs.renameSync(tempPath, envPath);
 }
 
-function encryptSensitiveField(plainText) {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', dataKey, iv);
-  const encrypted = Buffer.concat([cipher.update(plainText, 'utf8'), cipher.final()]);
-  const authTag = cipher.getAuthTag();
-  return Buffer.concat([iv, authTag, encrypted]).toString('base64');
-}
-
-function decryptSensitiveField(cipherText) {
-  const payload = Buffer.from(cipherText, 'base64');
-  const iv = payload.subarray(0, 12);
-  const authTag = payload.subarray(12, 28);
-  const encrypted = payload.subarray(28);
-  const decipher = crypto.createDecipheriv('aes-256-gcm', dataKey, iv);
-  decipher.setAuthTag(authTag);
-  return decipher.update(encrypted, undefined, 'utf8') + decipher.final('utf8');
-}
-
-function safeDecryptField(cipherText) {
-  const text = String(cipherText ?? '');
-  try {
-    return decryptSensitiveField(text);
-  } catch {
-    return text;
-  }
-}
-
-function restoreCipherField(value) {
-  const text = String(value ?? '');
-  if (!text) {
-    return encryptSensitiveField('');
-  }
-  try {
-    decryptSensitiveField(text);
-    return text;
-  } catch {
-    return encryptSensitiveField(text);
-  }
-}
+// Primitives de chiffrement extraites dans ./lib/crypto.mjs. Le getter () => dataKey
+// permet de refléter une redéfinition de la clé au runtime (assistant d'installation).
+const { encryptSensitiveField, decryptSensitiveField, safeDecryptField, restoreCipherField } =
+  createFieldCrypto(() => dataKey);
 
 function signTokenForSession(user, remember) {
   const tokenTtl = remember ? SESSION_REMEMBER_TTL : SESSION_DEFAULT_TTL;
