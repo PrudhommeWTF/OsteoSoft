@@ -85,6 +85,22 @@ import {
   CONSULTATION_SECTION_KEYS
 } from './lib/patients.mjs';
 import { createPatientRecords } from './lib/patient-records.mjs';
+import {
+  normalizeOfficeOpeningHours,
+  parseOfficeOpeningHours,
+  normalizeOfficeDefaultSessionDurationMinutes,
+  normalizeOfficeDevise,
+  normalizeOfficeInvoiceNumberFormat,
+  normalizeOfficeInvoiceNumberingConfiguration,
+  normalizeInvoiceTemplateLayoutJson,
+  normalizeOfficeLetterTitle,
+  normalizeOfficeLetterContent,
+  getDefaultOfficePaymentMethods,
+  inferPaymentMethodSystemKey,
+  normalizeOfficeServiceTypesPayload,
+  normalizeOfficePaymentMethodsPayload,
+  normalizeOfficeIds
+} from './lib/office-settings.mjs';
 
 dotenv.config();
 
@@ -1411,206 +1427,24 @@ function parseVisibleUserIds(raw) {
   }
 }
 
-const OFFICE_OPENING_TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
-
-function createDefaultOfficeOpeningHours() {
-  return {
-    monday: [],
-    tuesday: [],
-    wednesday: [],
-    thursday: [],
-    friday: [],
-    saturday: [],
-    sunday: []
-  };
-}
-
-function normalizeOfficeOpeningHours(rawOpeningHours) {
-  const normalized = createDefaultOfficeOpeningHours();
-
-  if (!rawOpeningHours || typeof rawOpeningHours !== 'object') {
-    return normalized;
-  }
-
-  for (const day of OFFICE_OPENING_DAY_KEYS) {
-    const ranges = Array.isArray(rawOpeningHours[day]) ? rawOpeningHours[day] : [];
-
-    normalized[day] = ranges
-      .map((range) => {
-        if (!range || typeof range !== 'object') {
-          return null;
-        }
-
-        const start = String(range.start ?? '').trim();
-        const end = String(range.end ?? '').trim();
-        if (!OFFICE_OPENING_TIME_PATTERN.test(start) || !OFFICE_OPENING_TIME_PATTERN.test(end)) {
-          return null;
-        }
-
-        if (start >= end) {
-          return null;
-        }
-
-        return { start, end };
-      })
-      .filter(Boolean);
-  }
-
-  return normalized;
-}
-
-function parseOfficeOpeningHours(rawJson) {
-  if (typeof rawJson !== 'string' || rawJson.trim().length === 0) {
-    return createDefaultOfficeOpeningHours();
-  }
-
-  try {
-    return normalizeOfficeOpeningHours(JSON.parse(rawJson));
-  } catch {
-    return createDefaultOfficeOpeningHours();
-  }
-}
 
 
 
-function normalizeOfficeDefaultSessionDurationMinutes(rawValue) {
-  const parsed = Number(rawValue);
-  if (!Number.isInteger(parsed)) {
-    return 60;
-  }
-
-  return Math.min(Math.max(parsed, 15), 90);
-}
-
-function normalizeOfficeDevise(rawValue) {
-  const value = String(rawValue ?? '').trim().toUpperCase();
-  return ['EUR', 'USD', 'CHF', 'GBP', 'CAD'].includes(value) ? value : 'EUR';
-}
-
-function normalizeOfficeInvoiceNumberFormat(rawValue) {
-  const value = String(rawValue ?? '').trim();
-  return [
-    'AAAA-XXXXXX',
-    'AAAAMM-XXXXXX',
-    'AAAAMMJJ-XXXXXX',
-    'AAAAMM-XXXX : RAZ mensuelle (déconseillé)',
-    'AAAA-XXXX : RAZ annuel'
-  ].includes(value)
-    ? value
-    : 'AAAA-XXXXXX';
-}
-
-function normalizeOfficeInvoiceNumberingConfiguration(rawValue) {
-  const value = String(rawValue ?? '').trim();
-  return value === 'Numérotation par praticien' ? value : 'Numérotation globale au cabinet';
-}
-
-function clampInvoiceTemplateLayoutValue(value, min, max, fallback) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    return fallback;
-  }
-  return Math.min(max, Math.max(min, Math.round(parsed)));
-}
-
-function defaultInvoiceTemplateBlock(x, y, w) {
-  return { x, y, w, visible: true, fontSize: 10, color: '#000000', borderStyle: 'none' };
-}
-
-function defaultInvoiceTemplateLayout() {
-  return {
-    logo: defaultInvoiceTemplateBlock(4, 4, 24),
-    practitioner: defaultInvoiceTemplateBlock(30, 4, 32),
-    patient: defaultInvoiceTemplateBlock(64, 4, 32),
-    invoiceMeta: defaultInvoiceTemplateBlock(64, 20, 32),
-    lineItems: defaultInvoiceTemplateBlock(4, 32, 92),
-    totals: defaultInvoiceTemplateBlock(56, 74, 40),
-    payment: defaultInvoiceTemplateBlock(4, 74, 50),
-    mentions: defaultInvoiceTemplateBlock(4, 86, 92),
-    signature: defaultInvoiceTemplateBlock(60, 92, 36),
-    _global: { primaryColor: '#4d92d1', fontFamily: 'helvetica', showPageNumber: false, footerText: '' }
-  };
-}
-
-function normalizeInvoiceTemplateBlockStyle(candidate, fallback) {
-  const visible = candidate?.visible !== false;
-  const fontSize = clampInvoiceTemplateLayoutValue(candidate?.fontSize, 9, 14, fallback?.fontSize ?? 10);
-  const rawColor = String(candidate?.color ?? fallback?.color ?? '#000000');
-  const color = /^#[0-9a-fA-F]{6}$/.test(rawColor) ? rawColor : '#000000';
-  const borderStyle = ['none', 'line', 'box'].includes(candidate?.borderStyle) ? candidate.borderStyle : 'none';
-  const customLabel = typeof candidate?.customLabel === 'string' ? candidate.customLabel.slice(0, 80) : undefined;
-  const content = typeof candidate?.content === 'string' ? candidate.content.slice(0, 5000) : undefined;
-  return {
-    visible, fontSize, color, borderStyle,
-    ...(customLabel != null ? { customLabel } : {}),
-    ...(content != null ? { content } : {})
-  };
-}
-
-function normalizeInvoiceTemplateGlobalSettings(candidate) {
-  const validFonts = ['helvetica', 'courier', 'times'];
-  const rawColor = String(candidate?.primaryColor ?? '#4d92d1');
-  const primaryColor = /^#[0-9a-fA-F]{6}$/.test(rawColor) ? rawColor : '#4d92d1';
-  const fontFamily = validFonts.includes(candidate?.fontFamily) ? candidate.fontFamily : 'helvetica';
-  const showPageNumber = Boolean(candidate?.showPageNumber);
-  const footerText = String(candidate?.footerText ?? '').slice(0, 200);
-  return { primaryColor, fontFamily, showPageNumber, footerText };
-}
-
-function normalizeInvoiceTemplateLayoutJson(rawValue) {
-  const normalized = defaultInvoiceTemplateLayout();
-  let source = {};
-
-  if (typeof rawValue === 'string' && rawValue.trim()) {
-    try {
-      const parsed = JSON.parse(rawValue);
-      if (parsed && typeof parsed === 'object') {
-        source = parsed;
-      }
-    } catch {
-      source = {};
-    }
-  } else if (rawValue && typeof rawValue === 'object') {
-    source = rawValue;
-  }
-
-  const blockKeys = ['logo', 'practitioner', 'patient', 'invoiceMeta', 'lineItems', 'totals', 'payment', 'mentions', 'signature'];
-  for (const key of blockKeys) {
-    const candidate = source?.[key];
-    if (!candidate || typeof candidate !== 'object') {
-      continue;
-    }
-    const fallback = normalized[key];
-    const style = normalizeInvoiceTemplateBlockStyle(candidate, fallback);
-    const next = {
-      x: clampInvoiceTemplateLayoutValue(candidate.x, 0, 96, fallback.x),
-      y: clampInvoiceTemplateLayoutValue(candidate.y, 0, 96, fallback.y),
-      w: clampInvoiceTemplateLayoutValue(candidate.w, 20, 96, fallback.w),
-      ...style
-    };
-
-    if (next.x + next.w > 100) {
-      next.x = Math.max(0, 100 - next.w);
-    }
-
-    normalized[key] = next;
-  }
-
-  if (source?._global && typeof source._global === 'object') {
-    normalized._global = normalizeInvoiceTemplateGlobalSettings(source._global);
-  }
-
-  return JSON.stringify(normalized);
-}
 
 
-function normalizeOfficeLetterTitle(rawValue) {
-  return String(rawValue ?? '').trim().slice(0, 200);
-}
 
-function normalizeOfficeLetterContent(rawValue) {
-  return String(rawValue ?? '').trim().slice(0, 20000);
-}
+
+
+
+
+
+
+
+
+
+
+
+
 
 const DEFAULT_PAYMENT_REMINDER_LETTER_TITLE = 'Relance de règlement';
 const DEFAULT_PAYMENT_REMINDER_LETTER_CONTENT = `{$CIVILITE},
@@ -1770,60 +1604,8 @@ function replaceOfficeUserDelegations(officeId, rawDelegations) {
   transaction();
 }
 
-function normalizeOfficeServiceTypesPayload(rawServiceTypes) {
-  if (!Array.isArray(rawServiceTypes)) {
-    return [];
-  }
 
-  return rawServiceTypes
-    .map((item, index) => {
-      const id = item?.id != null ? Number(item.id) : null;
-      const label = String(item?.label ?? '').trim();
-      if (!label) {
-        return null;
-      }
 
-      return {
-        id: Number.isInteger(id) && id > 0 ? id : null,
-        label,
-        amountHtCents: Math.max(0, Math.round((Number(item?.amountHt) || 0) * 100)),
-        vatRate: Math.min(Math.max(Number(item?.vatRate) || 0, 0), 100),
-        displayOrder: index + 1
-      };
-    })
-    .filter(Boolean);
-}
-
-function getDefaultOfficePaymentMethods() {
-  return [
-    { systemKey: 'cb', label: 'Carte bleu (CB)', displayOrder: 1 },
-    { systemKey: 'especes', label: 'Espèces', displayOrder: 2 },
-    { systemKey: 'cheque', label: 'Chèque', displayOrder: 3 }
-  ];
-}
-
-function inferPaymentMethodSystemKey(rawLabel) {
-  const label = String(rawLabel ?? '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-
-  if (!label) {
-    return null;
-  }
-
-  if (label.includes('cb') || label.includes('carte')) {
-    return 'cb';
-  }
-  if (label.includes('espece') || label.includes('especes')) {
-    return 'especes';
-  }
-  if (label.includes('cheque') || label.includes('chq')) {
-    return 'cheque';
-  }
-  return null;
-}
 
 function ensureDefaultOfficePaymentMethods(officeId) {
   const normalizedOfficeId = Number(officeId);
@@ -1886,28 +1668,6 @@ function ensureDefaultOfficePaymentMethods(officeId) {
   }
 }
 
-function normalizeOfficePaymentMethodsPayload(rawPaymentMethods) {
-  if (!Array.isArray(rawPaymentMethods)) {
-    return [];
-  }
-
-  return rawPaymentMethods
-    .map((item, index) => {
-      const id = item?.id != null ? Number(item.id) : null;
-      const label = String(item?.label ?? '').trim();
-      if (!label) {
-        return null;
-      }
-
-      return {
-        id: Number.isInteger(id) && id > 0 ? id : null,
-        label,
-        isActive: Boolean(item?.isActive),
-        displayOrder: index + 1
-      };
-    })
-    .filter(Boolean);
-}
 
 function replaceOfficeBusinessSettings(officeId, serviceTypes, paymentMethods) {
   const normalizedOfficeId = Number(officeId);
@@ -2157,22 +1917,6 @@ function readAgendaSettings(userId = null, officeId = null) {
 }
 
 
-function normalizeOfficeIds(officeIds, fallbackOfficeId = null) {
-  const normalized = [...new Set((Array.isArray(officeIds) ? officeIds : [])
-    .map((value) => Number(value))
-    .filter((value) => Number.isInteger(value) && value > 0))];
-
-  if (normalized.length > 0) {
-    return normalized;
-  }
-
-  const fallback = Number(fallbackOfficeId);
-  if (Number.isInteger(fallback) && fallback > 0) {
-    return [fallback];
-  }
-
-  return [];
-}
 
 function syncUserOffices(userId, officeIds) {
   const normalized = normalizeOfficeIds(officeIds);
