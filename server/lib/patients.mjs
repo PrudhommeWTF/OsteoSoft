@@ -228,7 +228,7 @@ export function normalizePatientSexLabel(/** @type {any} */ rawSex) {
   return 'Non renseigne';
 }
 
-export function computePatientRetentionDateIso(/** @type {any} */ birthDateIso) {
+export function computePatientRetentionDateIso(/** @type {any} */ birthDateIso = null) {
   // Base rule: 10 years from today (used when no consultation date is known)
   const tenYearsFromNow = new Date();
   tenYearsFromNow.setFullYear(tenYearsFromNow.getFullYear() + 10);
