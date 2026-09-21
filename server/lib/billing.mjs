@@ -16,6 +16,73 @@
 
 /** @typedef {any} Db */
 
+/**
+ * Décompose un format de numéro de facture en préfixe (période) et largeur du
+ * compteur. Reproduit exactement les formats configurables côté cabinet.
+ * Le préfixe encode la période (année, année-mois, ou année-mois-jour) ; le
+ * numéro final est `${prefix}-${compteur zéro-paddé sur digits}`.
+ * Fonction pure.
+ * @param {any} format
+ * @param {Date} date
+ * @returns {{ prefix: string, digits: number }}
+ */
+export function buildInvoiceNumberParts(format, date) {
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const value = String(format ?? '');
+
+  if (value === 'AAAA-XXXXXX') {
+    return { prefix: year, digits: 6 };
+  }
+  if (value === 'AAAAMM-XXXXXX') {
+    return { prefix: `${year}${month}`, digits: 6 };
+  }
+  if (value === 'AAAAMMJJ-XXXXXX') {
+    return { prefix: `${year}${month}${day}`, digits: 6 };
+  }
+  if (value === 'AAAAMM-XXXX : RAZ mensuelle (déconseillé)') {
+    return { prefix: `${year}${month}`, digits: 4 };
+  }
+  if (value === 'AAAA-XXXX : RAZ annuel') {
+    return { prefix: year, digits: 4 };
+  }
+  // Défaut : même comportement que le format par jour, 6 chiffres.
+  return { prefix: `${year}${month}${day}`, digits: 6 };
+}
+
+/**
+ * Formate un numéro de facture depuis un préfixe, une largeur et une valeur.
+ * @param {string} prefix
+ * @param {number} digits
+ * @param {number} value
+ * @returns {string}
+ */
+export function formatInvoiceNumber(prefix, digits, value) {
+  return `${prefix}-${String(value).padStart(digits, '0')}`;
+}
+
+/**
+ * Extrait la partie numérique (suffixe) d'un numéro de facture pour un préfixe
+ * donné. Renvoie 0 si le numéro ne correspond pas au préfixe. Fonction pure.
+ * @param {any} invoiceNumber
+ * @param {string} prefix
+ * @returns {number}
+ */
+export function parseInvoiceNumberSuffix(invoiceNumber, prefix) {
+  const value = String(invoiceNumber ?? '');
+  const expected = `${prefix}-`;
+  if (!value.startsWith(expected)) {
+    return 0;
+  }
+  const suffix = value.slice(expected.length);
+  if (!/^\d+$/.test(suffix)) {
+    return 0;
+  }
+  const parsed = Number(suffix);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
+}
+
 export function parseBillingOperationId(/** @type {any} */ rawValue) {
   const value = String(rawValue ?? '').trim();
   const separatorIndex = value.indexOf(':');
@@ -181,6 +248,49 @@ export function computeInvoiceStatusFromPayments(/** @type {any} */ totalAmountC
 }
 
 export function createBillingService(/** @type {Db} */ db, /** @type {{ encryptSensitiveField: (v: any) => any, decryptSensitiveField: (v: any) => any, safeDecryptField: (v: any) => any, readOfficePaymentMethods: (officeId: any) => any[] }} */ { encryptSensitiveField, decryptSensitiveField, safeDecryptField, readOfficePaymentMethods }) {
+  /**
+   * Attribue le prochain numéro de facture séquentiel pour un cabinet et une
+   * période, de façon atomique. DOIT être appelée dans la transaction de
+   * création. Le prochain compteur est le maximum entre la valeur enregistrée et
+   * le plus grand suffixe déjà présent (garde-fou contre tout numéro non tracé,
+   * par exemple importé), plus un. Le compteur est ensuite mis à jour et le
+   * numéro produit est garanti non réutilisé pour ce cabinet et cette période.
+   * @param {{ officeId: number, format: any, issuedAt: any }} params
+   * @returns {string}
+   */
+  function allocateNextInvoiceNumber({ officeId, format, issuedAt }) {
+    const date = new Date(String(issuedAt ?? ''));
+    const effectiveDate = Number.isNaN(date.getTime()) ? new Date() : date;
+    const { prefix, digits } = buildInvoiceNumberParts(format, effectiveDate);
+
+    const counterRow = db
+      .prepare('SELECT last_value FROM invoice_number_sequences WHERE office_id = ? AND period_key = ?')
+      .get(officeId, prefix);
+    const counterValue = counterRow ? Number(counterRow.last_value) : 0;
+
+    // Garde-fou : plus grand suffixe déjà utilisé pour ce cabinet et ce préfixe.
+    const existing = db
+      .prepare("SELECT invoice_number FROM invoices WHERE office_id = ? AND invoice_number LIKE ? || '-%'")
+      .all(officeId, prefix);
+    let maxExisting = 0;
+    for (const row of existing) {
+      const suffix = parseInvoiceNumberSuffix(row.invoice_number, prefix);
+      if (suffix > maxExisting) {
+        maxExisting = suffix;
+      }
+    }
+
+    const nextValue = Math.max(counterValue, maxExisting) + 1;
+
+    db.prepare(
+      `INSERT INTO invoice_number_sequences (office_id, period_key, last_value, updated_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(office_id, period_key) DO UPDATE SET last_value = excluded.last_value, updated_at = excluded.updated_at`
+    ).run(officeId, prefix, nextValue, new Date().toISOString());
+
+    return formatInvoiceNumber(prefix, digits, nextValue);
+  }
+
   function getInvoiceDetail(/** @type {any} */ invoiceId) {
     const invoiceRow = db.prepare(
       `SELECT i.id, i.patient_id, i.consultation_id, i.office_id, i.invoice_number, i.amount_cents, i.status,
@@ -372,6 +482,7 @@ export function createBillingService(/** @type {Db} */ db, /** @type {{ encryptS
   }
 
   return {
+    allocateNextInvoiceNumber,
     getInvoiceDetail,
     appendInvoicePayment,
     refreshInvoicePaymentState,

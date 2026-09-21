@@ -698,11 +698,11 @@ export class ApiService {
     return response.consultation;
   }
 
-  async createBillingInvoice(payload: BillingInvoiceCreatePayload): Promise<number> {
+  async createBillingInvoice(payload: BillingInvoiceCreatePayload): Promise<{ invoiceId: number; invoiceNumber: string }> {
     const response = await firstValueFrom(
-      this.http.post<{ invoiceId: number }>(`${this.baseUrl}/billing/invoices`, payload)
+      this.http.post<{ invoiceId: number; invoiceNumber: string }>(`${this.baseUrl}/billing/invoices`, payload)
     );
-    return response.invoiceId;
+    return { invoiceId: response.invoiceId, invoiceNumber: response.invoiceNumber };
   }
 
   async getBillingInvoice(invoiceId: number): Promise<BillingInvoiceDetail> {

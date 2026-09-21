@@ -789,6 +789,14 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
   CREATE INDEX IF NOT EXISTS idx_audit_logs_user_created_at ON audit_logs(user_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_id ON audit_logs(entity, entity_id, created_at);
+
+  CREATE TABLE IF NOT EXISTS invoice_number_sequences (
+    office_id INTEGER NOT NULL,
+    period_key TEXT NOT NULL,
+    last_value INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (office_id, period_key)
+  );
 `);
 
 // ---- Migrations versionnées (Priorité 2) ----
@@ -797,7 +805,56 @@ db.exec(`
 // tracées dans la table schema_migrations, et le démarrage S'ARRÊTE en cas
 // d'échec (au lieu de l'avertissement silencieux des migrations ad hoc). La
 // conversion des migrations ad hoc historiques vers ce système se fera par étapes.
-const VERSIONED_MIGRATIONS = [];
+const VERSIONED_MIGRATIONS = [
+  {
+    version: 2,
+    name: 'numerotation-factures: table de compteurs + amorce depuis les factures existantes',
+    up: (database) => {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS invoice_number_sequences (
+          office_id INTEGER NOT NULL,
+          period_key TEXT NOT NULL,
+          last_value INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (office_id, period_key)
+        );
+      `);
+
+      // Amorce : pour chaque facture existante rattachée à un cabinet, on regroupe
+      // par (cabinet, préfixe) et on retient le plus grand suffixe numérique. Le
+      // compteur reprend ainsi la suite exacte de la numérotation en place, sans
+      // collision ni trou. Le préfixe est la partie avant le dernier tiret.
+      const rows = database
+        .prepare('SELECT office_id, invoice_number FROM invoices WHERE office_id IS NOT NULL')
+        .all();
+      const maxByKey = new Map();
+      for (const row of rows) {
+        const number = String(row.invoice_number ?? '');
+        const separator = number.lastIndexOf('-');
+        if (separator <= 0) continue;
+        const prefix = number.slice(0, separator);
+        const suffix = number.slice(separator + 1);
+        if (!/^\d+$/.test(suffix)) continue;
+        const value = Number(suffix);
+        if (!Number.isInteger(value) || value <= 0) continue;
+        const key = `${Number(row.office_id)}\u0000${prefix}`;
+        if (value > Number(maxByKey.get(key) ?? 0)) {
+          maxByKey.set(key, value);
+        }
+      }
+
+      const insert = database.prepare(
+        `INSERT INTO invoice_number_sequences (office_id, period_key, last_value)
+         VALUES (?, ?, ?)
+         ON CONFLICT(office_id, period_key) DO UPDATE SET last_value = excluded.last_value`
+      );
+      for (const [key, value] of maxByKey.entries()) {
+        const [officeIdRaw, prefix] = key.split('\u0000');
+        insert.run(Number(officeIdRaw), prefix, value);
+      }
+    }
+  }
+];
 markBaselineIfEmpty(db, 1, 'socle: schema initial (0.3.0)');
 runMigrations(db, VERSIONED_MIGRATIONS, { log: (message) => console.log(message) });
 
@@ -12193,6 +12250,7 @@ app.patch('/api/appointments/:id/cancel', authMiddleware, requirePermission('edi
 // opérations liées à la base instanciées via createBillingService. Chiffrement
 // et lecture des méthodes de paiement injectés (définis plus haut).
 const {
+  allocateNextInvoiceNumber,
   getInvoiceDetail,
   appendInvoicePayment,
   refreshInvoicePaymentState,
@@ -13039,7 +13097,8 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('invoice-con
   const patientId = Number(req.body?.patientId);
   const consultationId = req.body?.consultationId != null ? Number(req.body.consultationId) : null;
   const officeId = req.body?.officeId != null ? Number(req.body.officeId) : null;
-  const invoiceNumber = String(req.body?.invoiceNumber ?? '').trim();
+  // Le numéro de facture est attribué par le serveur (séquentiel, sans trou). Un
+  // éventuel numéro envoyé par le client est ignoré.
   const amountCents = Math.round(Number(req.body?.amountCents ?? 0));
   const status = String(req.body?.status ?? 'payee').trim();
   const issuedAt = String(req.body?.issuedAt ?? new Date().toISOString()).trim();
@@ -13055,9 +13114,6 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('invoice-con
   if (!Number.isInteger(patientId) || patientId <= 0) {
     return res.status(400).json({ message: 'Patient invalide' });
   }
-  if (!invoiceNumber) {
-    return res.status(400).json({ message: 'Numéro de facture requis' });
-  }
   if (!Number.isFinite(amountCents) || amountCents < 0) {
     return res.status(400).json({ message: 'Montant invalide' });
   }
@@ -13069,11 +13125,6 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('invoice-con
 
   if (!canUserAccessPatient(patientId, req.userAccess)) {
     return res.status(403).json({ message: 'Accès refusé' });
-  }
-
-  const existing = db.prepare('SELECT id FROM invoices WHERE invoice_number = ?').get(invoiceNumber);
-  if (existing) {
-    return res.status(409).json({ invoiceId: Number(existing.id) });
   }
 
   const requestedOfficeId = Number.isInteger(officeId) && officeId > 0 ? officeId : null;
@@ -13097,8 +13148,18 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('invoice-con
   const effectiveStatus = computeInvoiceStatusFromPayments(amountCents, payments, status);
   const dueAt = issuedAt;
   const notesCipher = notes ? encryptSensitiveField(notes) : '';
+  const officeNumberFormat = db
+    .prepare('SELECT invoice_number_format FROM offices WHERE id = ?')
+    .get(effectiveOfficeId)?.invoice_number_format ?? 'AAAA-XXXXXX';
 
   const createInvoice = db.transaction(() => {
+    // Numéro attribué de façon atomique dans la transaction : séquentiel, sans
+    // trou, jamais réutilisé pour ce cabinet et cette période.
+    const invoiceNumber = allocateNextInvoiceNumber({
+      officeId: effectiveOfficeId,
+      format: officeNumberFormat,
+      issuedAt
+    });
     const inserted = db.prepare(
       `INSERT INTO invoices
         (patient_id, invoice_number, amount_cents, status, issued_at, due_at, notes_cipher, office_id, consultation_id, payment_method)
@@ -13152,10 +13213,10 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('invoice-con
       );
     }
 
-    return invoiceId;
+    return { invoiceId, invoiceNumber };
   });
 
-  const invoiceId = createInvoice();
+  const { invoiceId, invoiceNumber } = createInvoice();
 
   writeAuditLog(req.user.sub, 'CREATE', 'invoices', String(invoiceId), {
     patientId,
@@ -13165,7 +13226,7 @@ app.post('/api/billing/invoices', authMiddleware, requirePermission('invoice-con
     paymentCount: payments.length
   });
 
-  return res.status(201).json({ invoiceId });
+  return res.status(201).json({ invoiceId, invoiceNumber });
 });
 
 app.delete('/api/billing/invoices/:id', authMiddleware, requirePermission('cancel-invoice'), (req, res) => {

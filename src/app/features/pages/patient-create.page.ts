@@ -2535,11 +2535,13 @@ export class PatientCreatePage implements OnInit, OnDestroy {
       ? String(billing.payments[0]?.method ?? '').trim()
       : (billing.payments.length > 1 ? 'multiple' : '');
 
-    await this.api.createBillingInvoice({
+    // La facture est enregistrée d'abord : le serveur attribue le numéro
+    // (séquentiel, sans trou). Le PDF est ensuite régénéré avec CE numéro et
+    // attaché à la fiche, pour que la pièce et l'enregistrement coïncident.
+    const { invoiceNumber } = await this.api.createBillingInvoice({
       patientId: created.patient.id,
       consultationId,
       officeId: billing.officeId ?? created.consultation?.officeId ?? null,
-      invoiceNumber: billing.invoiceNumber,
       amountCents: Math.round(billing.totalAmount * 100),
       status: billingStatus,
       paymentMethod: billingPaymentMethod,
@@ -2560,6 +2562,38 @@ export class PatientCreatePage implements OnInit, OnDestroy {
         paymentMethod: payment.method
       }))
     });
+
+    // Régénère le PDF avec le numéro serveur et l'attache comme document patient.
+    try {
+      const offices = await this.api.getOffices();
+      const office = this.resolveConsultationBillingOffice(offices);
+      const profile = await this.api.getMyUserProfile();
+      const pdfBlob = this.pdfBuilder.buildConsultationInvoicePdf(
+        raw,
+        office,
+        profile,
+        billing.issuedAt,
+        invoiceNumber,
+        this.consultationOfficeName()
+      );
+      const base64 = await this.blobToBase64(pdfBlob);
+      const rawName = String(raw.documentName ?? '').trim() || 'Facture acquittee';
+      const fileName = rawName.toLowerCase().endsWith('.pdf') ? rawName : `${rawName}.pdf`;
+      await this.api.createPatientDocument(created.patient.id, {
+        consultationId,
+        officeId: billing.officeId ?? created.consultation?.officeId ?? null,
+        fileName,
+        mimeType: 'application/pdf',
+        sizeBytes: pdfBlob.size,
+        title: rawName,
+        comment: billing.internalComment,
+        contentBase64: base64,
+        documentType: 'invoice'
+      });
+    } catch {
+      // Non bloquant : l'enregistrement comptable existe ; le PDF pourra être
+      // régénéré depuis la fiche patient si nécessaire.
+    }
   }
 
   private computeConsultationPaymentStatus(totalAmount: number, payments: ConsultationPaymentEntry[]): ConsultationPaymentStatus {
@@ -2586,7 +2620,16 @@ export class PatientCreatePage implements OnInit, OnDestroy {
   }
 
   private serializeConsultationDocumentsForPayload(): ConsultationDocumentUploadPayload[] {
+    // Le PDF de facture mis en scène pendant l'assistant sert d'aperçu uniquement :
+    // il porte un numéro provisoire. Il est EXCLU de la sauvegarde et sera
+    // régénéré après enregistrement avec le numéro attribué par le serveur
+    // (voir persistConsultationBillingInvoice), afin que la pièce et
+    // l'enregistrement comptable portent le même numéro.
+    const provisionalInvoiceRef = this.consultationBillingChoice() === 'bill'
+      ? String(this.consultationBillingState()?.invoiceDocumentRef ?? '').trim()
+      : '';
     return this.consultationDocuments()
+      .filter((item) => !provisionalInvoiceRef || item.documentRef !== provisionalInvoiceRef)
       .map((item) => ({
         documentRef: item.documentRef,
         fileName: item.fileName.trim(),

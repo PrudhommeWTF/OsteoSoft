@@ -46,47 +46,59 @@ after(async () => {
   await server?.stop();
 });
 
-describe('Intégrité de la facturation', () => {
-  test('crée une facture et la relit', async () => {
-    const created = await admin.post('/api/billing/invoices', invoiceBody('2026-000001'));
+// Suffixe numérique d'un numéro de facture (partie après le dernier tiret).
+function invoiceSuffix(invoiceNumber) {
+  const value = String(invoiceNumber ?? '');
+  return Number(value.slice(value.lastIndexOf('-') + 1));
+}
+
+describe('Numérotation attribuée par le serveur', () => {
+  test('crée une facture, le serveur attribue le numéro et on le relit', async () => {
+    const created = await admin.post('/api/billing/invoices', invoiceBody());
     assert.equal(created.status, 201);
     const invoiceId = created.body?.invoiceId;
+    const invoiceNumber = created.body?.invoiceNumber;
     assert.ok(Number.isInteger(invoiceId));
+    assert.match(String(invoiceNumber), /^2026-\d{6}$/, 'numéro au format AAAA-XXXXXX pour une facture datée 2026');
 
     const read = await admin.get(`/api/billing/invoices/${invoiceId}`);
     assert.equal(read.status, 200);
-    assert.ok(read.raw.includes('2026-000001'), 'le numéro de facture doit être relu');
+    assert.ok(read.raw.includes(invoiceNumber), 'le numéro attribué par le serveur doit être relu');
   });
 
-  test('un numéro de facture en double est refusé (409)', async () => {
-    const n = '2026-000100';
-    assert.equal((await admin.post('/api/billing/invoices', invoiceBody(n))).status, 201);
-    const dup = await admin.post('/api/billing/invoices', invoiceBody(n));
-    assert.equal(dup.status, 409, 'un numéro déjà utilisé doit être rejeté');
-  });
-
-  test('deux créations concurrentes du même numéro: une seule réussit', async () => {
-    const n = '2026-000200';
-    const [r1, r2] = await Promise.all([
-      admin.post('/api/billing/invoices', invoiceBody(n)),
-      admin.post('/api/billing/invoices', invoiceBody(n))
-    ]);
-    const codes = [r1.status, r2.status].sort();
-    assert.deepEqual(codes, [201, 409], 'exactement une création réussie, une refusée, jamais deux factures au même numéro');
-  });
-
-  test('des numéros distincts créent des factures distinctes', async () => {
-    const a = await admin.post('/api/billing/invoices', invoiceBody('2026-000300'));
-    const b = await admin.post('/api/billing/invoices', invoiceBody('2026-000301'));
+  test('le numéro envoyé par le client est ignoré', async () => {
+    // Deux factures avec le MÊME numéro client : le serveur attribue quand même
+    // deux numéros distincts (le numéro client n'a aucun effet).
+    const a = await admin.post('/api/billing/invoices', invoiceBody('MEME-NUMERO-CLIENT'));
+    const b = await admin.post('/api/billing/invoices', invoiceBody('MEME-NUMERO-CLIENT'));
     assert.equal(a.status, 201);
     assert.equal(b.status, 201);
-    assert.notEqual(a.body.invoiceId, b.body.invoiceId);
+    assert.notEqual(a.body.invoiceNumber, b.body.invoiceNumber, 'numéros serveur distincts malgré un numéro client identique');
+    assert.notEqual(a.body.invoiceNumber, 'MEME-NUMERO-CLIENT');
+  });
+
+  test('les numéros se suivent sans trou', async () => {
+    const a = await admin.post('/api/billing/invoices', invoiceBody());
+    const b = await admin.post('/api/billing/invoices', invoiceBody());
+    assert.equal(a.status, 201);
+    assert.equal(b.status, 201);
+    assert.equal(invoiceSuffix(b.body.invoiceNumber), invoiceSuffix(a.body.invoiceNumber) + 1, 'incrément de 1, sans trou');
+  });
+
+  test('deux créations concurrentes reçoivent des numéros distincts', async () => {
+    const [r1, r2] = await Promise.all([
+      admin.post('/api/billing/invoices', invoiceBody()),
+      admin.post('/api/billing/invoices', invoiceBody())
+    ]);
+    assert.equal(r1.status, 201);
+    assert.equal(r2.status, 201);
+    assert.notEqual(r1.body.invoiceNumber, r2.body.invoiceNumber, 'jamais deux factures au même numéro, même en concurrence');
   });
 });
 
 describe('Annulation conservatrice (facture émise non supprimée)', () => {
   test('annuler une facture la conserve en statut annulee, sans la supprimer', async () => {
-    const created = await admin.post('/api/billing/invoices', invoiceBody('2026-000400'));
+    const created = await admin.post('/api/billing/invoices', invoiceBody());
     assert.equal(created.status, 201);
     const invoiceId = created.body.invoiceId;
 
@@ -99,14 +111,17 @@ describe('Annulation conservatrice (facture émise non supprimée)', () => {
     assert.ok(read.raw.includes('annulee'), 'la facture conservée doit porter le statut annulee');
   });
 
-  test('le numéro d une facture annulée n est pas réutilisable', async () => {
-    const n = '2026-000401';
-    const created = await admin.post('/api/billing/invoices', invoiceBody(n));
+  test('le numéro d une facture annulée n est pas réutilisé (numérotation continue)', async () => {
+    const created = await admin.post('/api/billing/invoices', invoiceBody());
     assert.equal(created.status, 201);
+    const cancelledNumber = created.body.invoiceNumber;
     assert.equal((await admin.del(`/api/billing/invoices/${created.body.invoiceId}`)).status, 200);
 
-    // Recréer une facture avec le même numéro doit être refusé (continuité).
-    const reuse = await admin.post('/api/billing/invoices', invoiceBody(n));
-    assert.equal(reuse.status, 409, 'le numéro d une facture annulée ne doit pas être réutilisable');
+    // La facture suivante reçoit un numéro strictement supérieur : le numéro de la
+    // facture annulée n'est pas réattribué, la séquence continue sans trou.
+    const next = await admin.post('/api/billing/invoices', invoiceBody());
+    assert.equal(next.status, 201);
+    assert.notEqual(next.body.invoiceNumber, cancelledNumber, 'le numéro annulé ne doit pas être réattribué');
+    assert.equal(invoiceSuffix(next.body.invoiceNumber), invoiceSuffix(cancelledNumber) + 1, 'la séquence continue après l annulation');
   });
 });
