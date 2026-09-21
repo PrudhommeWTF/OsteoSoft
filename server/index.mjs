@@ -131,8 +131,20 @@ const {
   sessionRememberTtl: SESSION_REMEMBER_TTL,
   sessionDefaultTtl: SESSION_DEFAULT_TTL,
   auditLogRetentionDays: AUDIT_LOG_RETENTION_DAYS,
-  draftRetentionDays: DRAFT_RETENTION_DAYS
+  draftRetentionDays: DRAFT_RETENTION_DAYS,
+  patientRetentionYears: PATIENT_RETENTION_YEARS,
+  patientRetentionMinorUntilAge: PATIENT_RETENTION_MINOR_UNTIL_AGE
 } = loadServerConfig();
+
+// Options de retention des dossiers patients (parametrables, defauts 10 ans / 28
+// ans pour les mineurs). Utilisees pour calculer les dates d'echeance.
+const patientRetentionOptions = {
+  years: PATIENT_RETENTION_YEARS,
+  minorUntilAge: PATIENT_RETENTION_MINOR_UNTIL_AGE
+};
+// Enveloppe liee a la configuration, utilisee partout a la place de l'appel brut.
+const computePatientRetentionDate = (/** @type {any} */ birthDateIso) =>
+  computePatientRetentionDateIso(birthDateIso, patientRetentionOptions);
 const CURRENT_CONSENT_FORM_VERSION = '1.0';
 
 // Garde de démarrage : refuse la clé JWT publique de développement hors mode
@@ -2035,7 +2047,8 @@ const {
 // statistiques (qui reçoivent plusieurs de ces primitives).
 const {
   isPatientProcessingRestricted,
-  processExpiredPatients,
+  getPatientsDueForAnonymization,
+  anonymizeExpiredPatients,
   resolveConsultationSchedulingContextFromRaw,
   updatePatientRetentionFields,
   insertConsultationFromNote,
@@ -2065,7 +2078,9 @@ const {
   parseOfficeOpeningHours,
   resolveUserIdFromPractitionerText,
   normalizeAuditValue,
-  normalizePersonNameKey
+  normalizePersonNameKey,
+  retentionYears: PATIENT_RETENTION_YEARS,
+  retentionMinorUntilAge: PATIENT_RETENTION_MINOR_UNTIL_AGE
 });
 
 function mapDirectoryContactRow(row) {
@@ -2607,7 +2622,7 @@ function seedDemoInstanceDataForOffice(officeId, options = {}) {
 
       const consentSigned = seededUnit(patientSeedBase + 31) < 0.14 ? 0 : 1;
       const consentSignedAt = consentSigned ? new Date(now.getTime() - ((365 + patientIndex * 30) * 24 * 60 * 60 * 1000)).toISOString() : null;
-      const retentionUntil = computePatientRetentionDateIso(patient.birthDate || null);
+      const retentionUntil = computePatientRetentionDate(patient.birthDate || null);
 
       const patientResult = insertPatient.run(
         encryptSensitiveField(fullName),
@@ -6869,8 +6884,34 @@ app.get('/api/data-management/retention-status', authMiddleware, requirePermissi
     isExpired: row.retention_until < today
   }));
 
-  writeAuditLog(req.user.sub, 'READ_LIST', 'data-management-retention', null, { count: expiringSoon.length });
-  return res.json({ expiringSoon });
+  // Dossiers deja echus, donc eligibles a l'anonymisation confirmee (apercu).
+  const eligibleForAnonymization = getPatientsDueForAnonymization(today);
+
+  writeAuditLog(req.user.sub, 'READ_LIST', 'data-management-retention', null, {
+    count: expiringSoon.length,
+    eligibleCount: eligibleForAnonymization.length
+  });
+  return res.json({ expiringSoon, eligibleForAnonymization });
+});
+
+// Anonymisation confirmee par lot : detruit (irreversible) uniquement les dossiers
+// dont l'echeance est passee, parmi la liste explicite confirmee par l'utilisateur.
+// Remplace l'ancienne anonymisation automatique non supervisee.
+app.post('/api/data-management/anonymize-expired', heavyOperationLimiter, authMiddleware, requirePermission('manage-data-rgpd'), (req, res) => {
+  const patientIds = Array.isArray(req.body?.patientIds) ? req.body.patientIds : null;
+  if (!patientIds || patientIds.length === 0) {
+    return res.status(400).json({ message: 'Veuillez fournir la liste des dossiers a anonymiser.' });
+  }
+  if (patientIds.length > 1000) {
+    return res.status(400).json({ message: 'Trop de dossiers dans une seule demande (maximum 1000).' });
+  }
+
+  const result = anonymizeExpiredPatients(patientIds, req.user.sub);
+  return res.status(200).json({
+    anonymizedCount: result.anonymized.length,
+    anonymized: result.anonymized,
+    skipped: result.skipped
+  });
 });
 
 app.get('/api/data-management/consent-status', authMiddleware, requirePermission('manage-data-rgpd'), (req, res) => {
@@ -7044,7 +7085,7 @@ app.post('/api/data-management/import', heavyOperationLimiter, authMiddleware, r
         };
 
         const birthDate = patient.birthDate.trim();
-        const retentionUntil = computePatientRetentionDateIso(birthDate || null);
+        const retentionUntil = computePatientRetentionDate(birthDate || null);
         const inserted = db
           .prepare(
             `INSERT INTO patients
@@ -7654,7 +7695,7 @@ const { importWebOsteoDatabase } = createWebOsteoImport(db, {
   parseImportedNullableNumber,
   formatRelatedPeople,
   updatePatientRetentionFields,
-  computePatientRetentionDateIso,
+  computePatientRetentionDateIso: computePatientRetentionDate,
   syncUserOffices,
   storeAntecedentTypes,
   replaceConsultationSections,
@@ -9691,7 +9732,7 @@ app.post('/api/patients', authMiddleware, requirePermission('create-patient-reco
   const antecedentCategories = extractAntecedentCategories(payload.medicalHistory);
 
   const birthDate = payload.birthDate.trim();
-  const retentionUntil = computePatientRetentionDateIso(birthDate || null);
+  const retentionUntil = computePatientRetentionDate(birthDate || null);
   // Honest consent capture: only record consent when the caller explicitly
   // signals it was signed. No more hardcoded consent_signed = 1 (RGPD Art. 7).
   const consentSigned = payload.consentSigned === true ? 1 : 0;
@@ -14447,11 +14488,14 @@ app.listen(port, () => {
   console.log(`Secure SQLite API ready on http://localhost:${port}`);
 });
 
-processExpiredPatients();
+// Les dossiers patients ne sont PLUS anonymises automatiquement : l'anonymisation
+// (irreversible) n'a lieu qu'apres confirmation humaine explicite, via l'apercu
+// et l'action confirmee de la section RGPD (voir /api/data-management/retention-*).
+// Les purges non destructives de PII (brouillons orphelins, journal d'audit
+// au-dela de la retention) restent automatiques.
 processExpiredDrafts();
 processExpiredAuditLogs();
 
 const retentionCheckIntervalMs = 24 * 60 * 60 * 1000;
-const retentionCheckInterval = setInterval(processExpiredPatients, retentionCheckIntervalMs);
 const draftPurgeInterval = setInterval(processExpiredDrafts, retentionCheckIntervalMs);
 const auditLogPurgeInterval = setInterval(processExpiredAuditLogs, retentionCheckIntervalMs);

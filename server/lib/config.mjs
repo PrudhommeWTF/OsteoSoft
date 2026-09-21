@@ -65,7 +65,14 @@ export function loadServerConfig(env = process.env, { cwd = process.cwd() } = {}
     auditLogRetentionDays: Number(env.AUDIT_LOG_RETENTION_DAYS ?? 3650),
     // Rétention des brouillons : un brouillon non modifié depuis 7 jours est
     // considéré comme orphelin et purgé.
-    draftRetentionDays: Number(env.DRAFT_RETENTION_DAYS ?? 7)
+    draftRetentionDays: Number(env.DRAFT_RETENTION_DAYS ?? 7),
+    // Rétention des dossiers patients (annees) avant eligibilite a l'anonymisation.
+    // Defaut 10 ans. La duree est une decision reglementaire ; elle est
+    // parametrable sans figer une valeur dans le code.
+    patientRetentionYears: Number(env.PATIENT_RETENTION_YEARS ?? 10),
+    // Age minimal jusqu'auquel un dossier de mineur est conserve (defaut 28 ans,
+    // soit 10 ans apres la majorite).
+    patientRetentionMinorUntilAge: Number(env.PATIENT_RETENTION_MINOR_UNTIL_AGE ?? 28)
   };
 }
 

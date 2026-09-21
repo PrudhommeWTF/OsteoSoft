@@ -228,22 +228,36 @@ export function normalizePatientSexLabel(/** @type {any} */ rawSex) {
   return 'Non renseigne';
 }
 
-export function computePatientRetentionDateIso(/** @type {any} */ birthDateIso = null) {
-  // Base rule: 10 years from today (used when no consultation date is known)
-  const tenYearsFromNow = new Date();
-  tenYearsFromNow.setFullYear(tenYearsFromNow.getFullYear() + 10);
+/**
+ * Calcule la date d'echeance de retention (a partir de laquelle un dossier est
+ * eligible a l'anonymisation). Duree parametrable ; les defauts (10 ans, mineurs
+ * jusqu'a 28 ans) preservent le comportement historique.
+ * @param {any} [birthDateIso]
+ * @param {{ years?: number, minorUntilAge?: number }} [options]
+ * @returns {string}
+ */
+export function computePatientRetentionDateIso(birthDateIso = null, options = {}) {
+  const rawYears = Number(options.years);
+  const rawMinor = Number(options.minorUntilAge);
+  const years = Number.isInteger(rawYears) && rawYears > 0 ? rawYears : 10;
+  const minorUntilAge = Number.isInteger(rawMinor) && rawMinor > 0 ? rawMinor : 28;
 
-  // GDPR / Code de la santé publique: medical records for minors must be kept
-  // until at least the patient's 28th birthday (10 years after majority at 18).
+  // Regle de base : N annees a compter d'aujourd'hui (utilisee quand aucune date
+  // de consultation n'est connue).
+  const baseThreshold = new Date();
+  baseThreshold.setFullYear(baseThreshold.getFullYear() + years);
+
+  // RGPD / Code de la sante publique : les dossiers de mineurs sont conserves au
+  // moins jusqu'a l'age configure (par defaut 28 ans, soit 10 ans apres 18 ans).
   if (birthDateIso) {
     const minorThreshold = new Date(birthDateIso);
-    minorThreshold.setFullYear(minorThreshold.getFullYear() + 28);
-    if (minorThreshold > tenYearsFromNow) {
+    minorThreshold.setFullYear(minorThreshold.getFullYear() + minorUntilAge);
+    if (minorThreshold > baseThreshold) {
       return minorThreshold.toISOString().slice(0, 10);
     }
   }
 
-  return tenYearsFromNow.toISOString().slice(0, 10);
+  return baseThreshold.toISOString().slice(0, 10);
 }
 
 export function buildDefaultPatientNotes() {

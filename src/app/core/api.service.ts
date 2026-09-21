@@ -897,6 +897,32 @@ export class ApiService {
     );
   }
 
+  async getRetentionStatus(): Promise<{
+    expiringSoon: Array<{ id: number; retentionUntil: string; isExpired: boolean }>;
+    eligibleForAnonymization: Array<{ id: number; retentionUntil: string; processingRestricted: boolean }>;
+  }> {
+    return firstValueFrom(
+      this.http.get<{
+        expiringSoon: Array<{ id: number; retentionUntil: string; isExpired: boolean }>;
+        eligibleForAnonymization: Array<{ id: number; retentionUntil: string; processingRestricted: boolean }>;
+      }>(`${this.baseUrl}/data-management/retention-status`)
+    );
+  }
+
+  async anonymizeExpiredPatients(patientIds: number[]): Promise<{
+    anonymizedCount: number;
+    anonymized: number[];
+    skipped: Array<{ id: number; reason: string }>;
+  }> {
+    return firstValueFrom(
+      this.http.post<{
+        anonymizedCount: number;
+        anonymized: number[];
+        skipped: Array<{ id: number; reason: string }>;
+      }>(`${this.baseUrl}/data-management/anonymize-expired`, { patientIds })
+    );
+  }
+
   async downloadEncryptedDataBackup(passphrase: string): Promise<Blob> {
     return firstValueFrom(
       this.http.post(`${this.baseUrl}/data-management/backup/encrypted`, { passphrase }, {
