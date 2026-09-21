@@ -19,6 +19,7 @@ import ExcelJS from 'exceljs';
 import { z } from 'zod';
 
 import { createFieldCrypto } from './lib/crypto.mjs';
+import { markBaselineIfEmpty, runMigrations } from './lib/migrations.mjs';
 
 dotenv.config();
 
@@ -727,6 +728,16 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_audit_logs_user_created_at ON audit_logs(user_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_id ON audit_logs(entity, entity_id, created_at);
 `);
+
+// ---- Migrations versionnées (Priorité 2) ----
+// Le schéma créé ci-dessus est adopté comme socle (migration 1). Les évolutions
+// futures s'ajoutent à VERSIONED_MIGRATIONS : elles sont appliquées dans l'ordre,
+// tracées dans la table schema_migrations, et le démarrage S'ARRÊTE en cas
+// d'échec (au lieu de l'avertissement silencieux des migrations ad hoc). La
+// conversion des migrations ad hoc historiques vers ce système se fera par étapes.
+const VERSIONED_MIGRATIONS = [];
+markBaselineIfEmpty(db, 1, 'socle: schema initial (0.3.0)');
+runMigrations(db, VERSIONED_MIGRATIONS, { log: (message) => console.log(message) });
 
 // Empty/whitespace is treated as unset (→ triggers the guard below) rather than
 // decoding to a zero-length key.
