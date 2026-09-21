@@ -69,9 +69,30 @@ sans lien avec un compte reel.
   d'installation (creation du cabinet et du compte admin), connexion admin,
   refus d'un mot de passe errone, impossibilite de relancer l'installation une
   fois le cabinet cree.
+- Creation patient et consultation (`patient-consultation.spec.ts`) : creation
+  d'un patient via l'assistant (identite, date de naissance au calendrier,
+  consentement), presence dans la liste, puis creation d'une consultation
+  rattachee au dossier.
 
-Parcours prevus (PR suivantes) : creation patient et consultation, facturation
-et PDF, agenda et rendez-vous.
+Parcours prevus (PR suivantes) : facturation et PDF, agenda et rendez-vous.
+
+## Pieges rencontres (a garder en tete)
+
+- `getByRole('button', { name: 'Suivant' })` filtre par sous-chaine et sans
+  tenir compte de la casse : il attrape aussi les libelles contenant "suivante"
+  (infobulles "Passer a l'etape suivante"). Utiliser `exact: true` ou un
+  selecteur CSS cible.
+- L'assistant patient garde toutes les etapes dans le DOM et rafraichit
+  l'indicateur de brouillon chaque seconde. Apres chaque "Suivant", on attend
+  l'entete de l'etape suivante pour se synchroniser avec le rendu.
+- Le selecteur de date est un composant maison (calendrier, pas de saisie
+  texte) : on ouvre le panneau, on recule de quelques mois, on choisit un jour,
+  on valide.
+- Certains libelles de boutons different selon le mode : en creation de
+  consultation, le bouton est "Creer la consultation" (et non "Enregistrer et
+  fermer", qui n'existe qu'en edition).
+- La barre laterale et l'entete ont aussi un champ de recherche patient : cibler
+  celui de la liste par sa classe (`input.pat-search-input`).
 
 ## Integration continue
 
