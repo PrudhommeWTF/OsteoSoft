@@ -16143,13 +16143,14 @@ function canUserAccessPatient(patientId, userAccess) {
 
   // Fast path: patient linked to an accessible office via consultations,
   // appointments or their registration office (patients.office_id).
+  // On utilise EXISTS ... OR ... : placer LIMIT dans chaque branche d'un
+  // UNION ALL est une syntaxe SQLite invalide (levait une erreur, donc un 500
+  // pour tout utilisateur non-admin, cassant de fait le cloisonnement).
   const hasAccess = db.prepare(`
-    SELECT 1 FROM consultations WHERE patient_id = ? AND office_id IN (${placeholders}) LIMIT 1
-    UNION ALL
-    SELECT 1 FROM appointments  WHERE patient_id = ? AND office_id IN (${placeholders}) LIMIT 1
-    UNION ALL
-    SELECT 1 FROM patients WHERE id = ? AND is_deleted = 0 AND office_id IN (${placeholders}) LIMIT 1
-    LIMIT 1
+    SELECT 1 WHERE
+         EXISTS (SELECT 1 FROM consultations WHERE patient_id = ? AND office_id IN (${placeholders}))
+      OR EXISTS (SELECT 1 FROM appointments  WHERE patient_id = ? AND office_id IN (${placeholders}))
+      OR EXISTS (SELECT 1 FROM patients WHERE id = ? AND is_deleted = 0 AND office_id IN (${placeholders}))
   `).get(patientId, ...officeIds, patientId, ...officeIds, patientId, ...officeIds);
 
   if (hasAccess) return true;
@@ -16157,13 +16158,10 @@ function canUserAccessPatient(patientId, userAccess) {
   // Backward compatibility: if the patient has no office affiliation anywhere
   // (all rows have NULL office_id), they remain visible to every practitioner.
   const hasAnyOfficeLink = db.prepare(`
-    SELECT 1 FROM (
-      SELECT 1 FROM consultations WHERE patient_id = ? AND office_id IS NOT NULL LIMIT 1
-      UNION ALL
-      SELECT 1 FROM appointments WHERE patient_id = ? AND office_id IS NOT NULL LIMIT 1
-      UNION ALL
-      SELECT 1 FROM patients WHERE id = ? AND office_id IS NOT NULL AND is_deleted = 0 LIMIT 1
-    ) LIMIT 1
+    SELECT 1 WHERE
+         EXISTS (SELECT 1 FROM consultations WHERE patient_id = ? AND office_id IS NOT NULL)
+      OR EXISTS (SELECT 1 FROM appointments WHERE patient_id = ? AND office_id IS NOT NULL)
+      OR EXISTS (SELECT 1 FROM patients WHERE id = ? AND office_id IS NOT NULL AND is_deleted = 0)
   `).get(patientId, patientId, patientId);
 
   return hasAnyOfficeLink == null;
