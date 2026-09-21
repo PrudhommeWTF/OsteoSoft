@@ -33,6 +33,13 @@ import {
   getScopedBillingOfficeIds,
   createAccessControl
 } from './lib/access.mjs';
+import {
+  SESSION_COOKIE_NAME,
+  CSRF_COOKIE_NAME,
+  SESSION_COOKIE_PATH,
+  loadServerConfig,
+  assertConfigUsable
+} from './lib/config.mjs';
 
 dotenv.config();
 
@@ -43,51 +50,33 @@ const APP_VERSION = packageJson.version ?? '0.0.0';
 const changelogPath = path.resolve(process.cwd(), 'CHANGELOG.md');
 
 const app = express();
-const port = Number(process.env.API_PORT ?? 4199);
-const dataDir = path.resolve(process.cwd(), 'server/data');
-const dbPath = path.resolve(dataDir, 'osteo.db');
-// Treat an empty/whitespace JWT_SECRET as unset so it falls back to the sentinel
-// dev value (which the guard below then rejects) instead of silently signing
-// tokens with an empty secret.
-const jwtSecret = process.env.JWT_SECRET && process.env.JWT_SECRET.trim()
-  ? process.env.JWT_SECRET
-  : 'dev-only-jwt-secret-change-me';
-const isProduction = process.env.NODE_ENV === 'production';
-// Development mode must be opted into EXPLICITLY. Any other NODE_ENV value —
-// including an UNSET one — is treated as a real deployment, so the dev key/secret
-// guards below fire unless NODE_ENV=development. This prevents silently booting a
-// production instance with the public development key/secret.
-const isDevelopment = process.env.NODE_ENV === 'development';
-const allowRemoteSetup = /^(1|true|yes)$/i.test(String(process.env.ALLOW_REMOTE_SETUP ?? 'false'));
-const requestBodyLimit = process.env.API_BODY_LIMIT ?? '5mb';
-const largeRequestBodyLimit = process.env.API_LARGE_BODY_LIMIT ?? '200mb';
-const MAX_PATIENT_DOCUMENT_BYTES = Number(process.env.MAX_PATIENT_DOCUMENT_BYTES ?? 15 * 1024 * 1024);
-const trustedProxies = process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1'
-  ? 1
-  : (process.env.TRUST_PROXY === 'loopback' ? 'loopback' : false);
-const SESSION_COOKIE_NAME = 'os_session';
-const CSRF_COOKIE_NAME = 'os_csrf';
-const SESSION_COOKIE_PATH = '/';
-const SESSION_REMEMBER_MAX_AGE_MS = Number(process.env.SESSION_REMEMBER_MAX_AGE_MS ?? 12 * 60 * 60 * 1000);
-const SESSION_DEFAULT_MAX_AGE_MS = Number(process.env.SESSION_DEFAULT_MAX_AGE_MS ?? 2 * 60 * 60 * 1000);
-const SESSION_REMEMBER_TTL = process.env.SESSION_REMEMBER_TTL ?? '12h';
-const SESSION_DEFAULT_TTL = process.env.SESSION_DEFAULT_TTL ?? '2h';
+// Configuration serveur dérivée de l'environnement (server/lib/config.mjs).
+// Les noms locaux sont conservés à l'identique via l'aliasing de la déstructuration
+// afin de ne changer aucun site d'appel.
+const {
+  port,
+  dataDir,
+  dbPath,
+  jwtSecret,
+  isProduction,
+  isDevelopment,
+  allowRemoteSetup,
+  requestBodyLimit,
+  largeRequestBodyLimit,
+  maxPatientDocumentBytes: MAX_PATIENT_DOCUMENT_BYTES,
+  trustedProxies,
+  sessionRememberMaxAgeMs: SESSION_REMEMBER_MAX_AGE_MS,
+  sessionDefaultMaxAgeMs: SESSION_DEFAULT_MAX_AGE_MS,
+  sessionRememberTtl: SESSION_REMEMBER_TTL,
+  sessionDefaultTtl: SESSION_DEFAULT_TTL,
+  auditLogRetentionDays: AUDIT_LOG_RETENTION_DAYS,
+  draftRetentionDays: DRAFT_RETENTION_DAYS
+} = loadServerConfig();
 const CURRENT_CONSENT_FORM_VERSION = '1.0';
-// Audit log retention: default 10 years (3650 days) to match patient data retention. Set to 0 to disable automatic purge.
-const AUDIT_LOG_RETENTION_DAYS = Number(process.env.AUDIT_LOG_RETENTION_DAYS ?? 3650);
-// Draft retention: drafts not updated in 7 days are considered orphaned and purged.
-const DRAFT_RETENTION_DAYS = Number(process.env.DRAFT_RETENTION_DAYS ?? 7);
 
-if (!isDevelopment && jwtSecret === 'dev-only-jwt-secret-change-me') {
-  throw new Error(
-    'JWT_SECRET must be set to a strong non-empty value unless NODE_ENV=development. ' +
-    'Refusing to start with the public development secret.'
-  );
-}
-
-if (isDevelopment && jwtSecret === 'dev-only-jwt-secret-change-me') {
-  console.warn('WARNING: Using development JWT secret. Set JWT_SECRET for safer local environments.');
-}
+// Garde de démarrage : refuse la clé JWT publique de développement hors mode
+// développement, avertit si elle est utilisée en développement.
+assertConfigUsable({ isDevelopment, jwtSecret }, { onWarn: (message) => console.warn(message) });
 
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
