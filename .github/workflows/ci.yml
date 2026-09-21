@@ -1,0 +1,54 @@
+name: CI
+
+# Filet de sécurité (Priorité 1) : tests d'API de bout en bout, audit des
+# dépendances de production, et recherche de secrets. Ces contrôles doivent
+# rester verts avant et après chaque PR de découpage.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api-tests:
+    name: Tests d'API (bout en bout)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Suite d'API
+        run: npm run test:api
+
+  audit:
+    name: Audit des dépendances
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      # Bloque la construction sur toute vulnérabilité CRITIQUE d'une dépendance
+      # de production (le runtime servant les données de santé). Seuil à resserrer
+      # vers "high" une fois les vulnérabilités hautes transitives triées.
+      - name: Audit production (bloque sur critique)
+        run: npm audit --omit=dev --audit-level=critical
+      # Vue complète, informative, ne bloque pas (bruit de l'outillage de dev).
+      - name: Audit complet (informatif)
+        run: npm audit || true
+
+  secrets:
+    name: Recherche de secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Installer gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz | tar -xz gitleaks
+      - name: Scanner l'arborescence (échoue si un secret est trouvé)
+        run: ./gitleaks dir . --redact --no-banner --exit-code 1
