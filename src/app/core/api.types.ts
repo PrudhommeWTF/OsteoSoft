@@ -539,7 +539,6 @@ export type BillingInvoiceCreatePayload = {
   patientId: number;
   consultationId: number | null;
   officeId: number | null;
-  invoiceNumber: string;
   amountCents: number;
   status: 'payee' | 'impayee' | 'partiellement_payee';
   paymentMethod: string;

@@ -903,16 +903,6 @@ export class ConsultationWorkspacePage implements OnInit, OnDestroy {
       }
       const profile = await this.api.getMyUserProfile();
       const nowIso = new Date().toISOString();
-      const invoiceNumber = this.generateInvoiceNumber(office, profile, new Date(nowIso));
-      const pdfBlob = this.pdfBuilder.buildConsultationInvoicePdf(
-        this.billingForm.getRawValue(),
-        office,
-        profile,
-        nowIso,
-        invoiceNumber,
-        this.officeName()
-      );
-      const base64 = await this.blobToBase64(pdfBlob);
 
       const raw = this.billingForm.getRawValue();
       const rawName = String(raw.documentName ?? '').trim() || 'Facture acquittee';
@@ -938,9 +928,45 @@ export class ConsultationWorkspacePage implements OnInit, OnDestroy {
         }));
       const status = this.computePaymentStatus(totalAmount, payments);
       const primaryMethod = payments[0]?.method ?? PAYMENT_PENDING_LABEL;
+      const consultationId = this.consultation()?.id ?? null;
+
+      // Facture enregistrée d'abord : le serveur attribue le numéro (séquentiel,
+      // sans trou), puis le PDF est construit avec ce même numéro.
+      const { invoiceId, invoiceNumber } = await this.api.createBillingInvoice({
+        patientId,
+        consultationId,
+        officeId: office.id,
+        amountCents: Math.round(totalAmount * 100),
+        status: status === 'paid' ? 'payee' : 'impayee',
+        paymentMethod: primaryMethod,
+        issuedAt: nowIso,
+        currency,
+        notes: String(raw.internalComment ?? '').trim(),
+        lineItems: [{
+          label: serviceLabel,
+          quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+          unitAmountHtCents: Math.max(0, Math.round(amountHt * 100)),
+          vatRate: Number.isFinite(tvaRate) ? tvaRate : 0,
+          displayOrder: 0
+        }],
+        payments: payments.map((p) => ({
+          paidAt: p.paidAt, amountCents: Math.max(0, Math.round(p.amount * 100)), currency: p.currency,
+          paymentMethod: p.method, bankName: p.bankName, chequeNumber: p.chequeNumber, notes: p.comment
+        }))
+      });
+
+      const pdfBlob = this.pdfBuilder.buildConsultationInvoicePdf(
+        raw,
+        office,
+        profile,
+        nowIso,
+        invoiceNumber,
+        this.officeName()
+      );
+      const base64 = await this.blobToBase64(pdfBlob);
 
       const created = await this.api.createPatientDocument(patientId, {
-        consultationId: this.consultation()?.id ?? null,
+        consultationId,
         officeId: office.id,
         fileName,
         mimeType: 'application/pdf',
@@ -952,12 +978,11 @@ export class ConsultationWorkspacePage implements OnInit, OnDestroy {
       });
 
       this.patientDocuments.update((items) => [created, ...items]);
-      const consultationId = this.consultation()?.id;
       if (consultationId) {
         const practitionerName = String(this.editForm.controls.practitioner.value ?? '').trim() || '-';
         const newState: ConsultationBillingState = {
           consultationId,
-          billingInvoiceId: null,
+          billingInvoiceId: invoiceId,
           invoiceNumber,
           totalAmount,
           currency,
@@ -970,37 +995,6 @@ export class ConsultationWorkspacePage implements OnInit, OnDestroy {
         };
         this.billingState.set(newState);
         this.persistBillingState(newState);
-
-        try {
-          const invoiceId = await this.api.createBillingInvoice({
-            patientId,
-            consultationId,
-            officeId: office.id,
-            invoiceNumber,
-            amountCents: Math.round(totalAmount * 100),
-            status: status === 'paid' ? 'payee' : 'impayee',
-            paymentMethod: primaryMethod,
-            issuedAt: nowIso,
-            currency,
-            notes: String(raw.internalComment ?? '').trim(),
-            lineItems: [{
-              label: serviceLabel,
-              quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
-              unitAmountHtCents: Math.max(0, Math.round(amountHt * 100)),
-              vatRate: Number.isFinite(tvaRate) ? tvaRate : 0,
-              displayOrder: 0
-            }],
-            payments: payments.map((p) => ({
-              paidAt: p.paidAt, amountCents: Math.max(0, Math.round(p.amount * 100)), currency: p.currency,
-              paymentMethod: p.method, bankName: p.bankName, chequeNumber: p.chequeNumber, notes: p.comment
-            }))
-          });
-          const updatedState = { ...newState, billingInvoiceId: invoiceId };
-          this.billingState.set(updatedState);
-          this.persistBillingState(updatedState);
-        } catch {
-          // Non-blocking: invoice PDF is saved; accounting record will be reconciled later.
-        }
       }
       this.isBillingModalOpen.set(false);
     } catch {
@@ -1784,31 +1778,6 @@ export class ConsultationWorkspacePage implements OnInit, OnDestroy {
       return offices.find((o) => o.id === Number(ctxId)) ?? null;
     }
     return null;
-  }
-
-  private generateInvoiceNumber(office: Office | null, profile: MyUserProfile | null, now: Date): string {
-    const year = String(now.getFullYear());
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const format = office?.invoiceNumberFormat ?? 'AAAA-XXXXXX';
-    let prefix = year;
-    let digits = 6;
-    if (format === 'AAAAMM-XXXXXX') { prefix = `${year}${month}`; }
-    else if (format === 'AAAAMMJJ-XXXXXX') { prefix = `${year}${month}${day}`; }
-    else if (format === 'AAAAMM-XXXX : RAZ mensuelle (déconseillé)') { prefix = `${year}${month}`; digits = 4; }
-    else if (format === 'AAAA-XXXX : RAZ annuel') { digits = 4; }
-
-    const numberingScope = office?.numberingConfiguration === 'Numérotation par praticien' ? `user:${profile?.id ?? 0}` : 'global';
-    const storageKey = `osteosoft:invoice-seq:${office?.id ?? 0}:${numberingScope}:${format}:${prefix}`;
-    let sequence = 1;
-    try {
-      const prev = Number(window.localStorage.getItem(storageKey) ?? '0');
-      sequence = (Number.isFinite(prev) && prev > 0 ? prev : 0) + 1;
-      window.localStorage.setItem(storageKey, String(sequence));
-    } catch {
-      sequence = Math.floor(Math.random() * (10 ** digits));
-    }
-    return `${prefix}-${String(sequence).padStart(digits, '0').slice(-digits)}`;
   }
 
   private parsePaymentAmount(raw: unknown): number {

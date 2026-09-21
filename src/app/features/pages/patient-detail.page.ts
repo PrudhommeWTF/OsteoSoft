@@ -2220,16 +2220,6 @@ export class PatientDetailPage implements OnInit, OnDestroy {
       }
       const profile = await this.api.getMyUserProfile();
       const nowIso = new Date().toISOString();
-      const invoiceNumber = this.generateConsultationInvoiceNumber(office, profile, new Date(nowIso));
-      const pdfBlob = this.pdfBuilder.buildConsultationInvoicePdf(
-        this.consultationBillingForm.getRawValue(),
-        office,
-        profile,
-        nowIso,
-        invoiceNumber,
-        this.consultationOfficeName()
-      );
-      const base64 = await this.blobToBase64(pdfBlob);
 
       const raw = this.consultationBillingForm.getRawValue();
       const rawName = String(raw.documentName ?? '').trim() || 'Facture acquittee';
@@ -2260,8 +2250,51 @@ export class PatientDetailPage implements OnInit, OnDestroy {
         ]
         : [];
 
+      const consultationId = this.activeConsultation()?.id ?? null;
+
+      // La facture est enregistrée d'abord : le serveur attribue le numéro
+      // (séquentiel, sans trou). Le PDF est ensuite construit avec CE numéro, de
+      // sorte que la pièce et l'enregistrement comptable portent le même numéro.
+      const { invoiceId, invoiceNumber } = await this.api.createBillingInvoice({
+        patientId: patient.id,
+        consultationId,
+        officeId: office.id,
+        amountCents: Math.round(totalAmount * 100),
+        status: status === 'paid' ? 'payee' : 'impayee',
+        paymentMethod,
+        issuedAt: nowIso,
+        currency,
+        notes: String(raw.internalComment ?? '').trim(),
+        lineItems: [{
+          label: serviceLabel,
+          quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+          unitAmountHtCents: Math.max(0, Math.round(amountHt * 100)),
+          vatRate: Number.isFinite(tvaRate) ? tvaRate : 0,
+          displayOrder: 0
+        }],
+        payments: payments.map((payment) => ({
+          paidAt: payment.paidAt,
+          amountCents: Math.max(0, Math.round(payment.amount * 100)),
+          currency: payment.currency,
+          paymentMethod: payment.method,
+          bankName: payment.bankName,
+          chequeNumber: payment.chequeNumber,
+          notes: payment.comment
+        }))
+      });
+
+      const pdfBlob = this.pdfBuilder.buildConsultationInvoicePdf(
+        raw,
+        office,
+        profile,
+        nowIso,
+        invoiceNumber,
+        this.consultationOfficeName()
+      );
+      const base64 = await this.blobToBase64(pdfBlob);
+
       const created = await this.api.createPatientDocument(patient.id, {
-        consultationId: this.activeConsultation()?.id ?? null,
+        consultationId,
         officeId: office.id,
         fileName,
         mimeType: 'application/pdf',
@@ -2273,12 +2306,11 @@ export class PatientDetailPage implements OnInit, OnDestroy {
       });
 
       this.patientDocuments.update((items) => [created, ...items]);
-      const consultationId = this.activeConsultation()?.id;
       if (consultationId) {
         const practitionerName = String(this.consultationEditForm.controls.practitioner.value ?? '').trim() || '-';
         this.upsertConsultationBillingState({
           consultationId,
-          billingInvoiceId: null,
+          billingInvoiceId: invoiceId,
           invoiceNumber,
           totalAmount,
           currency,
@@ -2289,44 +2321,6 @@ export class PatientDetailPage implements OnInit, OnDestroy {
           paymentStatus: status,
           payments
         });
-
-        // Record the invoice in the accounting table so it shows in Comptabilite.
-        try {
-          const invoiceId = await this.api.createBillingInvoice({
-            patientId: patient.id,
-            consultationId,
-            officeId: office.id,
-            invoiceNumber,
-            amountCents: Math.round(totalAmount * 100),
-            status: status === 'paid' ? 'payee' : 'impayee',
-            paymentMethod,
-            issuedAt: nowIso,
-            currency,
-            notes: String(raw.internalComment ?? '').trim(),
-            lineItems: [{
-              label: serviceLabel,
-              quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
-              unitAmountHtCents: Math.max(0, Math.round(amountHt * 100)),
-              vatRate: Number.isFinite(tvaRate) ? tvaRate : 0,
-              displayOrder: 0
-            }],
-            payments: payments.map((payment) => ({
-              paidAt: payment.paidAt,
-              amountCents: Math.max(0, Math.round(payment.amount * 100)),
-              currency: payment.currency,
-              paymentMethod: payment.method,
-              bankName: payment.bankName,
-              chequeNumber: payment.chequeNumber,
-              notes: payment.comment
-            }))
-          });
-          this.upsertConsultationBillingState({
-            ...this.consultationBillingStates()[consultationId],
-            billingInvoiceId: invoiceId
-          });
-        } catch {
-          // Non-blocking: PDF is already saved; accounting record will be retried next time.
-        }
       }
 
       this.isConsultationBillingModalOpen.set(false);
@@ -4371,55 +4365,6 @@ export class PatientDetailPage implements OnInit, OnDestroy {
     }));
     this.persistConsultationBillingStates();
     this.consultationBillingChoice.set('bill');
-  }
-
-  private generateConsultationInvoiceNumber(office: Office | null, profile: MyUserProfile | null, now: Date): string {
-    const year = String(now.getFullYear());
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const format = office?.invoiceNumberFormat ?? 'AAAA-XXXXXX';
-
-    let prefix = `${year}${month}${day}`;
-    let digits = 6;
-    if (format === 'AAAA-XXXXXX') {
-      prefix = year;
-      digits = 6;
-    } else if (format === 'AAAAMM-XXXXXX') {
-      prefix = `${year}${month}`;
-      digits = 6;
-    } else if (format === 'AAAAMMJJ-XXXXXX') {
-      prefix = `${year}${month}${day}`;
-      digits = 6;
-    } else if (format === 'AAAAMM-XXXX : RAZ mensuelle (déconseillé)') {
-      prefix = `${year}${month}`;
-      digits = 4;
-    } else if (format === 'AAAA-XXXX : RAZ annuel') {
-      prefix = year;
-      digits = 4;
-    }
-
-    const periodKey = prefix;
-    const numberingScope = office?.numberingConfiguration === 'Numérotation par praticien'
-      ? `user:${profile?.id ?? 0}`
-      : 'global';
-    const storageKey = `osteosoft:invoice-seq:${office?.id ?? 0}:${numberingScope}:${format}:${periodKey}`;
-
-    let sequence = 1;
-    if (typeof window !== 'undefined') {
-      try {
-        const previous = Number(window.localStorage.getItem(storageKey) ?? '0');
-        const safePrevious = Number.isFinite(previous) && previous > 0 ? previous : 0;
-        sequence = safePrevious + 1;
-        window.localStorage.setItem(storageKey, String(sequence));
-      } catch {
-        sequence = Math.floor(Math.random() * (10 ** digits));
-      }
-    } else {
-      sequence = Math.floor(Math.random() * (10 ** digits));
-    }
-
-    const sequenceLabel = String(sequence).padStart(digits, '0').slice(-digits);
-    return `${prefix}-${sequenceLabel}`;
   }
 
   private readPersistedConsultationBillingStates(): Record<number, ConsultationBillingState> {
