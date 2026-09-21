@@ -6,6 +6,8 @@
 - `npm run typecheck` : verification de types checkJs (`server/lib/`).
 - `npm run build` : build Angular (valide aussi les templates, ce que `tsc` seul
   ne fait pas).
+- `npm run test:e2e` : tests end-to-end en navigateur reel (Playwright). Voir
+  [tests-e2e.md](tests-e2e.md).
 
 ## Harnais
 
@@ -46,10 +48,12 @@ serveur) s'accompagnent de la reecriture des tests concernes.
 
 ## Integration continue (`.github/workflows/ci.yml`)
 
-Quatre jobs (Node 22) :
+Cinq jobs (Node 22) :
 
 - `api-tests` : `npm run test:api`.
 - `typecheck` : `npm run typecheck`.
+- `e2e` : installe Chromium puis `npm run test:e2e` (voir
+  [tests-e2e.md](tests-e2e.md)).
 - `audit` : `npm audit --omit=dev --audit-level=critical` (bloquant), plus un
   audit complet informatif.
 - `secrets` : scan gitleaks, bloquant.
