@@ -83,3 +83,30 @@ describe('Intégrité de la facturation', () => {
     assert.notEqual(a.body.invoiceId, b.body.invoiceId);
   });
 });
+
+describe('Annulation conservatrice (facture émise non supprimée)', () => {
+  test('annuler une facture la conserve en statut annulee, sans la supprimer', async () => {
+    const created = await admin.post('/api/billing/invoices', invoiceBody('2026-000400'));
+    assert.equal(created.status, 201);
+    const invoiceId = created.body.invoiceId;
+
+    const cancelled = await admin.del(`/api/billing/invoices/${invoiceId}`);
+    assert.equal(cancelled.status, 200);
+
+    // La facture doit toujours exister, marquée annulée (pas un 404).
+    const read = await admin.get(`/api/billing/invoices/${invoiceId}`);
+    assert.equal(read.status, 200, 'une facture annulée doit être conservée, pas supprimée');
+    assert.ok(read.raw.includes('annulee'), 'la facture conservée doit porter le statut annulee');
+  });
+
+  test('le numéro d une facture annulée n est pas réutilisable', async () => {
+    const n = '2026-000401';
+    const created = await admin.post('/api/billing/invoices', invoiceBody(n));
+    assert.equal(created.status, 201);
+    assert.equal((await admin.del(`/api/billing/invoices/${created.body.invoiceId}`)).status, 200);
+
+    // Recréer une facture avec le même numéro doit être refusé (continuité).
+    const reuse = await admin.post('/api/billing/invoices', invoiceBody(n));
+    assert.equal(reuse.status, 409, 'le numéro d une facture annulée ne doit pas être réutilisable');
+  });
+});
