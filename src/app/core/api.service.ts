@@ -897,6 +897,23 @@ export class ApiService {
     );
   }
 
+  async downloadEncryptedDataBackup(passphrase: string): Promise<Blob> {
+    return firstValueFrom(
+      this.http.post(`${this.baseUrl}/data-management/backup/encrypted`, { passphrase }, {
+        responseType: 'blob'
+      })
+    );
+  }
+
+  async restoreEncryptedDataBackup(archiveBase64: string, passphrase: string): Promise<BackupRestoreResult> {
+    return firstValueFrom(
+      this.http.post<BackupRestoreResult>(`${this.baseUrl}/data-management/restore/encrypted`, {
+        archiveBase64,
+        passphrase
+      })
+    );
+  }
+
   async downloadDataImportTemplate(format: DataImportFormat, dataset: DataImportDataset): Promise<Blob> {
     const params = new HttpParams()
       .set('format', format)

@@ -388,6 +388,11 @@ export class SettingsPage implements OnDestroy {
   readonly isDownloadingBackup = signal(false);
   readonly isRestoringBackup = signal(false);
   readonly isResettingDemo = signal(false);
+  // Sauvegarde chiffrée (phrase de passe)
+  readonly encryptedBackupPassphrase = signal('');
+  readonly encryptedRestorePassphrase = signal('');
+  readonly selectedEncryptedBackupFile = signal<File | null>(null);
+  readonly selectedEncryptedBackupFileName = signal('');
   readonly isCleanupLoading = signal(false);
   readonly isCleanupApplying = signal(false);
   readonly isSearchingRgpdPatients = signal(false);
@@ -1959,6 +1964,89 @@ export class SettingsPage implements OnDestroy {
       this.dataManagementError.set('Impossible de télécharger la sauvegarde pour le moment.');
     } finally {
       this.isDownloadingBackup.set(false);
+    }
+  }
+
+  async downloadEncryptedBackup(): Promise<void> {
+    const passphrase = this.encryptedBackupPassphrase();
+    this.dataManagementError.set('');
+    this.dataManagementSuccess.set('');
+    if (passphrase.length < 12) {
+      this.dataManagementError.set('La phrase de passe doit contenir au moins 12 caractères.');
+      return;
+    }
+
+    this.isDownloadingBackup.set(true);
+    try {
+      const blob = await this.api.downloadEncryptedDataBackup(passphrase);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      anchor.href = url;
+      anchor.download = `osteosoft-backup-${stamp}.osteobackup`;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+
+      this.encryptedBackupPassphrase.set('');
+      this.dataManagementSuccess.set('Sauvegarde chiffrée téléchargée. Conservez la phrase de passe en lieu sûr : elle est indispensable pour restaurer.');
+      this.lastBackupAt.set(new Date().toISOString());
+    } catch {
+      this.dataManagementError.set('Impossible de générer la sauvegarde chiffrée pour le moment.');
+    } finally {
+      this.isDownloadingBackup.set(false);
+    }
+  }
+
+  onEncryptedBackupFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement | null;
+    const file = input?.files?.item(0) ?? null;
+    this.dataManagementError.set('');
+    this.dataManagementSuccess.set('');
+    this.selectedEncryptedBackupFile.set(file);
+    this.selectedEncryptedBackupFileName.set(file?.name ?? '');
+  }
+
+  async restoreEncryptedBackup(): Promise<void> {
+    const file = this.selectedEncryptedBackupFile();
+    const passphrase = this.encryptedRestorePassphrase();
+    this.dataManagementError.set('');
+    this.dataManagementSuccess.set('');
+    this.restoreTempPasswords.set([]);
+    if (!file) {
+      this.dataManagementError.set('Veuillez sélectionner une sauvegarde chiffrée.');
+      return;
+    }
+    if (!passphrase) {
+      this.dataManagementError.set('Veuillez saisir la phrase de passe de la sauvegarde.');
+      return;
+    }
+
+    const confirmation = globalThis.confirm('Cette opération remplacera toutes les données actuelles. Continuer ?');
+    if (!confirmation) {
+      return;
+    }
+
+    this.isRestoringBackup.set(true);
+    this.setRestoreProgress('uploading', 'Envoi de la sauvegarde chiffrée au serveur...', 30);
+    try {
+      const archiveBase64 = await this.readFileAsBase64(file);
+      this.setRestoreProgress('applying', 'Déchiffrement et application des données...', 70);
+      const result = await this.api.restoreEncryptedDataBackup(archiveBase64, passphrase);
+      this.setRestoreProgress('done', 'Restauration terminée avec succes.', 100);
+      this.dataManagementSuccess.set('Restauration terminée avec succès.');
+      this.restoreTempPasswords.set(result?.tempPasswords ?? []);
+      this.encryptedRestorePassphrase.set('');
+      await this.loadAccessProfiles();
+      await this.loadUsers();
+      await this.loadCurrentUser();
+    } catch (error) {
+      this.setRestoreProgress('error', 'La restauration a échoué.', 100);
+      const apiMessage = error instanceof HttpErrorResponse ? String(error.error?.message ?? '').trim() : '';
+      this.dataManagementError.set(apiMessage || 'La restauration a échoué. Vérifiez le fichier et la phrase de passe.');
+    } finally {
+      this.isRestoringBackup.set(false);
     }
   }
 

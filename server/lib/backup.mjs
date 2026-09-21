@@ -18,6 +18,75 @@ import crypto from 'node:crypto';
 
 /** @typedef {any} Db */
 
+// En-tête d'une archive de sauvegarde chiffrée (magie + version de format).
+const ENCRYPTED_BACKUP_MAGIC = Buffer.from('OSTEOBK1', 'utf8'); // 8 octets
+const ENCRYPTED_BACKUP_SALT_BYTES = 16;
+const ENCRYPTED_BACKUP_IV_BYTES = 12;
+const ENCRYPTED_BACKUP_TAG_BYTES = 16;
+
+/**
+ * Chiffre une archive de sauvegarde avec une phrase de passe. La clé est dérivée
+ * par scrypt (sel aléatoire), le chiffrement est AES-256-GCM. Format de sortie :
+ * magie(8) + sel(16) + iv(12) + tag(16) + texte chiffré. Fonction pure.
+ * @param {Buffer} archiveBuffer Contenu en clair (par ex. un ZIP).
+ * @param {string} passphrase
+ * @returns {Buffer}
+ */
+export function encryptBackupArchive(archiveBuffer, passphrase) {
+  const pass = String(passphrase ?? '');
+  if (pass.length < 12) {
+    throw new Error('Phrase de passe trop courte (au moins 12 caractères)');
+  }
+  const salt = crypto.randomBytes(ENCRYPTED_BACKUP_SALT_BYTES);
+  const iv = crypto.randomBytes(ENCRYPTED_BACKUP_IV_BYTES);
+  const key = crypto.scryptSync(pass, salt, 32);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const ciphertext = Buffer.concat([cipher.update(archiveBuffer), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([ENCRYPTED_BACKUP_MAGIC, salt, iv, tag, ciphertext]);
+}
+
+/**
+ * Déchiffre une archive de sauvegarde chiffrée par encryptBackupArchive. Lève une
+ * erreur si le format est invalide ou la phrase de passe incorrecte (échec
+ * d'authentification GCM). Fonction pure.
+ * @param {Buffer} encryptedBuffer
+ * @param {string} passphrase
+ * @returns {Buffer}
+ */
+export function decryptBackupArchive(encryptedBuffer, passphrase) {
+  const buffer = Buffer.isBuffer(encryptedBuffer) ? encryptedBuffer : Buffer.from(encryptedBuffer ?? '');
+  const headerBytes = ENCRYPTED_BACKUP_MAGIC.length + ENCRYPTED_BACKUP_SALT_BYTES + ENCRYPTED_BACKUP_IV_BYTES + ENCRYPTED_BACKUP_TAG_BYTES;
+  if (buffer.length <= headerBytes || !buffer.subarray(0, ENCRYPTED_BACKUP_MAGIC.length).equals(ENCRYPTED_BACKUP_MAGIC)) {
+    throw new Error('Archive chiffrée invalide (format non reconnu)');
+  }
+  let offset = ENCRYPTED_BACKUP_MAGIC.length;
+  const salt = buffer.subarray(offset, offset += ENCRYPTED_BACKUP_SALT_BYTES);
+  const iv = buffer.subarray(offset, offset += ENCRYPTED_BACKUP_IV_BYTES);
+  const tag = buffer.subarray(offset, offset += ENCRYPTED_BACKUP_TAG_BYTES);
+  const ciphertext = buffer.subarray(offset);
+
+  const key = crypto.scryptSync(String(passphrase ?? ''), salt, 32);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(tag);
+  try {
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  } catch {
+    throw new Error('Phrase de passe incorrecte ou archive corrompue');
+  }
+}
+
+/**
+ * Indique si un buffer est une archive de sauvegarde chiffrée (magie reconnue).
+ * @param {Buffer} buffer
+ * @returns {boolean}
+ */
+export function isEncryptedBackupArchive(buffer) {
+  return Buffer.isBuffer(buffer)
+    && buffer.length >= ENCRYPTED_BACKUP_MAGIC.length
+    && buffer.subarray(0, ENCRYPTED_BACKUP_MAGIC.length).equals(ENCRYPTED_BACKUP_MAGIC);
+}
+
 export const BACKUP_MANIFEST_FORMAT = 'osteosoft-backup';
 export const BACKUP_MANIFEST_VERSION = 1;
 export const MAX_BACKUP_RESTORE_PAYLOAD_BYTES = Number(process.env.MAX_BACKUP_RESTORE_PAYLOAD_BYTES ?? 35 * 1024 * 1024);
