@@ -10482,6 +10482,10 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
       db.prepare('DELETE FROM consultations WHERE office_id = ?').run(officeId);
       db.prepare('DELETE FROM patients WHERE office_id = ?').run(officeId);
       db.prepare('DELETE FROM directory_contacts WHERE office_id = ?').run(officeId);
+      // Les remises bancaires du cabinet sont aussi remplacées, sinon un second
+      // import créerait des doublons (elles n'ont ni identifiant source ni upsert).
+      // Les accounting_deposit_items disparaissent par cascade (ON DELETE CASCADE).
+      db.prepare('DELETE FROM accounting_deposits WHERE office_id = ?').run(officeId);
 
     // ---- Utilisateurs ----
     for (const wu of weoUsers) {
