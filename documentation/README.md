@@ -30,6 +30,8 @@ Pages) et n'a pas vocation a documenter l'implementation.
 - [migrations.md](migrations.md) : migrations de schema versionnees.
 - [tests.md](tests.md) : harnais de test, execution, couverture, integration
   continue.
+- [tests-e2e.md](tests-e2e.md) : tests end-to-end en navigateur reel
+  (Playwright).
 - [exploitation.md](exploitation.md) : variables d'environnement, deploiement,
   sauvegarde/restauration, procedures de retour arriere.
 
