@@ -495,6 +495,30 @@ export class ApiService {
     );
   }
 
+  async exportRecettesJournal(filters?: {
+    from?: string;
+    to?: string;
+    officeId?: number | null;
+  }): Promise<Blob> {
+    let params = new HttpParams().set('format', 'csv');
+    if (filters?.from?.trim()) {
+      params = params.set('from', filters.from.trim());
+    }
+    if (filters?.to?.trim()) {
+      params = params.set('to', filters.to.trim());
+    }
+    if (Number.isInteger(filters?.officeId) && Number(filters?.officeId) > 0) {
+      params = params.set('officeId', String(filters?.officeId));
+    }
+
+    return firstValueFrom(
+      this.http.get(`${this.baseUrl}/billing/recettes`, {
+        params,
+        responseType: 'blob'
+      })
+    );
+  }
+
   async getBillingMonthlyRevenue(officeId?: number | null): Promise<{ amountCents: number; currency: string }> {
     let params = new HttpParams();
     if (Number.isInteger(officeId) && Number(officeId) > 0) {

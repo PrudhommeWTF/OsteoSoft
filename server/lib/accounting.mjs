@@ -22,6 +22,56 @@
  * }} deps
  */
 export function createAccountingService(db, { decryptSensitiveField, getBillingOfficeOptions, getBillingUsersForOfficeIds }) {
+  /**
+   * Livre des recettes (régime micro-BNC) : journal chronologique des recettes
+   * ENCAISSÉES, en trésorerie (une ligne par encaissement, daté par la date de
+   * paiement, pas par la date d'émission de la facture). Les factures annulées
+   * ont leurs paiements supprimés, donc elles sont naturellement absentes du
+   * livre (recette non conservée). Restreint aux cabinets accessibles.
+   * @param {{ fromIso: any, toIso: any, scopedOfficeIds: any }} params
+   * @returns {{ entries: any[], totalCents: number, count: number }}
+   */
+  function getRecettesJournal({ fromIso, toIso, scopedOfficeIds }) {
+    const officeIds = (Array.isArray(scopedOfficeIds) ? scopedOfficeIds : [])
+      .map((/** @type {any} */ id) => Number(id))
+      .filter((/** @type {any} */ id) => Number.isInteger(id) && id > 0);
+    if (officeIds.length === 0) {
+      return { entries: [], totalCents: 0, count: 0 };
+    }
+
+    const placeholders = officeIds.map(() => '?').join(', ');
+    const rows = db
+      .prepare(
+        `SELECT ip.id, ip.paid_at, ip.amount_cents, ip.currency, ip.payment_method,
+                i.invoice_number, i.office_id, p.cipher_full_name
+         FROM invoice_payments ip
+         INNER JOIN invoices i ON i.id = ip.invoice_id
+         INNER JOIN patients p ON p.id = i.patient_id
+         WHERE i.office_id IN (${placeholders})
+           AND datetime(ip.paid_at) >= datetime(?)
+           AND datetime(ip.paid_at) <= datetime(?)
+         ORDER BY datetime(ip.paid_at) ASC, ip.id ASC`
+      )
+      .all(...officeIds, fromIso, toIso);
+
+    let totalCents = 0;
+    const entries = rows.map((/** @type {any} */ row) => {
+      const amountCents = Number(row.amount_cents ?? 0);
+      totalCents += amountCents;
+      return {
+        paidAt: String(row.paid_at ?? ''),
+        amountCents,
+        currency: String(row.currency ?? 'EUR').trim() || 'EUR',
+        paymentMethod: String(row.payment_method ?? '').trim(),
+        patientName: decryptSensitiveField(row.cipher_full_name),
+        invoiceNumber: String(row.invoice_number ?? '').trim(),
+        officeId: row.office_id != null ? Number(row.office_id) : null
+      };
+    });
+
+    return { entries, totalCents, count: entries.length };
+  }
+
   /** @param {{ userId: any, access: any, fromIso: any, toIso: any, availableOfficeIds: any, filterOfficeIds: any, ownerUserId: any }} params */
   function getBillingOperationsData({ userId, access, fromIso, toIso, availableOfficeIds, filterOfficeIds, ownerUserId }) {
     if (!Array.isArray(availableOfficeIds) || availableOfficeIds.length === 0) {
@@ -281,5 +331,5 @@ export function createAccountingService(db, { decryptSensitiveField, getBillingO
     };
   }
 
-  return { getBillingOperationsData };
+  return { getBillingOperationsData, getRecettesJournal };
 }
