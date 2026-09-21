@@ -10,6 +10,7 @@
     "seed:directory": "node server/scripts/seed-directory-contacts.mjs",
     "e2e:backup": "node server/scripts/e2e-backup-restore.mjs",
     "e2e:rights": "node server/scripts/e2e-access-rights.mjs",
+    "test:api": "node --test server/test/*.test.mjs",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test --watch=false --browsers=ChromeHeadless",
