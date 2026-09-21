@@ -51,6 +51,7 @@ export async function startTestServer() {
     const timer = setTimeout(() => rej(new Error('Timeout au démarrage du serveur de test.\n' + logs)), 30000);
     const onData = (chunk) => {
       logs += String(chunk);
+      if (process.env.HARNESS_DEBUG) process.stderr.write(chunk);
       if (logs.includes('ready on')) {
         clearTimeout(timer);
         res();
@@ -141,6 +142,43 @@ export async function setupCleanInstance(baseUrl, opts = {}) {
     throw new Error(`login admin a échoué (${login.status}): ${login.raw?.slice(0, 300)}`);
   }
   return { client, officeId: setup.body?.officeId ?? null, adminPassword };
+}
+
+// Crée un cabinet (nécessite un client admin super-admin) et renvoie son id.
+export async function createOffice(client, name) {
+  const r = await client.post('/api/offices', { name });
+  if (r.status !== 200 && r.status !== 201) {
+    throw new Error(`création du cabinet "${name}" a échoué (${r.status}): ${r.raw?.slice(0, 200)}`);
+  }
+  let id = r.body?.officeId ?? r.body?.office?.id ?? r.body?.id;
+  if (!Number.isInteger(id)) {
+    // Repli : retrouver l'id via la liste des cabinets.
+    const list = await client.get('/api/offices');
+    const arr = list.body?.offices ?? (Array.isArray(list.body) ? list.body : []);
+    id = arr.find((o) => o.name === name)?.id;
+  }
+  if (!Number.isInteger(id)) {
+    throw new Error(`impossible de récupérer l'id du cabinet "${name}"`);
+  }
+  return id;
+}
+
+// Crée un utilisateur rattaché à un ou plusieurs cabinets (client admin requis).
+export async function createUser(client, { username, password, profileId, officeIds = [], role = 'practitioner' }) {
+  const r = await client.post('/api/users', {
+    username,
+    password,
+    profileId,
+    role,
+    isActive: true,
+    lastName: 'Test',
+    firstName: username,
+    officeIds
+  });
+  if (r.status !== 201) {
+    throw new Error(`création de l'utilisateur "${username}" a échoué (${r.status}): ${r.raw?.slice(0, 200)}`);
+  }
+  return r.body?.user?.id ?? null;
 }
 
 // Ouvre la base de test en lecture seule (pour vérifier le chiffrement au repos).
