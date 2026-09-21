@@ -42,8 +42,18 @@ scenarios suivants reutilisent cette instance, comme un cabinet dans le temps.
 - `playwright.config.ts` : configuration (repertoire `e2e/`, serveur, port).
 - `e2e/serve-for-e2e.mjs` : lanceur du serveur isole.
 - `e2e/helpers/app.ts` : helpers reutilisables (installation, connexion,
-  constantes comme le mot de passe admin de test).
-- `e2e/*.spec.ts` : les scenarios, un fichier par parcours.
+  creation de patient, constantes comme le mot de passe admin de test).
+- `e2e/NN-*.spec.ts` : les scenarios, un fichier par parcours.
+
+## Ordre des scenarios
+
+L'instance est partagee et unique pour toute l'execution : son etat evolue au
+fil des scenarios (vierge, puis installee, puis peuplee). Playwright execute les
+fichiers par ordre alphabetique, donc les scenarios sont prefixes d'un numero
+pour rendre cet ordre explicite. Le scenario `01` teste l'instance vierge
+(installation) et DOIT passer en premier ; les suivants utilisent le helper
+`ensureLoggedIn` (qui installe le cabinet au besoin) et sont donc autonomes,
+mais restent numerotes pour la lisibilite du cycle de vie.
 
 Les fichiers `e2e/` sont hors du perimetre des tsconfig Angular
 (`tsconfig.app.json` n'inclut que `src/`), ils ne perturbent donc ni le build
@@ -65,16 +75,19 @@ sans lien avec un compte reel.
 
 ## Parcours couverts
 
-- Installation initiale et connexion (`installation-login.spec.ts`) : assistant
-  d'installation (creation du cabinet et du compte admin), connexion admin,
-  refus d'un mot de passe errone, impossibilite de relancer l'installation une
-  fois le cabinet cree.
-- Creation patient et consultation (`patient-consultation.spec.ts`) : creation
+- Installation initiale et connexion (`01-installation-login.spec.ts`) :
+  assistant d'installation (creation du cabinet et du compte admin), connexion
+  admin, refus d'un mot de passe errone, impossibilite de relancer l'installation
+  une fois le cabinet cree.
+- Creation patient et consultation (`02-patient-consultation.spec.ts`) : creation
   d'un patient via l'assistant (identite, date de naissance au calendrier,
   consentement), presence dans la liste, puis creation d'une consultation
   rattachee au dossier.
+- Facturation et PDF (`03-billing-pdf.spec.ts`) : facturation d'une consultation
+  depuis l'onglet Paiement (numero de facture attribue par le serveur), puis
+  telechargement du PDF de la facture.
 
-Parcours prevus (PR suivantes) : facturation et PDF, agenda et rendez-vous.
+Parcours prevus (PR suivantes) : agenda et rendez-vous.
 
 ## Pieges rencontres (a garder en tete)
 
@@ -93,6 +106,11 @@ Parcours prevus (PR suivantes) : facturation et PDF, agenda et rendez-vous.
   fermer", qui n'existe qu'en edition).
 - La barre laterale et l'entete ont aussi un champ de recherche patient : cibler
   celui de la liste par sa classe (`input.pat-search-input`).
+- La facturation se fait depuis l'onglet Paiement de la consultation ;
+  `generateInvoice` sauvegarde d'abord la consultation en mode creation pour
+  obtenir un identifiant. Le telechargement de la facture ouvre le PDF via
+  `window.open` (nouvel onglet), a capturer avec `page.waitForEvent('popup')`,
+  pas avec l'evenement `download`.
 
 ## Integration continue
 
