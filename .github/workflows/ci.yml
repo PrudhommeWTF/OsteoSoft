@@ -23,6 +23,21 @@ jobs:
       - name: Suite d'API
         run: npm run test:api
 
+  typecheck:
+    name: Vérification de types (checkJs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      # Vérifie les modules serveur extraits (server/lib), sans compilation
+      # (Node exécute les .mjs tels quels). Périmètre élargi au fil du découpage.
+      - name: Types des modules serveur
+        run: npm run typecheck
+
   audit:
     name: Audit des dépendances
     runs-on: ubuntu-latest
