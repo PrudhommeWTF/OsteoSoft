@@ -67,6 +67,23 @@ import {
   alignDateToOfficeSlot,
   createAgendaService
 } from './lib/agenda.mjs';
+import {
+  normalizeOfficeConsultationProfiles,
+  parseOfficeConsultationProfiles,
+  normalizePatientLetterTemplates,
+  extractAntecedentCategories,
+  parsePatientAntecedentsFromMedicalHistory,
+  normalizeConsultationReasonItems,
+  buildEmptyConsultationSections,
+  normalizeConsultationSectionsPayload,
+  hasConsultationSectionsContent,
+  normalizePatientSexLabel,
+  computePatientRetentionDateIso,
+  buildDefaultPatientNotes,
+  inferConsultationType,
+  buildDataImportPatientKey,
+  CONSULTATION_SECTION_KEYS
+} from './lib/patients.mjs';
 
 dotenv.config();
 
@@ -1481,46 +1498,7 @@ function parseOfficeOpeningHours(rawJson) {
   }
 }
 
-function normalizeOfficeConsultationProfiles(rawProfiles) {
-  if (!Array.isArray(rawProfiles)) {
-    return [];
-  }
 
-  return rawProfiles
-    .map((profile, index) => {
-      if (!profile || typeof profile !== 'object') {
-        return null;
-      }
-
-      const id = String(profile.id ?? '').trim() || `profile-${index + 1}`;
-      const name = String(profile.name ?? '').trim() || `Profil ${index + 1}`;
-      const reasons = Array.isArray(profile.reasons)
-        ? profile.reasons
-          .map((reason) => String(reason ?? '').trim())
-          .filter((reason) => reason.length > 0)
-        : [];
-
-      return {
-        id,
-        name,
-        reasons,
-        displayOrder: index + 1
-      };
-    })
-    .filter(Boolean);
-}
-
-function parseOfficeConsultationProfiles(rawJson) {
-  if (typeof rawJson !== 'string' || rawJson.trim().length === 0) {
-    return [];
-  }
-
-  try {
-    return normalizeOfficeConsultationProfiles(JSON.parse(rawJson));
-  } catch {
-    return [];
-  }
-}
 
 function normalizeOfficeDefaultSessionDurationMinutes(rawValue) {
   const parsed = Number(rawValue);
@@ -1668,19 +1646,6 @@ Suite à la consultation ostéopathique du {$DATECONSULTATION}, il apparaît que
 
 Je vous remercie par avance, et vous prie d'agréer mes sincères salutations.`;
 
-function normalizePatientLetterTemplates(rawValue) {
-  let arr;
-  try {
-    arr = typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue;
-  } catch {
-    arr = [];
-  }
-  if (!Array.isArray(arr)) return [];
-  return arr.map((item) => ({
-    title: String(item?.title ?? '').trim().slice(0, 200),
-    content: String(item?.content ?? '').trim().slice(0, 20000)
-  }));
-}
 
 function readOfficeServiceTypes(officeId) {
   return db
@@ -4388,147 +4353,13 @@ function getAgeFromBirthDate(birthDate) {
   return age >= 0 ? age : null;
 }
 
-function extractAntecedentCategories(medicalHistoryRaw) {
-  const raw = String(medicalHistoryRaw ?? '').trim();
-  if (!raw) {
-    return [];
-  }
 
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
 
-    return parsed
-      .map((item) => (typeof item?.category === 'string' ? item.category.trim() : ''))
-      .filter((category) => category.length > 0)
-      .slice(0, 200);
-  } catch {
-    return [];
-  }
-}
 
-function buildAntecedentSortKey(precision, display) {
-  if (precision === 'year') {
-    const year = Number(display);
-    if (!Number.isInteger(year) || year < 1800 || year > 2999) {
-      return null;
-    }
-    return year * 10000 + 1231;
-  }
 
-  if (precision === 'month') {
-    const [monthStr, yearStr] = String(display).split('/');
-    const month = Number(monthStr);
-    const year = Number(yearStr);
-    if (!Number.isInteger(month) || !Number.isInteger(year) || month < 1 || month > 12 || year < 1800 || year > 2999) {
-      return null;
-    }
-    return year * 10000 + month * 100 + 31;
-  }
 
-  const [dayStr, monthStr, yearStr] = String(display).split('/');
-  const day = Number(dayStr);
-  const month = Number(monthStr);
-  const year = Number(yearStr);
-  if (
-    !Number.isInteger(day) ||
-    !Number.isInteger(month) ||
-    !Number.isInteger(year) ||
-    day < 1 ||
-    day > 31 ||
-    month < 1 ||
-    month > 12 ||
-    year < 1800 ||
-    year > 2999
-  ) {
-    return null;
-  }
-  return year * 10000 + month * 100 + day;
-}
 
-function parsePatientAntecedentsFromMedicalHistory(medicalHistoryRaw) {
-  const raw = String(medicalHistoryRaw ?? '').trim();
-  if (!raw) {
-    return [];
-  }
 
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return [];
-  }
-
-  if (!Array.isArray(parsed)) {
-    return [];
-  }
-
-  return parsed
-    .map((item) => {
-      const precision = item?.datePrecision === 'year' || item?.datePrecision === 'month' || item?.datePrecision === 'date'
-        ? item.datePrecision
-        : 'date';
-      const dateDisplay = String(item?.date ?? '').trim();
-      const category = String(item?.category ?? '').trim();
-      const description = String(item?.description ?? '').trim();
-      const sortKey = buildAntecedentSortKey(precision, dateDisplay);
-      if (!category || !dateDisplay || sortKey == null) {
-        return null;
-      }
-
-      return {
-        datePrecision: precision,
-        dateDisplay,
-        category,
-        description,
-        important: Boolean(item?.important),
-        sortKey
-      };
-    })
-    .filter(Boolean)
-    .slice(0, 400);
-}
-
-function normalizeConsultationReasonItems(rawItems) {
-  return Array.isArray(rawItems)
-    ? rawItems
-      .map((item) => ({
-        label: String(item?.label ?? '').trim(),
-        value: String(item?.value ?? '').trim(),
-        important: Boolean(item?.important)
-      }))
-      .filter((item, index, all) => item.label && all.findIndex((candidate) => candidate.label === item.label) === index)
-    : [];
-}
-
-const CONSULTATION_SECTION_KEYS = ['motifMainHtml', 'testsHtml', 'schemaHtml', 'treatmentsHtml', 'remarksHtml'];
-
-function buildEmptyConsultationSections() {
-  return {
-    motifMainHtml: '',
-    testsHtml: '',
-    schemaHtml: '',
-    treatmentsHtml: '',
-    remarksHtml: ''
-  };
-}
-
-function normalizeConsultationSectionsPayload(rawSections) {
-  const source = rawSections && typeof rawSections === 'object' ? rawSections : {};
-  const normalized = buildEmptyConsultationSections();
-
-  for (const key of CONSULTATION_SECTION_KEYS) {
-    normalized[key] = String(source[key] ?? '');
-  }
-
-  return normalized;
-}
-
-function hasConsultationSectionsContent(sections) {
-  return CONSULTATION_SECTION_KEYS.some((key) => String(sections?.[key] ?? '').trim().length > 0);
-}
 
 function normalizePersonNameKey(name) {
   return String(name ?? '')
@@ -7482,13 +7313,6 @@ async function buildDataImportTemplateWorkbook(dataset) {
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
-function buildDataImportPatientKey(lastName, firstName, birthDate) {
-  return [
-    String(lastName ?? '').trim().toLowerCase(),
-    String(firstName ?? '').trim().toLowerCase(),
-    String(birthDate ?? '').trim()
-  ].join('|');
-}
 
 function parseImportedNullableNumber(rawValue) {
   const value = String(rawValue ?? '').trim();
@@ -12208,15 +12032,6 @@ app.post('/api/patients/:id/anonymize', heavyOperationLimiter, authMiddleware, a
   return res.status(204).send();
 });
 
-function normalizePatientSexLabel(rawSex) {
-  if (rawSex === 'F') {
-    return 'Femme';
-  }
-  if (rawSex === 'M') {
-    return 'Homme';
-  }
-  return 'Non renseigne';
-}
 
 function parsePatientNotesFromCipher(cipherMedicalNotes) {
   try {
@@ -12231,49 +12046,7 @@ function parsePatientNotesFromCipher(cipherMedicalNotes) {
   }
 }
 
-function computePatientRetentionDateIso(birthDateIso) {
-  // Base rule: 10 years from today (used when no consultation date is known)
-  const tenYearsFromNow = new Date();
-  tenYearsFromNow.setFullYear(tenYearsFromNow.getFullYear() + 10);
 
-  // GDPR / Code de la santé publique: medical records for minors must be kept
-  // until at least the patient's 28th birthday (10 years after majority at 18).
-  if (birthDateIso) {
-    const minorThreshold = new Date(birthDateIso);
-    minorThreshold.setFullYear(minorThreshold.getFullYear() + 28);
-    if (minorThreshold > tenYearsFromNow) {
-      return minorThreshold.toISOString().slice(0, 10);
-    }
-  }
-
-  return tenYearsFromNow.toISOString().slice(0, 10);
-}
-
-function buildDefaultPatientNotes() {
-  return {
-    generalRemarks: '',
-    medicalHistory: '',
-    consultationNote: '',
-    relatedPeople: '',
-    mobilePhone: '',
-    landlinePhone: '',
-    email: '',
-    address1: '',
-    address2: '',
-    postalCode: '',
-    city: '',
-    country: 'France',
-    maritalStatus: 'Non renseigne',
-    childrenCount: 0,
-    occupationOrSchool: '',
-    hobbies: '',
-    primaryDoctor: '',
-    socialSecurityNumber: '',
-    referredBy: '',
-    manualPreference: 'Non renseigne',
-    isDeceased: false
-  };
-}
 
 function findOrCreateQuickPatientForAppointment(lastName, firstName, officeId) {
   const normalizedLastName = String(lastName ?? '').trim();
@@ -12369,19 +12142,6 @@ function findOrCreatePrivatePlaceholderPatient(officeId) {
   return Number(inserted.lastInsertRowid);
 }
 
-function inferConsultationType(reason) {
-  const normalized = String(reason ?? '').toLowerCase();
-  if (normalized.includes('urgence') || normalized.includes('aigu')) {
-    return 'Urgence';
-  }
-  if (normalized.includes('bilan') || normalized.includes('premier')) {
-    return 'Bilan';
-  }
-  if (normalized.includes('suivi') || normalized.includes('controle')) {
-    return 'Suivi';
-  }
-  return 'Consultation';
-}
 
 app.get('/api/appointments', authMiddleware, requirePermission('read-agenda'), (req, res) => {
   const requestedOfficeId = Number(req.query.officeId);
