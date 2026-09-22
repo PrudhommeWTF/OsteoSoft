@@ -99,6 +99,9 @@ sans lien avec un compte reel.
   telechargement du PDF de la facture.
 - Agenda et rendez-vous (`04-agenda.spec.ts`) : creation d'un rendez-vous prive
   depuis l'agenda, confirmation serveur, puis affichage dans la vue mensuelle.
+- Integrite CSP (`05-csp-integrity.spec.ts`) : le frontend servi par l'API se
+  charge sans violation CSP et avec sa feuille de style appliquee (garde-fou du
+  bug "page blanche" en deploiement mono-service).
 
 ## Pieges rencontres (a garder en tete)
 
@@ -128,6 +131,11 @@ sans lien avec un compte reel.
 - Le champ Motif du rendez-vous est facultatif (interface et serveur) : un
   rendez-vous peut etre cree sans motif. (Auparavant le serveur le refusait vide
   malgre le libelle "(facultatif)" ; corrige.)
+- Deploiement mono-service + CSP stricte (`script-src 'self'`) : le build ne doit
+  produire ni script/handler inline ni ressource tierce. L'inlining de CSS
+  critique (Beasties) est desactive (il injectait un `onload` inline bloque par
+  la CSP), et aucune police tierce n'est chargee (polices systeme). Le scenario
+  05 garde ces invariants.
 
 ## Scenarios HTTP (sans interface)
 
