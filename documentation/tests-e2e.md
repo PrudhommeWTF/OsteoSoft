@@ -1,9 +1,19 @@
-# Tests end-to-end (navigateur)
+# Tests end-to-end
+
+Deux familles de tests de bout en bout coexistent :
+
+- **Navigateur (Playwright)** : pilotent la vraie interface Angular dans Chromium
+  contre le vrai backend. Voir ci-dessous.
+- **Scenarios HTTP (sans interface)** : pilotent directement l'API pour des
+  parcours multi-modules. Voir la section [Scenarios HTTP](#scenarios-http-sans-interface).
+
+Les deux completent les tests d'API unitaires et d'integration
+(`server/test/*.test.mjs`).
+
+## Tests navigateur (Playwright)
 
 Ces tests pilotent la vraie interface Angular dans un navigateur reel
-(Chromium via Playwright), contre le vrai backend et une base SQLite. Ils
-completent les tests d'API (`server/test/*.test.mjs`), qui verifient les
-endpoints sans interface.
+(Chromium via Playwright), contre le vrai backend et une base SQLite.
 
 ## Execution
 
@@ -89,9 +99,6 @@ sans lien avec un compte reel.
 - Agenda et rendez-vous (`04-agenda.spec.ts`) : creation d'un rendez-vous prive
   depuis l'agenda, confirmation serveur, puis affichage dans la vue mensuelle.
 
-Parcours prevus (PR suivante) : extension des scripts HTTP (scenarios sans
-interface).
-
 ## Pieges rencontres (a garder en tete)
 
 - `getByRole('button', { name: 'Suivant' })` filtre par sous-chaine et sans
@@ -121,8 +128,36 @@ interface).
   refuse vide (schema `reason` >= 1). A signaler cote produit ; en attendant, les
   scenarios le renseignent.
 
+## Scenarios HTTP (sans interface)
+
+En complement des tests navigateur, des scenarios pilotent directement l'API
+pour des parcours complets multi-modules, sans navigateur (plus rapides). Ils
+reprennent l'esprit des anciens scripts `e2e:backup` / `e2e:rights`, mais
+reposent desormais sur le harnais de test (`server/test/helpers/harness.mjs`) :
+instance reelle sur un port libre, base SQLite temporaire et isolee, jamais les
+donnees de developpement. (Les anciennes versions demarraient le serveur dans le
+repertoire courant, donc contre la base de developpement, et sur un port fixe :
+elles ne fonctionnaient plus depuis l'ajout de la garde de securite au demarrage.)
+
+Fichiers dans `server/scripts/` :
+
+- `e2e-backup-restore.mjs` (`npm run e2e:backup`) : telechargement d'une
+  sauvegarde, verification de l'absence de donnees en clair, restauration.
+- `e2e-access-rights.mjs` (`npm run e2e:rights`) : controle d'acces par role
+  (non authentifie, admin, cabinet-member, assistant, comptabilite).
+- `e2e-clinical-flow.mjs` (`npm run e2e:clinical`) : parcours clinique et
+  comptable (patient, consultation, facture avec numero serveur, livre des
+  recettes, annulation).
+- `e2e-lib.mjs` : petit utilitaire commun (trace lisible, compteur de
+  verifications, code de sortie).
+
+`npm run e2e:scenarios` enchaine les trois.
+
 ## Integration continue
 
-Le job `e2e` de `.github/workflows/ci.yml` installe Chromium
-(`npx playwright install --with-deps chromium`), puis lance `npm run test:e2e`.
-En cas d'echec, le rapport HTML est publie en artefact.
+Deux jobs dans `.github/workflows/ci.yml` :
+
+- `e2e-scenarios` : `npm run e2e:scenarios` (parcours HTTP, pas de navigateur).
+- `e2e` : installe Chromium (`npx playwright install --with-deps chromium`) puis
+  lance `npm run test:e2e` (tests navigateur). En cas d'echec, le rapport HTML est
+  publie en artefact.
