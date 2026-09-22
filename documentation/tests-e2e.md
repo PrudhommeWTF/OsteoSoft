@@ -86,8 +86,11 @@ sans lien avec un compte reel.
 - Facturation et PDF (`03-billing-pdf.spec.ts`) : facturation d'une consultation
   depuis l'onglet Paiement (numero de facture attribue par le serveur), puis
   telechargement du PDF de la facture.
+- Agenda et rendez-vous (`04-agenda.spec.ts`) : creation d'un rendez-vous prive
+  depuis l'agenda, confirmation serveur, puis affichage dans la vue mensuelle.
 
-Parcours prevus (PR suivantes) : agenda et rendez-vous.
+Parcours prevus (PR suivante) : extension des scripts HTTP (scenarios sans
+interface).
 
 ## Pieges rencontres (a garder en tete)
 
@@ -111,6 +114,12 @@ Parcours prevus (PR suivantes) : agenda et rendez-vous.
   obtenir un identifiant. Le telechargement de la facture ouvre le PDF via
   `window.open` (nouvel onglet), a capturer avec `page.waitForEvent('popup')`,
   pas avec l'evenement `download`.
+- Les boutons avec `bsTooltip` voient leur attribut `title` deplace vers
+  `data-bs-original-title` par Bootstrap : un selecteur `[title="..."]` ne matche
+  plus une fois l'infobulle initialisee. Cibler par le libelle visible.
+- Le champ Motif du rendez-vous est affiche "(facultatif)" mais le serveur le
+  refuse vide (schema `reason` >= 1). A signaler cote produit ; en attendant, les
+  scenarios le renseignent.
 
 ## Integration continue
 

@@ -99,6 +99,18 @@ export async function pickBirthDate(page: Page): Promise<void> {
 }
 
 /**
+ * Choisit un jour du mois affiche dans un selecteur de date (composant maison),
+ * identifie par l'id de son hote. Par defaut le 15, present et non desactive.
+ */
+export async function pickCalendarDay(page: Page, hostId: string, day = '15'): Promise<void> {
+  await page.locator(`#${hostId} .os-dp-field`).click();
+  await expect(page.locator('.os-dp-popup')).toBeVisible();
+  await page.locator('.os-dp-day:not(.os-dp-day--other)').filter({ hasText: new RegExp(`^${day}$`) }).first().click();
+  await page.getByRole('button', { name: 'Valider' }).click();
+  await expect(page.locator('.os-dp-popup')).toBeHidden();
+}
+
+/**
  * Cree un patient via l'assistant (5 etapes ; seule l'etape 1 est obligatoire).
  * Termine sur la liste des patients.
  */
