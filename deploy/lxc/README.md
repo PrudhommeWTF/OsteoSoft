@@ -137,5 +137,5 @@ bash deploy/lxc/install.sh
 
 ## Prérequis dans le conteneur (installés automatiquement)
 
-Node.js 20 (NodeSource), `build-essential` + `python3` (compilation du module
+Node.js 22 (NodeSource), `build-essential` + `python3` (compilation du module
 natif `better-sqlite3`), git.

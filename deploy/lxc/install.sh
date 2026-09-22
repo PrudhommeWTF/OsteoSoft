@@ -6,7 +6,7 @@
 # compilé (aucun nginx requis). Un seul service systemd, un seul port.
 #
 # Ce script :
-#   1. installe Node.js 20 et les outils de compilation (better-sqlite3 est natif) ;
+#   1. installe Node.js 22 et les outils de compilation (better-sqlite3 est natif) ;
 #   2. récupère le code source (checkout local déjà présent, sinon clone REPO_URL) ;
 #   3. compile le frontend Angular et installe les dépendances de l'API ;
 #   4. génère un .env avec des secrets forts (s'il n'existe pas déjà) ;
@@ -30,7 +30,7 @@ REPO_URL="${REPO_URL:-https://github.com/PrudhommeWTF/OsteoSoft.git}"
 BRANCH="${BRANCH:-main}"
 DOMAIN="${DOMAIN:-}"
 API_PORT="${API_PORT:-4199}"
-NODE_MAJOR="20"
+NODE_MAJOR="22"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

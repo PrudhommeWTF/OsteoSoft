@@ -25,6 +25,9 @@
     "release:minor": "standard-version --release-as minor",
     "release:major": "standard-version --release-as major"
   },
+  "engines": {
+    "node": ">=22"
+  },
   "private": true,
   "packageManager": "npm@11.11.0",
   "dependencies": {
