@@ -116,6 +116,11 @@ CLIENT_ORIGIN=${ORIGIN}
 # L'API sert aussi le frontend : exposition directe, pas de reverse proxy par défaut.
 # Passez à true UNIQUEMENT si vous ajoutez nginx/Traefik devant (voir README).
 TRUST_PROXY=false
+# Forcer le navigateur à charger les ressources en HTTPS (CSP
+# upgrade-insecure-requests). À laisser sur false en accès HTTP direct : sinon
+# le JS/CSS est demandé en HTTPS (inexistant) et la page reste blanche. Passez à
+# true UNIQUEMENT derrière un reverse proxy TLS.
+FORCE_HTTPS=false
 NODE_ENV=production
 # Répertoire du build Angular servi par l'API (défaut auto = <app>/dist/OsteoSoft/browser).
 OSTEOSOFT_STATIC_DIR=${APP_DIR}/dist/OsteoSoft/browser
@@ -157,7 +162,7 @@ $(log 'Installation terminée (mono-service).')
 Étapes suivantes recommandées :
   1. Premier démarrage : ouvrir http://<ip>:${API_PORT}/ et suivre l'assistant.
   2. TLS (hors LAN de confiance) : placer un reverse proxy (nginx/Traefik/Caddy)
-     devant le port ${API_PORT}, puis mettre TRUST_PROXY=true et
+     devant le port ${API_PORT}, puis mettre TRUST_PROXY=true, FORCE_HTTPS=true et
      CLIENT_ORIGIN=https://votre-domaine dans ${APP_DIR}/.env
      (exemple nginx fourni dans deploy/lxc/nginx.conf), puis :
      systemctl restart osteosoft-api
