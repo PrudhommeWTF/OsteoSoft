@@ -113,7 +113,7 @@ async function main() {
   const pRes = await apiRequest('GET', '/api/patients?limit=30&sortBy=id&sortDir=asc', null, cookie);
   const { patients } = JSON.parse(pRes.body);
   if (!patients?.length) {
-    console.error('[seed:demo] Aucun patient - lance import-randomuser-patients.mjs 40 d\'abord');
+    console.error('[seed:demo] Aucun patient - lance "npm run seed:fakename" d\'abord (ou "node server/scripts/import-fakename-patients.mjs 40")');
     process.exit(1);
   }
   console.log(`[seed:demo] ${patients.length} patients disponibles`);

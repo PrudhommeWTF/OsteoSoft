@@ -138,10 +138,13 @@ Voir le guide complet: [INSTALLATION.md](INSTALLATION.md).
 - `npm run build`
 - `npm test`
 - `npm run test:watch`
+- `npm run test:e2e` (tests navigateur Playwright)
+- `npm run e2e:scenarios` (scenarios HTTP sans interface)
 - `npm run e2e:backup`
 - `npm run e2e:rights`
+- `npm run e2e:clinical`
 - `npm run seed:directory`
-- `npm run seed:fakename`
+- `npm run seed:fakename` (patients fictifs generes localement, sans reseau)
 
 ## Structure du projet
 
