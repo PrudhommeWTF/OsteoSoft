@@ -10,7 +10,7 @@
 #     ./proxmox-create-lxc.sh
 #
 # Le script :
-#   1. télécharge le template Debian 12 si nécessaire ;
+#   1. résout et télécharge le dernier template Debian (12 par défaut) si nécessaire ;
 #   2. crée un conteneur LXC non privilégié ;
 #   3. y pousse le code source (checkout local) — ou le fera cloner si REPO_URL est fourni ;
 #   4. lance deploy/lxc/install.sh à l'intérieur.
@@ -19,6 +19,7 @@
 #   CTID HOSTNAME STORAGE TEMPLATE_STORAGE DISK_GB CORES RAM_MB BRIDGE
 #   IP (dhcp | CIDR ex: 192.168.1.50/24) GATEWAY DNS
 #   DOMAIN REPO_URL BRANCH
+#   DEBIAN_RELEASE (defaut 12) TEMPLATE_NAME (force un template precis)
 #
 set -euo pipefail
 
@@ -37,7 +38,13 @@ DOMAIN="${DOMAIN:-}"
 API_PORT="${API_PORT:-4199}"
 REPO_URL="${REPO_URL:-}"
 BRANCH="${BRANCH:-main}"
-TEMPLATE_NAME="${TEMPLATE_NAME:-debian-12-standard_12.7-1_amd64.tar.zst}"
+# Version majeure de Debian visee. On NE fige PAS la revision de correctif
+# (12.7, 12.8, ...) : pveam ne propose au telechargement que la revision
+# courante, donc une valeur figee finit par disparaitre du catalogue. La
+# revision exacte est resolue dynamiquement plus bas. TEMPLATE_NAME force un
+# template precis si besoin.
+DEBIAN_RELEASE="${DEBIAN_RELEASE:-12}"
+TEMPLATE_NAME="${TEMPLATE_NAME:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -56,12 +63,41 @@ fi
 pct status "$CTID" >/dev/null 2>&1 && die "Le conteneur $CTID existe déjà."
 
 # ── Template ─────────────────────────────────────────────────────────────────
+# Motif de nom attendu : debian-<release>-standard_<version>_amd64.tar.(zst|gz)
+TEMPLATE_GLOB="debian-${DEBIAN_RELEASE}-standard_.*_amd64\\.tar\\.(zst|gz)"
+
+# Dernier template deja telecharge sur le stockage (revision la plus recente).
+latest_local_template() {
+  pveam list "$TEMPLATE_STORAGE" 2>/dev/null \
+    | awk '{print $1}' | sed 's#.*/##' \
+    | grep -E "^${TEMPLATE_GLOB}$" | sort -V | tail -n1
+}
+
+# Dernier template disponible au telechargement dans le catalogue.
+latest_available_template() {
+  pveam available --section system 2>/dev/null \
+    | awk '{print $2}' \
+    | grep -E "^${TEMPLATE_GLOB}$" | sort -V | tail -n1
+}
+
+if [ -z "$TEMPLATE_NAME" ]; then
+  log "Résolution du dernier template debian-${DEBIAN_RELEASE}-standard…"
+  TEMPLATE_NAME="$(latest_local_template)"
+  if [ -z "$TEMPLATE_NAME" ]; then
+    pveam update >/dev/null 2>&1 || true
+    TEMPLATE_NAME="$(latest_available_template)"
+  fi
+  [ -n "$TEMPLATE_NAME" ] \
+    || die "Aucun template debian-${DEBIAN_RELEASE}-standard trouvé. Listez: pveam available --section system | grep debian-${DEBIAN_RELEASE}"
+  log "Template retenu : $TEMPLATE_NAME"
+fi
+
 TEMPLATE_REF="${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE_NAME}"
 if ! pveam list "$TEMPLATE_STORAGE" 2>/dev/null | grep -q "$TEMPLATE_NAME"; then
   log "Téléchargement du template $TEMPLATE_NAME…"
   pveam update >/dev/null 2>&1 || true
   pveam download "$TEMPLATE_STORAGE" "$TEMPLATE_NAME" \
-    || die "Impossible de télécharger $TEMPLATE_NAME. Listez les templates dispo avec: pveam available | grep debian-12"
+    || die "Impossible de télécharger $TEMPLATE_NAME. Listez les templates dispo avec: pveam available --section system | grep debian-${DEBIAN_RELEASE}"
 fi
 
 # ── Réseau ───────────────────────────────────────────────────────────────────

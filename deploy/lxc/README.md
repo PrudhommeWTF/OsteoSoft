@@ -49,8 +49,21 @@ API_PORT=4199 DOMAIN=osteosoft.example.com \
 ```
 
 Défauts : `HOSTNAME=osteosoft`, `STORAGE=local-lvm`, `DISK_GB=8`, `CORES=2`,
-`RAM_MB=2048`, `BRIDGE=vmbr0`, `IP=dhcp`, `API_PORT=4199`, template
-`debian-12-standard_12.7-1_amd64.tar.zst`. Le `CTID` est auto-attribué si absent.
+`RAM_MB=2048`, `BRIDGE=vmbr0`, `IP=dhcp`, `API_PORT=4199`. Le `CTID` est
+auto-attribué si absent.
+
+### Template Debian
+
+Le script ne fige pas de révision de correctif. Il résout automatiquement le
+dernier template `debian-<release>-standard` disponible (par défaut
+`DEBIAN_RELEASE=12`), d'abord parmi ceux déjà téléchargés, sinon dans le
+catalogue `pveam`. On évite ainsi l'échec quand une révision figée (ex.
+`12.7-1`) disparaît du catalogue au profit de la suivante.
+
+- `DEBIAN_RELEASE=13` : viser une autre version majeure (Node est installé via
+  NodeSource, qui gère le nom de code Debian).
+- `TEMPLATE_NAME=debian-12-standard_12.12-1_amd64.tar.zst` : forcer un template
+  précis (contourne la résolution automatique).
 
 ## Option B — dans un conteneur LXC déjà existant
 
