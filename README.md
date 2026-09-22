@@ -50,7 +50,7 @@ Le déploiement GitHub Pages est automatisé via workflow (`.github/workflows/de
 
 ## Prérequis
 
-- Node.js 20+
+- Node.js 22+
 - npm 10+
 - macOS, Linux ou Windows
 
