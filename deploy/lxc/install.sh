@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# OsteoSoft — installation native dans un conteneur LXC (Debian 12 recommandé).
+# OsteoSoft — installation native dans un conteneur LXC (Debian 13, ou 12).
 #
 # Déploiement MONO-SERVICE : l'API Node sert à la fois /api ET le frontend Angular
 # compilé (aucun nginx requis). Un seul service systemd, un seul port.

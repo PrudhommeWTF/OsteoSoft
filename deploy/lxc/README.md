@@ -1,7 +1,8 @@
 # Déploiement LXC Proxmox
 
 Kit de déploiement natif d'OsteoSoft dans un conteneur LXC Proxmox VE
-(Debian 12), sans Docker. Déploiement **mono-service** : l'API Node.js sert à la
+(Debian 13 par défaut, Debian 12 possible), sans Docker. Déploiement
+**mono-service** : l'API Node.js sert à la
 fois `/api` **et** le frontend Angular compilé, via un unique service **systemd**.
 Aucun nginx requis (identique au modèle de déploiement de Foyer-App).
 
@@ -56,18 +57,19 @@ auto-attribué si absent.
 
 Le script ne fige pas de révision de correctif. Il résout automatiquement le
 dernier template `debian-<release>-standard` disponible (par défaut
-`DEBIAN_RELEASE=12`), d'abord parmi ceux déjà téléchargés, sinon dans le
-catalogue `pveam`. On évite ainsi l'échec quand une révision figée (ex.
-`12.7-1`) disparaît du catalogue au profit de la suivante.
+`DEBIAN_RELEASE=13`, Debian 13 « trixie »), d'abord parmi ceux déjà téléchargés,
+sinon dans le catalogue `pveam`. On évite ainsi l'échec quand une révision figée
+(ex. `12.7-1`) disparaît du catalogue au profit de la suivante.
 
-- `DEBIAN_RELEASE=13` : viser une autre version majeure (Node est installé via
-  NodeSource, qui gère le nom de code Debian).
-- `TEMPLATE_NAME=debian-12-standard_12.12-1_amd64.tar.zst` : forcer un template
-  précis (contourne la résolution automatique).
+- `DEBIAN_RELEASE=12` : rester sur Debian 12 « bookworm » (oldstable). Node est
+  installé via NodeSource, qui gère le nom de code Debian dans les deux cas.
+- `TEMPLATE_NAME=debian-13-standard_13.1-1_amd64.tar.zst` : forcer un template
+  précis (contourne la résolution automatique ; adaptez le nom à la révision
+  réellement disponible via `pveam available --section system | grep debian`).
 
 ## Option B — dans un conteneur LXC déjà existant
 
-Depuis un LXC Debian 12, en root :
+Depuis un LXC Debian 13 (ou 12), en root :
 
 ```bash
 DOMAIN=osteosoft.example.com \
