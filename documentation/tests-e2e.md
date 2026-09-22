@@ -125,9 +125,9 @@ sans lien avec un compte reel.
 - Les boutons avec `bsTooltip` voient leur attribut `title` deplace vers
   `data-bs-original-title` par Bootstrap : un selecteur `[title="..."]` ne matche
   plus une fois l'infobulle initialisee. Cibler par le libelle visible.
-- Le champ Motif du rendez-vous est affiche "(facultatif)" mais le serveur le
-  refuse vide (schema `reason` >= 1). A signaler cote produit ; en attendant, les
-  scenarios le renseignent.
+- Le champ Motif du rendez-vous est facultatif (interface et serveur) : un
+  rendez-vous peut etre cree sans motif. (Auparavant le serveur le refusait vide
+  malgre le libelle "(facultatif)" ; corrige.)
 
 ## Scenarios HTTP (sans interface)
 
