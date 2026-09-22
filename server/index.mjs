@@ -126,6 +126,7 @@ const {
   largeRequestBodyLimit,
   maxPatientDocumentBytes: MAX_PATIENT_DOCUMENT_BYTES,
   trustedProxies,
+  forceHttpsUpgrade,
   sessionRememberMaxAgeMs: SESSION_REMEMBER_MAX_AGE_MS,
   sessionDefaultMaxAgeMs: SESSION_DEFAULT_MAX_AGE_MS,
   sessionRememberTtl: SESSION_REMEMBER_TTL,
@@ -4994,6 +4995,12 @@ app.use(
         objectSrc: ["'none'"],
         mediaSrc: ["'self'", 'blob:'],
         workerSrc: ["'self'", 'blob:'],
+        // helmet ajoute upgrade-insecure-requests par defaut. En acces HTTP
+        // direct (LAN, mono-service sans TLS), cela ferait echouer le chargement
+        // du JS/CSS (upgrade vers un HTTPS inexistant) -> page blanche. On la
+        // retire par defaut (null) et on la retablit derriere un proxy TLS
+        // (FORCE_HTTPS=true).
+        ...(forceHttpsUpgrade ? {} : { upgradeInsecureRequests: null }),
       }
     }
   })

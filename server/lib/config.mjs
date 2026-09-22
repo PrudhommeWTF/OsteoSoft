@@ -56,6 +56,12 @@ export function loadServerConfig(env = process.env, { cwd = process.cwd() } = {}
     trustedProxies: env.TRUST_PROXY === 'true' || env.TRUST_PROXY === '1'
       ? 1
       : (env.TRUST_PROXY === 'loopback' ? 'loopback' : false),
+    // Directive CSP upgrade-insecure-requests : forcer le navigateur a charger
+    // les ressources en HTTPS. A n'activer QUE derriere un reverse proxy TLS.
+    // Par defaut desactivee : en acces HTTP direct (LAN, deploiement mono-service),
+    // elle casserait le chargement du JS/CSS (upgrade vers un HTTPS inexistant),
+    // d'ou une page blanche.
+    forceHttpsUpgrade: /^(1|true|yes)$/i.test(String(env.FORCE_HTTPS ?? 'false')),
     sessionRememberMaxAgeMs: Number(env.SESSION_REMEMBER_MAX_AGE_MS ?? 12 * 60 * 60 * 1000),
     sessionDefaultMaxAgeMs: Number(env.SESSION_DEFAULT_MAX_AGE_MS ?? 2 * 60 * 60 * 1000),
     sessionRememberTtl: env.SESSION_REMEMBER_TTL ?? '12h',

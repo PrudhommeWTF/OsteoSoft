@@ -155,6 +155,17 @@ historiques, désormais corrigées et couvertes par un test end-to-end
   règle « aucun appel tiers ») : supprimées, la typographie retombe sur les
   polices système.
 
+**Page blanche en accès HTTP direct (LAN), console montrant des ressources
+demandées en HTTPS**
+
+En HTTP direct sans TLS, la directive CSP `upgrade-insecure-requests` (ajoutée
+par défaut par helmet) fait charger le JS/CSS en `https://<ip>:<port>` — qui
+n'existe pas → page blanche. Elle est désormais **désactivée par défaut** ;
+`FORCE_HTTPS=true` (dans `.env`) ne doit être mis **que derrière un reverse
+proxy TLS**. Ce cas échappe aux tests navigateur (les navigateurs exemptent
+`localhost` de cet upgrade), il est donc couvert par un test d'en-têtes
+(`server/test/csp-headers.test.mjs`).
+
 Si une page blanche réapparaît après une modification du frontend :
 
 1. Ouvrir la console du navigateur (F12) : une violation CSP y est explicite
