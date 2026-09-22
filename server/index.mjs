@@ -4659,8 +4659,10 @@ const loginSchema = z.object({
 
 const createPatientSchema = z.object({
   sex: z.enum(['Non renseigne', 'Femme', 'Homme']),
-  lastName: z.string().min(1).max(100),
-  firstName: z.string().min(1).max(100),
+  // trim() avant min(1) : un nom compose uniquement d'espaces (reduit a du vide
+  // par le trim du serveur) est refuse, jamais stocke a blanc.
+  lastName: z.string().trim().min(1).max(100),
+  firstName: z.string().trim().min(1).max(100),
   // Whether the patient actually signed the consent form at creation. Defaults to
   // false: consent must be genuinely captured, never fabricated (RGPD Art. 7).
   consentSigned: z.boolean().optional().default(false),
@@ -4756,9 +4758,13 @@ const officeDraftSchema = z.object({
 });
 
 const updatePatientSchema = z.object({
-  fullName: z.string().min(1).max(200).optional(),
-  lastName: z.string().min(1).max(100).optional(),
-  firstName: z.string().min(1).max(100).optional(),
+  // trim() avant min(1) : un champ present ne peut pas blanchir le nom (une
+  // valeur d'espaces est refusee). Le champ reste facultatif (mise a jour
+  // partielle : l'omettre conserve la valeur existante), en phase avec la
+  // creation qui impose nom et prenom non vides.
+  fullName: z.string().trim().min(1).max(200).optional(),
+  lastName: z.string().trim().min(1).max(100).optional(),
+  firstName: z.string().trim().min(1).max(100).optional(),
   sex: z.enum(['Non renseigne', 'Femme', 'Homme']).optional(),
   birthDate: z.string().max(20).optional(),
   mobilePhone: z.string().max(50).optional(),
