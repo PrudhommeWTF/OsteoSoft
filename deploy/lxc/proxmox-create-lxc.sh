@@ -16,7 +16,7 @@
 #   4. lance deploy/lxc/install.sh à l'intérieur.
 #
 # Variables surchargées via l'environnement (voir défauts ci-dessous) :
-#   CTID HOSTNAME STORAGE TEMPLATE_STORAGE DISK_GB CORES RAM_MB BRIDGE
+#   CTID CT_HOSTNAME STORAGE TEMPLATE_STORAGE DISK_GB CORES RAM_MB BRIDGE
 #   IP (dhcp | CIDR ex: 192.168.1.50/24) GATEWAY DNS
 #   DOMAIN REPO_URL BRANCH
 #   DEBIAN_RELEASE (defaut 13) TEMPLATE_NAME (force un template precis)
@@ -24,7 +24,10 @@
 set -euo pipefail
 
 CTID="${CTID:-}"
-HOSTNAME="${HOSTNAME:-osteosoft}"
+# Attention : ne PAS utiliser $HOSTNAME (variable predefinie de bash = nom de
+# l'hote courant), sinon le conteneur herite du nom de l'hote Proxmox. On utilise
+# CT_HOSTNAME, surchargeable via l'environnement.
+CT_HOSTNAME="${CT_HOSTNAME:-osteosoft}"
 STORAGE="${STORAGE:-local-lvm}"
 TEMPLATE_STORAGE="${TEMPLATE_STORAGE:-local}"
 DISK_GB="${DISK_GB:-8}"
@@ -110,10 +113,10 @@ else
 fi
 
 # ── Création ─────────────────────────────────────────────────────────────────
-log "Création du conteneur $CTID ($HOSTNAME)…"
+log "Création du conteneur $CTID ($CT_HOSTNAME)…"
 # shellcheck disable=SC2086
 pct create "$CTID" "$TEMPLATE_REF" \
-  --hostname "$HOSTNAME" \
+  --hostname "$CT_HOSTNAME" \
   --cores "$CORES" \
   --memory "$RAM_MB" \
   --rootfs "${STORAGE}:${DISK_GB}" \
