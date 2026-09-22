@@ -48,11 +48,13 @@ serveur) s'accompagnent de la reecriture des tests concernes.
 
 ## Integration continue (`.github/workflows/ci.yml`)
 
-Cinq jobs (Node 22) :
+Six jobs (Node 22) :
 
 - `api-tests` : `npm run test:api`.
 - `typecheck` : `npm run typecheck`.
-- `e2e` : installe Chromium puis `npm run test:e2e` (voir
+- `e2e-scenarios` : `npm run e2e:scenarios` (parcours HTTP sans interface, voir
+  [tests-e2e.md](tests-e2e.md)).
+- `e2e` : installe Chromium puis `npm run test:e2e` (tests navigateur, voir
   [tests-e2e.md](tests-e2e.md)).
 - `audit` : `npm audit --omit=dev --audit-level=critical` (bloquant), plus un
   audit complet informatif.

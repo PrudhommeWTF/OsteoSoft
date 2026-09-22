@@ -10,6 +10,8 @@
     "seed:directory": "node server/scripts/seed-directory-contacts.mjs",
     "e2e:backup": "node server/scripts/e2e-backup-restore.mjs",
     "e2e:rights": "node server/scripts/e2e-access-rights.mjs",
+    "e2e:clinical": "node server/scripts/e2e-clinical-flow.mjs",
+    "e2e:scenarios": "node server/scripts/e2e-backup-restore.mjs && node server/scripts/e2e-access-rights.mjs && node server/scripts/e2e-clinical-flow.mjs",
     "test:e2e": "npm run build && playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:api": "node --test server/test/*.test.mjs",

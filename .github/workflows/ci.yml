@@ -38,6 +38,22 @@ jobs:
       - name: Types des modules serveur
         run: npm run typecheck
 
+  e2e-scenarios:
+    name: Scenarios end-to-end HTTP (sans interface)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      # Parcours multi-modules contre l'API reelle (base SQLite temporaire isolee) :
+      # sauvegarde/restauration, controle d'acces par role, parcours clinique et
+      # comptable. Complete la suite d'API et les tests navigateur.
+      - name: Scenarios HTTP
+        run: npm run e2e:scenarios
+
   e2e:
     name: Tests end-to-end (navigateur)
     runs-on: ubuntu-latest
