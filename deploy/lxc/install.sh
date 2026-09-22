@@ -121,6 +121,13 @@ TRUST_PROXY=false
 # le JS/CSS est demandé en HTTPS (inexistant) et la page reste blanche. Passez à
 # true UNIQUEMENT derrière un reverse proxy TLS.
 FORCE_HTTPS=false
+# Deploiement mono-service : l'assistant d'installation est ouvert depuis un
+# navigateur sur le LAN (donc "a distance" du conteneur, pas en loopback). Sans
+# ceci, la configuration initiale serait refusee (autorisee uniquement en local).
+# La fenetre d'exposition se limite au tout premier demarrage : une fois le
+# premier cabinet cree, la configuration initiale est close quoi qu'il arrive.
+# Faites donc la configuration initiale sans tarder, sur un reseau de confiance.
+ALLOW_REMOTE_SETUP=true
 NODE_ENV=production
 # Répertoire du build Angular servi par l'API (défaut auto = <app>/dist/OsteoSoft/browser).
 OSTEOSOFT_STATIC_DIR=${APP_DIR}/dist/OsteoSoft/browser
