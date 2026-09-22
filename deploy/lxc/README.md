@@ -139,3 +139,28 @@ bash deploy/lxc/install.sh
 
 Node.js 22 (NodeSource), `build-essential` + `python3` (compilation du module
 natif `better-sqlite3`), git.
+
+## Dépannage
+
+**Page blanche à l'ouverture**
+
+L'API et le frontend étant servis sur la même origine avec une CSP stricte
+(`script-src 'self'`), toute ressource inline ou tierce est bloquée. Deux causes
+historiques, désormais corrigées et couvertes par un test end-to-end
+(`e2e/05-csp-integrity.spec.ts`) :
+
+- l'inlining de CSS critique injectait un `onload` inline sur la feuille de
+  style (bloqué par la CSP → application non stylée) : désactivé côté build ;
+- des polices Google étaient chargées (bloquées par la CSP, contraires à la
+  règle « aucun appel tiers ») : supprimées, la typographie retombe sur les
+  polices système.
+
+Si une page blanche réapparaît après une modification du frontend :
+
+1. Ouvrir la console du navigateur (F12) : une violation CSP y est explicite
+   (« Refused to … because it violates the Content Security Policy »).
+2. Vérifier que le service tourne : `systemctl status osteosoft-api` et
+   `journalctl -u osteosoft-api -n 50`.
+3. Vérifier que le build est présent : `ls <APP_DIR>/dist/OsteoSoft/browser/index.html`.
+4. Rejouer `npm run test:e2e` en local : le scénario CSP échoue si une ressource
+   inline ou tierce a été réintroduite.
