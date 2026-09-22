@@ -42,14 +42,14 @@ local, donc **fonctionne aussi pour un dépôt privé**), puis lance `install.sh
 Personnalisation via variables d'environnement :
 
 ```bash
-CTID=910 HOSTNAME=osteosoft \
+CTID=910 CT_HOSTNAME=osteosoft \
 STORAGE=local-lvm DISK_GB=8 CORES=2 RAM_MB=2048 \
 BRIDGE=vmbr0 IP=192.168.1.50/24 GATEWAY=192.168.1.1 DNS=192.168.1.1 \
 API_PORT=4199 DOMAIN=osteosoft.example.com \
 ./proxmox-create-lxc.sh
 ```
 
-Défauts : `HOSTNAME=osteosoft`, `STORAGE=local-lvm`, `DISK_GB=8`, `CORES=2`,
+Défauts : `CT_HOSTNAME=osteosoft`, `STORAGE=local-lvm`, `DISK_GB=8`, `CORES=2`,
 `RAM_MB=2048`, `BRIDGE=vmbr0`, `IP=dhcp`, `API_PORT=4199`. Le `CTID` est
 auto-attribué si absent.
 
