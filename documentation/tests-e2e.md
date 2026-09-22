@@ -34,8 +34,9 @@ Un lanceur, `e2e/serve-for-e2e.mjs`, demarre une instance reelle de
   supprime a l'arret), donc jamais les donnees de developpement ;
 - avec le frontend compile servi par cette meme instance
   (`OSTEOSOFT_STATIC_DIR` pointe sur `dist/OsteoSoft/browser`) ;
-- sur le port 4199 (fixe), car le frontend compile appelle l'API sur ce port.
-  Tout est donc servi sur une seule origine : pas de probleme CORS.
+- sur le port 4199 par defaut. Le build de production appelle l'API en relatif
+  (`/api`), donc tout est servi sur une seule origine : pas de probleme CORS, et
+  le port exact n'a pas d'importance.
 
 Cette approche reprend celle du harnais des tests d'API
 (`server/test/helpers/harness.mjs`) : aucune modification du code applicatif
