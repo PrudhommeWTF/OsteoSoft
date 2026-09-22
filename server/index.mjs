@@ -4962,7 +4962,8 @@ const createAppointmentSchema = z.object({
   privateReason: z.string().max(300).optional().nullable(),
   practitioner: z.string().max(120).optional().nullable(),
   startsAt: z.string().datetime({ offset: true }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)),
-  reason: z.string().min(1).max(500),
+  // Motif facultatif (l'interface l'affiche comme tel) : chaine vide acceptee.
+  reason: z.string().max(500).optional().default(''),
   status: z.enum(['A confirmer', 'En attente', 'Termine']),
   localCalendarId: z.union([z.number().int().positive(), z.string()]).optional().nullable(),
   consultationId: z.number().int().positive().optional().nullable(),

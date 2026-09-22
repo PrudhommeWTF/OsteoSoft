@@ -28,10 +28,7 @@ test.describe.serial('Agenda et rendez-vous', () => {
     await pickCalendarDay(page, 'create-slot-date');
     await page.locator('#create-slot-time').fill('10:00');
 
-    // Le motif est marque "(facultatif)" dans l'interface mais le serveur le
-    // refuse vide : on le renseigne donc.
-    await page.locator('#create-reason').fill('Point equipe');
-
+    // On ne renseigne PAS le motif : il est facultatif (interface et serveur).
     await page.getByRole('button', { name: 'Créer le rendez-vous' }).click();
 
     // La creation est confirmee par le serveur.
