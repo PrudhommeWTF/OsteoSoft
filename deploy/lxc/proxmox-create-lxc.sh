@@ -10,7 +10,7 @@
 #     ./proxmox-create-lxc.sh
 #
 # Le script :
-#   1. résout et télécharge le dernier template Debian (12 par défaut) si nécessaire ;
+#   1. résout et télécharge le dernier template Debian (13 « trixie » par défaut) si nécessaire ;
 #   2. crée un conteneur LXC non privilégié ;
 #   3. y pousse le code source (checkout local) — ou le fera cloner si REPO_URL est fourni ;
 #   4. lance deploy/lxc/install.sh à l'intérieur.
@@ -19,7 +19,7 @@
 #   CTID HOSTNAME STORAGE TEMPLATE_STORAGE DISK_GB CORES RAM_MB BRIDGE
 #   IP (dhcp | CIDR ex: 192.168.1.50/24) GATEWAY DNS
 #   DOMAIN REPO_URL BRANCH
-#   DEBIAN_RELEASE (defaut 12) TEMPLATE_NAME (force un template precis)
+#   DEBIAN_RELEASE (defaut 13) TEMPLATE_NAME (force un template precis)
 #
 set -euo pipefail
 
@@ -43,7 +43,7 @@ BRANCH="${BRANCH:-main}"
 # courante, donc une valeur figee finit par disparaitre du catalogue. La
 # revision exacte est resolue dynamiquement plus bas. TEMPLATE_NAME force un
 # template precis si besoin.
-DEBIAN_RELEASE="${DEBIAN_RELEASE:-12}"
+DEBIAN_RELEASE="${DEBIAN_RELEASE:-13}"
 TEMPLATE_NAME="${TEMPLATE_NAME:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
