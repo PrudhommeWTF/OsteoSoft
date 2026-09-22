@@ -140,6 +140,18 @@ bash deploy/lxc/install.sh
 Node.js 22 (NodeSource), `build-essential` + `python3` (compilation du module
 natif `better-sqlite3`), git.
 
+## Configuration initiale à distance
+
+L'assistant d'installation (création du premier cabinet, instance de démo) est
+ouvert depuis un navigateur sur le LAN, donc « à distance » du conteneur. Par
+sécurité, l'application refuse par défaut la configuration initiale hors
+loopback ; le kit active donc `ALLOW_REMOTE_SETUP=true` dans le `.env`. La
+fenêtre d'exposition se limite au tout premier démarrage : dès que le premier
+cabinet est créé, la configuration initiale est close quoi qu'il arrive. Faites
+donc la configuration initiale **sans tarder, sur un réseau de confiance**. Pour
+durcir davantage, mettez `ALLOW_REMOTE_SETUP=false` et faites la configuration
+via un tunnel SSH (`ssh -L 4199:localhost:4199 …`) puis remettez la valeur.
+
 ## Dépannage
 
 **Page blanche à l'ouverture**

@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
@@ -144,10 +145,25 @@ export class InstallationPage {
       this.setupService.markComplete();
       await this.router.navigateByUrl('/login');
     } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Erreur lors de l\'installation de la demonstration');
+      this.error.set(this.serverErrorMessage(err, 'Erreur lors de l\'installation de la demonstration'));
     } finally {
       this.isInstallingDemo.set(false);
     }
+  }
+
+  /**
+   * Message d'erreur le plus parlant : on privilegie le message renvoye par le
+   * serveur (ex. "Configuration initiale autorisee uniquement en local...")
+   * plutot qu'un libelle generique, pour rendre les echecs auto-explicatifs.
+   */
+  private serverErrorMessage(err: unknown, fallback: string): string {
+    if (err instanceof HttpErrorResponse) {
+      const serverMessage = String(err.error?.message ?? '').trim();
+      if (serverMessage) {
+        return serverMessage;
+      }
+    }
+    return fallback;
   }
 
   previousStep(): void {
@@ -516,7 +532,7 @@ export class InstallationPage {
       this.setupService.markComplete();
       await this.router.navigateByUrl('/login');
     } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Erreur lors de la création du cabinet');
+      this.error.set(this.serverErrorMessage(err, 'Erreur lors de la création du cabinet'));
     } finally {
       this.isCreating.set(false);
     }
