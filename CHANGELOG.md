@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.4.1-rc.1](https://github.com/PrudhommeWTF/OsteoSoft/compare/v0.4.0...v0.4.1-rc.1) (2026-09-23)
+
+
+### Corrections de bugs
+
+* **deploy:** redemarrer le service quand install.sh met a jour le code ([#148](https://github.com/PrudhommeWTF/OsteoSoft/issues/148)) ([d996ede](https://github.com/PrudhommeWTF/OsteoSoft/commit/d996ede3d01527046ea48e01435e7a35a0f9fccf))
+
 ## [0.4.0](https://github.com/PrudhommeWTF/OsteoSoft/compare/v0.3.0...v0.4.0) (2026-09-23)
 
 
