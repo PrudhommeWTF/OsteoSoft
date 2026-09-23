@@ -19,6 +19,8 @@ avec des tests. Les routes HTTP restent dans `index.mjs`.
 | `patients.mjs` | Fonctions pures patients/consultations : profils, antecedents, motifs et sections, retention, type de consultation. | Fonctions pures |
 | `patient-records.mjs` | Operations patients/consultations liees a la base : insertion de consultation, remplacement des antecedents/motifs/sections, cartes dechiffrees, notes, retention effective, purge des dossiers expires. | Fabrique `createPatientRecords(db, deps)` |
 | `office-settings.mjs` | Parametres cabinet (fonctions pures) : horaires, devise, formats et numerotation de facture, modele de facture, methodes de paiement, identifiants de cabinet. | Fonctions pures |
+| `releases.mjs` | (Nouveau) Releases GitHub : `fetchRelease` par canal (stable / preversions, repli sur les tags), `semverCmp` (preversions comprises), `normalizeUpdateChannel`. Fetch et base d'API injectables. | Fonctions pures |
+| `self-update.mjs` | (Nouveau) Mise a jour en un clic : `isValidReleaseTag` (frontiere de privilege), `selfUpdateCapability` (script root constate), `freshUpdateStatus` / `readUpdateStatus` (statut perime), `writeUpdateTrigger`. | Fonctions (acces disque) |
 
 ## Convention d'injection
 
