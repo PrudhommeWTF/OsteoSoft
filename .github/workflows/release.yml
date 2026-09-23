@@ -1,0 +1,93 @@
+name: Release
+
+# Publie la release GitHub quand la version de package.json change sur main
+# (commit « chore(release): X.Y.Z » produit par `npm run release`).
+#
+# La mise a jour depuis l'interface lit les RELEASES GitHub (canal stable :
+# /releases/latest ; canal preversions : liste des releases). Un simple tag ne
+# suffit donc pas : ce workflow cree le tag vX.Y.Z sur le commit pousse ET la
+# release, avec la section correspondante de CHANGELOG.md comme notes. Une
+# version avec suffixe (1.2.0-rc.1) est publiee en preversion.
+#
+# Idempotent : si la release existe deja, rien n'est fait. Relancable a la main
+# (workflow_dispatch) si une publication a echoue.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - package.json
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publication de la release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version de package.json
+        id: version
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "Version invalide : $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Release deja publiee ?
+        id: exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "La release $TAG existe deja : rien a faire."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Notes de version (CHANGELOG.md)
+        if: steps.exists.outputs.skip == 'false'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Section « ## [X.Y.Z] » (ou « ### [X.Y.Z] » pour un correctif) jusqu'a
+          # la version suivante.
+          awk -v v="$VERSION" '
+            /^###? \[[0-9]+\.[0-9]+\.[0-9]+/ {
+              if (found) exit
+              if (index($0, "[" v "]")) { found = 1; next }
+            }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "Aucune section $VERSION dans CHANGELOG.md : lancez npm run release." >&2
+            exit 1
+          fi
+          cat release-notes.md
+
+      - name: Creation du tag et de la release
+        if: steps.exists.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          flags=()
+          case "$VERSION" in *-*) flags+=(--prerelease) ;; esac
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            --notes-file release-notes.md \
+            "${flags[@]}"
