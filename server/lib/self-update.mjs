@@ -17,7 +17,12 @@ export const SELF_UPDATE_HELPER_DEFAULT = '/usr/local/sbin/osteosoft-self-update
 /** Fichiers ecrits dans le dossier de donnees (seul dossier inscriptible du service). */
 export const UPDATE_TRIGGER_FILE = '.update-trigger';
 export const UPDATE_STATUS_FILE = 'update-status.json';
-export const UPDATE_LOG_FILE = 'update.log';
+
+/**
+ * Journal du script root (deploy/lxc/self-update.sh). Hors du dossier de
+ * donnees : le service ne doit pas pouvoir ecrire dans ce que root journalise.
+ */
+export const UPDATE_LOG_PATH = '/var/log/osteosoft/update.log';
 
 /** Temps SANS PROGRESSION au-dela duquel une mise a jour est tenue pour interrompue. */
 export const UPDATE_STALE_MS = 15 * 60 * 1000;
@@ -111,15 +116,16 @@ export function freshUpdateStatus(status, now, logPath, staleMs = UPDATE_STALE_M
  * illisible : un fichier corrompu ne doit pas bloquer l'interface).
  * @param {string} dataDir
  * @param {number} [now]
+ * @param {string} [logPath] Chemin cite dans le message d'interruption.
  * @returns {UpdateStatus}
  */
-export function readUpdateStatus(dataDir, now = Date.now()) {
+export function readUpdateStatus(dataDir, now = Date.now(), logPath = UPDATE_LOG_PATH) {
   const statusPath = path.join(dataDir, UPDATE_STATUS_FILE);
   try {
     if (fs.existsSync(statusPath)) {
       const parsed = JSON.parse(fs.readFileSync(statusPath, 'utf-8'));
       if (parsed && typeof parsed.state === 'string') {
-        return freshUpdateStatus(parsed, now, path.join(dataDir, UPDATE_LOG_FILE));
+        return freshUpdateStatus(parsed, now, logPath);
       }
     }
   } catch {

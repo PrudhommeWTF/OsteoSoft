@@ -11,22 +11,22 @@ deploy/lxc/
 ├── proxmox-create-lxc.sh   # exécuté sur l'HÔTE Proxmox : crée le conteneur puis installe
 ├── install.sh              # exécuté DANS le conteneur : build + service systemd
 ├── osteosoft-api.service   # gabarit d'unité systemd (API + frontend)
-└── nginx.conf              # OPTIONNEL — reverse proxy pour terminer TLS uniquement
+└── nginx.conf              # OPTIONNEL : reverse proxy pour terminer TLS uniquement
 ```
 
 ## Architecture
 
 ```
-              :4199 (Node — sert le SPA + l'API)
+              :4199 (Node : sert le SPA + l'API)
 Navigateur ─────────────► osteosoft-api (systemd) ──┬─► /            → dist/OsteoSoft/browser (SPA)
                                                      ├─► /api/        → API Express
                                                      └─► SQLite       /opt/osteosoft/server/data
 ```
 
 Pour TLS hors LAN, on place un reverse proxy (nginx/Traefik/Caddy) devant le
-port `4199` — voir `nginx.conf` (optionnel).
+port `4199`, voir `nginx.conf` (optionnel).
 
-## Option A — tout depuis l'hôte Proxmox (recommandé)
+## Option A : tout depuis l'hôte Proxmox (recommandé)
 
 Sur l'hôte Proxmox VE, en root :
 
@@ -67,7 +67,7 @@ sinon dans le catalogue `pveam`. On évite ainsi l'échec quand une révision fi
   précis (contourne la résolution automatique ; adaptez le nom à la révision
   réellement disponible via `pveam available --section system | grep debian`).
 
-## Option B — dans un conteneur LXC déjà existant
+## Option B : dans un conteneur LXC déjà existant
 
 Depuis un LXC Debian 13 (ou 12), en root :
 
@@ -89,7 +89,7 @@ forcez avec `ALLOW_HOST=1` si vous êtes sûr d'être dans un conteneur.
 1. **Premier démarrage** : ouvrir `http://<ip-du-lxc>:4199/` et suivre
    l'assistant. Si l'accès n'est pas local, mettre temporairement
    `ALLOW_REMOTE_SETUP=true` dans `.env` (puis le repasser à `false`).
-2. **TLS (obligatoire hors LAN de confiance)** — placer un reverse proxy devant
+2. **TLS (obligatoire hors LAN de confiance)** : placer un reverse proxy devant
    le port `4199`. Exemple nginx fourni dans `nginx.conf` :
    ```bash
    apt-get install -y nginx certbot python3-certbot-nginx
@@ -116,6 +116,59 @@ forcez avec `ALLOW_HOST=1` si vous êtes sûr d'être dans un conteneur.
 | Secrets | `/opt/osteosoft/.env` |
 
 ## Mise à jour
+
+### Depuis l'interface (recommandé)
+
+Le kit installe un dispositif de mise à jour en un clic (repris de Foyer-App) :
+l'administrateur voit la version disponible (canal stable ou préversions) et
+déclenche l'installation en redonnant son mot de passe. L'application elle-même
+ne fait que déposer une demande (`server/data/.update-trigger`) ; c'est une
+unité systemd root (`osteosoft-update.path`) qui lance le script
+`/usr/local/sbin/osteosoft-self-update.sh` :
+
+1. téléchargement et compilation de la nouvelle version à part, service en
+   marche ;
+2. arrêt du service, sauvegarde de la base et du code dans
+   `/var/backups/osteosoft/` ;
+3. remplacement du code (`.env` et `server/data` préservés), redémarrage ;
+4. contrôle que la nouvelle version répond, sinon **retour arrière
+   automatique** (ancien code et ancienne base).
+
+| Action | Commande (dans le conteneur) |
+|---|---|
+| Journal de la dernière mise à jour | `cat /var/log/osteosoft/update.log` |
+| État des unités | `systemctl status osteosoft-update.path osteosoft-update.service` |
+| Sauvegardes avant mise à jour | `ls /var/backups/osteosoft/` |
+
+**Conteneur installé avant l'arrivée de cette fonction** : relancer une fois
+`bash deploy/lxc/install.sh` (section suivante) pour poser le script et les
+unités.
+
+**Désactiver** : `SELF_UPDATE=false bash deploy/lxc/install.sh` retire le
+script et les unités (mise à jour manuelle uniquement). Pour simplement masquer
+le bouton : `OSTEOSOFT_SELF_UPDATE=false` dans `.env`, puis
+`systemctl restart osteosoft-api`.
+
+**Revenir à la version précédente à la main** (si le retour arrière
+automatique n'a pas suffi) :
+
+```bash
+systemctl stop osteosoft-api
+BK=/var/backups/osteosoft/<dossier>   # le plus récent : ls -1t /var/backups/osteosoft | head -1
+cd /opt/osteosoft
+find . -mindepth 1 -maxdepth 1 ! -name .env ! -name server -exec rm -rf {} +
+find server -mindepth 1 -maxdepth 1 ! -name data -exec rm -rf {} +
+tar -xf "$BK/code.tar"
+rm -f server/data/osteo.db server/data/osteo.db-wal server/data/osteo.db-shm
+cp -a "$BK"/data/osteo.db* server/data/
+chown -R osteosoft:osteosoft /opt/osteosoft
+systemctl start osteosoft-api
+```
+
+Une version qui exige un nouveau paquet système (ou une autre version majeure
+de Node) le signale dans ses notes : il faut alors passer par `install.sh`.
+
+### Manuellement, avec `install.sh`
 
 Relancer `install.sh` récupère la dernière version du code, recompile le
 frontend, élague les dépendances et redémarre le service. Le `.env` (secrets) et
@@ -149,7 +202,7 @@ REPO_URL=https://<token>@github.com/PrudhommeWTF/OsteoSoft.git bash deploy/lxc/i
 ## Sauvegarde / restauration
 
 - **À sauvegarder** : `/opt/osteosoft/server/data/` (base SQLite) **et**
-  la clé `OSTEOSOFT_DATA_KEY` de `.env`, conservée **séparément** — sans elle,
+  la clé `OSTEOSOFT_DATA_KEY` de `.env`, conservée **séparément** : sans elle,
   les données chiffrées sont irrécupérables.
 - Les snapshots/backups Proxmox du conteneur contiennent la clé à côté des
   données ; pour respecter la séparation exigée par le guide RGPD, préférez une
@@ -191,7 +244,7 @@ historiques, désormais corrigées et couvertes par un test end-to-end
 demandées en HTTPS**
 
 En HTTP direct sans TLS, la directive CSP `upgrade-insecure-requests` (ajoutée
-par défaut par helmet) fait charger le JS/CSS en `https://<ip>:<port>` — qui
+par défaut par helmet) fait charger le JS/CSS en `https://<ip>:<port>`, qui
 n'existe pas → page blanche. Elle est désormais **désactivée par défaut** ;
 `FORCE_HTTPS=true` (dans `.env`) ne doit être mis **que derrière un reverse
 proxy TLS**. Ce cas échappe aux tests navigateur (les navigateurs exemptent

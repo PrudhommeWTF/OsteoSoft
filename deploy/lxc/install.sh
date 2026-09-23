@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# OsteoSoft — installation native dans un conteneur LXC (Debian 13, ou 12).
+# OsteoSoft : installation native dans un conteneur LXC (Debian 13, ou 12).
 #
 # Déploiement MONO-SERVICE : l'API Node sert à la fois /api ET le frontend Angular
 # compilé (aucun nginx requis). Un seul service systemd, un seul port.
@@ -21,6 +21,7 @@
 #   BRANCH       Branche à cloner                    (défaut: main)
 #   DOMAIN       Nom d'hôte public (pour CLIENT_ORIGIN) (défaut: vide → http://localhost)
 #   API_PORT     Port d'écoute                       (défaut: 4199)
+#   SELF_UPDATE  Mise à jour depuis l'interface       (défaut: true ; false retire le script root et les unités)
 #
 set -euo pipefail
 
@@ -120,7 +121,7 @@ if [ ! -f "$ENV_FILE" ]; then
   ORIGIN="http://localhost"
   [ -n "$DOMAIN" ] && ORIGIN="http://${DOMAIN}"
   cat > "$ENV_FILE" <<EOF
-# Généré par deploy/lxc/install.sh — NE PAS committer, NE PAS inclure dans une sauvegarde.
+# Généré par deploy/lxc/install.sh. NE PAS committer, NE PAS inclure dans une sauvegarde.
 OSTEOSOFT_DATA_KEY=${DATA_KEY}
 JWT_SECRET=${JWT}
 API_PORT=${API_PORT}
@@ -162,13 +163,57 @@ sed -e "s#__APP_DIR__#${APP_DIR}#g" \
 systemctl daemon-reload
 systemctl enable --now osteosoft-api >/dev/null 2>&1 || systemctl restart osteosoft-api
 
+# ── 8. Mise à jour depuis l'interface (script root déclenché par systemd) ────
+# Le service (non privilégié) dépose server/data/.update-trigger ; l'unité
+# .path, exécutée en root, lance osteosoft-self-update.sh (sauvegarde, installation
+# de la version, retour arrière automatique). Voir deploy/lxc/self-update.sh.
+SELF_UPDATE="${SELF_UPDATE:-true}"
+if [[ "$SELF_UPDATE" =~ ^(1|true|yes|on)$ ]]; then
+  log "Activation de la mise à jour depuis l'interface…"
+  install -m 0755 -o root -g root "$SCRIPT_DIR/self-update.sh" /usr/local/sbin/osteosoft-self-update.sh
+  install -d -m 0750 -o root -g root /var/log/osteosoft
+  install -d -m 0700 -o root -g root /var/backups/osteosoft
+  cat > /etc/systemd/system/osteosoft-update.service <<EOF
+[Unit]
+Description=OsteoSoft : mise à jour depuis l'interface
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=APP_DIR=${APP_DIR}
+Environment=APP_USER=${APP_USER}
+Environment=HOME=/root
+ExecStart=/usr/local/sbin/osteosoft-self-update.sh
+EOF
+  cat > /etc/systemd/system/osteosoft-update.path <<EOF
+[Unit]
+Description=OsteoSoft : surveille le déclencheur de mise à jour
+
+[Path]
+PathExists=${APP_DIR}/server/data/.update-trigger
+Unit=osteosoft-update.service
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable --now osteosoft-update.path >/dev/null 2>&1 || true
+else
+  log "Mise à jour depuis l'interface désactivée (SELF_UPDATE=false)."
+  systemctl disable --now osteosoft-update.path >/dev/null 2>&1 || true
+  rm -f /etc/systemd/system/osteosoft-update.path /etc/systemd/system/osteosoft-update.service \
+        /usr/local/sbin/osteosoft-self-update.sh
+  systemctl daemon-reload
+fi
+
 # ── Fin ──────────────────────────────────────────────────────────────────────
 sleep 2
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 if systemctl is-active --quiet osteosoft-api; then
   log "API + frontend actifs."
 else
-  warn "Le service n'est pas actif — voir: journalctl -u osteosoft-api -n 50"
+  warn "Le service n'est pas actif, voir : journalctl -u osteosoft-api -n 50"
 fi
 
 cat <<EOF
