@@ -596,10 +596,14 @@ export class ApiService {
     return firstValueFrom(this.http.get<SystemUpdateStatus & { current: string }>(`${this.baseUrl}/system/update/status`));
   }
 
-  /** Declenche l'installation (super-administrateur, mot de passe redemande). */
-  async triggerSystemUpdate(password: string): Promise<{ started: boolean; tag: string }> {
+  /**
+   * Declenche l'installation (super-administrateur, mot de passe redemande).
+   * `tag` : version affichee a l'ecran ; le serveur refuse (409) si une autre
+   * version a ete publiee entre-temps.
+   */
+  async triggerSystemUpdate(password: string, tag?: string): Promise<{ started: boolean; tag: string }> {
     return firstValueFrom(
-      this.http.post<{ started: boolean; tag: string }>(`${this.baseUrl}/system/update`, { password })
+      this.http.post<{ started: boolean; tag: string }>(`${this.baseUrl}/system/update`, { password, tag })
     );
   }
 
