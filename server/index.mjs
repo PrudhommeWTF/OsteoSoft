@@ -5168,7 +5168,11 @@ app.get('/api/changelog', publicEndpointLimiter, (_req, res) => {
   }
 
   const entries = [];
-  const versionBlocks = raw.split(/^## /m).slice(1);
+  // Une version par titre `## [X.Y.Z]` (mineure, majeure) ou `### [X.Y.Z]`
+  // (corrective, préversion : format de standard-version). Les rubriques
+  // `### Corrections de bugs` ne commencent pas par un numéro et restent dans
+  // leur version.
+  const versionBlocks = raw.split(/^#{2,3} (?=\[?\d)/m).slice(1);
 
   for (const block of versionBlocks.slice(0, 10)) {
     const lines = block.split('\n');
