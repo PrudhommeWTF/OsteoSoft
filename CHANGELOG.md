@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.4.0](https://github.com/PrudhommeWTF/OsteoSoft/compare/v0.3.0...v0.4.0) (2026-09-23)
+
+
+### Corrections de bugs
+
+* **access:** corrige la requête de cloisonnement inter-cabinets (500 non-admin) + tests ([7f1bbb7](https://github.com/PrudhommeWTF/OsteoSoft/commit/7f1bbb7a3318ad0fbd780c47018d7ad2fcf51ad0))
+* **agenda:** rendre le motif de rendez-vous reellement facultatif ([#132](https://github.com/PrudhommeWTF/OsteoSoft/issues/132)) ([d97b9f0](https://github.com/PrudhommeWTF/OsteoSoft/commit/d97b9f031109e6ec8f876b063c72dcbb178752fa))
+* **auth:** cookies non Secure en HTTP direct (connexion en mono-service) ([#141](https://github.com/PrudhommeWTF/OsteoSoft/issues/141)) ([7c475b0](https://github.com/PrudhommeWTF/OsteoSoft/commit/7c475b00b8186820117a99f1efa646f9d41614c9))
+* **billing:** annulation conservatrice des factures au lieu de suppression ([1b23208](https://github.com/PrudhommeWTF/OsteoSoft/commit/1b23208c9e24efaef25b9d0049ad865f01e235cd))
+* **build:** utiliser une URL d'API relative en production ([#131](https://github.com/PrudhommeWTF/OsteoSoft/issues/131)) ([8f7ca47](https://github.com/PrudhommeWTF/OsteoSoft/commit/8f7ca4778b97009adc7151b26d0949878c6d9584))
+* **deploy:** autoriser la configuration initiale à distance (mono-service) ([#140](https://github.com/PrudhommeWTF/OsteoSoft/issues/140)) ([553f140](https://github.com/PrudhommeWTF/OsteoSoft/commit/553f14006388e0e1fa0ce5242f52348a4f41c2ca))
+* **deploy:** ne pas nommer le conteneur LXC comme l'hote Proxmox ([#139](https://github.com/PrudhommeWTF/OsteoSoft/issues/139)) ([30416a3](https://github.com/PrudhommeWTF/OsteoSoft/commit/30416a379ea68e5594d1cf25dcda3c04ed72e582))
+* **deploy:** permettre la mise a jour du code dans le conteneur LXC ([#142](https://github.com/PrudhommeWTF/OsteoSoft/issues/142)) ([a3b551e](https://github.com/PrudhommeWTF/OsteoSoft/commit/a3b551edb5c6badcb26e2f4b4d7574d49e66a309))
+* **deploy:** resoudre dynamiquement le template LXC Debian ([#134](https://github.com/PrudhommeWTF/OsteoSoft/issues/134)) ([2825315](https://github.com/PrudhommeWTF/OsteoSoft/commit/28253156b5c155115f4c9801f9aceeef51a14f5e))
+* **frontend:** corriger la page blanche en deploiement mono-service (CSP) ([#137](https://github.com/PrudhommeWTF/OsteoSoft/issues/137)) ([7a2014b](https://github.com/PrudhommeWTF/OsteoSoft/commit/7a2014b0431d9299b592fd72e3a6f711208eeeab))
+* implémente reprogrammation/annulation de RDV et corrige l'ouverture auto du modal agenda ([221d51a](https://github.com/PrudhommeWTF/OsteoSoft/commit/221d51a0898a09a417e4ed4238ea3917cb12aa2f))
+* **patients:** empecher de blanchir le nom via des espaces (creation et edition) ([#133](https://github.com/PrudhommeWTF/OsteoSoft/issues/133)) ([ae0eb17](https://github.com/PrudhommeWTF/OsteoSoft/commit/ae0eb17939531f1d8589bb7542f65e658e773cc6))
+* **security:** contrôle d'accès cabinet sur la création de consultation (IDOR) ([6f1c90a](https://github.com/PrudhommeWTF/OsteoSoft/commit/6f1c90a2b40462ce01d81ccc592b89b2758b9123))
+* **security:** correctifs ciblés issus de l'audit RGPD/sécurité ([e5adfab](https://github.com/PrudhommeWTF/OsteoSoft/commit/e5adfab2119640be81ee1a0928f55dcff89e31b2))
+* **security:** ne pas forcer HTTPS (CSP) en acces HTTP direct ([#138](https://github.com/PrudhommeWTF/OsteoSoft/issues/138)) ([fae5e10](https://github.com/PrudhommeWTF/OsteoSoft/commit/fae5e10c890aaa8d07c008d0db1f775c905af7de))
+* **security:** refuse de démarrer avec les secrets de dev hors NODE_ENV=development ([#4](https://github.com/PrudhommeWTF/OsteoSoft/issues/4)) ([530198c](https://github.com/PrudhommeWTF/OsteoSoft/commit/530198c09478e2ff929884b033ac923d6a04b9da))
+* **security:** scope les patients par cabinet dès la création + backfill (cloisonnement) ([#7](https://github.com/PrudhommeWTF/OsteoSoft/issues/7)) ([b93fa68](https://github.com/PrudhommeWTF/OsteoSoft/commit/b93fa68946cf71020d135f293c1c2cb8ada49b2b))
+* **seed:** generer les patients fictifs en local, sans appel reseau ([#130](https://github.com/PrudhommeWTF/OsteoSoft/issues/130)) ([dcc4ce5](https://github.com/PrudhommeWTF/OsteoSoft/commit/dcc4ce529e8fc036467e38b721bee8045b4091b1))
+* vue Jour n'oublie plus aucun RDV et rattache les paiements aux remises WebOsteo ([caa170f](https://github.com/PrudhommeWTF/OsteoSoft/commit/caa170f66a6f0e55513f382f05290f48bc80d901))
+* **webosteo:** import idempotent des remises bancaires + tests ([d36cb47](https://github.com/PrudhommeWTF/OsteoSoft/commit/d36cb47bcab848d319ee67c86395fbaf1d5ac9ec))
+
+
+### Nouvelles fonctionnalités
+
+* **backup:** sauvegardes chiffrées autoportantes (phrase de passe) ([#121](https://github.com/PrudhommeWTF/OsteoSoft/issues/121)) ([514680b](https://github.com/PrudhommeWTF/OsteoSoft/commit/514680b03b72478549b3d20550075e91fae3cb1b))
+* **billing:** livre des recettes micro-BNC (journal des encaissements) ([#120](https://github.com/PrudhommeWTF/OsteoSoft/issues/120)) ([0b10466](https://github.com/PrudhommeWTF/OsteoSoft/commit/0b104667eeca04e24bb948c9649e2bf465ecf8a4))
+* **billing:** numérotation des factures attribuée par le serveur (séquentielle, sans trou) ([#119](https://github.com/PrudhommeWTF/OsteoSoft/issues/119)) ([58d87ef](https://github.com/PrudhommeWTF/OsteoSoft/commit/58d87ef4b22e20ec86dd5c8576cc568c4964dfaf))
+* déploiement mono-service (l'API sert le frontend) + kit LXC aligné sur Foyer ([d562f87](https://github.com/PrudhommeWTF/OsteoSoft/commit/d562f871d156fef82f54d426d65a2c6ba7eb7dd9))
+* **deploy:** kit de déploiement LXC Proxmox (nginx + systemd, sans Docker) ([ff99386](https://github.com/PrudhommeWTF/OsteoSoft/commit/ff993864753b2a5a75dc0a429668e286518946f2))
+* **deploy:** script root de mise a jour en un clic avec retour arriere ([#144](https://github.com/PrudhommeWTF/OsteoSoft/issues/144)) ([1abb33e](https://github.com/PrudhommeWTF/OsteoSoft/commit/1abb33eb08c51f5f1d38a385f1defccf010a3bd8))
+* **docker:** ajoute l'image unique + compose mono-service + docs ([9f24bf0](https://github.com/PrudhommeWTF/OsteoSoft/commit/9f24bf0905fc16c32ae9beb18390f5fa32bc1406))
+* **docker:** image unique multi-stage (l'API sert le frontend), façon Foyer ([a1a09ee](https://github.com/PrudhommeWTF/OsteoSoft/commit/a1a09ee730d783fbe72edcb2cc64670190e93474))
+* **rgpd:** rendre la conservation configurable et l'anonymisation confirmee ([#124](https://github.com/PrudhommeWTF/OsteoSoft/issues/124)) ([fb62f30](https://github.com/PrudhommeWTF/OsteoSoft/commit/fb62f3094e1d3fb0f06f4726e47c00aa4aace29c))
+* **security:** chiffre au repos le titre de consultation et la catégorie d'antécédent (RGPD art. 9) ([e588276](https://github.com/PrudhommeWTF/OsteoSoft/commit/e588276aae1f5f1af29de61b7a6bbf11aab88df1))
+* **security:** consentement réel + application effective de la restriction (RGPD Art. 7 & 18) ([#2](https://github.com/PrudhommeWTF/OsteoSoft/issues/2)) ([617e3c4](https://github.com/PrudhommeWTF/OsteoSoft/commit/617e3c4f8b7cfcb64b4f1abb0b184ede9f467c9d))
+* **security:** journal d'audit inviolable + préservation de la traçabilité (RGPD Art. 30) ([#3](https://github.com/PrudhommeWTF/OsteoSoft/issues/3)) ([1af1c4c](https://github.com/PrudhommeWTF/OsteoSoft/commit/1af1c4cc424a53f546999a58ecdfdd6c9215797f))
+* **server:** cadre de migrations versionnées + adoption du schéma comme socle (Priorité 2) ([191f577](https://github.com/PrudhommeWTF/OsteoSoft/commit/191f577dfddc96aa56e1e8d19294e34a11e0fba5))
+* **update:** ecran Mises a jour et notification de nouvelle version ([#145](https://github.com/PrudhommeWTF/OsteoSoft/issues/145)) ([70fbd13](https://github.com/PrudhommeWTF/OsteoSoft/commit/70fbd13ed4f542b1ddbbcce3e1cdeca6a8062a4a))
+* **update:** verification des releases GitHub et declenchement de mise a jour ([#143](https://github.com/PrudhommeWTF/OsteoSoft/issues/143)) ([5bad919](https://github.com/PrudhommeWTF/OsteoSoft/commit/5bad919cc85df25eccab1da85278f3cbaa04edfd))
+
 ## [0.3.0](https://github.com/PrudhommeWTF/OsteoSoft/compare/v0.2.0...v0.3.0) (2026-07-18)
 
 
