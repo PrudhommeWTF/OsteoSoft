@@ -661,8 +661,10 @@
 
 .notif-btn {
   position: relative;
+  text-decoration: none;
 
-  &::after {
+  // Pastille uniquement quand il y a quelque chose a signaler.
+  &.has-notif::after {
     content: '';
     position: absolute;
     top: 7px;

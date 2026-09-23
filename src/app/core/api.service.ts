@@ -94,7 +94,10 @@ import {
   UpdatePatientPayload,
   BackupRestoreResult,
   RescheduleAppointmentPayload,
-  CancelAppointmentPayload
+  CancelAppointmentPayload,
+  SystemUpdateInfo,
+  SystemUpdateStatus,
+  UpdateChannel
 } from './api.types';
 
 @Injectable({ providedIn: 'root' })
@@ -574,6 +577,30 @@ export class ApiService {
 
   async getChangelog(): Promise<ChangelogEntry[]> {
     return firstValueFrom(this.http.get<ChangelogEntry[]>(`${this.baseUrl}/changelog`));
+  }
+
+  /** Verification des mises a jour (gardee en cache 6 h par le serveur, sauf `refresh`). */
+  async getSystemUpdate(refresh = false): Promise<SystemUpdateInfo> {
+    const params = refresh ? new HttpParams().set('refresh', '1') : undefined;
+    return firstValueFrom(this.http.get<SystemUpdateInfo>(`${this.baseUrl}/system/update`, { params }));
+  }
+
+  async setUpdateChannel(channel: UpdateChannel): Promise<UpdateChannel> {
+    const response = await firstValueFrom(
+      this.http.put<{ channel: UpdateChannel }>(`${this.baseUrl}/system/update/channel`, { channel })
+    );
+    return response.channel;
+  }
+
+  async getSystemUpdateStatus(): Promise<SystemUpdateStatus & { current: string }> {
+    return firstValueFrom(this.http.get<SystemUpdateStatus & { current: string }>(`${this.baseUrl}/system/update/status`));
+  }
+
+  /** Declenche l'installation (super-administrateur, mot de passe redemande). */
+  async triggerSystemUpdate(password: string): Promise<{ started: boolean; tag: string }> {
+    return firstValueFrom(
+      this.http.post<{ started: boolean; tag: string }>(`${this.baseUrl}/system/update`, { password })
+    );
   }
 
   async getAntecedentTypes(): Promise<string[]> {

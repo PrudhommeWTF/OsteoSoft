@@ -104,6 +104,19 @@ describe('Mise a jour : verification et declenchement', () => {
     assert.equal(r.body.selfUpdate, true, 'script root present');
     assert.equal(r.body.latestTag, 'v9.9.9');
     assert.equal(r.body.updateAvailable, true);
+    assert.equal(r.body.canInstall, true, 'admin de l instance = super-administrateur application');
+    assert.ok(!Number.isNaN(Date.parse(r.body.checkedAt)), 'date de verification fournie');
+  });
+
+  test('verification gardee en cache (notification a chaque ouverture), refresh=1 la force', async () => {
+    const before = fakeGithub.requests;
+    const cached = await ctx.admin.get('/api/system/update');
+    assert.equal(cached.body.latestTag, 'v9.9.9');
+    assert.equal(fakeGithub.requests, before, 'aucun nouvel appel a GitHub');
+
+    const forced = await ctx.admin.get('/api/system/update?refresh=1');
+    assert.equal(forced.body.latestTag, 'v9.9.9');
+    assert.equal(fakeGithub.requests, before + 1, 'refresh=1 interroge GitHub');
   });
 
   test('canal preversions : la preversion la plus haute est proposee', async () => {

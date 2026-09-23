@@ -5211,7 +5211,9 @@ app.get('/api/changelog', publicEndpointLimiter, (_req, res) => {
 // ── Mises à jour (releases GitHub) ───────────────────────────────────────────
 // Réservé aux administrateurs. La vérification interroge GitHub À LA DEMANDE
 // d'un administrateur (aucun appel de fond) : c'est le seul appel sortant de
-// l'application, voir config.mjs (updateCheckEnabled). L'installation n'est
+// l'application, voir config.mjs (updateCheckEnabled). La réponse est gardée
+// en mémoire UPDATE_CHECK_CACHE_MS par canal (la notification de l'interface
+// interroge à chaque ouverture) ; `?refresh=1` force une nouvelle vérification. L'installation n'est
 // jamais faite par ce processus : il dépose un déclencheur, lu par une unité
 // systemd root (deploy/lxc/install.sh), voir lib/self-update.mjs.
 
@@ -5223,6 +5225,26 @@ function readUpdateChannel() {
 
 function currentSelfUpdateCapability() {
   return selfUpdateCapability({ refusal: selfUpdateRefusal, helper: selfUpdateHelper || undefined });
+}
+
+const UPDATE_CHECK_CACHE_MS = 6 * 60 * 60 * 1000;
+/** @type {Map<string, { at: number, release: Awaited<ReturnType<typeof fetchRelease>> }>} */
+const releaseCheckCache = new Map();
+
+/**
+ * Release du canal, depuis le cache si elle a moins de UPDATE_CHECK_CACHE_MS.
+ * Les échecs ne sont pas mis en cache (on retentera au prochain affichage).
+ * @param {'latest' | 'prerelease'} channel
+ * @param {boolean} refresh
+ */
+async function cachedLatestRelease(channel, refresh) {
+  const cached = releaseCheckCache.get(channel);
+  if (!refresh && cached && Date.now() - cached.at < UPDATE_CHECK_CACHE_MS) {
+    return cached;
+  }
+  const entry = { at: Date.now(), release: await resolveLatestRelease(channel) };
+  releaseCheckCache.set(channel, entry);
+  return entry;
 }
 
 /** @param {'latest' | 'prerelease'} channel */
@@ -5243,7 +5265,7 @@ const triggerUpdateSchema = z.object({
   password: z.string().min(1).max(256)
 });
 
-app.get('/api/system/update', authMiddleware, adminOnlyMiddleware, async (_req, res) => {
+app.get('/api/system/update', authMiddleware, adminOnlyMiddleware, async (req, res) => {
   const channel = readUpdateChannel();
   const capability = currentSelfUpdateCapability();
   const base = {
@@ -5252,6 +5274,8 @@ app.get('/api/system/update', authMiddleware, adminOnlyMiddleware, async (_req, 
     checkEnabled: updateCheckEnabled,
     selfUpdate: capability.possible,
     selfUpdateReason: capability.reason ?? null,
+    // Le déclenchement est réservé au super-administrateur application.
+    canInstall: isApplicationSuperAdmin(req.userAccess),
     status: readUpdateStatus(dataDir)
   };
 
@@ -5260,10 +5284,11 @@ app.get('/api/system/update', authMiddleware, adminOnlyMiddleware, async (_req, 
   }
 
   try {
-    const release = await resolveLatestRelease(channel);
+    const { at, release } = await cachedLatestRelease(channel, req.query.refresh === '1');
     const latest = release.tag.replace(/^v/, '');
     return res.json({
       ...base,
+      checkedAt: new Date(at).toISOString(),
       latest,
       latestTag: release.tag,
       name: release.name,

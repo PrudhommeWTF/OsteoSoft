@@ -36,7 +36,11 @@ Un lanceur, `e2e/serve-for-e2e.mjs`, demarre une instance reelle de
   (`OSTEOSOFT_STATIC_DIR` pointe sur `dist/OsteoSoft/browser`) ;
 - sur le port 4199 par defaut. Le build de production appelle l'API en relatif
   (`/api`), donc tout est servi sur une seule origine : pas de probleme CORS, et
-  le port exact n'a pas d'importance.
+  le port exact n'a pas d'importance ;
+- branchee sur un FAUX GitHub local (`OSTEOSOFT_GITHUB_API`) qui publie une
+  version 99.0.0, et sur un faux script root (`OSTEOSOFT_SELF_UPDATE_HELPER`) :
+  la cloche des administrateurs verifie les mises a jour a chaque ouverture, et
+  aucun test ne doit sortir sur le reseau.
 
 Cette approche reprend celle du harnais des tests d'API
 (`server/test/helpers/harness.mjs`) : aucune modification du code applicatif
@@ -72,7 +76,8 @@ ni les tests unitaires.
 
 ## Selecteurs
 
-Il n'y a pas d'attribut `data-testid` dans les templates. Les scenarios
+Les templates n'ont que de rares attributs `data-testid` (ecran Mises a jour
+et cloche de notification). Les scenarios
 s'appuient sur les `id` existants (`#username`, `#password`, `#setup-name`...),
 les roles ARIA et le texte visible des boutons (en francais). Si un parcours
 devient difficile a cibler de facon stable, ajouter un `data-testid` cible dans
@@ -102,6 +107,12 @@ sans lien avec un compte reel.
 - Integrite CSP (`05-csp-integrity.spec.ts`) : le frontend servi par l'API se
   charge sans violation CSP et avec sa feuille de style appliquee (garde-fou du
   bug "page blanche" en deploiement mono-service).
+- Mises a jour (`06-updates.spec.ts`) : la cloche signale la version publiee et
+  mene a Parametres > Mises a jour ; les notes de version s'affichent en texte
+  brut (une balise `<script>` dans les notes n'est pas interpretee) ;
+  l'installation redemande le mot de passe (refus d'un mot de passe faux), puis
+  affiche le suivi. Passe en dernier : l'installation reste « en cours » (aucun
+  systemd pour la traiter), sans effet sur les autres scenarios.
 
 ## Pieges rencontres (a garder en tete)
 
