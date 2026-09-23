@@ -45,6 +45,9 @@ extractions.
   reussie, retour arriere (code ET base restaures), tag piege refuse, retour en
   arriere de version refuse, archive incoherente refusee, ligne malveillante du
   `.env` jamais executee.
+- Script d'installation : `install-script` execute la section « Service
+  systemd » de `deploy/lxc/install.sh` avec un faux `systemctl` fidele a
+  systemd : une mise a jour doit REDEMARRER le service deja actif.
 
 ## Regle de correction
 

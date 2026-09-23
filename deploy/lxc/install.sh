@@ -161,7 +161,11 @@ sed -e "s#__APP_DIR__#${APP_DIR}#g" \
     -e "s#__APP_USER__#${APP_USER}#g" \
     "$SCRIPT_DIR/osteosoft-api.service" > /etc/systemd/system/osteosoft-api.service
 systemctl daemon-reload
-systemctl enable --now osteosoft-api >/dev/null 2>&1 || systemctl restart osteosoft-api
+systemctl enable osteosoft-api >/dev/null 2>&1
+# TOUJOURS redemarrer : `enable --now` ne fait rien si le service tourne deja,
+# et une mise a jour laisserait alors l'ancien code en memoire (frontend neuf
+# servi depuis le disque, API ancienne).
+systemctl restart osteosoft-api
 
 # ── 8. Mise à jour depuis l'interface (script root déclenché par systemd) ────
 # Le service (non privilégié) dépose server/data/.update-trigger ; l'unité
@@ -212,6 +216,20 @@ sleep 2
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 if systemctl is-active --quiet osteosoft-api; then
   log "API + frontend actifs."
+  # Le processus en service doit annoncer la version qui vient d'etre installee.
+  EXPECTED_VERSION="$(node -p "require('${APP_DIR}/package.json').version" 2>/dev/null || true)"
+  RUNNING_VERSION=""
+  for _ in $(seq 1 30); do
+    RUNNING_VERSION="$(curl -fsS --max-time 3 "http://127.0.0.1:${API_PORT}/api/health" 2>/dev/null \
+      | grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)"$/\1/' || true)"
+    [ -n "$RUNNING_VERSION" ] && break
+    sleep 1
+  done
+  if [ -n "$EXPECTED_VERSION" ] && [ "$RUNNING_VERSION" = "$EXPECTED_VERSION" ]; then
+    log "Version en service : ${RUNNING_VERSION}."
+  else
+    warn "Version en service (${RUNNING_VERSION:-inconnue}) différente de la version installée (${EXPECTED_VERSION:-inconnue}) : systemctl restart osteosoft-api"
+  fi
 else
   warn "Le service n'est pas actif, voir : journalctl -u osteosoft-api -n 50"
 fi
