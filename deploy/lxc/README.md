@@ -117,14 +117,34 @@ forcez avec `ALLOW_HOST=1` si vous êtes sûr d'être dans un conteneur.
 
 ## Mise à jour
 
-Relancer `install.sh` est idempotent : il met à jour le code (si cloné),
-recompile le frontend, élague les dépendances et redémarre le service. Le
-`.env` existant (donc les secrets) est **conservé**.
+Relancer `install.sh` récupère la dernière version du code, recompile le
+frontend, élague les dépendances et redémarre le service. Le `.env` (secrets) et
+`server/data` (base SQLite) sont **toujours préservés**.
+
+Selon le mode d'installation, `install.sh` récupère le code ainsi :
+
+- installation via `git clone` (le dossier a un `.git`) : `git pull` ;
+- exécution depuis un checkout local distinct (ex. sur l'hôte Proxmox) : copie
+  de ce checkout ;
+- conteneur sans `.git` (cas Option A) : récupération depuis `REPO_URL` (par
+  défaut le dépôt public GitHub) et superposition.
+
+Depuis le conteneur, en root :
 
 ```bash
-cd /opt/osteosoft && git pull   # si installé via clone
+cd /opt/osteosoft
 bash deploy/lxc/install.sh
 ```
+
+Pour un **dépôt privé**, fournir un `REPO_URL` authentifié :
+
+```bash
+REPO_URL=https://<token>@github.com/PrudhommeWTF/OsteoSoft.git bash deploy/lxc/install.sh
+```
+
+> Note : la superposition met à jour et ajoute les fichiers mais ne supprime pas
+> ceux retirés en amont. Pour repartir d'une base propre, recréez un conteneur
+> (les données sont dans `server/data`, à sauvegarder au préalable).
 
 ## Sauvegarde / restauration
 

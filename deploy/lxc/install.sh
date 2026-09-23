@@ -66,25 +66,37 @@ if ! id -u "$APP_USER" >/dev/null 2>&1; then
   useradd --system --home-dir "$APP_DIR" --shell /usr/sbin/nologin "$APP_USER"
 fi
 
-# ── 3. Code source ───────────────────────────────────────────────────────────
-if [ -f "$APP_DIR/package.json" ]; then
-  log "Source déjà présent dans $APP_DIR (pas de clone)."
-elif [ -f "$SCRIPT_DIR/../../package.json" ]; then
-  log "Copie du checkout local vers $APP_DIR…"
-  mkdir -p "$APP_DIR"
-  tar -C "$(cd "$SCRIPT_DIR/../.." && pwd)" \
-      --exclude='./.git' --exclude='./node_modules' --exclude='./dist' --exclude='./.angular' \
+# ── 3. Code source (installation OU mise à jour) ─────────────────────────────
+# Recouvre le code de $APP_DIR sans jamais toucher aux secrets (.env) ni aux
+# données SQLite (server/data). Utilisé aussi bien à l'installation qu'à la
+# mise à jour (relancer install.sh récupère le dernier code).
+overlay_source_from() {
+  tar -C "$1" \
+      --exclude='./.git' --exclude='./node_modules' --exclude='./dist' \
+      --exclude='./.angular' --exclude='./.env' --exclude='./server/data' \
       -cf - . | tar -C "$APP_DIR" -xf -
+}
+
+mkdir -p "$APP_DIR"
+LOCAL_SRC="$(cd "$SCRIPT_DIR/../.." 2>/dev/null && pwd || true)"
+
+if [ -d "$APP_DIR/.git" ]; then
+  # Installation issue d'un clone git : mise à jour par git.
+  log "Mise à jour du code (git pull)…"
+  git -C "$APP_DIR" pull --ff-only || warn "git pull a échoué : code inchangé."
+elif [ -n "$LOCAL_SRC" ] && [ "$LOCAL_SRC" != "$APP_DIR" ] && [ -f "$LOCAL_SRC/package.json" ]; then
+  # Exécution depuis un checkout local distinct (ex. sur l'hôte Proxmox) :
+  # on recopie ce checkout (installation initiale ou mise à jour locale).
+  log "Copie/mise à jour depuis le checkout local ($LOCAL_SRC)…"
+  overlay_source_from "$LOCAL_SRC"
 else
-  log "Clone de $REPO_URL ($BRANCH) vers $APP_DIR…"
-  if [ -e "$APP_DIR" ] && [ -n "$(ls -A "$APP_DIR" 2>/dev/null)" ]; then
-    TMP_SRC="$(mktemp -d)"
-    git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$TMP_SRC/src"
-    cp -a "$TMP_SRC/src/." "$APP_DIR/"
-    rm -rf "$TMP_SRC"
-  else
-    git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$APP_DIR"
-  fi
+  # Exécution dans le conteneur sans .git (cas Option A) : on récupère la
+  # dernière version depuis REPO_URL et on la superpose (secrets/données préservés).
+  log "Récupération du code depuis $REPO_URL ($BRANCH)…"
+  TMP_SRC="$(mktemp -d)"
+  git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$TMP_SRC/src"
+  overlay_source_from "$TMP_SRC/src"
+  rm -rf "$TMP_SRC"
 fi
 cd "$APP_DIR"
 
