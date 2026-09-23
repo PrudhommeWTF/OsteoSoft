@@ -72,8 +72,10 @@ navigateur).
 Seule exception, decidee explicitement : la verification des mises a jour
 interroge l'API GitHub (releases du depot) depuis le serveur. Garde-fous :
 
-- uniquement a la demande d'un administrateur (ouverture de l'ecran, bouton
-  « Verifier ») : aucun appel de fond, aucune frequence ;
+- uniquement quand un administrateur ouvre l'application (cloche de
+  notification) ou l'ecran Mises a jour : aucun appel de fond ni tache
+  planifiee. Le serveur garde la reponse 6 heures par canal, donc au plus un
+  appel toutes les 6 heures, sauf clic sur « Verifier maintenant » ;
 - ne transmet que des metadonnees de version (URL du depot, et le jeton si le
   depot est prive) : aucune donnee patient ni de cabinet ;
 - coupable par `UPDATE_CHECK=false` (plus aucun appel, bouton refuse) ; un test

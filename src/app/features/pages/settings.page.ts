@@ -2,10 +2,12 @@ import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, signal
 import { HttpErrorResponse } from '@angular/common/http';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { BsTooltipDirective } from '../../core/bs-tooltip.directive';
+import { UpdatePanelComponent } from '../updates/update-panel.component';
 import {
   AccessManagedUser,
   AgendaSettingsPayload,
@@ -40,7 +42,13 @@ type SettingsSectionId =
   | 'audit-logs'
   | 'user-management'
   | 'roles-and-access'
-  | 'offices';
+  | 'offices'
+  | 'updates';
+
+/** `/parametres?section=mises-a-jour` ouvre directement la section (lien de la cloche). */
+const SECTION_QUERY_ALIASES: Record<string, SettingsSectionId> = {
+  'mises-a-jour': 'updates'
+};
 
 type SettingsSection = {
   id: SettingsSectionId;
@@ -154,7 +162,7 @@ Je vous remercie par avance, et vous prie d'agréer mes sincères salutations.`;
 
 @Component({
   selector: 'app-settings-page',
-  imports: [ReactiveFormsModule, BsTooltipDirective],
+  imports: [ReactiveFormsModule, BsTooltipDirective, UpdatePanelComponent],
   templateUrl: './settings.page.html',
   styleUrl: './settings.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -777,6 +785,13 @@ export class SettingsPage implements OnDestroy {
       return;
     }
 
+    this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((params) => {
+      const target = SECTION_QUERY_ALIASES[params.get('section') ?? ''];
+      if (target) {
+        this.selectSection(target);
+      }
+    });
+
     void this.loadAccessProfiles();
     void this.loadCurrentUser();
     void this.loadUsers();
@@ -860,6 +875,14 @@ export class SettingsPage implements OnDestroy {
         'Coordonnées et contacts',
         'Logo et identité visuelle'
       ]
+    },
+    {
+      id: 'updates',
+      label: 'Mises à jour',
+      icon: 'fa-solid fa-cloud-arrow-down',
+      summary: 'Version en service, nouvelles versions et installation.',
+      description: 'Vérifiez les nouvelles versions publiées et installez-les en un clic, sans ligne de commande.',
+      items: ['Canal stable ou préversions', 'Notes de version', 'Installation avec sauvegarde et retour arrière automatique']
     },
     {
       id: 'audit-logs',

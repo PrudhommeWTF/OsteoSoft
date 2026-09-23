@@ -218,16 +218,30 @@
           <i [class]="isDark() ? 'fa-solid fa-sun' : 'fa-solid fa-moon'" aria-hidden="true"></i>
         </button>
 
-        <!-- Notifications placeholder -->
-        <button
-          type="button"
-          class="topbar-icon-btn notif-btn"
-          title="Notifications"
-          bsTooltip
-          aria-label="Notifications"
-        >
-          <i class="fa-solid fa-bell" aria-hidden="true"></i>
-        </button>
+        <!-- Notifications (nouvelle version disponible, administrateurs) -->
+        @if (updateNotice()) {
+          <a
+            class="topbar-icon-btn notif-btn has-notif"
+            routerLink="/parametres"
+            [queryParams]="{ section: 'mises-a-jour' }"
+            [title]="updateNotice()"
+            bsTooltip
+            [attr.aria-label]="'Notifications : ' + updateNotice()"
+            data-testid="update-notice"
+          >
+            <i class="fa-solid fa-bell" aria-hidden="true"></i>
+          </a>
+        } @else {
+          <button
+            type="button"
+            class="topbar-icon-btn notif-btn"
+            title="Aucune notification"
+            bsTooltip
+            aria-label="Aucune notification"
+          >
+            <i class="fa-solid fa-bell" aria-hidden="true"></i>
+          </button>
+        }
 
         <!-- Topbar page-specific actions (registered by child pages) -->
         @if (topbar.actions().length) {

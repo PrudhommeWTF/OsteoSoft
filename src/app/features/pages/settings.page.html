@@ -1684,7 +1684,7 @@
           </div>
           <div class="modal-backdrop fade show" (click)="closeUserModal()"></div>
         }
-      } @else if (activeSection().id !== 'offices') {
+      } @else if (activeSection().id !== 'offices' && activeSection().id !== 'updates') {
         <div class="row g-3 mb-4" aria-label="Champs à prévoir">
           @for (item of activeSection().items; track item) {
             <div class="col-12 col-md-6 col-xl-4">
@@ -3537,7 +3537,11 @@
         </section>
       }
 
-      @if (activeSection().id !== 'offices' && activeSection().id !== 'roles-and-access' && activeSection().id !== 'user-management' && activeSection().id !== 'data-management') {
+      @if (activeSection().id === 'updates') {
+        <app-update-panel />
+      }
+
+      @if (activeSection().id !== 'offices' && activeSection().id !== 'roles-and-access' && activeSection().id !== 'user-management' && activeSection().id !== 'data-management' && activeSection().id !== 'updates') {
         <section class="settings-placeholder" aria-label="Prochaine étape">
           <div>
             <h3 class="h6 mb-2">Prochaine étape d'implémentation</h3>

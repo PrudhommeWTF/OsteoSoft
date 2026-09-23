@@ -957,6 +957,35 @@ export type ChangelogEntry = {
   sections: { label: string; items: string[] }[];
 };
 
+export type UpdateChannel = 'latest' | 'prerelease';
+
+export type SystemUpdateStatus = {
+  state: 'idle' | 'running' | 'done' | 'error';
+  message?: string;
+  ts?: number;
+};
+
+/** Reponse de GET /api/system/update (administrateurs). */
+export type SystemUpdateInfo = {
+  current: string;
+  channel: UpdateChannel;
+  checkEnabled: boolean;
+  selfUpdate: boolean;
+  selfUpdateReason: 'disabled' | 'missing' | null;
+  canInstall: boolean;
+  status: SystemUpdateStatus;
+  checkedAt?: string;
+  latest?: string;
+  latestTag?: string;
+  name?: string;
+  notes?: string;
+  url?: string;
+  publishedAt?: string | null;
+  prerelease?: boolean;
+  updateAvailable?: boolean;
+  error?: string;
+};
+
 export type AntecedentTypesPayload = {
   types: string[];
 };

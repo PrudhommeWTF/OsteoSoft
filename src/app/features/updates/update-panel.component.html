@@ -1,0 +1,175 @@
+<section class="row g-3" aria-label="Mises à jour de l'application">
+  <!-- Version en service et canal -->
+  <div class="col-12 col-xl-5">
+    <article class="upd-card h-100">
+      <p class="upd-eyebrow mb-2">Version en service</p>
+      <p class="upd-version mb-3" data-testid="update-current">{{ info()?.current ?? '...' }}</p>
+
+      <fieldset class="mb-3" [disabled]="isSavingChannel() || !info()">
+        <legend class="upd-legend mb-1">Canal de mise à jour</legend>
+        <div class="form-check">
+          <input
+            class="form-check-input"
+            type="radio"
+            name="update-channel"
+            id="update-channel-latest"
+            [checked]="info()?.channel === 'latest'"
+            (change)="changeChannel('latest')" />
+          <label class="form-check-label" for="update-channel-latest">
+            Stable <span class="text-secondary small">(recommandé pour un cabinet en activité)</span>
+          </label>
+        </div>
+        <div class="form-check">
+          <input
+            class="form-check-input"
+            type="radio"
+            name="update-channel"
+            id="update-channel-prerelease"
+            [checked]="info()?.channel === 'prerelease'"
+            (change)="changeChannel('prerelease')" />
+          <label class="form-check-label" for="update-channel-prerelease">
+            Préversions <span class="text-secondary small">(versions de test, peuvent contenir des défauts)</span>
+          </label>
+        </div>
+      </fieldset>
+      @if (channelError()) {
+        <div class="alert alert-danger py-2" role="alert">{{ channelError() }}</div>
+      }
+
+      <button
+        type="button"
+        class="btn btn-outline-primary btn-sm"
+        [disabled]="updates.isChecking() || !info()?.checkEnabled"
+        (click)="refresh()">
+        <i class="fa-solid fa-rotate me-1" [class.fa-spin]="updates.isChecking()" aria-hidden="true"></i>Vérifier maintenant
+      </button>
+      @if (checkedAtLabel()) {
+        <p class="small text-secondary mt-2 mb-0">Dernière vérification : {{ checkedAtLabel() }}</p>
+      }
+    </article>
+  </div>
+
+  <!-- Version disponible -->
+  <div class="col-12 col-xl-7">
+    <article class="upd-card h-100" aria-live="polite">
+      @if (updates.checkError()) {
+        <div class="alert alert-warning py-2" role="alert">{{ updates.checkError() }}</div>
+      }
+
+      @if (!info()) {
+        @if (!updates.checkError()) {
+          <p class="text-secondary mb-0">Vérification en cours...</p>
+        }
+      } @else if (!info()!.checkEnabled) {
+        <p class="upd-eyebrow mb-2">Vérification désactivée</p>
+        <p class="mb-0">
+          La vérification des mises à jour est désactivée sur ce serveur (<code>UPDATE_CHECK=false</code>).
+          Mettez à jour depuis le conteneur : <code>bash deploy/lxc/install.sh</code>.
+        </p>
+      } @else if (info()!.error) {
+        <p class="upd-eyebrow mb-2">Vérification impossible</p>
+        <p class="mb-0">{{ info()!.error }}</p>
+      } @else if (info()!.updateAvailable) {
+        <p class="upd-eyebrow mb-2">Mise à jour disponible</p>
+        <h3 class="h5 mb-1" data-testid="update-latest">
+          {{ info()!.name || info()!.latestTag }}
+          @if (info()!.prerelease) {
+            <span class="badge text-bg-warning ms-1">Préversion</span>
+          }
+        </h3>
+        <p class="small text-secondary mb-3">
+          Version {{ info()!.latest }}@if (publishedAtLabel()) {, publiée le {{ publishedAtLabel() }}}
+        </p>
+
+        @if (info()!.notes) {
+          <details class="mb-3" open>
+            <summary>Notes de version</summary>
+            <!-- Texte brut : les notes viennent de GitHub, aucun HTML n'est interprété. -->
+            <div class="upd-notes mt-2">{{ info()!.notes }}</div>
+          </details>
+        }
+        @if (info()!.url) {
+          <p class="small mb-3">
+            <a [href]="info()!.url" target="_blank" rel="noopener noreferrer">Voir la version sur GitHub</a>
+          </p>
+        }
+
+        @if (!info()!.canInstall) {
+          <div class="alert alert-info py-2 mb-0" role="note">
+            Seul le super-administrateur de l'application peut lancer l'installation.
+          </div>
+        } @else if (!info()!.selfUpdate) {
+          <div class="alert alert-info py-2 mb-0" role="note">
+            @if (info()!.selfUpdateReason === 'disabled') {
+              La mise à jour depuis l'interface est désactivée sur ce serveur (<code>OSTEOSOFT_SELF_UPDATE</code>).
+            } @else {
+              Ce serveur n'a pas le dispositif de mise à jour en un clic.
+            }
+            Mettez à jour depuis le conteneur : <code>bash deploy/lxc/install.sh</code>
+            (une fois fait, le bouton apparaîtra ici).
+          </div>
+        } @else if (!isBusy()) {
+          <form class="upd-install" (ngSubmit)="install()">
+            <p class="small mb-2">
+              L'application sera indisponible une à trois minutes. La base est sauvegardée avant
+              l'installation ; si la nouvelle version ne démarre pas, l'ancienne est remise en place
+              automatiquement (code et base).
+            </p>
+            <label class="form-label mb-1" for="update-password">Votre mot de passe, pour confirmer</label>
+            <div class="d-flex flex-wrap gap-2">
+              <input
+                id="update-password"
+                name="password"
+                type="password"
+                class="form-control upd-password"
+                autocomplete="current-password"
+                [ngModel]="password()"
+                (ngModelChange)="password.set($event)"
+                required />
+              <button type="submit" class="btn btn-primary" [disabled]="!password() || isInstalling()">
+                <i class="fa-solid fa-download me-1" aria-hidden="true"></i>Installer la version {{ info()!.latest }}
+              </button>
+            </div>
+            @if (installError()) {
+              <div class="alert alert-danger py-2 mt-2 mb-0" role="alert">{{ installError() }}</div>
+            }
+          </form>
+        }
+      } @else {
+        <p class="upd-eyebrow mb-2">À jour</p>
+        <p class="mb-0" data-testid="update-uptodate">
+          Vous utilisez la dernière version du canal
+          {{ info()!.channel === 'prerelease' ? 'préversions' : 'stable' }}.
+        </p>
+      }
+
+      <!-- Suivi d'une installation -->
+      @if (progress(); as p) {
+        <div class="mt-3" data-testid="update-progress">
+          @if (p.state === 'running') {
+            <div class="alert alert-primary py-2 mb-0 d-flex align-items-center gap-2" role="status">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+              <span>{{ p.message || 'Mise à jour en cours...' }}</span>
+            </div>
+            <p class="small text-secondary mt-2 mb-0">
+              L'application redémarre pendant l'installation : cette page reprend le suivi toute seule.
+            </p>
+          } @else if (p.state === 'done') {
+            <div class="alert alert-success py-2 mb-0" role="status">
+              {{ p.message || 'Mise à jour terminée.' }}
+              @if (updates.reloadNeeded()) {
+                <button type="button" class="btn btn-success btn-sm ms-2" (click)="reload()">Recharger la page</button>
+              }
+            </div>
+          } @else if (p.state === 'error') {
+            <div class="alert alert-danger py-2 mb-0" role="alert">{{ p.message || 'La mise à jour a échoué.' }}</div>
+          }
+        </div>
+      } @else if (lastResult(); as last) {
+        <p class="small text-secondary mt-3 mb-0">
+          Dernière mise à jour : {{ last.message || (last.state === 'done' ? 'terminée' : 'en échec') }}
+        </p>
+      }
+    </article>
+  </div>
+</section>

@@ -1,0 +1,44 @@
+:host {
+	display: block;
+}
+
+.upd-card {
+	border: 1px solid var(--bs-border-color);
+	border-radius: 0.75rem;
+	background: var(--bs-body-bg);
+	padding: 1rem;
+}
+
+.upd-eyebrow {
+	color: var(--bs-secondary-color);
+	font-size: 0.75rem;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	font-weight: 700;
+}
+
+.upd-version {
+	font-size: 1.75rem;
+	font-weight: 700;
+	line-height: 1.1;
+}
+
+.upd-legend {
+	font-size: 0.9rem;
+	font-weight: 600;
+}
+
+.upd-notes {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	max-height: 18rem;
+	overflow-y: auto;
+	font-size: 0.875rem;
+	padding: 0.75rem;
+	border-radius: 0.5rem;
+	background: var(--bs-tertiary-bg);
+}
+
+.upd-password {
+	max-width: 18rem;
+}

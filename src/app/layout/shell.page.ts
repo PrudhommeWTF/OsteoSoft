@@ -17,6 +17,7 @@ import { ApiService } from '../core/api.service';
 import { ChangelogEntry, Patient } from '../core/api.types';
 import { AuthService } from '../core/auth.service';
 import { ConfigService } from '../core/config.service';
+import { SystemUpdateService } from '../core/system-update.service';
 import { ThemeService } from '../core/theme.service';
 import { TopbarService } from '../core/topbar.service';
 import { BsTooltipDirective } from '../core/bs-tooltip.directive';
@@ -53,6 +54,7 @@ export class ShellPage implements OnInit, OnDestroy {
   readonly configService = inject(ConfigService);
   readonly topbar = inject(TopbarService);
   readonly themeService = inject(ThemeService);
+  readonly updates = inject(SystemUpdateService);
 
   readonly isMenuOpen = signal(false);
   readonly isOfficeDropdownOpen = signal(false);
@@ -129,8 +131,16 @@ export class ShellPage implements OnInit, OnDestroy {
     { path: '/administration-cabinet', label: 'Administration', icon: 'fa-solid fa-building', exact: true, requiredPermission: 'read-office-settings', group: 'cabinet' },
   ]);
 
+  readonly isAdmin = computed(() => this.role() === 'admin' || this.authService.isSuperAdmin());
+
+  /** Libelle de la cloche quand une nouvelle version est publiee (administrateurs). */
+  readonly updateNotice = computed(() => {
+    const info = this.updates.info();
+    return this.isAdmin() && info?.updateAvailable ? `Version ${info.latest} disponible` : '';
+  });
+
   readonly visibleNavItems = computed(() => {
-    const isAdmin = this.role() === 'admin' || this.authService.isSuperAdmin();
+    const isAdmin = this.isAdmin();
 
     return this.navItems().filter((item) => {
       if (isAdmin && item.path === '/administration-cabinet') return false;
@@ -171,6 +181,10 @@ export class ShellPage implements OnInit, OnDestroy {
     void this.refreshAgendaBadge();
     void this.refreshPatientsBadge();
     void this.refreshBillingBadge();
+    // Verification gardee en cache cote serveur : pas d'appel GitHub a chaque ouverture.
+    if (this.isAdmin()) {
+      void this.updates.check();
+    }
   }
 
   ngOnDestroy(): void {
