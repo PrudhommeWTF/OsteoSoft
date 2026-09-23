@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# OsteoSoft — création d'un conteneur LXC sur un hôte Proxmox VE, puis installation.
+# OsteoSoft : création d'un conteneur LXC sur un hôte Proxmox VE, puis installation.
 #
 # À exécuter EN ROOT SUR L'HÔTE PROXMOX (là où la commande `pct` existe),
 # de préférence depuis un checkout du dépôt :
@@ -12,13 +12,13 @@
 # Le script :
 #   1. résout et télécharge le dernier template Debian (13 « trixie » par défaut) si nécessaire ;
 #   2. crée un conteneur LXC non privilégié ;
-#   3. y pousse le code source (checkout local) — ou le fera cloner si REPO_URL est fourni ;
+#   3. y pousse le code source (checkout local), ou le fera cloner si REPO_URL est fourni ;
 #   4. lance deploy/lxc/install.sh à l'intérieur.
 #
 # Variables surchargées via l'environnement (voir défauts ci-dessous) :
 #   CTID CT_HOSTNAME STORAGE TEMPLATE_STORAGE DISK_GB CORES RAM_MB BRIDGE
 #   IP (dhcp | CIDR ex: 192.168.1.50/24) GATEWAY DNS
-#   DOMAIN REPO_URL BRANCH
+#   DOMAIN REPO_URL BRANCH SELF_UPDATE (defaut true : mise a jour depuis l'interface)
 #   DEBIAN_RELEASE (defaut 13) TEMPLATE_NAME (force un template precis)
 #
 set -euo pipefail
@@ -41,6 +41,7 @@ DOMAIN="${DOMAIN:-}"
 API_PORT="${API_PORT:-4199}"
 REPO_URL="${REPO_URL:-}"
 BRANCH="${BRANCH:-main}"
+SELF_UPDATE="${SELF_UPDATE:-true}"
 # Version majeure de Debian visee. On NE fige PAS la revision de correctif
 # (12.7, 12.8, ...) : pveam ne propose au telechargement que la revision
 # courante, donc une valeur figee finit par disparaitre du catalogue. La
@@ -152,17 +153,17 @@ if [ -z "$REPO_URL" ] && [ -f "$REPO_ROOT/package.json" ]; then
   pct exec "$CTID" -- tar -C /opt/osteosoft -xzf /root/osteosoft-src.tgz
   pct exec "$CTID" -- rm -f /root/osteosoft-src.tgz
   rm -f "$TARBALL"
-  INSTALL_ENV="DOMAIN=${DOMAIN} API_PORT=${API_PORT}"
+  INSTALL_ENV="DOMAIN=${DOMAIN} API_PORT=${API_PORT} SELF_UPDATE=${SELF_UPDATE}"
 else
   # Le source sera cloné par install.sh dans le conteneur.
   [ -n "$REPO_URL" ] || REPO_URL="https://github.com/PrudhommeWTF/OsteoSoft.git"
   log "Le conteneur clonera $REPO_URL ($BRANCH)…"
   # On a quand même besoin d'install.sh à l'intérieur : on pousse le dossier deploy/lxc.
   pct exec "$CTID" -- mkdir -p /opt/osteosoft/deploy/lxc
-  for f in install.sh osteosoft-api.service nginx.conf; do
+  for f in install.sh self-update.sh osteosoft-api.service nginx.conf; do
     pct push "$CTID" "$SCRIPT_DIR/$f" "/opt/osteosoft/deploy/lxc/$f"
   done
-  INSTALL_ENV="DOMAIN=${DOMAIN} API_PORT=${API_PORT} REPO_URL=${REPO_URL} BRANCH=${BRANCH}"
+  INSTALL_ENV="DOMAIN=${DOMAIN} API_PORT=${API_PORT} REPO_URL=${REPO_URL} BRANCH=${BRANCH} SELF_UPDATE=${SELF_UPDATE}"
 fi
 
 log "Lancement de l'installation dans le conteneur…"
@@ -175,4 +176,4 @@ log "Terminé. Conteneur $CTID prêt."
 echo "  • Accès       : http://${CT_IP:-<ip>}:${API_PORT}/"
 echo "  • Shell       : pct enter ${CTID}"
 echo "  • Logs API    : pct exec ${CTID} -- journalctl -u osteosoft-api -f"
-echo "  • Secrets/.env: /opt/osteosoft/.env (dans le conteneur) — sauvegardez OSTEOSOFT_DATA_KEY !"
+echo "  • Secrets/.env: /opt/osteosoft/.env (dans le conteneur) : sauvegardez OSTEOSOFT_DATA_KEY !"

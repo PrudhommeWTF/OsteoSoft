@@ -5146,7 +5146,9 @@ app.use((req, res, next) => {
 });
 
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok' });
+  // La version (deja publique via /api/config) sert au controle de sante de la
+  // mise a jour en un clic : cette route n'est pas limitee en debit.
+  res.json({ status: 'ok', version: APP_VERSION });
 });
 
 app.get('/api/config', publicEndpointLimiter, (_req, res) => {

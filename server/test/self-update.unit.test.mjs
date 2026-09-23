@@ -14,7 +14,8 @@ import {
   writeUpdateTrigger,
   UPDATE_STALE_MS,
   UPDATE_TRIGGER_FILE,
-  UPDATE_STATUS_FILE
+  UPDATE_STATUS_FILE,
+  UPDATE_LOG_PATH
 } from '../lib/self-update.mjs';
 
 const tmpDirs = [];
@@ -106,5 +107,16 @@ describe('declencheur et lecture du statut', () => {
     assert.equal(readUpdateStatus(dir).state, 'idle');
     fs.writeFileSync(path.join(dir, UPDATE_STATUS_FILE), '{pas du json');
     assert.equal(readUpdateStatus(dir).state, 'idle');
+  });
+
+  test('readUpdateStatus : un statut perime renvoie vers le journal du script root', () => {
+    const dir = tmpDir();
+    const now = 1_000_000_000_000;
+    fs.writeFileSync(path.join(dir, UPDATE_STATUS_FILE),
+      JSON.stringify({ state: 'running', ts: now - UPDATE_STALE_MS - 1 }));
+    const out = readUpdateStatus(dir, now);
+    assert.equal(out.state, 'error');
+    assert.equal(UPDATE_LOG_PATH, '/var/log/osteosoft/update.log');
+    assert.ok(String(out.message).includes(UPDATE_LOG_PATH), out.message);
   });
 });

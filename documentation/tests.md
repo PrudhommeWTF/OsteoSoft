@@ -39,6 +39,12 @@ extractions.
   dossier patient), qui gardent les gros assemblages lies a la base.
 - Metier : `billing-invoices` (numerotation, annulation), `livre-recettes`,
   `backup-encryption`.
+- Script de deploiement : `self-update-script` execute le VRAI
+  `deploy/lxc/self-update.sh` dans un bac a sable (faux `systemctl`, `curl` et
+  `npm` places en tete du `PATH`, aucun acces reseau ni root) : mise a jour
+  reussie, retour arriere (code ET base restaures), tag piege refuse, retour en
+  arriere de version refuse, archive incoherente refusee, ligne malveillante du
+  `.env` jamais executee.
 
 ## Regle de correction
 
