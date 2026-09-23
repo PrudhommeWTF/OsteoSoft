@@ -140,7 +140,7 @@ describe('Mise a jour : verification et declenchement', () => {
   });
 
   test('bon mot de passe : declencheur depose avec le tag, statut running', async () => {
-    const r = await ctx.admin.post('/api/system/update', { password: DEFAULT_ADMIN_PASSWORD });
+    const r = await ctx.admin.post('/api/system/update', { password: DEFAULT_ADMIN_PASSWORD, tag: 'v9.9.9' });
     assert.equal(r.status, 202, r.raw);
     assert.equal(r.body.tag, 'v9.9.9');
     assert.equal(fs.readFileSync(path.join(ctx.dataDir, '.update-trigger'), 'utf-8'), 'tag=v9.9.9\n');
@@ -178,6 +178,19 @@ describe('Mise a jour : garde-fous', () => {
     assert.equal(r.status, 409);
     assert.match(r.body.message, /Déjà à jour/);
     assert.equal(fs.existsSync(path.join(ctx.dataDir, '.update-trigger')), false);
+  });
+
+  test('version annoncee depassee : rien n est installe, le cache est rafraichi', async () => {
+    fakeGithub.latest = { tag_name: 'v9.9.9', name: 'v9.9.9', body: '', html_url: '', prerelease: false };
+    // L'ecran affichait encore une version plus ancienne (verification en cache).
+    const r = await ctx.admin.post('/api/system/update', { password: DEFAULT_ADMIN_PASSWORD, tag: 'v9.9.8' });
+    assert.equal(r.status, 409, r.raw);
+    assert.equal(r.body.latestTag, 'v9.9.9');
+    assert.match(r.body.message, /a changé/);
+    assert.equal(fs.existsSync(path.join(ctx.dataDir, '.update-trigger')), false, 'aucun declencheur');
+
+    const check = await ctx.admin.get('/api/system/update');
+    assert.equal(check.body.latestTag, 'v9.9.9', 'l ecran recoit la nouvelle version sans refresh');
   });
 
   test('script root absent : bouton refuse, consigne de mise a jour manuelle', async () => {

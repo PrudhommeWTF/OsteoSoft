@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
@@ -90,6 +91,12 @@ export class UpdatePanelComponent implements OnInit, OnDestroy {
       this.password.set('');
     } catch (error) {
       this.installError.set(apiErrorMessage(error, 'Déclenchement de la mise à jour impossible.'));
+      // Une autre version a ete publiee depuis l'affichage : on montre la
+      // nouvelle (le serveur a deja rafraichi sa verification).
+      if (error instanceof HttpErrorResponse && error.status === 409 && error.error?.latestTag) {
+        this.password.set('');
+        await this.updates.check();
+      }
     } finally {
       this.isInstalling.set(false);
     }

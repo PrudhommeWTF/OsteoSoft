@@ -5266,7 +5266,9 @@ const updateChannelSchema = z.object({
 });
 
 const triggerUpdateSchema = z.object({
-  password: z.string().min(1).max(256)
+  password: z.string().min(1).max(256),
+  // Version affichée à l'écran au moment du clic : on installe celle-là, ou rien.
+  tag: z.string().max(64).optional()
 });
 
 app.get('/api/system/update', authMiddleware, adminOnlyMiddleware, async (req, res) => {
@@ -5383,6 +5385,19 @@ app.post('/api/system/update', heavyOperationLimiter, authMiddleware, adminOnlyM
   } catch (err) {
     const reason = err instanceof Error ? err.message : 'erreur inconnue';
     return res.status(502).json({ message: `Version à installer indéterminable : ${reason}` });
+  }
+  // Vérification fraîche : on en profite pour mettre le cache à jour.
+  releaseCheckCache.set(channel, { at: Date.now(), release });
+
+  // L'écran peut afficher une vérification de quelques heures : si une autre
+  // version a été publiée depuis, on n'installe pas autre chose que ce qui
+  // était annoncé. L'interface se rafraîchit et l'administrateur reconfirme.
+  const announced = parsed.data.tag;
+  if (announced !== undefined && announced.replace(/^v/, '') !== release.tag.replace(/^v/, '')) {
+    return res.status(409).json({
+      message: `La version disponible a changé : ${release.tag} (au lieu de ${announced}). Vérifiez ses notes, puis relancez l'installation.`,
+      latestTag: release.tag
+    });
   }
 
   // Jamais de retour en arrière : une release plus ancienne que la version en

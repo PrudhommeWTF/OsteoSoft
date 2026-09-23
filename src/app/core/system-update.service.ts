@@ -70,8 +70,9 @@ export class SystemUpdateService {
     await this.check();
   }
 
+  /** Installe la version affichee (et elle seule). */
   async install(password: string): Promise<string> {
-    const result = await this.api.triggerSystemUpdate(password);
+    const result = await this.api.triggerSystemUpdate(password, this.info()?.latestTag);
     this.progress.set({ state: 'running', message: `Mise à jour vers ${result.tag} demandée.` });
     this.startPolling();
     return result.tag;
