@@ -44,7 +44,9 @@ export async function startTestServer(options = {}) {
     OSTEOSOFT_DATA_KEY: dataKey,
     JWT_SECRET: randomBytes(48).toString('base64'),
     API_PORT: String(port),
-    ALLOW_REMOTE_SETUP: 'false'
+    ALLOW_REMOTE_SETUP: 'false',
+    // Surcharges d'environnement pour un test (ex. NODE_ENV=production, FORCE_HTTPS).
+    ...(options.env ?? {})
   };
 
   const proc = spawn(process.execPath, [SERVER_ENTRY], { cwd: dir, env, stdio: ['ignore', 'pipe', 'pipe'] });

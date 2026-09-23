@@ -941,11 +941,20 @@ function signTokenForSession(user, remember) {
   });
 }
 
-function buildSessionCookieOptions(remember) {
+// Un cookie Secure n'est jamais stocke par le navigateur sur une connexion HTTP :
+// en deploiement mono-service accede en HTTP direct (LAN), marquer les cookies
+// Secure casse la session (connexion impossible). On se base donc sur le
+// protocole reel de la requete (req.secure, qui tient compte de trust proxy /
+// X-Forwarded-Proto), avec un forcage explicite possible via FORCE_HTTPS.
+function shouldUseSecureCookies(req) {
+  return Boolean(req?.secure) || forceHttpsUpgrade;
+}
+
+function buildSessionCookieOptions(remember, secure) {
   return {
     httpOnly: true,
     sameSite: 'lax',
-    secure: isProduction,
+    secure,
     path: SESSION_COOKIE_PATH,
     maxAge: remember ? SESSION_REMEMBER_MAX_AGE_MS : SESSION_DEFAULT_MAX_AGE_MS
   };
@@ -955,30 +964,30 @@ function generateCsrfToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
-function buildCsrfCookieOptions(remember) {
+function buildCsrfCookieOptions(remember, secure) {
   return {
     httpOnly: false,
     sameSite: 'lax',
-    secure: isProduction,
+    secure,
     path: SESSION_COOKIE_PATH,
     maxAge: remember ? SESSION_REMEMBER_MAX_AGE_MS : SESSION_DEFAULT_MAX_AGE_MS
   };
 }
 
-function clearSessionCookie(res) {
+function clearSessionCookie(res, secure) {
   res.clearCookie(SESSION_COOKIE_NAME, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: isProduction,
+    secure,
     path: SESSION_COOKIE_PATH
   });
 }
 
-function clearCsrfCookie(res) {
+function clearCsrfCookie(res, secure) {
   res.clearCookie(CSRF_COOKIE_NAME, {
     httpOnly: false,
     sameSite: 'lax',
-    secure: isProduction,
+    secure,
     path: SESSION_COOKIE_PATH
   });
 }
@@ -5448,8 +5457,9 @@ app.put('/api/profile/me', authMiddleware, async (req, res) => {
     const updatedUser = db.prepare('SELECT id, role, username, must_change_password FROM users WHERE id = ?').get(req.user.sub);
     if (updatedUser) {
       const newToken = signTokenForSession(updatedUser, false);
-      res.cookie(SESSION_COOKIE_NAME, newToken, buildSessionCookieOptions(false));
-      res.cookie(CSRF_COOKIE_NAME, generateCsrfToken(), buildCsrfCookieOptions(false));
+      const secureCookies = shouldUseSecureCookies(req);
+      res.cookie(SESSION_COOKIE_NAME, newToken, buildSessionCookieOptions(false, secureCookies));
+      res.cookie(CSRF_COOKIE_NAME, generateCsrfToken(), buildCsrfCookieOptions(false, secureCookies));
     }
   }
 
@@ -9051,8 +9061,9 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
   db.prepare('UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = ?').run(user.id);
 
   const token = signTokenForSession(user, Boolean(parsed.data.remember));
-  res.cookie(SESSION_COOKIE_NAME, token, buildSessionCookieOptions(Boolean(parsed.data.remember)));
-  res.cookie(CSRF_COOKIE_NAME, generateCsrfToken(), buildCsrfCookieOptions(Boolean(parsed.data.remember)));
+  const secureCookies = shouldUseSecureCookies(req);
+  res.cookie(SESSION_COOKIE_NAME, token, buildSessionCookieOptions(Boolean(parsed.data.remember), secureCookies));
+  res.cookie(CSRF_COOKIE_NAME, generateCsrfToken(), buildCsrfCookieOptions(Boolean(parsed.data.remember), secureCookies));
 
   writeAuditLog(user.id, 'LOGIN', 'auth', String(user.id));
   writeAuthSecurityLog(req, 'login_attempt_succeeded', {
@@ -9080,8 +9091,9 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
 });
 
 app.post('/api/auth/logout', authMiddleware, (req, res) => {
-  clearSessionCookie(res);
-  clearCsrfCookie(res);
+  const secureCookies = shouldUseSecureCookies(req);
+  clearSessionCookie(res, secureCookies);
+  clearCsrfCookie(res, secureCookies);
   writeAuditLog(req.user.sub, 'LOGOUT', 'auth', String(req.user.sub));
   res.status(204).send();
 });
