@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.4.1-rc.2](https://github.com/PrudhommeWTF/OsteoSoft/compare/v0.4.1-rc.1...v0.4.1-rc.2) (2026-09-23)
+
+
+### Corrections de bugs
+
+* **changelog:** lister les versions correctives et preversions dans Nouveautes ([#150](https://github.com/PrudhommeWTF/OsteoSoft/issues/150)) ([7b99d82](https://github.com/PrudhommeWTF/OsteoSoft/commit/7b99d822e7cc56335f0345536bb0d0f4c1c6a60e))
+
 ### [0.4.1-rc.1](https://github.com/PrudhommeWTF/OsteoSoft/compare/v0.4.0...v0.4.1-rc.1) (2026-09-23)
 
 
