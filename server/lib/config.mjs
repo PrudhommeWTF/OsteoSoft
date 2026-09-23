@@ -62,6 +62,19 @@ export function loadServerConfig(env = process.env, { cwd = process.cwd() } = {}
     // elle casserait le chargement du JS/CSS (upgrade vers un HTTPS inexistant),
     // d'ou une page blanche.
     forceHttpsUpgrade: /^(1|true|yes)$/i.test(String(env.FORCE_HTTPS ?? 'false')),
+    // Verification des mises a jour (releases GitHub). Seul appel sortant de
+    // l'application, et exception assumee a la regle "aucun appel tiers" : il
+    // n'est fait qu'a la demande d'un administrateur, ne transmet que des
+    // metadonnees de version (aucune donnee patient), et se coupe avec
+    // UPDATE_CHECK=false.
+    updateCheckEnabled: !/^(0|false|no|off)$/i.test(String(env.UPDATE_CHECK ?? '').trim()),
+    githubRepo: String(env.OSTEOSOFT_GITHUB_REPO ?? '').trim() || 'PrudhommeWTF/OsteoSoft',
+    githubToken: String(env.OSTEOSOFT_GITHUB_TOKEN ?? '').trim(),
+    githubApiBase: String(env.OSTEOSOFT_GITHUB_API ?? '').trim() || 'https://api.github.com',
+    // Mise a jour en un clic : interrupteur d'arret (une valeur fausse coupe le
+    // bouton) et emplacement du script root (surcharge en test).
+    selfUpdateRefusal: String(env.OSTEOSOFT_SELF_UPDATE ?? '').trim(),
+    selfUpdateHelper: String(env.OSTEOSOFT_SELF_UPDATE_HELPER ?? '').trim(),
     sessionRememberMaxAgeMs: Number(env.SESSION_REMEMBER_MAX_AGE_MS ?? 12 * 60 * 60 * 1000),
     sessionDefaultMaxAgeMs: Number(env.SESSION_DEFAULT_MAX_AGE_MS ?? 2 * 60 * 60 * 1000),
     sessionRememberTtl: env.SESSION_REMEMBER_TTL ?? '12h',

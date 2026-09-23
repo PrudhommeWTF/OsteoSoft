@@ -63,6 +63,24 @@ demarrer avec `OSTEOSOFT_DATA_KEY` egale a la cle de la sauvegarde, puis restaur
 avec la phrase de passe. En cas de divergence de cle, la restauration refuse
 proprement pour ne pas restaurer des PII illisibles.
 
+## Regle : aucun appel sortant (et son unique exception)
+
+L'application n'emet aucune requete vers un tiers : pas de telemetrie, pas de
+police ni de script externe (la CSP `connect-src 'self'` le garantit cote
+navigateur).
+
+Seule exception, decidee explicitement : la verification des mises a jour
+interroge l'API GitHub (releases du depot) depuis le serveur. Garde-fous :
+
+- uniquement a la demande d'un administrateur (ouverture de l'ecran, bouton
+  « Verifier ») : aucun appel de fond, aucune frequence ;
+- ne transmet que des metadonnees de version (URL du depot, et le jeton si le
+  depot est prive) : aucune donnee patient ni de cabinet ;
+- coupable par `UPDATE_CHECK=false` (plus aucun appel, bouton refuse) ; un test
+  verifie qu'aucune requete ne part dans ce cas.
+
+Voir exploitation.md, section « Mises a jour depuis l'interface ».
+
 ## Regle : aucune donnee reelle
 
 Aucune donnee patient reelle dans le depot, les tests, les captures ou les

@@ -85,6 +85,8 @@ import {
   CONSULTATION_SECTION_KEYS
 } from './lib/patients.mjs';
 import { createPatientRecords } from './lib/patient-records.mjs';
+import { fetchRelease, normalizeUpdateChannel, semverCmp } from './lib/releases.mjs';
+import { selfUpdateCapability, readUpdateStatus, writeUpdateTrigger } from './lib/self-update.mjs';
 import {
   normalizeOfficeOpeningHours,
   parseOfficeOpeningHours,
@@ -127,6 +129,12 @@ const {
   maxPatientDocumentBytes: MAX_PATIENT_DOCUMENT_BYTES,
   trustedProxies,
   forceHttpsUpgrade,
+  updateCheckEnabled,
+  githubRepo,
+  githubToken,
+  githubApiBase,
+  selfUpdateRefusal,
+  selfUpdateHelper,
   sessionRememberMaxAgeMs: SESSION_REMEMBER_MAX_AGE_MS,
   sessionDefaultMaxAgeMs: SESSION_DEFAULT_MAX_AGE_MS,
   sessionRememberTtl: SESSION_REMEMBER_TTL,
@@ -5196,6 +5204,171 @@ app.get('/api/changelog', publicEndpointLimiter, (_req, res) => {
   }
 
   return res.json(entries);
+});
+
+// ── Mises à jour (releases GitHub) ───────────────────────────────────────────
+// Réservé aux administrateurs. La vérification interroge GitHub À LA DEMANDE
+// d'un administrateur (aucun appel de fond) : c'est le seul appel sortant de
+// l'application, voir config.mjs (updateCheckEnabled). L'installation n'est
+// jamais faite par ce processus : il dépose un déclencheur, lu par une unité
+// systemd root (deploy/lxc/install.sh), voir lib/self-update.mjs.
+
+const UPDATE_CHANNEL_CONFIG_KEY = 'settings_update_channel';
+
+function readUpdateChannel() {
+  return normalizeUpdateChannel(getConfigValue(UPDATE_CHANNEL_CONFIG_KEY, 'latest'));
+}
+
+function currentSelfUpdateCapability() {
+  return selfUpdateCapability({ refusal: selfUpdateRefusal, helper: selfUpdateHelper || undefined });
+}
+
+/** @param {'latest' | 'prerelease'} channel */
+function resolveLatestRelease(channel) {
+  /** @type {Record<string, string>} */
+  const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'OsteoSoft' };
+  if (githubToken) {
+    headers.Authorization = `Bearer ${githubToken}`;
+  }
+  return fetchRelease({ repo: githubRepo, channel, headers, apiBase: githubApiBase });
+}
+
+const updateChannelSchema = z.object({
+  channel: z.enum(['latest', 'prerelease'])
+});
+
+const triggerUpdateSchema = z.object({
+  password: z.string().min(1).max(256)
+});
+
+app.get('/api/system/update', authMiddleware, adminOnlyMiddleware, async (_req, res) => {
+  const channel = readUpdateChannel();
+  const capability = currentSelfUpdateCapability();
+  const base = {
+    current: APP_VERSION,
+    channel,
+    checkEnabled: updateCheckEnabled,
+    selfUpdate: capability.possible,
+    selfUpdateReason: capability.reason ?? null,
+    status: readUpdateStatus(dataDir)
+  };
+
+  if (!updateCheckEnabled) {
+    return res.json({ ...base, error: 'Vérification des mises à jour désactivée sur ce serveur (UPDATE_CHECK=false).' });
+  }
+
+  try {
+    const release = await resolveLatestRelease(channel);
+    const latest = release.tag.replace(/^v/, '');
+    return res.json({
+      ...base,
+      latest,
+      latestTag: release.tag,
+      name: release.name,
+      notes: release.body.slice(0, 4000),
+      url: release.url,
+      publishedAt: release.publishedAt,
+      prerelease: release.prerelease,
+      updateAvailable: semverCmp(latest, APP_VERSION) > 0
+    });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : 'erreur inconnue';
+    return res.json({ ...base, error: `Vérification impossible : ${reason}` });
+  }
+});
+
+app.put('/api/system/update/channel', authMiddleware, adminOnlyMiddleware, (req, res) => {
+  const parsed = updateChannelSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Canal de mise à jour invalide.' });
+  }
+
+  db.prepare(
+    `INSERT INTO config (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+  ).run(UPDATE_CHANNEL_CONFIG_KEY, parsed.data.channel);
+  writeAuditLog(req.user.sub, 'UPDATE', 'update_channel', null, { channel: parsed.data.channel });
+
+  return res.json({ channel: readUpdateChannel() });
+});
+
+app.get('/api/system/update/status', authMiddleware, adminOnlyMiddleware, (_req, res) => {
+  return res.json({ ...readUpdateStatus(dataDir), current: APP_VERSION });
+});
+
+app.post('/api/system/update', heavyOperationLimiter, authMiddleware, adminOnlyMiddleware, async (req, res) => {
+  // Ce bouton fait exécuter du code en root sur le conteneur : réservé au
+  // super-administrateur application, et confirmé par le mot de passe (un jeton
+  // de session dérobé ne doit pas suffire).
+  if (!isApplicationSuperAdmin(req.userAccess)) {
+    writeAuthSecurityLog(req, 'authorization_denied', {
+      userId: req.user.sub,
+      permissionId: 'self-update',
+      reason: 'application_super_admin_required'
+    });
+    return res.status(403).json({ message: 'Accès réservé aux super administrateurs application.' });
+  }
+
+  const parsed = triggerUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Mot de passe requis pour confirmer la mise à jour.' });
+  }
+
+  const capability = currentSelfUpdateCapability();
+  if (!capability.possible) {
+    return res.status(409).json({
+      message: capability.reason === 'disabled'
+        ? 'Mise à jour depuis l\'interface désactivée sur ce serveur (OSTEOSOFT_SELF_UPDATE). Mettez à jour depuis le conteneur : bash deploy/lxc/install.sh'
+        : 'Ce serveur n\'a pas le dispositif de mise à jour en un clic. Mettez à jour depuis le conteneur : bash deploy/lxc/install.sh'
+    });
+  }
+
+  if (!updateCheckEnabled) {
+    return res.status(409).json({ message: 'Vérification des mises à jour désactivée sur ce serveur (UPDATE_CHECK=false).' });
+  }
+
+  const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.sub);
+  let passwordOk = false;
+  try {
+    passwordOk = Boolean(user?.password_hash) && await argon2.verify(user.password_hash, parsed.data.password);
+  } catch {
+    passwordOk = false;
+  }
+  if (!passwordOk) {
+    writeAuthSecurityLog(req, 'self_update_password_rejected', { userId: req.user.sub });
+    return res.status(403).json({ message: 'Mot de passe incorrect. La mise à jour installe et exécute du code sur le serveur : elle se confirme par votre mot de passe.' });
+  }
+
+  if (readUpdateStatus(dataDir).state === 'running') {
+    return res.status(409).json({ message: 'Une mise à jour est déjà en cours.' });
+  }
+
+  // On nomme la version à installer : le script root n'a pas à choisir, et
+  // installe exactement ce que l'écran annonce (canal préversion compris).
+  const channel = readUpdateChannel();
+  let release;
+  try {
+    release = await resolveLatestRelease(channel);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : 'erreur inconnue';
+    return res.status(502).json({ message: `Version à installer indéterminable : ${reason}` });
+  }
+
+  // Jamais de retour en arrière : une release plus ancienne que la version en
+  // service (ex. dernière release publiée antérieure au code déployé) est refusée.
+  if (semverCmp(release.tag, APP_VERSION) <= 0) {
+    return res.status(409).json({ message: `Déjà à jour : la version en service (${APP_VERSION}) n'est pas antérieure à ${release.tag}.` });
+  }
+
+  try {
+    writeUpdateTrigger(dataDir, release.tag);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : 'erreur inconnue';
+    return res.status(500).json({ message: `Impossible de lancer la mise à jour : ${reason}` });
+  }
+
+  writeAuditLog(req.user.sub, 'UPDATE', 'self_update', null, { from: APP_VERSION, to: release.tag, channel });
+  return res.status(202).json({ started: true, tag: release.tag });
 });
 
 app.get('/api/settings/general', authMiddleware, adminOnlyMiddleware, (_req, res) => {
