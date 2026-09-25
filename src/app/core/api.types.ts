@@ -1268,6 +1268,20 @@ export type WebosteoImportPayload = {
   officeId: number;
   contentBase64: string;
   fileName: string;
+  // Optionnel : export « liste patients » WebOsteo (.xlsx), identite en clair.
+  listingBase64?: string;
+  listingFileName?: string;
+};
+
+export type WebosteoListingStats = {
+  total: number;
+  matched: number;
+  unique: number;
+  byFingerprint: number;
+  byCreated: number;
+  ambiguous: number;
+  none: number;
+  lengthMismatch: number;
 };
 
 export type WebosteoImportResult = {
@@ -1282,6 +1296,8 @@ export type WebosteoImportResult = {
   updatedRelatedPeople: number;
   errors: Array<{ entity: string; message: string }>;
   tempPasswords: Record<string, string>;
+  // Present uniquement si l'export « liste patients » a ete fourni.
+  listing?: WebosteoListingStats | null;
 };
 
 export type UpdatePatientPayload = {

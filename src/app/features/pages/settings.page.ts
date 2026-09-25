@@ -462,6 +462,9 @@ export class SettingsPage implements OnDestroy {
   readonly isImportingWebosteo = signal(false);
   readonly selectedWebosteoFileName = signal('');
   readonly selectedWebosteoFileBase64 = signal('');
+  // Export « liste patients » WebOsteo (.xlsx) optionnel : identite en clair.
+  readonly selectedListingFileName = signal('');
+  readonly selectedListingFileBase64 = signal('');
   readonly webosteoImportResult = signal<WebosteoImportResult | null>(null);
   readonly webosteoTargetOfficeId = signal<number | null>(null);
   readonly webosteoImportConfirmOpen = signal(false);
@@ -5179,6 +5182,45 @@ export class SettingsPage implements OnDestroy {
     }
   }
 
+  async onWebosteoListingSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement | null;
+    const file = input?.files?.item(0) ?? null;
+
+    this.dataManagementError.set('');
+
+    if (!file) {
+      this.selectedListingFileName.set('');
+      this.selectedListingFileBase64.set('');
+      return;
+    }
+
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+      this.dataManagementError.set('L\'export « liste patients » doit être un fichier Excel (.xlsx).');
+      this.selectedListingFileName.set('');
+      this.selectedListingFileBase64.set('');
+      if (input) input.value = '';
+      return;
+    }
+
+    const MAX_LISTING_BYTES = 50 * 1024 * 1024;
+    if (file.size > MAX_LISTING_BYTES) {
+      this.dataManagementError.set(`Export trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). La taille maximale est de 50 Mo.`);
+      this.selectedListingFileName.set('');
+      this.selectedListingFileBase64.set('');
+      if (input) input.value = '';
+      return;
+    }
+
+    this.selectedListingFileName.set(file.name);
+    try {
+      this.selectedListingFileBase64.set(await this.readFileAsBase64(file));
+    } catch {
+      this.selectedListingFileBase64.set('');
+      this.selectedListingFileName.set('');
+      this.dataManagementError.set('Impossible de lire l\'export « liste patients ».');
+    }
+  }
+
   async runWebosteoImport(): Promise<void> {
     this.webosteoImportConfirmOpen.set(false);
 
@@ -5205,10 +5247,15 @@ export class SettingsPage implements OnDestroy {
     this.isImportingWebosteo.set(true);
 
     try {
-      const result = await this.api.importWebosteoData({ officeId, fileName, contentBase64 });
+      const listingBase64 = this.selectedListingFileBase64() || undefined;
+      const listingFileName = listingBase64 ? this.selectedListingFileName() : undefined;
+      const result = await this.api.importWebosteoData({ officeId, fileName, contentBase64, listingBase64, listingFileName });
       this.webosteoImportResult.set(result);
+      const listingNote = result.listing
+        ? ` Identité en clair posée sur ${result.listing.matched}/${result.listing.total} fiche(s) via l'export.`
+        : '';
       this.dataManagementSuccess.set(
-        `Import WebOsteo terminé: ${result.importedPatients} patient(s), ${result.importedConsultations} consultation(s), ${result.importedAppointments} rendez-vous, ${result.importedInvoices} facture(s), ${result.importedContacts} contact(s), ${result.importedDeposits} remise(s), ${result.updatedRelatedPeople} lien(s) de parenté.`
+        `Import WebOsteo terminé: ${result.importedPatients} patient(s), ${result.importedConsultations} consultation(s), ${result.importedAppointments} rendez-vous, ${result.importedInvoices} facture(s), ${result.importedContacts} contact(s), ${result.importedDeposits} remise(s), ${result.updatedRelatedPeople} lien(s) de parenté.${listingNote}`
       );
     } catch (error) {
       if (error instanceof HttpErrorResponse) {

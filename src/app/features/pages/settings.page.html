@@ -540,11 +540,17 @@
               <article class="settings-card">
                 <p class="settings-card-status mb-2">Migration depuis WebOsteo</p>
                 <h3 class="settings-card-title">Importer depuis WebOsteo</h3>
-                <p class="settings-card-copy mb-3">
-                  Importez vos données depuis une installation WebOsteo existante. Sélectionnez le fichier de sauvegarde <strong>.bck</strong>
-                  (archive exportée depuis WebOsteo) ou directement le fichier <strong>webosteo.data</strong> (base SQLite).
-                  L'import couvre les utilisateurs, patients, consultations, rendez-vous, factures et contacts du répertoire.
+                <p class="settings-card-copy mb-2">
+                  Importez vos données depuis une installation WebOsteo existante. Deux fichiers, tous deux exportables depuis WebOsteo :
                 </p>
+                <ol class="settings-card-copy mb-2 ps-3">
+                  <li><strong>La sauvegarde</strong> (fichier <strong>.bck</strong>, ou directement <strong>webosteo.data</strong>) : contient tout l'historique (patients, consultations, rendez-vous, factures, contacts).</li>
+                  <li><strong>L'export « liste patients »</strong> (fichier <strong>.xlsx</strong>) : contient les noms, téléphones, e-mails et adresses en clair.</li>
+                </ol>
+                <div class="alert alert-warning py-2 small mb-3" role="note">
+                  <i class="fa-solid fa-triangle-exclamation me-1" aria-hidden="true"></i>
+                  Fournissez de préférence <strong>les deux fichiers</strong>. Sans l'export « liste patients », les noms, téléphones et adresses de la sauvegarde restent chiffrés par WebOsteo et s'importeront illisibles.
+                </div>
 
                 <div class="row g-3">
                   <div class="col-12 col-md-4">
@@ -563,8 +569,8 @@
                     </select>
                   </div>
 
-                  <div class="col-12 col-md-8">
-                    <label class="form-label" for="webosteo-import-file">Fichier WebOsteo (.bck ou .data)</label>
+                  <div class="col-12 col-md-4">
+                    <label class="form-label" for="webosteo-import-file">1. Sauvegarde (.bck ou .data)</label>
                     <input
                       id="webosteo-import-file"
                       type="file"
@@ -574,7 +580,24 @@
                       (change)="onWebosteoFileSelected($event)"
                     />
                     @if (selectedWebosteoFileName()) {
-                      <p class="small text-secondary mt-2 mb-0">Fichier sélectionné: {{ selectedWebosteoFileName() }}</p>
+                      <p class="small text-secondary mt-2 mb-0">Sélectionné: {{ selectedWebosteoFileName() }}</p>
+                    }
+                  </div>
+
+                  <div class="col-12 col-md-4">
+                    <label class="form-label" for="webosteo-listing-file">2. Liste patients (.xlsx) <span class="text-secondary">(recommandé)</span></label>
+                    <input
+                      id="webosteo-listing-file"
+                      type="file"
+                      class="form-control"
+                      accept=".xlsx"
+                      [disabled]="isImportingWebosteo()"
+                      (change)="onWebosteoListingSelected($event)"
+                    />
+                    @if (selectedListingFileName()) {
+                      <p class="small text-secondary mt-2 mb-0">Sélectionné: {{ selectedListingFileName() }}</p>
+                    } @else {
+                      <p class="small text-warning mt-2 mb-0">Sans ce fichier, noms et téléphones resteront illisibles.</p>
                     }
                   </div>
 
@@ -601,6 +624,20 @@
                     <div class="small text-secondary mb-2">
                       Utilisateurs: {{ result.importedUsers }} — Patients: {{ result.importedPatients }} — Consultations: {{ result.importedConsultations }} — Rendez-vous: {{ result.importedAppointments }} — Factures: {{ result.importedInvoices }} — Documents: {{ result.importedDocuments }} — Contacts: {{ result.importedContacts }} — Remises: {{ result.importedDeposits }} — Liens de parenté: {{ result.updatedRelatedPeople }}
                     </div>
+
+                    @if (result.listing; as listing) {
+                      <div class="small mb-2">
+                        <span class="fw-semibold">Identité en clair (export liste patients) :</span>
+                        {{ listing.matched }}/{{ listing.total }} fiche(s) rapprochée(s).
+                        @if (listing.ambiguous + listing.none > 0) {
+                          <span class="text-warning">{{ listing.ambiguous + listing.none }} fiche(s) non rapprochée(s) (homonymes ou absente de l'export) : nom et coordonnées à vérifier manuellement.</span>
+                        }
+                      </div>
+                    } @else {
+                      <div class="small text-warning mb-2">
+                        Import réalisé sans l'export « liste patients » : les noms et coordonnées peuvent être illisibles.
+                      </div>
+                    }
 
                     @if (result.errors.length > 0) {
                       <p class="small fw-semibold mb-1">Erreurs ({{ result.errors.length }})</p>
