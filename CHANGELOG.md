@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.4.1-rc.4](https://github.com/PrudhommeWTF/OsteoSoft/compare/v0.4.1-rc.3...v0.4.1-rc.4) (2026-09-25)
+
+
+### Nouvelles fonctionnalités
+
+* **webosteo:** champ optionnel « liste patients » dans l'ecran d'import ([#155](https://github.com/PrudhommeWTF/OsteoSoft/issues/155)) ([c2d22f4](https://github.com/PrudhommeWTF/OsteoSoft/commit/c2d22f4a609641cfd1af865d24940209b5011e2b))
+* **webosteo:** importer l'identite en clair depuis l'export liste patients ([#154](https://github.com/PrudhommeWTF/OsteoSoft/issues/154)) ([596a27c](https://github.com/PrudhommeWTF/OsteoSoft/commit/596a27cdd44a07bb8ac099deffa92af71f123772))
+
 ### [0.4.1-rc.3](https://github.com/PrudhommeWTF/OsteoSoft/compare/v0.4.1-rc.2...v0.4.1-rc.3) (2026-09-23)
 
 
