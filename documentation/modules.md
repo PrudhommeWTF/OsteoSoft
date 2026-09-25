@@ -12,6 +12,7 @@ avec des tests. Les routes HTTP restent dans `index.mjs`.
 | `config.mjs` | Configuration serveur depuis l'environnement : `loadServerConfig`, `assertConfigUsable`, constantes de session. | Fonctions pures |
 | `backup.mjs` | Sauvegarde/restauration : constantes de format, empreinte stable, filtrage par cabinet, chiffrement d'archive ; construction du snapshot et restauration. | Pur + fabrique `createBackupService(db, deps)` |
 | `webosteo-import.mjs` | Import d'une base WebOsteo (.bck / .data) vers le schema OsteoSoft. | Pur + fabrique `createWebOsteoImport(db, deps)` |
+| `webosteo-listing.mjs` | Lecture de l'export « liste patients » WebOsteo (.xlsx) et rapprochement avec les patients de la base (identite chiffree dans la sauvegarde, en clair dans l'export). | Pur + `parseListingWorkbook` (exceljs a la demande) |
 | `billing.mjs` | Coeur facturation : identifiants d'operation, normalisation lignes/paiements, statut, numerotation des factures, detail/paiements. | Pur + fabrique `createBillingService(db, deps)` |
 | `statistics.mjs` | Tableau de bord et agregations statistiques. | Pur + fabrique `createStatisticsService(db, deps)` |
 | `accounting.mjs` | Comptabilite : registre des operations, livre de recettes micro-BNC. | Fabrique `createAccountingService(db, deps)` |

@@ -42,6 +42,7 @@ import {
 } from './lib/config.mjs';
 import { BACKUP_MANIFEST_FORMAT, createBackupService, encryptBackupArchive, decryptBackupArchive } from './lib/backup.mjs';
 import { createWebOsteoImport } from './lib/webosteo-import.mjs';
+import { parseListingWorkbook, createListingMatcher } from './lib/webosteo-listing.mjs';
 import {
   parseBillingOperationId,
   billingPaymentMethodMatchesDepositType,
@@ -7949,14 +7950,18 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
   const parsedBody = z.object({
     officeId: z.number().int().positive(),
     contentBase64: z.string().min(1),
-    fileName: z.string().min(1).max(260)
+    fileName: z.string().min(1).max(260),
+    // Optionnel : export « liste patients » WebOsteo (.xlsx) qui contient
+    // l'identite en clair (chiffree dans la sauvegarde .bck).
+    listingBase64: z.string().min(1).optional(),
+    listingFileName: z.string().min(1).max(260).optional()
   }).safeParse(req.body);
 
   if (!parsedBody.success) {
     return res.status(400).json({ message: 'Payload d\'import WebOsteo invalide' });
   }
 
-  const { officeId, contentBase64, fileName } = parsedBody.data;
+  const { officeId, contentBase64, fileName, listingBase64, listingFileName } = parsedBody.data;
 
   const allowedOfficeIds = new Set(getDataManagementScopedOfficeIds(req.userAccess));
   if (!allowedOfficeIds.has(officeId)) {
@@ -8019,11 +8024,33 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
     fs.writeFileSync(tempDbPath, sqliteBuffer);
     weoDb = new Database(tempDbPath, { readonly: true });
 
+    // Export « liste patients » WebOsteo (.xlsx) optionnel : fournit l'identite
+    // en clair, chiffree dans la sauvegarde. On rapproche par patient.id.
+    let patientListing = null;
+    if (listingBase64) {
+      if (!String(listingFileName || '').toLowerCase().endsWith('.xlsx')) {
+        return res.status(400).json({ message: 'Le fichier « liste patients » doit être un export Excel (.xlsx).' });
+      }
+      const listingRaw = listingBase64.includes(',') ? listingBase64.slice(listingBase64.indexOf(',') + 1) : listingBase64;
+      const listingBuffer = Buffer.from(listingRaw, 'base64');
+      let records = [];
+      try {
+        records = await parseListingWorkbook(listingBuffer);
+      } catch {
+        return res.status(400).json({ message: 'Export « liste patients » illisible. Utilisez l\'export Excel de WebOsteo.' });
+      }
+      if (records.length === 0) {
+        return res.status(400).json({ message: 'Aucun patient trouvé dans l\'export « liste patients ». Vérifiez le fichier.' });
+      }
+      patientListing = createListingMatcher(records);
+    }
+
     const result = await importWebOsteoDatabase({
       weoDb,
       officeId,
       userId: req.user.sub,
-      weoDocumentFiles
+      weoDocumentFiles,
+      patientListing
     });
 
     writeAuditLog(req.user.sub, 'IMPORT', 'data-management-webosteo', String(officeId), {
@@ -8036,7 +8063,8 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
       importedDeposits: result.importedDeposits,
       importedDocuments: result.importedDocuments,
       updatedRelatedPeople: result.updatedRelatedPeople,
-      errorCount: result.errors.length
+      errorCount: result.errors.length,
+      listingMatched: result.listing ? result.listing.matched : null
     });
 
     return res.json({
@@ -8050,7 +8078,8 @@ app.post('/api/data-management/webosteo-import', heavyOperationLimiter, authMidd
       importedDocuments: result.importedDocuments,
       updatedRelatedPeople: result.updatedRelatedPeople,
       errors: result.errors.slice(0, 100),
-      tempPasswords: result.tempPasswords
+      tempPasswords: result.tempPasswords,
+      listing: result.listing
     });
   } catch (error) {
     // Log the detail server-side; return a generic message so internal/SQLite

@@ -117,9 +117,17 @@ export function createWebOsteoImport(db, {
    * Importe une base WebOsteo déjà ouverte dans le cabinet cible. Renvoie le
    * décompte des entités importées, les erreurs non bloquantes et les mots de
    * passe temporaires générés pour les utilisateurs importés.
-   * @param {{ weoDb: Db, officeId: number, userId: number, weoDocumentFiles: Map<string, { base64: string, mimeType: string, sizeBytes: number }> }} params
+   * `patientListing` (optionnel) : rapprocheur issu de l'export « liste patients »
+   * WebOsteo (server/lib/webosteo-listing.mjs). Quand il est fourni, l'identite
+   * en clair (nom, telephones, email, adresse, code postal, ville, n. securite
+   * sociale) provient de l'export, car ces champs sont CHIFFRES dans la base.
+   * @param {{ weoDb: Db, officeId: number, userId: number, weoDocumentFiles: Map<string, { base64: string, mimeType: string, sizeBytes: number }>, patientListing?: { match: (p: any) => any, stats: any } | null }} params
    */
-  async function importWebOsteoDatabase({ weoDb, officeId, userId, weoDocumentFiles }) {
+  async function importWebOsteoDatabase({ weoDb, officeId, userId, weoDocumentFiles, patientListing = null }) {
+    // Longueur du texte clair d'origine d'un champ chiffre WebOsteo : le
+    // chiffrement produit 2 octets par octet UTF-8 du clair.
+    /** @param {any} v */
+    const encLen = (v) => { try { return Math.round(Buffer.from(str(v), 'base64').length / 2); } catch { return 0; } };
     // Helpers de conversion (str, num, parseWeoDate, parseWeoDateTime,
     // mapMaritalStatus, mapSex) : fonctions pures définies au niveau module.
 
@@ -302,10 +310,27 @@ export function createWebOsteoImport(db, {
         const pid = str(wp.id);
         if (!pid) continue;
 
-        // Recover name from agenda if possible, fall back to patient table fields
+        // Identite : priorite a l'export « liste patients » (clair), puis a la
+        // recuperation via l'agenda, puis aux champs bruts de la base (chiffres).
+        const listed = patientListing ? patientListing.match({
+          prenom: str(wp.prenom),
+          sexe: str(wp.sexe),
+          dob: str(wp.date_naissance),
+          cree: str(wp.created),
+          encLen: {
+            nom: encLen(wp.nom),
+            tel: encLen(wp.telephone1) || encLen(wp.telephone2),
+            cp: encLen(wp.code_postal),
+            ville: encLen(wp.ville),
+            email: encLen(wp.email)
+          }
+        }) : null;
         const recovered = nameRecovery.get(pid);
-        const lastName = recovered ? recovered.nom : (str(wp.nom) || '[Non dechiffre]');
-        const firstName = recovered ? recovered.prenom : (str(wp.prenom) || '[Non dechiffre]');
+        const lastName = (listed && listed.nom)
+          ? listed.nom
+          : (recovered ? recovered.nom : (str(wp.nom) || '[Non dechiffre]'));
+        // Le prenom est en clair dans la base WebOsteo ; l'export sert de secours.
+        const firstName = str(wp.prenom) || (listed && listed.prenom) || (recovered ? recovered.prenom : '') || '[Non dechiffre]';
         const fullName = `${lastName} ${firstName}`.trim();
         const birthDate = parseWeoDate(wp.date_naissance);
         const retentionUntil = computePatientRetentionDateIso(birthDate || null);
@@ -332,8 +357,9 @@ export function createWebOsteoImport(db, {
         const maritalStatus = mapMaritalStatus(wp.statut_marital);
         const childrenCount = Math.max(0, num(wp.nombre_enfant));
 
-        const mobilePhone = str(wp.telephone1) || str(wp.portable) || '';
-        const landlinePhone = str(wp.telephone2) || '';
+        // Coordonnees : clair de l'export si disponible, sinon champs bruts.
+        const mobilePhone = listed ? str(listed.telephone1) : (str(wp.telephone1) || str(wp.portable) || '');
+        const landlinePhone = listed ? str(listed.telephone2) : str(wp.telephone2);
 
         const medicalRecord = {
           generalRemarks: [str(wp.remarques_antecedents), str(wp.remarques)].filter(Boolean).join('\n').trim(),
@@ -342,18 +368,18 @@ export function createWebOsteoImport(db, {
           relatedPeople: '',
           mobilePhone,
           landlinePhone,
-          email: str(wp.email),
-          address1: str(wp.adresse1),
-          address2: str(wp.adresse2),
-          postalCode: str(wp.code_postal),
-          city: str(wp.ville),
+          email: listed ? str(listed.email) : str(wp.email),
+          address1: listed ? str(listed.adresse1) : str(wp.adresse1),
+          address2: listed ? str(listed.adresse2) : str(wp.adresse2),
+          postalCode: listed ? str(listed.code_postal) : str(wp.code_postal),
+          city: listed ? str(listed.ville) : str(wp.ville),
           country: str(wp.pays) || 'France',
           maritalStatus,
           childrenCount,
           occupationOrSchool: str(wp.profession),
           hobbies: str(wp.activites),
           primaryDoctor: str(wp.medecin),
-          socialSecurityNumber: str(wp.secu),
+          socialSecurityNumber: listed ? str(listed.secu) : str(wp.secu),
           referredBy: str(wp.envoye_par),
           manualPreference: 'Non renseigne',
           isDeceased: Number(wp.decede) === 1
@@ -1000,7 +1026,8 @@ export function createWebOsteoImport(db, {
       importedDocuments,
       updatedRelatedPeople,
       errors,
-      tempPasswords
+      tempPasswords,
+      listing: patientListing ? patientListing.stats : null
     };
   }
 
